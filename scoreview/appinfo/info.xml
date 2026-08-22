@@ -34,7 +34,7 @@ triggers a new conversion.
 Current state: application skeleton only - the actual conversion pipeline
 and Viewer integration follow in upcoming phases.
 	]]></description>
-	<version>0.0.4</version>
+	<version>0.0.5</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>

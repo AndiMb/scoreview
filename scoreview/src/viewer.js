@@ -66,7 +66,14 @@ const ScoreViewerWrapper = {
 			this.mountEl = document.createElement('div')
 			this.mountEl.style.width = '100%'
 			this.mountEl.style.height = '100%'
-			this.$el.appendChild(this.mountEl)
+			// this.$el kann - je nachdem, wie Viewers (separate) Vue-Instanz
+			// unser Wrapper-VNode tatsächlich interpretiert - ein reiner
+			// Kommentar-Platzhalterknoten statt eines echten <div> sein und
+			// dann kein appendChild unterstützen ("HierarchyRequestError").
+			// Direkt daneben in den echten Elternknoten einfügen umgeht das,
+			// unabhängig vom genauen Knotentyp von this.$el selbst - jeder
+			// bereits gemountete Knoten hat einen gültigen parentNode.
+			this.$el.parentNode.insertBefore(this.mountEl, this.$el.nextSibling)
 
 			this.innerApp = createApp(ScoreViewer, { fileid: this.fileid })
 			this.innerApp.mount(this.mountEl)
