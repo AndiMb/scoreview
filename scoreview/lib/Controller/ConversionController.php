@@ -52,7 +52,13 @@ class ConversionController extends Controller {
 		if ($conversion === null) {
 			// Lazy-Trigger: Datei existierte schon vor App-Aktivierung, oder
 			// der Event-Listener ist aus irgendeinem Grund nicht gelaufen.
-			$this->conversionService->createPending($fileId, $etag);
+			// Bewusst KEIN eigenes createPending() hier: ConvertScoreJob::run()
+			// legt die Zeile selbst an. Würde der Controller sie vorab anlegen,
+			// fände der Job beim Start bereits eine (von ihm selbst noch gar
+			// nicht bearbeitete) "pending"-Zeile vor und würde die Konvertierung
+			// wegen seiner eigenen Idempotenz-Prüfung (status !== error =>
+			// überspringen) fälschlich als "läuft schon" überspringen - die
+			// Konvertierung würde für immer auf "pending" hängen bleiben.
 			$this->jobList->add(ConvertScoreJob::class, [
 				'userId' => $this->userSession->getUser()?->getUID(),
 				'fileId' => $fileId,
