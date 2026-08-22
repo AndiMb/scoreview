@@ -1,0 +1,4 @@
+{
+	"_comment": "Nextcloud lädt Custom-Mappings NICHT automatisch aus appinfo/ (anders als zunächst angenommen) - diese Datei ist Referenz/Dokumentation. Tatsächlich wirksam wird sie erst als config/mimetypemapping.json des Servers, danach `occ maintenance:mimetype:update-db` + `update-js` + `occ files:scan --all` (siehe README.md).",
+	"mscz": ["application/x-musescore"]
+}

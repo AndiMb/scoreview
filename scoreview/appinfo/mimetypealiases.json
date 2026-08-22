@@ -1,0 +1,4 @@
+{
+	"_comment": "Icon-Gruppe für application/x-musescore. Wie mimetypemapping.json: Referenz, wirksam erst als config/mimetypealiases.json des Servers, siehe README.md.",
+	"application/x-musescore": "x-musescore"
+}
