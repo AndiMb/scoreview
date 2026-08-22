@@ -33,7 +33,18 @@ const ScoreViewerWrapper = {
 			type: [Number, String],
 			required: true,
 		},
+		// Von Viewer per :loaded.sync übergeben (siehe Viewer.vue). Solange
+		// wir dafür nie ein update:loaded auslösen, bleibt Viewers eigener
+		// Lade-Spinner dauerhaft über dem Inhalt liegen - selbst wenn unser
+		// eigener Inhalt (inkl. unserer eigenen "Wird konvertiert…"/
+		// Fehler-Anzeige) längst sichtbar sein könnte.
+		loaded: {
+			type: Boolean,
+			default: false,
+		},
 	},
+
+	emits: ['update:loaded'],
 
 	render() {
 		return h('div', { style: 'width:100%;height:100%' })
@@ -41,6 +52,11 @@ const ScoreViewerWrapper = {
 
 	mounted() {
 		this.mountInner()
+		// Sofort, nicht erst nach Abschluss der Konvertierung: unsere eigene
+		// Komponente zeigt ihren eigenen "Wird konvertiert…"/Fehler-Zustand
+		// bereits an - Viewers generischer Spinner soll dem Platz machen,
+		// statt ihn zu verdecken.
+		this.$emit('update:loaded', true)
 	},
 
 	// beforeDestroy (Vue 2) und beforeUnmount (Vue 3) - je nachdem, welche
