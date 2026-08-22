@@ -118,6 +118,22 @@ docker exec -u www-data nextcloud-test php occ config:app:set scoreview sidecar_
 docker exec -u www-data nextcloud-test php occ config:app:set scoreview sidecar_secret --value="<secret>"
 ```
 
+**Background-Jobs ausführen:** Das schlichte `nextcloud`-Image hat keinen
+System-Cron. Nextclouds Default-Modus "ajax" reicht für den Prototyp nicht
+zuverlässig (Jobs blieben sichtbar für immer auf `pending` hängen, wenn kein
+Seitenaufruf sie anstößt). Einmalig auf `cron` umstellen und einen simplen
+Ersatz-Loop im Container starten:
+
+```sh
+docker exec -u www-data nextcloud-test php occ background:cron
+docker exec -d -u www-data nextcloud-test sh -c 'while true; do php -f /var/www/html/cron.php; sleep 15; done'
+```
+
+Der Loop überlebt einen Container-Neustart **nicht** (kein systemd/Supervisor
+im Image) - nach einem Neustart von `nextcloud-test` erneut ausführen, sonst
+bleiben neu eingereihte Jobs (z. B. `ConvertScoreJob`) unbegrenzt auf
+`pending` stehen und der Viewer dreht sich endlos.
+
 **Wichtig:** Nextcloud blockiert per Default abgehende HTTP-Anfragen an
 lokale/interne Hostnamen (SSRF-Schutz) - ohne folgende Einstellung schlägt
 jeder Sidecar-Aufruf mit „violates local access rules" fehl. Dieselbe
