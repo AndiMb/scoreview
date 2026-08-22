@@ -21,7 +21,8 @@ ARG MUSESCORE_APPIMAGE_URL
 # `apt-get remove` around for.
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-suggests \
-        xvfb wget libopengl0 musescore ca-certificates libpipewire-0.3-0 && \
+        xvfb wget libopengl0 musescore ca-certificates libpipewire-0.3-0 \
+        python3 python3-flask && \
     wget -O /tmp/musescore.AppImage "${MUSESCORE_APPIMAGE_URL}" && \
     chmod +x /tmp/musescore.AppImage && \
     cd /opt && /tmp/musescore.AppImage --appimage-extract && \
@@ -33,9 +34,16 @@ WORKDIR /data
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Overridable per `docker run -e`; the entrypoint enforces this as a hard
-# wall-clock guard so a hung MuseScore process (Risiko 6) cannot hang the
-# container indefinitely.
+# Phase 3: HTTP API wraps the same spike-validated xvfb-run+timeout+mscore
+# invocation. entrypoint.sh is kept in the image for manual one-off CLI
+# debugging (docker run --entrypoint /usr/local/bin/entrypoint.sh ...) but
+# is no longer the container's default command.
+COPY server.py /opt/scoreview-sidecar/server.py
+
+# Overridable per `docker run -e`; server.py enforces this as a hard
+# wall-clock guard so a hung MuseScore process (Risiko 6) cannot hang a
+# conversion job indefinitely.
 ENV MSCORE_TIMEOUT_SECONDS=120
 
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+EXPOSE 8765
+ENTRYPOINT ["python3", "/opt/scoreview-sidecar/server.py"]

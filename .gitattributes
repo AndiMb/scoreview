@@ -1,3 +1,4 @@
-# Shell scripts run inside Linux containers - never let Windows checkouts
+# Scripts run inside Linux containers - never let Windows checkouts
 # convert them to CRLF (breaks the shebang / `set -eu`).
 *.sh text eol=lf
+*.py text eol=lf
