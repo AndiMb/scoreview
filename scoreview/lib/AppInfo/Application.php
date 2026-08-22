@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\AppInfo;
 
+use OCA\Files\Event\LoadAdditionalScriptsEvent;
+use OCA\ScoreView\Listener\FilesLoadAdditionalScriptsListener;
 use OCA\ScoreView\Listener\ScoreFileListener;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
@@ -26,6 +28,8 @@ class Application extends App implements IBootstrap {
 		// (siehe ScoreFileListener).
 		$context->registerEventListener(NodeCreatedEvent::class, ScoreFileListener::class);
 		$context->registerEventListener(NodeWrittenEvent::class, ScoreFileListener::class);
+
+		$context->registerEventListener(LoadAdditionalScriptsEvent::class, FilesLoadAdditionalScriptsListener::class);
 	}
 
 	public function boot(IBootContext $context): void {
