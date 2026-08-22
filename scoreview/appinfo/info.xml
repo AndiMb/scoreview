@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+	<!-- Die Reihenfolge der Elemente ist durch die XSD fest vorgegeben und darf
+	     nicht veraendert werden, sonst lehnt der App Store das Release ab. -->
+	<id>scoreview</id>
+	<name lang="de">ScoreView</name>
+	<name lang="en">ScoreView</name>
+	<summary lang="de">Notenblätter aus Files öffnen: einmal konvertiert, synchron abgespielt</summary>
+	<summary lang="en">Open sheet music from Files: converted once, played back in sync</summary>
+	<description lang="de"><![CDATA[
+**Prototyp.** ScoreView zeigt MuseScore-Partituren (.mscz) direkt aus Files an
+- als Notation mit einem Wiedergabe-Cursor, der synchron zur Audiospur
+mitläuft, statt als starrer PDF-Export.
+
+Eine hochgeladene .mscz-Datei wird serverseitig einmalig zu MusicXML, Audio
+und Timing-Daten konvertiert und danach gecacht: erneutes Öffnen derselben
+Datei rendert nicht neu, sondern bedient sich aus dem Cache. Erst ein
+Re-Upload/eine Änderung der Datei stößt eine erneute Konvertierung an.
+
+Aktueller Stand: Grundgerüst der App, die eigentliche Konvertierungs-Pipeline
+und Viewer-Integration folgen in den nächsten Phasen.
+	]]></description>
+	<description lang="en"><![CDATA[
+**Prototype.** ScoreView displays MuseScore scores (.mscz) directly from
+Files - as notation with a playback cursor that follows the audio track in
+sync, instead of a static PDF export.
+
+An uploaded .mscz file is converted once, server-side, to MusicXML, audio
+and timing data, then cached: opening the same file again does not
+re-render, it is served from the cache. Only a re-upload/change of the file
+triggers a new conversion.
+
+Current state: application skeleton only - the actual conversion pipeline
+and Viewer integration follow in upcoming phases.
+	]]></description>
+	<version>0.0.1</version>
+	<licence>agpl</licence>
+	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
+	<namespace>ScoreView</namespace>
+	<category>multimedia</category>
+	<dependencies>
+		<php min-version="8.1" max-version="8.5"/>
+		<database>sqlite</database>
+		<database>mysql</database>
+		<database>pgsql</database>
+		<nextcloud min-version="31" max-version="35"/>
+	</dependencies>
+</info>
