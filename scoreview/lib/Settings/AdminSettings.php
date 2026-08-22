@@ -8,11 +8,14 @@ use OCA\ScoreView\AppInfo\Application;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
 use OCP\Settings\ISettings;
+use OCP\Util;
 
 /**
- * Erscheint unter Einstellungen → Verwaltung. Reine Server-Formular-Seite
- * ohne eigenes Vue-Bundle - für zwei Textfelder (Sidecar-URL, Secret) lohnt
- * sich im Prototyp kein zweiter Webpack-Entry.
+ * Erscheint unter Einstellungen → Verwaltung. Schlichtes Server-Formular
+ * (kein Vue) mit einem eigenen kleinen JS-Bundle fürs Speichern per fetch()
+ * - ein Inline-<script> im Template würde an Nextclouds
+ * Content-Security-Policy scheitern (kein Nonce für handgeschriebene
+ * Inline-Scripts), siehe src/settings.js.
  */
 class AdminSettings implements ISettings {
 	public function __construct(
@@ -21,6 +24,7 @@ class AdminSettings implements ISettings {
 	}
 
 	public function getForm(): TemplateResponse {
+		Util::addScript(Application::APP_ID, Application::APP_ID . '-settings');
 		return new TemplateResponse(Application::APP_ID, 'settings/admin', [
 			'sidecarUrl' => $this->config->getAppValue(Application::APP_ID, 'sidecar_url', ''),
 			'sidecarSecretSet' => $this->config->getAppValue(Application::APP_ID, 'sidecar_secret', '') !== '',
