@@ -102,10 +102,39 @@ paginierten Seitenansicht anbietet), nicht für einen Notenblatt-Cursor wie
 unseren. `mpos` wird daher **nicht** exportiert/verarbeitet - weder im
 Spike noch in der Sidecar-HTTP-API.
 
-## Docker-Compose-Skizze (spätere Testumgebung, Phase 5)
+## Aktuell laufende Testumgebung (vorgezogen aus Phase 5, für die Phase-3-Verifikation)
 
-Nicht produktiv genutzt, nur als Dokumentation für eine künftige saubere
-Umgebung neben dem bestehenden, händisch verwalteten `nextcloud-test`:
+Für den Ende-zu-Ende-Test der Konvertierungs-Pipeline bereits so aufgesetzt
+und weiterhin so belassen (kein Docker-Compose, weiterhin manuell verwaltet,
+wie im Plan für den Prototyp vorgesehen):
+
+```sh
+docker network create scoreview-net
+docker network connect scoreview-net nextcloud-test
+docker run -d --name scoreview-sidecar --network scoreview-net \
+  -e SCOREVIEW_SIDECAR_SECRET=<secret> scoreview-musescore-cli
+
+docker exec -u www-data nextcloud-test php occ config:app:set scoreview sidecar_url --value="http://scoreview-sidecar:8765"
+docker exec -u www-data nextcloud-test php occ config:app:set scoreview sidecar_secret --value="<secret>"
+```
+
+**Wichtig:** Nextcloud blockiert per Default abgehende HTTP-Anfragen an
+lokale/interne Hostnamen (SSRF-Schutz) - ohne folgende Einstellung schlägt
+jeder Sidecar-Aufruf mit „violates local access rules" fehl. Dieselbe
+Einstellung brauchen z. B. auch Collabora/OnlyOffice-Sidecar-Integrationen:
+
+```sh
+docker exec -u www-data nextcloud-test php occ config:system:set allow_local_remote_servers --value=true --type=boolean
+```
+
+Ende-zu-Ende verifiziert (Upload per WebDAV als Testnutzer → Event-Listener
+→ `occ background-job:execute` → Sidecar → IAppData-Cache → Status-API):
+Ergebnisse identisch zum direkten Sidecar-API-Test. Zweiter Statusabruf
+ohne Dateiänderung liefert sofort `ready` ohne neuen Job (Kernziel „einmal
+konvertieren, cachen" bestätigt). Fremder Nutzer bekommt 404 statt fremder
+Datei-Bytes. Kaputte `.mscz` läuft sauber auf `status: error`.
+
+## Docker-Compose-Skizze (spätere, sauberere Variante)
 
 ```yaml
 services:

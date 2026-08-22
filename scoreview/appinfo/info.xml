@@ -34,7 +34,7 @@ triggers a new conversion.
 Current state: application skeleton only - the actual conversion pipeline
 and Viewer integration follow in upcoming phases.
 	]]></description>
-	<version>0.0.1</version>
+	<version>0.0.2</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>
@@ -46,4 +46,8 @@ and Viewer integration follow in upcoming phases.
 		<database>pgsql</database>
 		<nextcloud min-version="31" max-version="35"/>
 	</dependencies>
+	<settings>
+		<admin>OCA\ScoreView\Settings\AdminSettings</admin>
+		<admin-section>OCA\ScoreView\Settings\Section</admin-section>
+	</settings>
 </info>
