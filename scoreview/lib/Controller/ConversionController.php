@@ -69,6 +69,17 @@ class ConversionController extends Controller {
 		$body = ['status' => $conversion->getStatus()];
 		if ($conversion->getStatus() === ScoreConversion::STATUS_ERROR) {
 			$body['error'] = $conversion->getErrorMessage();
+			// Ein einmal fehlgeschlagener Versuch blieb sonst für immer auf
+			// "error" hängen, auch wenn die eigentliche Ursache (z.B. ein
+			// falsch konfiguriertes Sidecar-Secret) längst behoben wurde - ein
+			// erneutes Öffnen derselben Datei zeigte dann nur den alten,
+			// stehengebliebenen Fehler statt es einfach nochmal zu versuchen.
+			// ConvertScoreJob::run() erlaubt genau das (sein Idempotenz-Guard
+			// überspringt nur status !== error).
+			$this->jobList->add(ConvertScoreJob::class, [
+				'userId' => $this->userSession->getUser()?->getUID(),
+				'fileId' => $fileId,
+			]);
 		} elseif ($conversion->getStatus() === ScoreConversion::STATUS_READY) {
 			$body['files'] = [
 				'musicxml' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.musicxml', ['fileId' => $fileId]),

@@ -40,6 +40,7 @@ export default {
 			osmd: null,
 			sync: null,
 			pollTimer: null,
+			autoRetried: false,
 		}
 	},
 
@@ -62,6 +63,7 @@ export default {
 			this.cleanup()
 			this.state = 'loading'
 			this.errorMessage = ''
+			this.autoRetried = false
 		},
 
 		cleanup() {
@@ -94,6 +96,16 @@ export default {
 			} else if (body.status === 'error') {
 				this.state = 'error'
 				this.errorMessage = body.error || 'Unbekannter Fehler bei der Konvertierung.'
+				// Der Status-Endpunkt stößt bei einem gespeicherten Fehler selbst
+				// schon einen erneuten Versuch an (z.B. nach einem Sidecar-
+				// Konfigurationsfix). Einmalig automatisch nachschauen, ob der
+				// gerade lief und erfolgreich war, statt dass der Nutzer die
+				// Datei manuell neu öffnen muss. Begrenzt auf einen Versuch,
+				// damit ein dauerhaft kaputtes Setup nicht endlos weiterpollt.
+				if (!this.autoRetried) {
+					this.autoRetried = true
+					this.pollTimer = setTimeout(() => this.pollStatus(), POLL_INTERVAL_MS)
+				}
 			} else {
 				this.state = 'converting'
 				this.pollTimer = setTimeout(() => this.pollStatus(), POLL_INTERVAL_MS)
