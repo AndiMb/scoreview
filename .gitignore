@@ -1,0 +1,24 @@
+# Node / build artifacts
+node_modules/
+/scoreview/js/
+vendor/
+*.log
+.phpunit.cache/
+.phpunit.result.cache
+
+# Spike scratch output (regenerated from test-scores/)
+spike/output/
+
+# Test scores are not guaranteed to be public domain / freely licensed.
+# Never commit them silently - see spike/test-scores/README.md.
+spike/test-scores/*.mscz
+spike/test-scores/*.mp3
+spike/test-scores/*.wav
+spike/test-scores/*.mid
+spike/test-scores/*.musicxml
+spike/test-scores/*.spos
+spike/test-scores/*.mpos
+
+# OS
+Thumbs.db
+.DS_Store
