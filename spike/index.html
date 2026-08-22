@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ScoreView Spike – Sync-Cursor</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 1.5rem; max-width: 900px; }
+      #controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+      #status { font-family: ui-monospace, monospace; font-size: 0.85rem; white-space: pre-wrap;
+                 background: #f4f4f4; border: 1px solid #ddd; padding: 0.75rem; margin-bottom: 1rem; }
+      #status.mismatch { background: #fff3cd; border-color: #e6c200; }
+      audio { width: 100%; margin-bottom: 1rem; }
+      #osmd-container { border: 1px solid #ddd; padding: 0.5rem; }
+      label { font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>ScoreView Spike: MuseScore spos/mpos → OSMD-Cursor</h1>
+    <p>
+      Wegwerf-Spike (Phase 1 des Implementierungsplans). Prüft, ob MuseScores
+      <code>.spos</code>/<code>.mpos</code>-Timing-Export einen OSMD-Cursor
+      synchron zur Audiowiedergabe treiben kann – inklusive Seeking und
+      Mehrstimmigkeit/Akkorden.
+    </p>
+    <div id="controls">
+      <label for="score-select">Partitur:</label>
+      <select id="score-select">
+        <option value="wwimf">What Was I Made For (einstimmig)</option>
+        <option value="duckwerk">Duckwerk Vokaltales (mehrstimmig, SATB+Bass)</option>
+      </select>
+
+      <label for="timing-select">Timing-Quelle:</label>
+      <select id="timing-select">
+        <option value="mpos">mpos</option>
+        <option value="spos">spos</option>
+      </select>
+
+      <button id="load-btn">Laden</button>
+    </div>
+
+    <div id="status">Noch nichts geladen.</div>
+
+    <audio id="audio" controls></audio>
+
+    <div id="osmd-container"></div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

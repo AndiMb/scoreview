@@ -19,6 +19,10 @@ spike/test-scores/*.musicxml
 spike/test-scores/*.spos
 spike/test-scores/*.mpos
 
+# Converted spike assets served to the browser - derived from the same
+# not-guaranteed-public-domain sources as spike/test-scores/.
+spike/public/scores/
+
 # OS
 Thumbs.db
 .DS_Store
