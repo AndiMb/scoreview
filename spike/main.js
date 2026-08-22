@@ -1,7 +1,14 @@
 import { OpenSheetMusicDisplay } from "opensheetmusicdisplay";
 
+// mpos was dropped after testing: it's a coarser granularity than spos
+// (fewer events) and does not correspond 1:1 to OSMD's per-note cursor
+// steps for either test score, even with proper time interpolation between
+// its sparser events - musescore.com likely uses it for a different,
+// continuous/scrolling view rather than a paginated notation cursor like
+// this one. spos matched the OSMD cursor step count exactly for both test
+// scores and is what drives the cursor here.
+
 const scoreSelect = document.getElementById("score-select");
-const timingSelect = document.getElementById("timing-select");
 const loadBtn = document.getElementById("load-btn");
 const statusEl = document.getElementById("status");
 const audioEl = document.getElementById("audio");
@@ -9,7 +16,10 @@ const osmdContainer = document.getElementById("osmd-container");
 
 let osmd = null;
 let stepTimesMs = [];
-let currentIndex = -1;
+// null = "cursor position unknown / needs a full reset()+iterate", as
+// opposed to a numeric step index. Using -1 for this used to collide with
+// real index 0 (0 === -1 + 1), see moveCursorTo().
+let currentIndex = null;
 let rafHandle = null;
 
 function setStatus(text, mismatch) {
@@ -30,7 +40,7 @@ async function fetchTimingEvents(url) {
 
 // Walks the OSMD cursor from the start to the end once, purely to count how
 // many distinct stop positions it has - this is the number we compare
-// against the spos/mpos event count to decide whether ordinal 1:1 mapping
+// against the spos event count to decide whether ordinal 1:1 mapping
 // (time[i] <-> cursor step i) is valid, per the Phase-1 Go/No-Go check.
 function countCursorSteps(osmdInstance) {
   const cursor = osmdInstance.cursor;
@@ -45,11 +55,13 @@ function countCursorSteps(osmdInstance) {
   return steps;
 }
 
-// If the OSMD cursor step count matches the timing-event count exactly, the
+// If the OSMD cursor step count matches the spos event count exactly, the
 // two sequences correspond 1:1 in chronological order (both are "one entry
-// per playback onset across all voices/parts"). If they don't match, we
-// fall back to nearest-neighbour resampling and surface that as a visible
-// mismatch instead of silently guessing.
+// per playback onset across all voices/parts") - true for both test scores
+// so far. Kept as a defensive fallback for future scores where it might not
+// hold (e.g. unusual tuplets/grace notes): linearly interpolate a time for
+// each cursor step between its two bracketing spos events, and surface the
+// mismatch visibly instead of silently guessing.
 function buildStepTimes(cursorStepCount, timingEvents) {
   const n = timingEvents.length;
   const m = cursorStepCount;
@@ -59,8 +71,13 @@ function buildStepTimes(cursorStepCount, timingEvents) {
   }
   const times = new Array(m);
   for (let i = 0; i < m; i++) {
-    const srcIdx = Math.min(n - 1, Math.round((i * (n - 1)) / Math.max(1, m - 1)));
-    times[i] = timingEvents[srcIdx].timeMs;
+    const pos = (i * (n - 1)) / Math.max(1, m - 1);
+    const idxLow = Math.floor(pos);
+    const idxHigh = Math.min(n - 1, idxLow + 1);
+    const frac = pos - idxLow;
+    const tLow = timingEvents[idxLow].timeMs;
+    const tHigh = timingEvents[idxHigh].timeMs;
+    times[i] = tLow + (tHigh - tLow) * frac;
   }
   return { times, exact: false };
 }
@@ -84,7 +101,7 @@ function findStepIndex(times, timeMs) {
 function moveCursorTo(index) {
   if (!osmd || stepTimesMs.length === 0 || index === currentIndex) return;
   const cursor = osmd.cursor;
-  if (index === currentIndex + 1) {
+  if (currentIndex !== null && index === currentIndex + 1) {
     cursor.next();
   } else {
     cursor.reset();
@@ -101,9 +118,9 @@ function tick() {
   rafHandle = requestAnimationFrame(tick);
 }
 
-async function loadScore(id, timingSource) {
+async function loadScore(id) {
   setStatus(`Lade ${id} ...`);
-  currentIndex = -1;
+  currentIndex = null;
   stepTimesMs = [];
   audioEl.pause();
 
@@ -124,14 +141,9 @@ async function loadScore(id, timingSource) {
   osmd.cursor.show();
 
   const cursorStepCount = countCursorSteps(osmd);
+  const sposEvents = await fetchTimingEvents(base + "score.spos");
 
-  const [sposEvents, mposEvents] = await Promise.all([
-    fetchTimingEvents(base + "score.spos"),
-    fetchTimingEvents(base + "score.mpos"),
-  ]);
-  const timingEvents = timingSource === "spos" ? sposEvents : mposEvents;
-
-  const { times, exact } = buildStepTimes(cursorStepCount, timingEvents);
+  const { times, exact } = buildStepTimes(cursorStepCount, sposEvents);
   stepTimesMs = times;
 
   audioEl.src = base + "audio.mp3";
@@ -140,26 +152,25 @@ async function loadScore(id, timingSource) {
     [
       `OSMD-Cursor-Schritte: ${cursorStepCount}`,
       `spos-Events: ${sposEvents.length}`,
-      `mpos-Events: ${mposEvents.length}`,
-      `Aktive Timing-Quelle: ${timingSource} (${timingEvents.length} Events)`,
       exact
-        ? "Ordinale 1:1-Zuordnung (Cursor-Schritte == Timing-Events)."
-        : "ACHTUNG: Anzahl weicht ab - Fallback per Nearest-Neighbour-Resampling, keine echte 1:1-Zuordnung.",
+        ? "Ordinale 1:1-Zuordnung (Cursor-Schritte == spos-Events)."
+        : "Hinweis: Anzahl weicht ab - Zeiten linear zwischen den vorhandenen spos-Events interpoliert, keine echte 1:1-Zuordnung.",
     ].join("\n"),
     !exact,
   );
 
   osmd.cursor.reset();
+  currentIndex = 0; // reset() already placed the cursor visually at step 0
 }
 
 audioEl.addEventListener("seeked", () => {
   if (stepTimesMs.length === 0) return;
-  currentIndex = -1; // force the reset()+iterate path even for a tiny jump
+  currentIndex = null; // force the reset()+iterate path even for a tiny jump
   moveCursorTo(findStepIndex(stepTimesMs, audioEl.currentTime * 1000));
 });
 
 loadBtn.addEventListener("click", () => {
-  loadScore(scoreSelect.value, timingSelect.value).catch((err) => {
+  loadScore(scoreSelect.value).catch((err) => {
     console.error(err);
     setStatus("Fehler: " + err.message, true);
   });
@@ -168,7 +179,7 @@ loadBtn.addEventListener("click", () => {
 rafHandle = requestAnimationFrame(tick);
 window.addEventListener("beforeunload", () => cancelAnimationFrame(rafHandle));
 
-loadScore(scoreSelect.value, timingSelect.value).catch((err) => {
+loadScore(scoreSelect.value).catch((err) => {
   console.error(err);
   setStatus("Fehler: " + err.message, true);
 });

@@ -25,10 +25,9 @@ docker run --rm -v <hostdir>:/data scoreview-musescore-cli \
 
 docker run --rm -v <hostdir>:/data scoreview-musescore-cli \
   /data/stück.mscz -o /data/stück.spos
-
-docker run --rm -v <hostdir>:/data scoreview-musescore-cli \
-  /data/stück.mscz -o /data/stück.mpos
 ```
+
+(`.mpos` absichtlich nicht mehr erzeugt - siehe unten.)
 
 Timeout-Guard per Env-Var überschreibbar (Default 120s):
 
@@ -41,7 +40,7 @@ docker run --rm -e MSCORE_TIMEOUT_SECONDS=300 -v <hostdir>:/data \
 verstümmelt `/data/...`-Argumente. Mit `MSYS_NO_PATHCONV=1` vor `docker run`
 umgehen.
 
-## spos vs. mpos
+## spos vs. mpos: nur spos wird verwendet
 
 Beide sind wohlgeformtes XML mit zwei Blöcken:
 
@@ -51,10 +50,16 @@ Beide sind wohlgeformtes XML mit zwei Blöcken:
   erzeugen **einen** gemeinsamen Event (kein doppelter Zeitstempel) - das
   entspricht direkt einem OSMD-Cursor-Schritt.
 
-`spos` ist deutlich feinkörniger (mehr Events) als `mpos`. Welche der
-beiden Granularitäten zur Schrittzahl des OSMD-Cursors passt, ist
-partiturabhängig und wird im Spike (`spike/main.js`) live verglichen und
-angezeigt statt fest angenommen.
+Im Spike getestet und empirisch entschieden: `spos` traf bei beiden
+Testpartituren die Schrittzahl des OSMD-Cursors exakt (ordinale 1:1-
+Zuordnung). `mpos` ist strukturell gröber (deutlich weniger Events) und
+entspricht dem OSMD-Cursor bei keiner der beiden Partituren - auch mit
+korrekter linearer Zeit-Interpolation zwischen den vorhandenen Events blieb
+die Zuordnung sichtbar ungenau. Vermutung: `mpos` ist für eine andere,
+kontinuierliche/scrollende Ansicht gedacht (wie sie musescore.com neben der
+paginierten Seitenansicht anbietet), nicht für einen Notenblatt-Cursor wie
+unseren. `mpos` wird daher **nicht** exportiert/verarbeitet - weder im
+Spike noch in einer künftigen Sidecar-HTTP-API (Phase 3).
 
 ## Docker-Compose-Skizze (spätere Testumgebung, Phase 5)
 
