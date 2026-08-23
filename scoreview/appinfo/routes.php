@@ -31,5 +31,10 @@ return [
 
 		// Admin-Einstellungen (Sidecar-URL/Secret, Eager-Konvertierung)
 		['name' => 'settings#update', 'url' => '/api/settings', 'verb' => 'POST'],
+		// Betriebsdiagnose + Sidecar-Selbsttest (Phase 21). health() ist
+		// lesend, selfTest() startet eine echte Konvertierung - deshalb
+		// getrennt und beide nur fuer Admins (AuthorizedAdminSetting).
+		['name' => 'settings#health', 'url' => '/api/health', 'verb' => 'GET'],
+		['name' => 'settings#selfTest', 'url' => '/api/selftest', 'verb' => 'POST'],
 	],
 ];

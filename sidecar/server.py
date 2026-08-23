@@ -22,6 +22,7 @@ import os
 import secrets
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import uuid
@@ -38,7 +39,14 @@ if not APP_SECRET:
     )
 
 MSCORE_BIN = "/opt/musescore/bin/mscore4portable"
-TIMEOUT_SECONDS = os.environ.get("MSCORE_TIMEOUT_SECONDS", "120")
+# Default raised from 120s to 600s in Phase 20 after measuring real
+# conversions: ~5.4s per rendered page plus ~1s startup (1/4/5-page scores
+# took 6.3s/23.0s/27.7s on the test machine). At that rate the old 120s
+# default aborted at roughly 22 pages - i.e. it would have failed the very
+# orchestral scores (30+ pages) the app is meant to handle, and failed them
+# as an opaque "timeout" error. 600s covers ~110 pages while still bounding
+# a runaway/pathological process. See PLAN.md Phase 20.
+TIMEOUT_SECONDS = os.environ.get("MSCORE_TIMEOUT_SECONDS", "600")
 JOBS_DIR = Path(os.environ.get("SCOREVIEW_JOBS_DIR", "/tmp/scoreview-jobs"))
 JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -283,6 +291,102 @@ def soundfont_version() -> str:
 @app.get("/health")
 def health():
     return "ok"
+
+
+# Phase 21 (MuseScore-Versionspflege): "Wie kommt eine neue MuseScore-Version
+# ins Image, ohne dass --score-media unbemerkt bricht?" Der Selbsttest laesst
+# eine echte Konvertierung gegen die mitgelieferte Minipartitur laufen und
+# prueft das Ergebnis auf die Merkmale, an denen ein Formatwechsel zuerst
+# auffiele. Absichtlich KEIN Test beim Containerstart: das wuerde jeden Start
+# um ~6s verzoegern und einen an sich benutzbaren Sidecar bei einem
+# Teilproblem gar nicht erst hochkommen lassen. Stattdessen auf Abruf, damit
+# die Admin-Seite (und ein Deployment-Skript) ihn gezielt ausloesen koennen.
+SELFTEST_SCORE = Path("/opt/scoreview-sidecar/selftest-score.mscz")
+
+
+@app.get("/selftest")
+def selftest():
+    require_secret()
+    if not SELFTEST_SCORE.exists():
+        return jsonify({"ok": False, "error": f"Selbsttest-Partitur fehlt: {SELFTEST_SCORE}"})
+
+    workdir = Path(tempfile.mkdtemp(prefix="scoreview-selftest-"))
+    try:
+        target = workdir / "selftest.mscz"
+        shutil.copy(SELFTEST_SCORE, target)
+        started = time.time()
+        media = run_score_media(target)
+        elapsed = time.time() - started
+
+        # Genau die Zusagen pruefen, auf denen der Rest der App aufbaut
+        # (M2/M4/M7) - nicht bloss "Exit 0". Jede verletzte Zusage wird
+        # einzeln benannt, damit ein Versionswechsel diagnostizierbar ist
+        # statt nur "kaputt".
+        problems = []
+        for key in ("svgs", "sposXML", "mposXML", "midi", "metadata"):
+            if not media.get(key):
+                problems.append(f"Schluessel '{key}' fehlt oder ist leer")
+
+        pages = len(media.get("svgs") or [])
+        if pages < 1:
+            problems.append("keine SVG-Seite geliefert")
+
+        timing = _parse_pos_xml(media["sposXML"]) if media.get("sposXML") else {"events": [], "elements": {}}
+        events = timing.get("events") or []
+        elements = timing.get("elements") or {}
+        if not events:
+            problems.append("sposXML enthaelt keine Events")
+        if not elements:
+            problems.append("sposXML enthaelt keine Elementkoordinaten")
+
+        # M7: Takt 1 dieser Partitur wird wiederholt, sein elid muss also
+        # MEHRFACH mit steigender Zeit vorkommen. Genau das ist die Zusage,
+        # auf der das Cursor-Datenmodell steht - bricht sie, ist der Cursor
+        # bei Wiederholungen still falsch statt sichtbar kaputt.
+        elid_counts = {}
+        for e in events:
+            elid_counts[e["elid"]] = elid_counts.get(e["elid"], 0) + 1
+        if not any(c > 1 for c in elid_counts.values()):
+            problems.append(
+                "kein elid kommt mehrfach vor - Wiederholung wird nicht mehr "
+                "ausgerollt (M7 verletzt)"
+            )
+
+        times = [e["timeMs"] for e in events]
+        if times != sorted(times):
+            problems.append("Event-Zeiten sind nicht monoton steigend")
+
+        return jsonify({
+            "ok": not problems,
+            "error": "; ".join(problems) if problems else None,
+            "details": {
+                "musescoreVersion": _musescore_version(),
+                "pages": pages,
+                "events": len(events),
+                "elements": len(elements),
+                "repeatedElids": sum(1 for c in elid_counts.values() if c > 1),
+                "seconds": round(elapsed, 1),
+            },
+        })
+    except Exception as exc:  # noqa: BLE001 - Selbsttest darf nie 500en
+        # Bewusst 200 mit ok:false statt 5xx: ein 5xx waere fuer die
+        # PHP-Seite von "Sidecar nicht erreichbar" nicht zu unterscheiden -
+        # dieselbe Ueberlegung wie bei /soundfont/info.
+        return jsonify({"ok": False, "error": str(exc)})
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _musescore_version() -> str:
+    """Version des im Image gepinnten MuseScore - fuer die Admin-Anzeige, damit
+    ein Image-Wechsel sichtbar ist, ohne im Container nachsehen zu muessen.
+
+    Kommt aus einer zur Bauzeit gesetzten ENV (siehe Dockerfile), NICHT aus
+    `mscore4portable --version`: dieser Aufruf braucht einen X-Server und
+    mischt Qt-Rauschen in die Ausgabe, ist also langsam und unzuverlaessig zu
+    parsen (in Phase 21 gemessen: liefert ohne xvfb gar nichts Brauchbares).
+    """
+    return os.environ.get("SCOREVIEW_MUSESCORE_VERSION", "unbekannt")
 
 
 @app.get("/soundfont/info")

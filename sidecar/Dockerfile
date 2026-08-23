@@ -40,10 +40,33 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # is no longer the container's default command.
 COPY server.py /opt/scoreview-sidecar/server.py
 
+# Phase 21: die gepinnte Version zur Bauzeit ins Image schreiben, statt sie
+# zur Laufzeit aus `mscore4portable --version` zu lesen. Grund: dieser Aufruf
+# braucht einen X-Server (xvfb) und schreibt Qt-Rauschen dazwischen - er ist
+# damit langsam UND unzuverlaessig zu parsen. Die ARGs oben sind ohnehin die
+# Wahrheit darueber, was im Image steckt.
+ARG MUSESCORE_VERSION
+ARG MUSESCORE_BUILD
+ENV SCOREVIEW_MUSESCORE_VERSION="${MUSESCORE_VERSION} (${MUSESCORE_BUILD})"
+
+# Phase 21 (MuseScore-Versionspflege): Minipartitur fuer den Selbsttest
+# (`GET /selftest`). Kopie von spike/test-scores/repeat-test.mscz - die
+# einzige selbst erstellte und damit committbare Testpartitur (siehe
+# spike/test-scores/README.md). Sie deckt Wiederholung und Volta ab, also
+# genau die Struktur, an der ein Formatwechsel in `--score-media` zuerst
+# auffiele (PLAN.md M7).
+COPY selftest-score.mscz /opt/scoreview-sidecar/selftest-score.mscz
+
 # Overridable per `docker run -e`; server.py enforces this as a hard
 # wall-clock guard so a hung MuseScore process (Risiko 6) cannot hang a
 # conversion job indefinitely.
-ENV MSCORE_TIMEOUT_SECONDS=120
+#
+# Raised from 120 to 600 in Phase 20 after measuring ~5.4s per rendered page
+# (+1s startup): 120s aborted at roughly 22 pages, i.e. it would have failed
+# the orchestral scores the app targets. Kept in sync with server.py's own
+# fallback default on purpose - this ENV wins over that fallback, so leaving
+# it at 120 here would have silently kept the old behaviour.
+ENV MSCORE_TIMEOUT_SECONDS=600
 
 # Phase 12 (Haertung, Minimum aus PLAN.md): der Konvertierungsprozess
 # (mscore4portable, eine grosse C++/Qt-Codebasis auf beliebigen,

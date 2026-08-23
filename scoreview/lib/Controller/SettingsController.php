@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Service\HealthService;
+use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Settings\AdminSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
@@ -16,8 +18,33 @@ class SettingsController extends Controller {
 	public function __construct(
 		IRequest $request,
 		private IConfig $config,
+		private HealthService $healthService,
+		private SidecarClient $sidecarClient,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+	}
+
+	/**
+	 * Betriebsdiagnose fuer die Admin-Seite (Phase 21): Sidecar erreichbar,
+	 * SoundFont vorhanden, Cron am Laufen, Konvertierungsstand. Bewusst
+	 * lesend und ohne Seiteneffekt - der eigentliche Selbsttest (der eine
+	 * echte Konvertierung startet) sitzt getrennt in selfTest().
+	 */
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
+	public function health(): JSONResponse {
+		return new JSONResponse($this->healthService->collect());
+	}
+
+	/**
+	 * Startet den Sidecar-Selbsttest (Phase 21, MuseScore-Versionspflege):
+	 * eine echte Konvertierung der mitgelieferten Minipartitur, geprueft auf
+	 * die Zusagen aus M2/M4/M7. Getrennt von health(), weil er ~8s dauert
+	 * und eine Konvertierung ausloest - das soll nur passieren, wenn jemand
+	 * es ausdruecklich anstoesst.
+	 */
+	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
+	public function selfTest(): JSONResponse {
+		return new JSONResponse($this->sidecarClient->runSelfTest());
 	}
 
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]

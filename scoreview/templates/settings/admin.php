@@ -38,4 +38,21 @@ declare(strict_types=1);
 			<span id="scoreview-settings-status"></span>
 		</p>
 	</form>
+
+	<!--
+		Betriebsdiagnose (Phase 21): macht sichtbar, was bisher nur im Log
+		oder gar nicht stand - insbesondere ob der Nextcloud-Cron laeuft.
+		Ohne ihn bleibt jede Konvertierung stumm auf "pending" stehen, ohne
+		dass irgendwo ein Fehler erscheint (siehe PLAN.md Phase 21).
+	-->
+	<h3><?php p($l->t('Status')); ?></h3>
+	<div id="scoreview-health"><?php p($l->t('Loading…')); ?></div>
+	<p>
+		<button type="button" id="scoreview-health-refresh"><?php p($l->t('Refresh')); ?></button>
+		<button type="button" id="scoreview-selftest-run"><?php p($l->t('Run sidecar self-test')); ?></button>
+		<span id="scoreview-selftest-status"></span>
+	</p>
+	<p>
+		<em><?php p($l->t('The self-test converts a small bundled score and checks that MuseScore still returns what the app expects. Run it after changing the MuseScore version in the sidecar image.')); ?></em>
+	</p>
 </div>

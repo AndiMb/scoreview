@@ -109,6 +109,59 @@ class SidecarClient {
 	 * @return array{available: bool, name?: string, size?: int, version?: string}
 	 * @throws SidecarException
 	 */
+	/**
+	 * Health-Abfrage fuer die Admin-Anzeige (Phase 21). Bewusst gegen
+	 * `/health` statt gegen einen der Arbeits-Endpunkte: `/health` verlangt
+	 * als einziger Endpunkt KEIN Secret (siehe sidecar/README.md), damit
+	 * laesst sich "Sidecar laeuft ueberhaupt" von "Secret stimmt nicht"
+	 * unterscheiden - genau die Unterscheidung, die bei einer Fehlersuche
+	 * ohne Logzugriff fehlt. `/selftest` wird davon getrennt abgefragt.
+	 *
+	 * @return array{reachable: bool, error?: string}
+	 */
+	public function checkHealth(): array {
+		if ($this->getBaseUrl() === '') {
+			return ['reachable' => false, 'error' => 'Keine Sidecar-URL konfiguriert.'];
+		}
+		try {
+			$response = $this->clientService->newClient()->get($this->getBaseUrl() . '/health', ['timeout' => 5]);
+			return ['reachable' => trim((string)$response->getBody()) === 'ok'];
+		} catch (\Exception $e) {
+			return ['reachable' => false, 'error' => $e->getMessage()];
+		}
+	}
+
+	/**
+	 * Selbsttest des Sidecars (Phase 21): konvertiert die mitgelieferte
+	 * Minipartitur und meldet, ob `--score-media` im aktuellen Image noch
+	 * das erwartete Ergebnis liefert. Antwort ist bewusst auch im
+	 * Negativfall HTTP 200 mit `ok: false` - ein 5xx waere von "Sidecar
+	 * nicht erreichbar" nicht zu unterscheiden.
+	 *
+	 * @return array{ok: bool, error?: string, details?: array}
+	 */
+	public function runSelfTest(): array {
+		if (!$this->isConfigured()) {
+			return ['ok' => false, 'error' => 'Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).'];
+		}
+		try {
+			// Grosszuegiger Timeout: der Selbsttest laesst eine echte
+			// MuseScore-Konvertierung laufen (gemessen ~6s fuer die
+			// einseitige Testpartitur, siehe PLAN.md Phase 20).
+			$response = $this->clientService->newClient()->get($this->getBaseUrl() . '/selftest', [
+				'headers' => $this->headers(),
+				'timeout' => 120,
+			]);
+		} catch (\Exception $e) {
+			return ['ok' => false, 'error' => $e->getMessage()];
+		}
+		$body = json_decode($response->getBody(), true);
+		if (!is_array($body) || !isset($body['ok'])) {
+			return ['ok' => false, 'error' => 'Sidecar-Antwort auf /selftest ohne ok-Feld (zu alter Sidecar?).'];
+		}
+		return $body;
+	}
+
 	public function fetchSoundFontInfo(): array {
 		if (!$this->isConfigured()) {
 			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).');
