@@ -106,7 +106,16 @@ export default {
 			const box = this.viewBox
 			return {
 				aspectRatio: box ? `${box.width} / ${box.height}` : '210 / 297',
-				maxWidth: `${BASE_PAGE_WIDTH_PX * this.zoom}px`,
+				// Echte Breite statt `width: 100%` + `max-width` (Phase 22):
+				// mit der alten Fassung war die Containerbreite eine harte
+				// Obergrenze - `900 * zoom` wirkte nur, solange es KLEINER als
+				// der Container war. Hineinzoomen und schieben (der Normalfall
+				// am Tablet) ging damit gar nicht. Die Zoomstufe legt die
+				// Breite jetzt allein fest; der Scroll-Container in
+				// ScoreViewer.vue erlaubt dafür waagerechtes Scrollen, und
+				// "Seitenbreite" ist dort der Startwert, damit sich nichts
+				// ändert, solange niemand selbst zoomt.
+				width: `${BASE_PAGE_WIDTH_PX * this.zoom}px`,
 			}
 		},
 
@@ -229,7 +238,8 @@ export default {
 <style scoped>
 .score-page {
 	position: relative;
-	width: 100%;
+	/* Breite kommt aus pageStyle (Zoom) - hier bewusst KEIN width/max-width,
+	   sonst wäre der Zoom wieder an der Containerbreite gedeckelt. */
 	margin: 0 auto 16px auto;
 	background: #fff;
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);

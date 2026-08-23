@@ -39,10 +39,19 @@ export function useScoreSync(timeline, clock, onCursorChange) {
 		}
 	}
 
+	// Bewusst JEDEN Frame, nicht nur während der Wiedergabe (Phase 22): ein
+	// Sprung bei angehaltener Wiedergabe (Taktfeld, Klick auf eine Note,
+	// Loop-Start) wirkte sonst nicht sichtbar. Grund ist der Setter
+	// `sequencer.currentTime` in player.js - er wirkt NICHT synchron, der
+	// unmittelbar danach aus dem 'seeked'-Ereignis gelesene Zeitwert war noch
+	// der alte. Der Cursor blieb deshalb stehen, während die Transportanzeige
+	// (eigene rAF-Schleife in ScoreViewer.vue) längst die neue Zeit zeigte -
+	// gemessen an einem Sprung zu Takt 30, der die Zeit auf 1:29 setzte und
+	// den Cursor in Takt 1 stehen ließ. Die Kosten sind eine Binärsuche pro
+	// Frame; die Referenzgleichheit unten verhindert weiterhin jede unnötige
+	// Vue-Reaktivität.
 	function tick() {
-		if (clock.isPlaying()) {
-			update()
-		}
+		update()
 		rafHandle = requestAnimationFrame(tick)
 	}
 

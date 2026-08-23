@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeCountInDelaysMs, estimateBeatsInMeasure } from './metronome.js'
+import { computeCountInDelaysMs, estimateBeatsInMeasure, resolveBeatInMeasure } from './metronome.js'
 
 describe('estimateBeatsInMeasure', () => {
 	it('schätzt 4 Schläge für einen Takt bei Viertel = 80 (wwimf-Messwert, 4/4)', () => {
@@ -31,5 +31,32 @@ describe('computeCountInDelaysMs', () => {
 
 	it('liefert mindestens einen Klick', () => {
 		expect(computeCountInDelaysMs(0, 500)).toEqual([0])
+	})
+})
+
+describe('resolveBeatInMeasure', () => {
+	// 4/4-Takt bei Viertel = 80: 3000ms, Schläge alle 750ms (wwimf-Messwert).
+	const measure = [12000, 15000]
+
+	it('liefert den Taktanfang mit Index 0', () => {
+		expect(resolveBeatInMeasure(...measure, 12000, 80)).toEqual({ index: 0, timeMs: 12000 })
+	})
+
+	it('liefert den laufenden Schlag samt seiner exakten Zeit', () => {
+		expect(resolveBeatInMeasure(...measure, 13600, 80)).toEqual({ index: 2, timeMs: 13500 })
+	})
+
+	it('bleibt am letzten Schlag, wenn die Zeit über den Takt hinausläuft', () => {
+		// Kommt durch den Vorlauf vor (ScoreViewer.vue fragt leicht in die
+		// Zukunft) - der nächste Takt bringt dann seinen eigenen Anfang mit.
+		expect(resolveBeatInMeasure(...measure, 15200, 80)).toEqual({ index: 3, timeMs: 14250 })
+	})
+
+	it('klickt auf Wunsch nur den Taktanfang (Verhalten bis Phase 21)', () => {
+		expect(resolveBeatInMeasure(...measure, 13600, 80, false)).toEqual({ index: 0, timeMs: 12000 })
+	})
+
+	it('liefert null, wenn der Takt keine Dauer hat', () => {
+		expect(resolveBeatInMeasure(12000, 12000, 12000, 80)).toBeNull()
 	})
 })

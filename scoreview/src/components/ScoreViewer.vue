@@ -15,21 +15,22 @@
 			</details>
 		</div>
 		<template v-else>
-			<div class="scoreview-transport">
-				<!--
-					Dauerhaft sichtbare Taktangabe (Phase 16, "wer wissen will, wo er
-					ist, scrollt nach oben zum Eingabefeld") - in der ohnehin schon
-					sticky Transportleiste, nicht in einer eigenen Kopfzeile. Der Titel
-					ist Material aus der Partitur selbst, kein UI-Text (CLAUDE.md) und
-					bleibt deshalb unübersetzt.
-				-->
-				<span v-if="scoreTitle || totalMeasures" class="scoreview-position" :title="scoreTitle">
-					<strong v-if="scoreTitle" class="scoreview-position-title">{{ scoreTitle }}</strong>
-					<span class="scoreview-position-measure">{{ t('Measure {current} of {total}', { current: currentMeasureDisplay, total: totalMeasures || '–' }) }}</span>
-				</span>
+			<!--
+				EINE Leiste, und zwar ausserhalb des Scroll-Bereichs (Phase 22).
+				Bis Phase 21 waren es zwei sticky Leisten IM Scroll-Container -
+				davon blieb nur die erste sichtbar, die zweite (Takt, Loop, Zoom,
+				Vollbild) und die Panels waren nur ganz oben erreichbar, wohin man
+				beim Lesen nie zurueckkommt (das Autoscroll scrollt schon beim
+				Oeffnen darueber hinweg). Als Geschwister eines eigenen
+				Scroll-Elements ist "wegscrollen" strukturell unmoeglich - und der
+				z-index-Wettlauf gegen die SVG-Seiten aus Phase 17 entfaellt.
+			-->
+			<div class="scoreview-bar">
 				<NcButton
 					class="scoreview-play"
+					variant="primary"
 					:aria-label="isPlaying ? t('Pause') : t('Play')"
+					:title="isPlaying ? t('Pause') : t('Play')"
 					@click="togglePlay">
 					<template #icon>
 						<Pause v-if="isPlaying" :size="20" />
@@ -45,185 +46,280 @@
 					:aria-label="t('Playback position')"
 					@input="onSeekInput">
 				<span class="scoreview-time">{{ formatTime(currentTimeMs) }} / {{ formatTime(durationMs) }}</span>
-				<template v-if="hasRealPlayer">
-					<!--
-						BPM statt Prozent (Phase 17, auf Basis von M8: metadata.tempo ist
-						Viertel-BPM) - der Notensymbol-Text "♩ = 80" statt "100%" ist die
-						Einheit, die eine Chorleitung tatsächlich ansagt. tempoGuessed
-						markiert Partituren ohne eigene Tempoangabe (M8: tempo kann 0
-						sein) sichtbar als geschätzt, statt eine Genauigkeit vorzutäuschen,
-						die nicht da ist.
-					-->
-					<label class="scoreview-tempo-label" :title="tempoGuessed ? t('No tempo marking in the score – 120 BPM assumed.') : ''">
-						♩ = {{ effectiveTempoBpm }}{{ tempoGuessed ? '*' : '' }}
-						<input
-							type="range"
-							class="scoreview-tempo"
-							:min="minTempoBpm"
-							:max="maxTempoBpm"
-							step="1"
-							:value="effectiveTempoBpm"
-							:aria-label="t('Tempo (BPM)')"
-							@input="onTempoBpmInput">
-					</label>
-					<NcButton :pressed="metronomeEnabled" :aria-label="metronomeEnabled ? t('Metronome on') : t('Metronome off')" @click="metronomeEnabled = !metronomeEnabled">
-						<template #icon>
-							<Metronome :size="20" />
-						</template>
-					</NcButton>
-					<NcButton :pressed="showMixer" :aria-label="t('Mixer')" @click="showMixer = !showMixer">
-						<template #icon>
-							<Tune :size="20" />
-						</template>
-						{{ t('Mixer') }}
-					</NcButton>
-				</template>
-				<NcButton :pressed="showAnnotations" :aria-label="t('Notes')" @click="showAnnotations = !showAnnotations">
+				<!--
+					Taktanzeige und Sprungfeld sind DASSELBE Feld (Phase 22): die
+					dauerhaft sichtbare Angabe aus Phase 16 und das Eingabefeld aus
+					Phase 10 zeigten dieselbe Zahl an zwei Stellen und kosteten
+					zusammen fast eine halbe Leiste. Solange das Feld den Fokus hat,
+					laeuft die Anzeige nicht mit - sonst wuerde die Wiedergabe die
+					gerade getippte Zahl ueberschreiben.
+				-->
+				<span class="scoreview-measure">
+					<!-- Die feste Breite sitzt am Wrapper, nicht an NcTextField
+						selbst - Begründung im CSS unten. -->
+					<span class="scoreview-measure-field">
+						<NcTextField
+							v-model.number="measureInput"
+							type="number"
+							min="1"
+							:label="t('Measure')"
+							:title="t('Measure – enter a number and press Enter to jump there')"
+							label-outside
+							@focus="measureFieldFocused = true"
+							@blur="onMeasureFieldBlur"
+							@keyup.enter="jumpToMeasure(measureInput)" />
+					</span>
+					<span class="scoreview-measure-total">/ {{ totalMeasures || '–' }}</span>
+				</span>
+				<NcPopover>
+					<template #trigger>
+						<NcButton :pressed="loopActive" :aria-label="t('Loop')" :title="loopActive ? t('Loop on') : t('Loop off')">
+							<template #icon>
+								<Repeat :size="20" />
+							</template>
+						</NcButton>
+					</template>
+					<template #default>
+						<div class="scoreview-popover">
+							<div class="scoreview-popover-row">
+								<NcTextField
+									v-model.number="loopFromMeasure"
+									type="number"
+									min="1"
+									:label="t('From measure')" />
+								<NcTextField
+									v-model.number="loopToMeasure"
+									type="number"
+									min="1"
+									:label="t('To measure')" />
+							</div>
+							<NcButton wide :aria-label="t('Loop from current measure')" @click="loopFromCurrentMeasure">
+								<template #icon>
+									<CrosshairsGps :size="20" />
+								</template>
+								{{ t('Loop from current measure') }}
+							</NcButton>
+							<NcButton wide :pressed="loopActive" :aria-label="loopActive ? t('Loop on') : t('Loop off')" @click="toggleLoop">
+								<template #icon>
+									<Repeat :size="20" />
+								</template>
+								{{ loopActive ? t('Loop on') : t('Loop off') }}
+							</NcButton>
+						</div>
+					</template>
+				</NcPopover>
+				<!--
+					BPM statt Prozent (Phase 17, auf Basis von M8: metadata.tempo ist
+					Viertel-BPM) - der Notensymbol-Text "♩ 80" statt "100%" ist die
+					Einheit, die eine Chorleitung tatsaechlich ansagt. tempoGuessed
+					markiert Partituren ohne eigene Tempoangabe (M8: tempo kann 0
+					sein) sichtbar als geschaetzt, statt eine Genauigkeit
+					vorzutaeuschen, die nicht da ist. Der Regler dazu liegt seit
+					Phase 22 im Popover - er wird einmal eingestellt, nicht dauernd.
+				-->
+				<NcPopover>
+					<template #trigger>
+						<NcButton
+							class="scoreview-tempo-button"
+							:aria-label="t('Tempo and metronome')"
+							:title="tempoGuessed ? t('No tempo marking in the score – 120 BPM assumed.') : t('Tempo and metronome')">
+							♩ {{ effectiveTempoBpm }}{{ tempoGuessed ? '*' : '' }}
+						</NcButton>
+					</template>
+					<template #default>
+						<div class="scoreview-popover">
+							<label v-if="hasRealPlayer" class="scoreview-popover-label">
+								{{ t('Tempo (BPM)') }}: ♩ = {{ effectiveTempoBpm }}
+								<input
+									type="range"
+									:min="minTempoBpm"
+									:max="maxTempoBpm"
+									step="1"
+									:value="effectiveTempoBpm"
+									:aria-label="t('Tempo (BPM)')"
+									@input="onTempoBpmInput">
+							</label>
+							<fieldset class="scoreview-popover-group">
+								<legend>{{ t('Metronome') }}</legend>
+								<NcCheckboxRadioSwitch v-model="metronomeBeats" type="radio" value="all" name="scoreview-metronome-beats">
+									{{ t('Every beat') }}
+								</NcCheckboxRadioSwitch>
+								<NcCheckboxRadioSwitch v-model="metronomeBeats" type="radio" value="downbeat" name="scoreview-metronome-beats">
+									{{ t('Downbeat only') }}
+								</NcCheckboxRadioSwitch>
+							</fieldset>
+						</div>
+					</template>
+				</NcPopover>
+				<NcButton
+					:pressed="metronomeEnabled"
+					:aria-label="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
+					:title="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
+					@click="metronomeEnabled = !metronomeEnabled">
+					<template #icon>
+						<Metronome :size="20" />
+					</template>
+				</NcButton>
+				<NcPopover>
+					<template #trigger>
+						<NcButton :aria-label="t('Zoom')" :title="t('Zoom')">
+							<template #icon>
+								<Magnify :size="20" />
+							</template>
+						</NcButton>
+					</template>
+					<template #default>
+						<div class="scoreview-popover">
+							<label class="scoreview-popover-label">
+								{{ t('Zoom') }}: {{ zoomPercent }}%
+								<input
+									type="range"
+									:min="minZoom"
+									:max="maxZoom"
+									step="0.05"
+									:value="zoom"
+									:aria-label="t('Zoom')"
+									@input="onZoomInput">
+							</label>
+							<NcButton wide @click="applyZoomPreset('width')">
+								<template #icon>
+									<ArrowExpandHorizontal :size="20" />
+								</template>
+								{{ t('Fit page width') }}
+							</NcButton>
+							<NcButton wide @click="applyZoomPreset('page')">
+								<template #icon>
+									<FitToPage :size="20" />
+								</template>
+								{{ t('Fit whole page') }}
+							</NcButton>
+							<NcButton wide @click="applyZoomPreset('actual')">
+								<template #icon>
+									<Magnify :size="20" />
+								</template>
+								{{ t('Actual size') }}
+							</NcButton>
+						</div>
+					</template>
+				</NcPopover>
+				<NcButton
+					v-if="hasRealPlayer"
+					:pressed="showMixer"
+					:aria-label="t('Mixer')"
+					:title="t('Mixer')"
+					@click="showMixer = !showMixer">
+					<template #icon>
+						<Tune :size="20" />
+					</template>
+				</NcButton>
+				<NcButton :pressed="showAnnotations" :aria-label="t('Notes')" :title="t('Notes')" @click="showAnnotations = !showAnnotations">
 					<template #icon>
 						<NotebookOutline :size="20" />
 					</template>
-					{{ t('Notes') }}
 				</NcButton>
-			</div>
-			<div class="scoreview-rehearsal">
-				<NcTextField
-					v-model.number="measureInput"
-					type="number"
-					min="1"
-					class="scoreview-measure-input"
-					:label="t('Measure')"
-					label-outside
-					@keyup.enter="jumpToMeasure(measureInput)" />
-				<NcButton :aria-label="t('Go')" @click="jumpToMeasure(measureInput)">
-					<template #icon>
-						<ArrowRight :size="20" />
-					</template>
-					{{ t('Go') }}
-				</NcButton>
-				<span class="scoreview-loop-fields">
-					{{ t('Loop') }}
-					<NcTextField
-						v-model.number="loopFromMeasure"
-						type="number"
-						min="1"
-						class="scoreview-loop-input"
-						:label="t('From measure')"
-						label-outside
-						:placeholder="t('from')" />
-					<NcTextField
-						v-model.number="loopToMeasure"
-						type="number"
-						min="1"
-						class="scoreview-loop-input"
-						:label="t('To measure')"
-						label-outside
-						:placeholder="t('to')" />
-					<NcButton :aria-label="t('Loop from current measure')" :title="t('Loop from current measure')" @click="loopFromCurrentMeasure">
-						<template #icon>
-							<CrosshairsGps :size="20" />
-						</template>
-					</NcButton>
-					<NcButton :pressed="loopActive" :aria-label="loopActive ? t('Loop on') : t('Loop off')" @click="toggleLoop">
-						<template #icon>
-							<Repeat :size="20" />
-						</template>
-						{{ loopActive ? t('Loop on') : t('Loop off') }}
-					</NcButton>
-				</span>
-				<label class="scoreview-zoom-label">
-					{{ t('Zoom') }}
-					<input type="range" min="0.5" max="2" step="0.1" :value="zoom" :aria-label="t('Zoom')" @input="onZoomInput">
-				</label>
-				<!--
-					Zoom-Presets in ein Aktionsmenue statt drei einzelne Knoepfe
-					(Phase 19: "selten Benutztes in ein Aktionsmenue", der stufenlose
-					Regler direkt daneben bleibt der primaere Zoom-Weg) - entlastet die
-					Leiste auf schmalen/Touch-Bildschirmen.
-				-->
-				<NcActions :aria-label="t('More zoom options')">
-					<NcActionButton @click="applyZoomPreset('width')">
-						<template #icon>
-							<ArrowExpandHorizontal :size="20" />
-						</template>
-						{{ t('Fit page width') }}
-					</NcActionButton>
-					<NcActionButton @click="applyZoomPreset('page')">
-						<template #icon>
-							<FitToPage :size="20" />
-						</template>
-						{{ t('Fit whole page') }}
-					</NcActionButton>
-					<NcActionButton @click="applyZoomPreset('actual')">
-						<template #icon>
-							<Magnify :size="20" />
-						</template>
-						{{ t('Actual size') }}
-					</NcActionButton>
-				</NcActions>
-				<NcButton :pressed="isFullscreen" :aria-label="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')" @click="toggleFullscreen">
+				<NcButton
+					:pressed="isFullscreen"
+					:aria-label="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
+					:title="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
+					@click="toggleFullscreen">
 					<template #icon>
 						<FullscreenExit v-if="isFullscreen" :size="20" />
 						<Fullscreen v-else :size="20" />
 					</template>
 				</NcButton>
 			</div>
-			<NcNoteCard v-if="soundFontLoading" type="info" class="scoreview-hint">
-				{{ t('Loading sound ({percent}%)…', { percent: soundFontLoadPercent }) }}
-				<NcButton @click="skipSoundFontLoad">
-					{{ t('Continue without sound') }}
-				</NcButton>
-			</NcNoteCard>
-			<NcNoteCard v-else-if="!hasRealPlayer" type="warning" class="scoreview-hint">
-				{{ t('No sound: {reason}', { reason: playbackError || t('Playback is not available.') }) }}
-				{{ t('The score cursor keeps running independently of this.') }}
-			</NcNoteCard>
-			<ScoreMixer
-				v-if="hasRealPlayer && showMixer && mixerChannels.length > 0"
-				:channels="mixerChannels"
-				:preset-list="presetList"
-				@volumes-changed="onVolumesChanged"
-				@program-changed="onProgramChanged" />
-			<ScoreAnnotations
-				v-if="showAnnotations"
-				:annotations="annotations"
-				:current-anchor="currentAnchor"
-				:error="annotationError"
-				@create="onAnnotationCreate"
-				@update="onAnnotationUpdate"
-				@delete="onAnnotationDelete"
-				@jump-to="onAnnotationJumpTo" />
-			<!--
-				Pinch-Zoom (Phase 19): eigene, zweifingrige Geste statt der
-				nativen Browser-Seiten-Zoom (die waere fuer die ganze
-				Nextcloud-Oberflaeche, nicht nur die Partitur) - siehe
-				onTouchMove(), das den Browser-Zoom waehrend der Geste bewusst
-				unterdrueckt (preventDefault). Einfingriges Scrollen bleibt
-				unangetastet (kein preventDefault dafuer), "Wischen zum
-				Blaettern" ist deshalb bewusst NICHT als zusaetzliche
-				Horizontal-Geste umgesetzt: das vertikale Scrollen deckt das
-				Blaettern in diesem fortlaufenden Einspaltenlayout bereits ab,
-				eine eigene Wischgeste haette zudem mit Nextcloud Viewers
-				eigener Wisch-zum-naechsten-Datei-Geste auf Mobilgeraeten
-				kollidieren koennen (siehe PLAN.md Phase 19).
-			-->
-			<div
-				class="scoreview-pages"
-				@touchstart="onTouchStart"
-				@touchmove="onTouchMove"
-				@touchend="onTouchEnd">
-				<ScorePage
-					v-for="(url, i) in pageUrls"
-					:key="url"
-					:ref="(el) => setPageRef(el, i)"
-					:svg-url="url"
-					:page-index="i"
-					:cursor-rect="cursorRect"
-					:zoom="zoom"
-					:markers="annotationMarkers"
-					:loop-markers="loopMarkers"
-					@note-click="onNoteClick"
-					@marker-click="onAnnotationJumpToById"
-					@loaded="onPageLoaded" />
+			<div class="scoreview-body">
+				<div
+					ref="scroll"
+					class="scoreview-scroll"
+					@scroll.passive="onViewerScroll"
+					@wheel="onWheel">
+					<NcNoteCard v-if="soundFontLoading" type="info" class="scoreview-hint">
+						{{ t('Loading sound ({percent}%)…', { percent: soundFontLoadPercent }) }}
+						<NcButton @click="skipSoundFontLoad">
+							{{ t('Continue without sound') }}
+						</NcButton>
+					</NcNoteCard>
+					<NcNoteCard v-else-if="!hasRealPlayer" type="warning" class="scoreview-hint">
+						{{ t('No sound: {reason}', { reason: playbackError || t('Playback is not available.') }) }}
+						{{ t('The score cursor keeps running independently of this.') }}
+					</NcNoteCard>
+					<!--
+						Pinch-Zoom (Phase 19): eigene, zweifingrige Geste statt der
+						nativen Browser-Seiten-Zoom (die waere fuer die ganze
+						Nextcloud-Oberflaeche, nicht nur die Partitur) - siehe
+						onTouchMove(), das den Browser-Zoom waehrend der Geste bewusst
+						unterdrueckt (preventDefault). Einfingriges Scrollen bleibt
+						unangetastet (kein preventDefault dafuer), "Wischen zum
+						Blaettern" ist deshalb bewusst NICHT als zusaetzliche
+						Horizontal-Geste umgesetzt: das vertikale Scrollen deckt das
+						Blaettern in diesem fortlaufenden Einspaltenlayout bereits ab,
+						eine eigene Wischgeste haette zudem mit Nextcloud Viewers
+						eigener Wisch-zum-naechsten-Datei-Geste auf Mobilgeraeten
+						kollidieren koennen (siehe PLAN.md Phase 19).
+					-->
+					<div
+						class="scoreview-pages"
+						@touchstart="onTouchStart"
+						@touchmove="onTouchMove"
+						@touchend="onTouchEnd">
+						<ScorePage
+							v-for="(url, i) in pageUrls"
+							:key="url"
+							:ref="(el) => setPageRef(el, i)"
+							:svg-url="url"
+							:page-index="i"
+							:cursor-rect="cursorRect"
+							:zoom="zoom"
+							:markers="annotationMarkers"
+							:loop-markers="loopMarkers"
+							@note-click="onNoteClick"
+							@marker-click="onAnnotationJumpToById"
+							@loaded="onPageLoaded" />
+					</div>
+				</div>
+				<!--
+					Mixer und Notizen liegen als Karten UEBER dem Notenbild statt
+					davor im Fluss (Phase 22): im Fluss kosteten sie Hoehe, sobald
+					sie offen waren, und waren - wie die zweite Leiste - nur ganz
+					oben zu sehen. Als Overlay kosten sie nichts, wenn sie zu sind,
+					und bleiben erreichbar, wo immer man gerade liest.
+				-->
+				<div v-if="showMixerPanel || showAnnotations" class="scoreview-panels">
+					<section v-if="showMixerPanel" class="scoreview-panel">
+						<div class="scoreview-panel-head">
+							<h3>{{ t('Mixer') }}</h3>
+							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="showMixer = false">
+								<template #icon>
+									<Close :size="20" />
+								</template>
+							</NcButton>
+						</div>
+						<ScoreMixer
+							:channels="mixerChannels"
+							:preset-list="presetList"
+							@volumes-changed="onVolumesChanged"
+							@program-changed="onProgramChanged" />
+					</section>
+					<section v-if="showAnnotations" class="scoreview-panel">
+						<div class="scoreview-panel-head">
+							<h3>{{ t('Notes') }}</h3>
+							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="showAnnotations = false">
+								<template #icon>
+									<Close :size="20" />
+								</template>
+							</NcButton>
+						</div>
+						<ScoreAnnotations
+							:annotations="annotations"
+							:current-anchor="currentAnchor"
+							:error="annotationError"
+							@create="onAnnotationCreate"
+							@update="onAnnotationUpdate"
+							@delete="onAnnotationDelete"
+							@jump-to="onAnnotationJumpTo" />
+					</section>
+				</div>
 			</div>
 		</template>
 	</div>
@@ -238,13 +334,13 @@ import NcTextField from '@nextcloud/vue/components/NcTextField'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import NcActions from '@nextcloud/vue/components/NcActions'
-import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import NcPopover from '@nextcloud/vue/components/NcPopover'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import Play from 'vue-material-design-icons/Play.vue'
 import Pause from 'vue-material-design-icons/Pause.vue'
 import Tune from 'vue-material-design-icons/Tune.vue'
 import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
-import ArrowRight from 'vue-material-design-icons/ArrowRight.vue'
+import Close from 'vue-material-design-icons/Close.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
 import ArrowExpandHorizontal from 'vue-material-design-icons/ArrowExpandHorizontal.vue'
@@ -266,16 +362,18 @@ import {
 	findElementAtPoint,
 	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
+	MAX_ZOOM,
 	measurePositionToTimeMs,
+	MIN_ZOOM,
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
 import { findStepIndex } from '../lib/timingSync.js'
 import { resolveMixerChannels } from '../lib/mixerLayout.js'
-import { planAutoScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
+import { planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
 import { useScoreSync } from '../composables/useScoreSync.js'
 import { createSilentClock } from '../lib/silentClock.js'
 import { createPlayer } from '../lib/player.js'
-import { computeCountInDelaysMs, estimateBeatsInMeasure } from '../lib/metronome.js'
+import { computeCountInDelaysMs, estimateBeatsInMeasure, resolveBeatInMeasure } from '../lib/metronome.js'
 import { createMetronomeClick } from '../lib/metronomeClick.js'
 
 // Pausendauer für das Autoscroll-Nachführen nach manuellem Scrollen (Phase
@@ -303,6 +401,15 @@ const DEFAULT_TEMPO_BPM = 120
 // tempounabhängig bleibt) - die BPM-Eingabe rechnet innerhalb dieser Grenzen.
 const MIN_TEMPO_FACTOR = 0.5
 const MAX_TEMPO_FACTOR = 1.5
+// Vorlauf, mit dem der naechste Metronomschlag gesucht und im AudioContext
+// terminiert wird (Phase 22, Zeitachsen-ms). Muss ueber einem
+// Bildwiederholtakt liegen (~16ms bei 60Hz), damit kein Schlag verpasst wird,
+// und klein genug bleiben, dass ein Sprung/Tempowechsel nicht mehrere schon
+// terminierte Klicks hinterherzieht.
+const METRONOME_LOOKAHEAD_MS = 60
+// Zoomschritt fuer Tastatur (+/-) und Strg+Mausrad - multiplikativ, damit sich
+// die gefuehlte Schrittweite ueber den ganzen Bereich (0,25-4) gleich anfuehlt.
+const ZOOM_STEP = 1.2
 
 export default {
 	name: 'ScoreViewer',
@@ -316,13 +423,13 @@ export default {
 		NcLoadingIcon,
 		NcEmptyContent,
 		NcNoteCard,
-		NcActions,
-		NcActionButton,
+		NcPopover,
+		NcCheckboxRadioSwitch,
 		Play,
 		Pause,
 		Tune,
 		NotebookOutline,
-		ArrowRight,
+		Close,
 		Repeat,
 		AlertCircleOutline,
 		ArrowExpandHorizontal,
@@ -387,8 +494,10 @@ export default {
 			autoRetried: false,
 			pageRefs: [],
 			timeDisplayHandle: null,
-			// Phase 16: Autoscroll (siehe scrollPlan.js) und Kopfangaben.
-			scoreTitle: '',
+			// Phase 16: Autoscroll (siehe scrollPlan.js) und Kopfangaben. Der
+			// Partiturtitel steht seit Phase 22 nicht mehr in der Leiste -
+			// Nextclouds Viewer zeigt den Dateinamen ohnehin in seiner eigenen
+			// Kopfzeile, und die Leiste braucht den Platz fuer Bedienelemente.
 			totalMeasures: 0,
 			// Geometrie der jeweils zuletzt geladenen Seite je Index (Phase 16,
 			// Zoom-Presets) - {viewBox, sizeMm}, gefüllt über ScorePage.vue "loaded".
@@ -400,10 +509,20 @@ export default {
 			// ausgelöst (performAutoScroll), nicht als manueller Nutzereingriff.
 			ignoreScrollUntil: 0,
 			isFullscreen: false,
+			// Ob der Zoom vor dem Vollbild der Fensterbreite folgte (siehe
+			// onFullscreenChange) - Vollbild erzwingt "ganze Seite".
+			zoomFollowedWidthBeforeFullscreen: false,
 			// Phase 10: Probenarbeit.
 			timeline: null, // timing.json (Note-Ebene) - für Klick-auf-Note.
 			measuresTimeline: null, // measures.json (Takt-Ebene) - für Taktnavigation/Loop.
+			// Zeigt die laufende Taktnummer UND nimmt das Sprungziel entgegen
+			// (Phase 22, ein Feld statt Anzeige + Eingabe) - siehe
+			// measureFieldFocused.
 			measureInput: 1,
+			// Solange das Taktfeld den Fokus hat, wird measureInput nicht mehr
+			// von der Wiedergabe nachgeführt: sonst überschriebe der nächste
+			// Takt die gerade getippte Zahl.
+			measureFieldFocused: false,
 			// '', nicht null: NcTextField (anders als ein natives <input>) nimmt
 			// als modelValue nur string|number entgegen und wirft bei null einen
 			// Laufzeitfehler ("Cannot read properties of null"). '' bleibt wie
@@ -415,6 +534,14 @@ export default {
 			loopStartMs: null,
 			loopEndMs: null,
 			zoom: 1,
+			// Solange niemand selbst gezoomt hat, folgt der Zoom der
+			// Fenstergröße ("Seitenbreite", siehe setUpViewportObserver) - das
+			// ist das Verhalten, das die Seite bis Phase 21 zwangsläufig hatte
+			// (`width: 100%`). Ab dem ersten eigenen Zoom gilt der gewählte
+			// Faktor absolut, sonst würde die App die Entscheidung der Nutzerin
+			// bei jedem Drehen des Tablets wieder verwerfen.
+			zoomFollowsWidth: true,
+			viewportObserver: null,
 			// Phase 11: private Notizen, Phase 18: zusaetzlich geteilte.
 			annotations: [],
 			showAnnotations: false,
@@ -433,8 +560,18 @@ export default {
 			// lib/metronome.js), deshalb ein eigener AudioContext-Klick statt
 			// eines MIDI-Kanals.
 			metronomeEnabled: false,
+			// 'all' = jeder Schlag (Voreinstellung seit Phase 22), 'downbeat' =
+			// nur der Taktanfang (das Verhalten bis Phase 21).
+			metronomeBeats: 'all',
 			metronomeClick: null,
-			lastClickedMeasureNumber: null,
+			// "<Taktindex>:<Schlagindex>" des zuletzt terminierten Klicks, oder
+			// null - verhindert Doppelklicks, weil die rAF-Schleife denselben
+			// Schlag mehrere Frames lang als fällig sieht.
+			lastBeatKey: null,
+			// Wiedergabezeit beim letzten Metronom-Tick: ein Rückwärtssprung
+			// (Seek, Loop-Neustart) setzt lastBeatKey zurück, damit die Eins
+			// danach wieder klickt, auch wenn es derselbe Schlag ist.
+			lastMetronomeTimeMs: 0,
 			countInTimers: [],
 			isCountingIn: false,
 			// Phase 19: Pinch-Zoom-Gestenzustand (siehe onTouchStart/-Move/-End).
@@ -479,10 +616,30 @@ export default {
 			return { ...position, elid: this.currentElid, anchorEtag: this.currentEtag }
 		},
 
-		// Für die Taktangabe in der Transportleiste (Phase 16) - '–' vor dem
-		// ersten berechneten Anker (currentAnchor braucht measuresTimeline).
-		currentMeasureDisplay() {
-			return this.currentAnchor ? this.currentAnchor.measureNumber : '–'
+		// Für das Taktfeld in der Leiste (Phase 16, seit Phase 22 zugleich das
+		// Sprungfeld) - null vor dem ersten berechneten Anker (currentAnchor
+		// braucht measuresTimeline).
+		currentMeasureNumber() {
+			return this.currentAnchor ? this.currentAnchor.measureNumber : null
+		},
+
+		// Nur zur Anzeige im Zoom-Popover.
+		zoomPercent() {
+			return Math.round(this.zoom * 100)
+		},
+
+		minZoom() {
+			return MIN_ZOOM
+		},
+
+		maxZoom() {
+			return MAX_ZOOM
+		},
+
+		// Der Mixer braucht echte Wiedergabe UND aufgelöste Kanäle - ohne
+		// beides bliebe eine leere Karte über dem Notenbild stehen.
+		showMixerPanel() {
+			return this.hasRealPlayer && this.showMixer && this.mixerChannels.length > 0
 		},
 
 		// Koordinaten je Notiz für die Seiten-Overlays: bevorzugt die exakte
@@ -564,15 +721,30 @@ export default {
 				this.releaseWakeLock()
 			}
 		},
+
+		// Taktfeld der Wiedergabe nachführen, solange niemand darin tippt
+		// (Phase 22: Anzeige und Eingabe sind dasselbe Feld).
+		currentMeasureNumber(measureNumber) {
+			if (measureNumber !== null && !this.measureFieldFocused) {
+				this.measureInput = measureNumber
+			}
+		},
+
+		// Nach einem Zoomwechsel steht das aktuelle System woanders - ohne
+		// dieses Nachziehen bliebe es bis zum nächsten Notenwechsel verschoben
+		// (bei angehaltener Wiedergabe: für immer). Bewusst mit force: ein
+		// Zoomwechsel ist eine ausdrückliche Handlung, keine Störung des
+		// Lesens wie ein manueller Scroll.
+		zoom() {
+			this.$nextTick(() => this.updateAutoScroll(this.cursorRect, true))
+		},
 	},
 
 	mounted() {
-		// Passive Listener am Root-Element (nicht an window/document, siehe
-		// PLAN.md Phase 16) - .scoreview-viewer ist der scrollende Container
-		// selbst (overflow: auto), this.$el ist hier stabil über die gesamte
-		// Lebensdauer der Komponente (anders als die ScorePage-Refs, die pro
-		// Partitur neu entstehen).
-		this.$el.addEventListener('scroll', this.onViewerScroll, { passive: true })
+		// Der Scroll-Listener sitzt seit Phase 22 im Template
+		// (@scroll.passive an .scoreview-scroll): das scrollende Element ist
+		// jetzt ein Kind, das erst im Zustand "ready" existiert, this.$el
+		// scrollt selbst nicht mehr.
 		document.addEventListener('fullscreenchange', this.onFullscreenChange)
 		// Tastaturkürzel (Phase 17) NICHT passiv: Leertaste/Pfeiltasten sollen
 		// die Seite nicht zusätzlich scrollen (siehe onKeydown - preventDefault
@@ -583,7 +755,6 @@ export default {
 
 	beforeUnmount() {
 		this.cleanup()
-		this.$el.removeEventListener('scroll', this.onViewerScroll)
 		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
 		this.$el.removeEventListener('keydown', this.onKeydown)
 	},
@@ -639,7 +810,6 @@ export default {
 			this.presetList = []
 			this.showMixer = false
 			this.pageRefs = []
-			this.scoreTitle = ''
 			this.totalMeasures = 0
 			this.pageDimensions = {}
 			this.lastManualScrollAt = null
@@ -652,6 +822,8 @@ export default {
 			this.loopStartMs = null
 			this.loopEndMs = null
 			this.zoom = 1
+			this.zoomFollowsWidth = true
+			this.measureFieldFocused = false
 			this.annotations = []
 			this.showAnnotations = false
 			this.annotationError = ''
@@ -662,7 +834,8 @@ export default {
 			this.baseTempoBpm = DEFAULT_TEMPO_BPM
 			this.tempoGuessed = false
 			this.metronomeEnabled = false
-			this.lastClickedMeasureNumber = null
+			this.lastBeatKey = null
+			this.lastMetronomeTimeMs = 0
 			this.isCountingIn = false
 			this.isPinching = false
 			this.soundFontLoading = false
@@ -692,6 +865,8 @@ export default {
 			this.clock = null
 			this.soundFontAbortController?.abort()
 			this.soundFontAbortController = null
+			this.viewportObserver?.disconnect()
+			this.viewportObserver = null
 			this.releaseWakeLock()
 		},
 
@@ -753,9 +928,17 @@ export default {
 				this.mixerChannels = resolveMixerChannels(this.metaTracks, this.metaParts)
 				this.baseTempoBpm = metaRes.data.tempo || DEFAULT_TEMPO_BPM
 				this.tempoGuessed = !metaRes.data.tempo
-				this.scoreTitle = metaRes.data.title || ''
 				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
 				this.loadAnnotations()
+				// Startzoom "Seitenbreite" statt fester Faktor 1 (Phase 22):
+				// die Seite hat jetzt eine echte Breite (ScorePage.vue), ein
+				// fester Faktor 1 hieße auf einem Telefon 900px Seitenbreite
+				// neben 390px Bildschirm. Erst nach $nextTick, damit
+				// .scoreview-pages die Seiten schon enthält und seine endgültige
+				// Breite (inkl. Scrollbalken) steht.
+				await this.$nextTick()
+				this.applyZoomPreset('width')
+				this.setUpViewportObserver()
 
 				if (soundFontUrl) {
 					await this.setUpRealPlayer(files.midi, soundFontUrl)
@@ -904,19 +1087,7 @@ export default {
 					if (this.loopActive && this.loopEndMs !== null && this.currentTimeMs >= this.loopEndMs) {
 						this.clock.seek(this.loopStartMs)
 					}
-					// Metronom-Klick auf Taktebene (Phase 17): einmal pro Takt, sobald
-					// currentAnchor.measureNumber wechselt - measures.json liefert
-					// keine Schlagauflösung (siehe lib/metronome.js), ein Klick pro
-					// Schlag ist daraus nicht ableitbar. Während des Einzählers
-					// (isCountingIn) übernimmt startCountIn() die Klicks selbst, damit
-					// hier keine doppelten entstehen.
-					if (this.metronomeEnabled && this.isPlaying && !this.isCountingIn) {
-						const measureNumber = this.currentAnchor?.measureNumber
-						if (measureNumber && measureNumber !== this.lastClickedMeasureNumber) {
-							this.lastClickedMeasureNumber = measureNumber
-							this.ensureMetronomeClick().click(true)
-						}
-					}
+					this.updateMetronome()
 				}
 				this.timeDisplayHandle = requestAnimationFrame(step)
 			}
@@ -962,6 +1133,51 @@ export default {
 			this.isCountingIn = false
 		},
 
+		// Laufender Metronomklick (Phase 17 auf Taktebene, seit Phase 22 auf
+		// Schlagebene - Nutzer-Rückmeldung: "nicht nur der erste Schlag im
+		// Takt"). Läuft in der rAF-Schleife mit, terminiert den Klick aber
+		// nicht dort: gesucht wird der Schlag, der in METRONOME_LOOKAHEAD_MS
+		// fällig ist, und die Restzeit geht an den AudioContext (siehe
+		// metronomeClick.js). Auf Taktebene fiel das rAF-Raster nicht auf, auf
+		// Schlagebene hörte man es.
+		//
+		// Der Vorlauf ist in Zeitachsen-ms gemessen; die Umrechnung in echte
+		// Sekunden teilt durch den Tempofaktor, weil die Zeitachse mit
+		// playbackRate läuft (Phase 9: die Zeitachse selbst bleibt unberührt).
+		updateMetronome() {
+			const now = this.currentTimeMs
+			// Rückwärtssprung (Seek, Loop-Neustart, Klick auf eine frühere
+			// Note): dasselbe Schlagraster gilt wieder von vorn.
+			if (now < this.lastMetronomeTimeMs) {
+				this.lastBeatKey = null
+			}
+			this.lastMetronomeTimeMs = now
+			if (!this.metronomeEnabled || !this.isPlaying || this.isCountingIn) {
+				return
+			}
+			const measures = this.measuresTimeline
+			if (!measures || measures.events.length === 0) {
+				return
+			}
+			const lookaheadMs = now + METRONOME_LOOKAHEAD_MS
+			const index = findStepIndex(measures.times, lookaheadMs)
+			const measureStartMs = measures.events[index].timeMs
+			const measureEndMs = index + 1 < measures.events.length
+				? measures.events[index + 1].timeMs
+				: this.durationMs
+			const beat = resolveBeatInMeasure(measureStartMs, measureEndMs, lookaheadMs, this.baseTempoBpm, this.metronomeBeats === 'all')
+			if (!beat) {
+				return
+			}
+			const key = `${index}:${beat.index}`
+			if (key === this.lastBeatKey) {
+				return
+			}
+			this.lastBeatKey = key
+			const delaySeconds = Math.max(0, (beat.timeMs - now) / (this.tempo || 1) / 1000)
+			this.ensureMetronomeClick().click(beat.index === 0, delaySeconds)
+		},
+
 		// Einzähler vor dem Loop-Start (Phase 17: "mehr wert als die meiste
 		// übrige Mixer-Funktionalität"). Schätzt die Schlagzahl des Zieltaktes
 		// aus seiner Dauer und der aktuellen BPM (lib/metronome.js - measures.json
@@ -980,17 +1196,21 @@ export default {
 				: this.durationMs
 			const beatsInMeasure = estimateBeatsInMeasure(nextMs - measureStartMs, this.baseTempoBpm)
 			const bpm = this.effectiveTempoBpm > 0 ? this.effectiveTempoBpm : DEFAULT_TEMPO_BPM
-			const delays = computeCountInDelaysMs(beatsInMeasure, 60000 / bpm)
+			const beatIntervalMs = 60000 / bpm
+			const delays = computeCountInDelaysMs(beatsInMeasure, beatIntervalMs)
 			this.isCountingIn = true
 			const click = this.ensureMetronomeClick()
-			this.countInTimers = delays.map((delay, i) => setTimeout(() => {
-				click.click(i === 0)
-				if (i === delays.length - 1) {
-					this.isCountingIn = false
-					this.countInTimers = []
-					this.clock?.play()
-				}
-			}, delay))
+			this.countInTimers = delays.map((delay, i) => setTimeout(() => click.click(i === 0), delay))
+			// Die Wiedergabe startet einen Schlag NACH dem letzten Einzähler-
+			// Klick (Phase 22). Bis Phase 21 startete sie auf dem letzten Klick
+			// - bei vier Schlägen zählte der Einzähler damit nur drei, und der
+			// vierte fiel mit der Eins zusammen. Am Dirigat ist das der
+			// Unterschied zwischen "und eins" und einem verschluckten Schlag.
+			this.countInTimers.push(setTimeout(() => {
+				this.isCountingIn = false
+				this.countInTimers = []
+				this.clock?.play()
+			}, delays[delays.length - 1] + beatIntervalMs))
 		},
 
 		onVolumesChanged(effectiveVolumes) {
@@ -1052,7 +1272,41 @@ export default {
 		},
 
 		onZoomInput(event) {
-			this.zoom = Number(event.target.value)
+			this.setZoom(Number(event.target.value))
+		},
+
+		// Einziger Weg, `zoom` zu setzen, außer der Fensterbreiten-Automatik
+		// (applyZoomPreset('width')/setUpViewportObserver): jeder selbst
+		// gewählte Zoom schaltet zoomFollowsWidth ab, sonst würde die
+		// Automatik ihn beim nächsten Resize wieder überschreiben.
+		setZoom(value) {
+			this.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value))
+			this.zoomFollowsWidth = false
+		},
+
+		zoomBy(factor) {
+			this.setZoom(this.zoom * factor)
+		},
+
+		// Strg+Mausrad zoomt die Partitur, nicht die Nextcloud-Oberfläche
+		// (dasselbe Motiv wie beim Pinch-Zoom aus Phase 19, siehe
+		// Template-Kommentar). Ohne Strg bleibt das Rad gewöhnliches Scrollen.
+		onWheel(event) {
+			if (!event.ctrlKey) {
+				return
+			}
+			event.preventDefault()
+			this.zoomBy(event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP)
+		},
+
+		// Beim Verlassen des Taktfeldes ohne Enter wieder der Wiedergabe
+		// folgen - eine halb getippte Zahl darf nicht als Anzeige stehen
+		// bleiben.
+		onMeasureFieldBlur() {
+			this.measureFieldFocused = false
+			if (this.currentMeasureNumber !== null) {
+				this.measureInput = this.currentMeasureNumber
+			}
 		},
 
 		// Tastaturkürzel für die Probe (Phase 17) - greifen nur, wenn der Viewer
@@ -1076,6 +1330,17 @@ export default {
 			} else if (event.code === 'KeyL') {
 				event.preventDefault()
 				this.toggleLoop()
+			} else if (event.key === '+') {
+				event.preventDefault()
+				this.zoomBy(ZOOM_STEP)
+			} else if (event.key === '-') {
+				event.preventDefault()
+				this.zoomBy(1 / ZOOM_STEP)
+			} else if (event.key === '0') {
+				// Zurück zur Seitenbreite - und wieder der Fenstergröße
+				// folgend, wie beim Öffnen.
+				event.preventDefault()
+				this.applyZoomPreset('width')
 			}
 		},
 
@@ -1177,19 +1442,21 @@ export default {
 			}
 		},
 
-		// Reine Sichtband-Rechnung in scrollPlan.js, hier nur die DOM-Messung
-		// dazu (Phase 16, ersetzt die frühere reine Seitenwechsel-Erkennung).
+		// Reine Rechnung in scrollPlan.js, hier nur die DOM-Messung dazu
+		// (Phase 16, ersetzt die frühere reine Seitenwechsel-Erkennung).
 		// Läuft bei jedem Notenwechsel (siehe useScoreSync.js), nicht jeden
-		// rAF-Frame - dieselbe Drosselung wie beim bisherigen Cursor-Update.
-		updateAutoScroll(rect) {
-			if (!rect) {
+		// rAF-Frame - dieselbe Drosselung wie beim bisherigen Cursor-Update -
+		// plus einmal nach jedem Zoomwechsel (Watcher, mit force).
+		updateAutoScroll(rect, force = false) {
+			const scrollEl = this.$refs.scroll
+			if (!rect || !scrollEl) {
 				return
 			}
-			if (shouldSuppressAutoScroll(this.lastManualScrollAt, Date.now(), MANUAL_SCROLL_RESUME_MS)) {
+			if (!force && shouldSuppressAutoScroll(this.lastManualScrollAt, Date.now(), MANUAL_SCROLL_RESUME_MS)) {
 				return
 			}
 			const pageEl = this.pageRefs[rect.page]
-			const containerRect = this.$el.getBoundingClientRect()
+			const containerRect = scrollEl.getBoundingClientRect()
 			const cursorClientRect = pageEl?.getCursorClientRect?.()
 			if (!cursorClientRect) {
 				// Die Zielseite ist noch nicht geladen (IntersectionObserver hat sie
@@ -1206,32 +1473,54 @@ export default {
 				// nachfolgenden genauen Scroll sofort wieder unterdrücken.
 				const pageClientRect = pageEl?.$el?.getBoundingClientRect?.()
 				if (pageClientRect) {
-					const pageTop = this.$el.scrollTop + (pageClientRect.top - containerRect.top)
+					const pageTop = scrollEl.scrollTop + (pageClientRect.top - containerRect.top)
 					this.performAutoScroll(pageTop)
 				}
 				return
 			}
-			const cursorTop = this.$el.scrollTop + (cursorClientRect.top - containerRect.top)
+			const cursorTop = scrollEl.scrollTop + (cursorClientRect.top - containerRect.top)
 			const target = planAutoScroll({
 				cursorTop,
 				cursorHeight: cursorClientRect.height,
-				scrollTop: this.$el.scrollTop,
-				viewportHeight: this.$el.clientHeight,
+				scrollTop: scrollEl.scrollTop,
+				viewportHeight: scrollEl.clientHeight,
 			})
-			if (target !== null) {
-				this.performAutoScroll(target)
+			// Waagerecht nur, wenn die Seite überhaupt breiter als das Bild ist
+			// (Phase 22: das kann sie jetzt, siehe ScorePage.vue) - sonst wäre
+			// jeder Aufruf eine überflüssige DOM-Schreiboperation.
+			let targetLeft = null
+			if (scrollEl.scrollWidth > scrollEl.clientWidth) {
+				targetLeft = planHorizontalScroll({
+					cursorLeft: scrollEl.scrollLeft + (cursorClientRect.left - containerRect.left),
+					cursorWidth: cursorClientRect.width,
+					scrollLeft: scrollEl.scrollLeft,
+					viewportWidth: scrollEl.clientWidth,
+				})
+			}
+			if (target !== null || targetLeft !== null) {
+				this.performAutoScroll(target, targetLeft)
 			}
 		},
 
-		performAutoScroll(targetScrollTop) {
-			const maxScrollTop = Math.max(0, this.$el.scrollHeight - this.$el.clientHeight)
-			const clamped = Math.min(Math.max(0, targetScrollTop), maxScrollTop)
+		performAutoScroll(targetScrollTop, targetScrollLeft = null) {
+			const scrollEl = this.$refs.scroll
+			if (!scrollEl) {
+				return
+			}
+			const clamp = (value, max) => Math.min(Math.max(0, value), Math.max(0, max))
+			const options = { behavior: 'smooth' }
+			if (targetScrollTop !== null) {
+				options.top = clamp(targetScrollTop, scrollEl.scrollHeight - scrollEl.clientHeight)
+			}
+			if (targetScrollLeft !== null) {
+				options.left = clamp(targetScrollLeft, scrollEl.scrollWidth - scrollEl.clientWidth)
+			}
 			// Markiert die eigenen, dadurch ausgelösten scroll-Events als
 			// "programmatisch" (siehe onViewerScroll) - sonst würde unser
 			// eigenes Nachführen sich selbst als manuellen Scroll auslegen und
 			// sofort wieder pausieren.
 			this.ignoreScrollUntil = Date.now() + PROGRAMMATIC_SCROLL_WINDOW_MS
-			this.$el.scrollTo({ top: clamped, behavior: 'smooth' })
+			scrollEl.scrollTo(options)
 		},
 
 		// Erkennt manuelles Scrollen (PLAN.md: "bei manuellem Scrollen
@@ -1252,7 +1541,8 @@ export default {
 		},
 
 		applyZoomPreset(preset) {
-			const pagesEl = this.$el.querySelector('.scoreview-pages')
+			const scrollEl = this.$refs.scroll
+			const pagesEl = scrollEl?.querySelector('.scoreview-pages')
 			if (!pagesEl) {
 				return
 			}
@@ -1261,20 +1551,43 @@ export default {
 			// Partitur mit Seite 0 aus dem Bild gescrollt sein sollte.
 			const dims = this.pageDimensions[0] ?? Object.values(this.pageDimensions)[0]
 			if (preset === 'width') {
-				this.zoom = computeFitWidthZoom(pagesEl.clientWidth)
-			} else if (preset === 'page') {
+				// Als einziger Zoomweg OHNE zoomFollowsWidth = false: "an die
+				// Breite anpassen" ist genau die Ansage, dass es das auch nach
+				// dem nächsten Drehen/Vergrößern noch tun soll.
+				this.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, computeFitWidthZoom(pagesEl.clientWidth)))
+				this.zoomFollowsWidth = true
+				return
+			}
+			if (preset === 'page') {
 				if (!dims?.viewBox) {
 					return
 				}
-				// Verfügbare Höhe ohne die sticky Transport-/Probenleiste, die über
-				// der Seite sichtbar bleiben (sonst rechnet sich "ganze Seite" zu
-				// groß und die Seite ragt darunter).
-				const reserved = (this.$el.querySelector('.scoreview-transport')?.offsetHeight ?? 0)
-					+ (this.$el.querySelector('.scoreview-rehearsal')?.offsetHeight ?? 0)
-				this.zoom = computeFitPageZoom(dims.viewBox, pagesEl.clientWidth, this.$el.clientHeight - reserved)
+				// Die Leiste liegt seit Phase 22 außerhalb des Scroll-Elements -
+				// dessen clientHeight IST die verfügbare Höhe, es ist nichts mehr
+				// abzuziehen (vorher: Höhe der beiden sticky Leisten).
+				this.setZoom(computeFitPageZoom(dims.viewBox, pagesEl.clientWidth, scrollEl.clientHeight))
 			} else if (preset === 'actual') {
-				this.zoom = computeActualSizeZoom(dims?.sizeMm ?? null)
+				this.setZoom(computeActualSizeZoom(dims?.sizeMm ?? null))
 			}
+		},
+
+		// Hält den Zoom an der Fensterbreite, solange niemand selbst gezoomt
+		// hat (siehe zoomFollowsWidth). Beobachtet wird .scoreview-body, nicht
+		// das Scroll-Element: dessen Innenbreite hängt am Scrollbalken, und ein
+		// Zoom, der den Scrollbalken erscheinen/verschwinden lässt, würde sich
+		// über den Beobachter selbst wieder anstoßen.
+		setUpViewportObserver() {
+			this.viewportObserver?.disconnect()
+			const bodyEl = this.$el.querySelector('.scoreview-body')
+			if (!bodyEl || typeof ResizeObserver === 'undefined') {
+				return
+			}
+			this.viewportObserver = new ResizeObserver(() => {
+				if (this.zoomFollowsWidth) {
+					this.applyZoomPreset('width')
+				}
+			})
+			this.viewportObserver.observe(bodyEl)
 		},
 
 		// Vollbild einer A4-Seite (Phase 16) - fullscreent den ganzen Viewer
@@ -1296,9 +1609,18 @@ export default {
 		},
 
 		onFullscreenChange() {
+			const wasFollowingWidth = this.zoomFollowsWidth
 			this.isFullscreen = document.fullscreenElement === this.$el
 			if (this.isFullscreen) {
+				// Merken, ob der Zoom vorher der Fensterbreite folgte -
+				// applyZoomPreset('page') schaltet das ab.
+				this.zoomFollowedWidthBeforeFullscreen = wasFollowingWidth
 				this.applyZoomPreset('page')
+			} else if (this.zoomFollowedWidthBeforeFullscreen) {
+				// Beim Verlassen nicht mit dem Vollbild-Zoom im kleinen Fenster
+				// zurückbleiben (Phase 22) - dort passte "ganze Seite" zu einer
+				// Fläche, die es nicht mehr gibt.
+				this.applyZoomPreset('width')
 			}
 		},
 
@@ -1370,7 +1692,7 @@ export default {
 				// .scoreview-pages.
 				event.preventDefault()
 				const distance = this.touchDistance(event.touches)
-				this.zoom = computePinchZoom(this.pinchStartDistance, distance, this.pinchStartZoom)
+				this.setZoom(computePinchZoom(this.pinchStartDistance, distance, this.pinchStartZoom))
 			}
 		},
 
@@ -1391,12 +1713,19 @@ export default {
 </script>
 
 <style scoped>
+/*
+ * Flex-Spalte statt eines einzigen scrollenden Kastens (Phase 22): die Leiste
+ * ist ein Geschwister des Scroll-Elements, kein sticky Kind darin. Damit kann
+ * sie nicht wegscrollen, und die Panels lassen sich über dem Notenbild
+ * platzieren, statt es nach unten zu schieben.
+ */
 .scoreview-viewer {
 	width: 100%;
 	height: 100%;
-	overflow: auto;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 	box-sizing: border-box;
-	padding: 12px;
 	background: var(--color-main-background);
 }
 
@@ -1452,53 +1781,20 @@ export default {
 }
 
 .scoreview-hint {
-	padding: 8px 1rem;
+	margin-bottom: 8px;
 }
 
-.scoreview-transport {
+.scoreview-bar {
+	flex: 0 0 auto;
 	display: flex;
 	align-items: center;
-	gap: 12px;
-	position: sticky;
-	top: 0;
-	/*
-	 * Muss über JEDEM Seiteninhalt liegen, auch beim Scrollen (Nutzer-
-	 * Feedback: der Play/Pause-Button war nur bedienbar, wenn ganz oben
-	 * gescrollt war). Grund: weder .scoreview-pages noch .score-page
-	 * eröffnen einen eigenen Stacking-Context, daher konkurrieren
-	 * .score-page-svg (z-index: 1, siehe ScorePage.vue) und
-	 * .score-page-marker (z-index: 2) direkt mit diesem z-index - ohne
-	 * einen klar höheren Wert hier hätte das zuletzt im DOM stehende
-	 * Seitenelement bei gleichem/höherem z-index den Klick auf die sticky
-	 * Transportleiste abgefangen, sobald sich beide beim Scrollen optisch
-	 * überlappen.
-	 */
-	z-index: 10;
+	gap: 6px;
+	/* Auf schmalen Bildschirmen darf sie umbrechen statt Knöpfe abzuschneiden -
+	   das ist selten und kostet dort eine Zeile, nicht dauerhaft Fläche. */
+	flex-wrap: wrap;
+	padding: 4px 8px;
+	border-bottom: 1px solid var(--color-border);
 	background: var(--color-main-background);
-	padding: 8px 0;
-	margin-bottom: 12px;
-}
-
-.scoreview-position {
-	flex: 0 1 auto;
-	display: flex;
-	flex-direction: column;
-	line-height: 1.2;
-	min-width: 0;
-	max-width: 220px;
-	overflow: hidden;
-}
-
-.scoreview-position-title {
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.scoreview-position-measure {
-	font-size: 0.85em;
-	color: var(--color-text-maxcontrast);
-	white-space: nowrap;
 }
 
 .scoreview-play {
@@ -1506,7 +1802,8 @@ export default {
 }
 
 .scoreview-seek {
-	flex: 1 1 auto;
+	flex: 1 1 120px;
+	min-width: 80px;
 }
 
 .scoreview-time {
@@ -1515,56 +1812,166 @@ export default {
 	color: var(--color-text-maxcontrast);
 }
 
-.scoreview-tempo-label {
+/* Auf Telefonbreite zählt jeder Millimeter: die Laufzeitanzeige ist die
+   entbehrlichste Angabe der Leiste (der Suchlauf daneben zeigt die Position
+   ohnehin), die Taktangabe dagegen die wichtigste. */
+@media (max-width: 600px) {
+	.scoreview-time {
+		display: none;
+	}
+}
+
+.scoreview-measure {
 	flex: 0 0 auto;
 	display: flex;
 	align-items: center;
 	gap: 4px;
+	color: var(--color-text-maxcontrast);
 	font-variant-numeric: tabular-nums;
-	color: var(--color-text-maxcontrast);
-}
-
-.scoreview-tempo {
-	width: 80px;
-}
-
-.scoreview-rehearsal {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	flex-wrap: wrap;
-	padding: 4px 0 12px 0;
-	color: var(--color-text-maxcontrast);
-}
-
-.scoreview-measure-input {
-	width: 70px;
 }
 
 /*
- * Breiter als scoreview-measure-input (Phase 17, Nutzer-Rückmeldung: die
- * Felder waren 60px breit und zeigten die "from"/"to"-Beschriftung nur
- * abgeschnitten an) - Platz für Label ("From measure"/"To measure") UND
- * eine mehrstellige Taktnummer samt Zahlenfeld-Spinner.
+ * Feste Breite MUSS an einen Wrapper, nicht an NcTextField selbst (Phase 22,
+ * Nutzer-Rückmeldung "das Taktfeld ist über die ganze Breite"): NcInputField
+ * bringt `.input-field[data-v-…] { width: 100% }` mit - dieselbe Spezifität
+ * wie eine scoped Klassenregel hier, und die Bibliotheks-CSS wird später
+ * eingebunden, gewinnt bei Gleichstand also. Die alte Regel
+ * `.scoreview-measure-input { width: 70px }` hatte deshalb nie gewirkt
+ * (gemessen: 1376px). Innerhalb eines schmalen Wrappers ist `width: 100%`
+ * genau das Gewünschte.
  */
-.scoreview-loop-input {
-	width: 130px;
+.scoreview-measure-field {
+	display: block;
+	width: 72px;
 }
 
-.scoreview-loop-fields {
-	display: flex;
-	align-items: center;
-	gap: 6px;
+/* Der obere Abstand von NcInputField (margin-block-start: 6px) verschiebt das
+   Feld in einer waagerechten Leiste gegen alles andere. */
+.scoreview-measure-field :deep(.input-field) {
+	margin-block-start: 0;
 }
 
-.scoreview-zoom-label {
-	display: flex;
-	align-items: center;
-	gap: 4px;
+.scoreview-measure-total {
+	white-space: nowrap;
 }
 
-.scoreview-pages {
+.scoreview-tempo-button {
+	font-variant-numeric: tabular-nums;
+}
+
+/* Popover-Inhalte (Loop, Tempo/Metronom, Zoom) - eine Spalte, breit genug
+   für die längste Beschriftung, aber schmal genug, um nicht das halbe
+   Notenbild zu verdecken. */
+.scoreview-popover {
 	display: flex;
 	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	min-width: 260px;
+	max-width: 320px;
+}
+
+.scoreview-popover-row {
+	display: flex;
+	gap: 8px;
+}
+
+.scoreview-popover-label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	color: var(--color-text-maxcontrast);
+}
+
+.scoreview-popover-group {
+	border: none;
+	margin: 0;
+	padding: 0;
+}
+
+.scoreview-popover-group legend {
+	color: var(--color-text-maxcontrast);
+	padding: 0 0 4px 0;
+}
+
+.scoreview-body {
+	position: relative;
+	flex: 1 1 auto;
+	/* Ohne min-height: 0 wächst ein Flex-Kind mit überlangem Inhalt über den
+	   Container hinaus, statt zu scrollen. */
+	min-height: 0;
+}
+
+.scoreview-scroll {
+	height: 100%;
+	/* Senkrecht IMMER mit Balken: sonst ändert sich die verfügbare Breite in
+	   dem Moment, in dem der Inhalt hoch genug wird - und der an die Breite
+	   gekoppelte Zoom (setUpViewportObserver) würde sich selbst anstoßen. */
+	overflow-y: scroll;
+	overflow-x: auto;
+	box-sizing: border-box;
+	padding: 12px;
+}
+
+/*
+ * Block statt Flex-Spalte (Phase 22): eine Seite kann jetzt breiter als der
+ * Container sein (Zoom, siehe ScorePage.vue). In einer zentrierenden
+ * Flex-Spalte wäre der überstehende linke Teil nicht mehr erreichbar - bei
+ * einem Blockelement mit `margin: 0 auto` fällt die Zentrierung im Überlauf
+ * einfach weg, und der Scrollbereich deckt die ganze Seite ab.
+ */
+.scoreview-pages {
+	display: block;
+}
+
+.scoreview-panels {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	/*
+	 * Muss über dem Notenbild liegen: .score-page-svg trägt z-index: 1 und
+	 * .score-page-marker z-index: 2 (ScorePage.vue), und weil weder
+	 * .scoreview-pages noch .score-page einen eigenen Stacking-Context
+	 * eröffnen, konkurrieren die direkt mit diesem Element. Ohne einen klar
+	 * höheren Wert malt das SVG durch die Panels hindurch (beim ersten
+	 * Nachmessen genau so beobachtet: der Mixer wirkte durchsichtig) - es ist
+	 * derselbe Fallstrick, den bis Phase 21 die sticky Transportleiste hatte.
+	 */
+	z-index: 20;
+	width: min(420px, 100%);
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 8px;
+	box-sizing: border-box;
+	overflow-y: auto;
+	/* Nur die Karten selbst fangen Klicks - der Zwischenraum gehört weiter
+	   dem Notenbild darunter (Klick auf eine Note springt dorthin). */
+	pointer-events: none;
+}
+
+.scoreview-panel {
+	pointer-events: auto;
+	box-sizing: border-box;
+	background: var(--color-main-background);
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large, 8px);
+	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+	padding: 8px 12px 12px 12px;
+	max-height: 100%;
+	overflow-y: auto;
+}
+
+.scoreview-panel-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.scoreview-panel-head h3 {
+	margin: 0;
+	font-size: 1.1em;
 }
 </style>

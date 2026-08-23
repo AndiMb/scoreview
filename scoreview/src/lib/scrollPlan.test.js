@@ -1,61 +1,84 @@
 import { describe, expect, it } from 'vitest'
-import { planAutoScroll, shouldSuppressAutoScroll } from './scrollPlan.js'
+import { planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from './scrollPlan.js'
 
 describe('planAutoScroll', () => {
-	// Viewport 1000px hoch, Band per Default 350-650px relativ zum sichtbaren
-	// Bereich (bandStart 0.35, bandEnd 0.65).
+	// Viewport 1000px hoch, Default-Rand 24px.
 	const base = { scrollTop: 2000, viewportHeight: 1000 }
 
-	it('liefert null, wenn der Cursor bereits im Sichtband liegt', () => {
-		// Band liegt bei [2350, 2650] - Cursor mittendrin.
+	it('liefert null, solange das System vollständig sichtbar ist', () => {
 		expect(planAutoScroll({ ...base, cursorTop: 2450, cursorHeight: 40 })).toBeNull()
 	})
 
-	it('scrollt nach oben, wenn der Cursor über dem Band liegt', () => {
-		const target = planAutoScroll({ ...base, cursorTop: 2100, cursorHeight: 40 })
-		// neues scrollTop so, dass die Cursor-Oberkante genau auf bandStart landet
-		expect(target).toBe(2100 - 1000 * 0.35)
+	it('führt nach oben nach, wenn das System über der Oberkante steht', () => {
+		const target = planAutoScroll({ ...base, cursorTop: 1900, cursorHeight: 40 })
+		// freier Platz = 1000 - 40 - 48 = 912, davon 35% über dem System
+		expect(target).toBe(1900 - (24 + 912 * 0.35))
 	})
 
-	it('scrollt nach unten, wenn der Cursor unter dem Band liegt', () => {
-		const cursorTop = 2900
-		const cursorHeight = 40
-		const target = planAutoScroll({ ...base, cursorTop, cursorHeight })
-		// neues scrollTop so, dass die Cursor-Unterkante genau auf bandEnd landet
-		expect(target).toBe((cursorTop + cursorHeight) - 1000 * 0.65)
+	it('führt nach unten nach, wenn das System unter der Unterkante steht', () => {
+		const target = planAutoScroll({ ...base, cursorTop: 2990, cursorHeight: 40 })
+		expect(target).toBe(2990 - (24 + 912 * 0.35))
 	})
 
-	it('behandelt eine Cursor-Unterkante GENAU auf der Bandgrenze noch als im Band', () => {
-		// bandBottomAbs = 2650, Cursor endet exakt dort.
-		expect(planAutoScroll({ ...base, cursorTop: 2600, cursorHeight: 50 })).toBeNull()
+	it('führt schon nach, wenn nur die Unterkante knapp abgeschnitten ist', () => {
+		// Unterkante bei 2990, sichtbar bis 2976 (Viewportende minus Rand) -
+		// mit der alten Sichtband-Regel hätte hier "alles gut" gestanden,
+		// obwohl die letzten Notenzeilen unter der Kante lagen.
+		expect(planAutoScroll({ ...base, cursorTop: 2600, cursorHeight: 390 })).not.toBeNull()
 	})
 
-	it('respektiert ein eigenes Sichtband', () => {
-		// Band bei bandStart 0.1/bandEnd 0.9 liegt bei [2100, 2900] - mit dem
-		// Default-Band (0.35/0.65, [2350, 2650]) wäre derselbe Cursor außerhalb.
-		const target = planAutoScroll({
-			...base, cursorTop: 2150, cursorHeight: 10, bandStart: 0.1, bandEnd: 0.9,
-		})
-		expect(target).toBeNull()
-	})
-
-	// Regression: bei SATB-/Mehrsystem-Partituren deckt das Cursor-Rechteck
-	// die ganze Notenzeile ab (siehe scrollPlan.js-Kommentar) und kann damit
-	// höher als das Band selbst sein - dann darf die Funktion nicht
-	// abwechselnd "Oberkante ins Band" und "Unterkante ins Band" verlangen
-	// (das wären zwei unerfüllbare, sich widersprechende Ziele), sonst
-	// springt der Viewport bei jedem Notenwechsel hin und her, obwohl sich
-	// die Note gar nicht bewegt hat. Nachgestellt am real beobachteten Fall.
-	it('oszilliert nicht, wenn der Cursor höher als das Band ist', () => {
-		const params = { cursorTop: 1000, cursorHeight: 500, viewportHeight: 1000 }
+	// Regression aus Phase 16/17: bei SATB-/Mehrsystem-Partituren deckt das
+	// Cursor-Rechteck die ganze Notenzeile ab und kann höher als der Viewport
+	// sein. Dann darf kein Ziel entstehen, das beim nächsten Aufruf sofort
+	// wieder korrigiert wird (real beobachtetes Hoch-Runter-Springen).
+	it('stabilisiert sich, wenn das System höher als der Viewport ist', () => {
+		const params = { cursorTop: 1000, cursorHeight: 1200, viewportHeight: 1000 }
 		const firstTarget = planAutoScroll({ ...params, scrollTop: 0 })
 		expect(firstTarget).not.toBeNull()
-		// Zweiter Aufruf mit UNVERÄNDERTER Cursorposition (wie bei mehreren
-		// Noten im selben System, siehe PLAN.md M4-Nachbarschaft), aber dem
-		// soeben berechneten scrollTop - muss sich stabilisieren (null),
-		// nicht ein neues, gegenläufiges Ziel liefern.
-		const secondTarget = planAutoScroll({ ...params, scrollTop: firstTarget })
-		expect(secondTarget).toBeNull()
+		expect(planAutoScroll({ ...params, scrollTop: firstTarget })).toBeNull()
+	})
+
+	// Dasselbe für den Normalfall: das berechnete Ziel muss die eigene
+	// "vollständig sichtbar"-Bedingung erfüllen, sonst führt jeder Frame
+	// erneut nach.
+	it('liefert nach einem Nachführen kein zweites Ziel', () => {
+		for (const cursorHeight of [10, 200, 800, 950]) {
+			const params = { cursorTop: 5000, cursorHeight, viewportHeight: 1000 }
+			const target = planAutoScroll({ ...params, scrollTop: 0 })
+			expect(target).not.toBeNull()
+			expect(planAutoScroll({ ...params, scrollTop: target })).toBeNull()
+		}
+	})
+
+	it('verschluckt den Rand nicht bei winzigem Viewport', () => {
+		// Rand ist auf 10% der Viewporthöhe gedeckelt (hier 12px statt 24px) -
+		// ohne den Deckel bliebe bei 120px Höhe kein Platz mehr übrig.
+		const params = { cursorTop: 500, cursorHeight: 30, viewportHeight: 120 }
+		const target = planAutoScroll({ ...params, scrollTop: 0 })
+		expect(planAutoScroll({ ...params, scrollTop: target })).toBeNull()
+	})
+
+	it('liefert null bei unbekannter Viewporthöhe', () => {
+		expect(planAutoScroll({ cursorTop: 100, cursorHeight: 10, scrollTop: 0, viewportHeight: 0 })).toBeNull()
+	})
+})
+
+describe('planHorizontalScroll', () => {
+	const base = { scrollLeft: 0, viewportWidth: 800 }
+
+	it('liefert null, solange die Stelle waagerecht sichtbar ist', () => {
+		expect(planHorizontalScroll({ ...base, cursorLeft: 300, cursorWidth: 40 })).toBeNull()
+	})
+
+	it('zentriert eine Stelle rechts außerhalb des Bildes', () => {
+		const target = planHorizontalScroll({ ...base, cursorLeft: 1200, cursorWidth: 40 })
+		expect(target).toBe(1200 - (800 - 40) / 2)
+		expect(planHorizontalScroll({ ...base, scrollLeft: target, cursorLeft: 1200, cursorWidth: 40 })).toBeNull()
+	})
+
+	it('legt eine breitere Stelle als das Bild links an', () => {
+		const target = planHorizontalScroll({ ...base, cursorLeft: 1000, cursorWidth: 900 })
+		expect(target).toBe(1000 - 24)
 	})
 })
 

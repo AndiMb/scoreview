@@ -34,6 +34,10 @@ SVG-Sanitizer statt Regex, Timeout-Default korrigiert) und Phase 21
 **teilweise** umgesetzt: die Abnahmen von 19 (echtes Tablet), 20
 (Orchesterpartitur, D.C. aus der MuseScore-GUI, Klangurteil) und 21
 (AppAPI-Verpackung) sind mangels Material bzw. Umfang ausdrücklich **offen**.
+Phase 22 (Bedienfläche: eine Leiste außerhalb des Scrollbereichs statt zweier
+mitscrollender, Mixer/Notizen als Overlay, Takt-Anzeige und -Eingabe in einem
+schmalen Feld, zoomabhängiges Autoscroll, Zoom über die Seitenbreite hinaus,
+Metronom auf jedem Schlag) ist umgesetzt und nachgemessen.
 Siehe `PLAN.md` für den vollständigen Stand inklusive offener Punkte.
 
 **Vorausgesetzt:** ein erreichbarer MuseScore-Sidecar (siehe `sidecar/`) -

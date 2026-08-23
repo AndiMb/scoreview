@@ -1,14 +1,13 @@
 <template>
 	<div class="scoreview-annotations">
-		<div class="scoreview-annotations-header">
-			<h3>{{ t('Notes') }}</h3>
-			<NcButton :aria-label="t('+ At current position')" @click="startNewAtCurrentPosition">
-				<template #icon>
-					<PlusCircleOutline :size="20" />
-				</template>
-				{{ t('+ At current position') }}
-			</NcButton>
-		</div>
+		<!-- Die Überschrift "Notes" liefert seit Phase 22 die Panel-Kopfzeile in
+			ScoreViewer.vue (samt Schließen-Knopf) - hier stünde sie doppelt. -->
+		<NcButton wide :aria-label="t('+ At current position')" @click="startNewAtCurrentPosition">
+			<template #icon>
+				<PlusCircleOutline :size="20" />
+			</template>
+			{{ t('+ At current position') }}
+		</NcButton>
 		<NcNoteCard v-if="error" type="error" class="scoreview-annotations-error">
 			{{ error }}
 		</NcNoteCard>
@@ -221,20 +220,10 @@ export default {
 </script>
 
 <style scoped>
+/* Rahmen und Abstand nach oben kommen seit Phase 22 von der Panel-Karte in
+   ScoreViewer.vue - hier bleibt nur der Inhalt. */
 .scoreview-annotations {
-	border-top: 1px solid var(--color-border);
 	padding-top: 8px;
-	margin-top: 12px;
-}
-
-.scoreview-annotations-header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-}
-
-.scoreview-annotations-header h3 {
-	margin: 0;
 }
 
 .scoreview-annotations-error {

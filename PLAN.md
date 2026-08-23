@@ -2040,6 +2040,163 @@ Entscheidung berührt E3 und ist bewusst nicht nebenbei gefallen.
   Image-Rebuilds dieser Sitzung weiterhin aktiv (`whoami` → `scoreview`
   nachgeprüft).
 
+### Phase 22 – Bedienfläche zurückgeben (UI-Konzept II)
+
+Dateien: `ScoreViewer.vue`, `ScorePage.vue`, `ScoreMixer.vue`,
+`ScoreAnnotations.vue`, `src/lib/scrollPlan.js`, `src/lib/metronome.js`,
+`src/lib/metronomeClick.js`, `src/lib/scoreLayout.js`.
+
+Ausgangslage (Nutzer-Rückmeldung nach Phase 19, am Bestand nachgemessen –
+`wwimf`, Viewport 1400×900):
+
+- Nur die Transportleiste ist `position: sticky`. Die zweite Leiste
+  (`.scoreview-rehearsal`: Takt, Loop, Zoom, Vollbild) und die Panels für
+  Mixer und Notizen stehen im normalen Fluss und sind **nur ganz oben**
+  erreichbar. Und dorthin kommt man beim Lesen nie zurück: das Autoscroll
+  aus Phase 16 scrollt schon beim Öffnen so weit, dass diese Leiste
+  verschwindet (gemessen: `.scoreview-rehearsal` liegt direkt nach dem
+  Laden bei `top: -54px`). Zoom, Mixer und Notizen sind damit im laufenden
+  Betrieb faktisch nicht bedienbar.
+- Die beiden Leisten kosten zusammen **158 px von 900 px** (17,6 %) – und
+  das dauerhaft, obwohl die Noten der eigentliche Inhalt sind.
+- Das Taktfeld ist **1376 px breit** für eine zweistellige Zahl. Die
+  scoped-CSS-Regel `width: 70px` greift nicht: `NcInputField` bringt
+  `.input-field[data-v-…] { width: 100% }` mit, gleiche Spezifität (0,2,0)
+  wie unsere Regel, und die Bibliotheks-CSS wird später eingebunden – bei
+  Gleichstand gewinnt die Reihenfolge. Eine feste Breite muss deshalb an
+  einen **Wrapper** statt an die Komponente.
+- Zoom über die Seitenbreite hinaus wirkt nicht: `.score-page` ist
+  `width: 100%` mit `max-width: 900 · zoom` px. Sobald `900 · zoom` die
+  Containerbreite übersteigt, begrenzt `width: 100%`. Hineinzoomen und
+  schieben – der Normalfall auf dem Tablet – ist damit unmöglich.
+- Das Metronom klickt nur auf den Taktanfang (ein Klick je Wechsel von
+  `currentAnchor.measureNumber`). Für die Probe zu wenig.
+
+**Leitgedanke.** Die Noten sind der Inhalt; jede Bedienfläche muss sich
+rechtfertigen. Was ständig gebraucht wird, bleibt sichtbar; alles andere
+liegt einen Klick tief in einem Popover, das über den Noten aufgeht, statt
+sie dauerhaft zu verdrängen. Und: **nichts scrollt weg.**
+
+- **Eine einzige Leiste, außerhalb des Scrollbereichs** (K1). Statt zweier
+  `sticky`-Leisten im Scroll-Container trägt der Viewer jetzt eine
+  Flex-Spalte: Leiste (`flex: 0 0 auto`) über einem eigenen Scroll-Element
+  (`flex: 1`). Damit ist „nach oben scrollen, um an die Bedienelemente zu
+  kommen" strukturell unmöglich, und der `z-index`-Wettlauf gegen die
+  SVG-Seiten aus Phase 17 entfällt ersatzlos.
+- **Panels als Overlay statt im Fluss** (K2). Mixer und Notizen liegen als
+  Karten rechts über dem Notenbild (eigenes Scrollen, Schließen-Knopf),
+  nicht mehr zwischen Leiste und Seiten. Sie kosten damit keine Höhe,
+  wenn sie zu sind, und keinen Weg nach oben, wenn sie offen sind.
+- **Takt: Anzeige und Eingabe sind dasselbe Feld** (K3). Statt „Takt 12 von
+  63" links und einem Sprungfeld plus „Los"-Knopf in der zweiten Leiste
+  ein Feld von 72 px, das die laufende Taktnummer zeigt, und daneben
+  `/ 63`. Hineinklicken, Zahl tippen, Enter springt; solange das Feld den
+  Fokus hat, läuft die Anzeige nicht mit (sonst überschriebe sie die
+  Eingabe). Der Partiturtitel entfällt in der Leiste – Nextclouds Viewer
+  zeigt den Dateinamen ohnehin in seiner eigenen Kopfzeile.
+- **Selten Benutztes in Popovers** (K4): Loop (Von/Bis, „ab aktuellem
+  Takt", An/Aus), Tempo + Metronom-Auflösung, Zoom (Regler + die drei
+  Presets). Jeweils ein Icon-Knopf in der Leiste, der seinen Zustand zeigt
+  (`pressed`), statt einer Reihe beschrifteter Knöpfe. Häufiges bleibt
+  ein Klick: Play/Pause, Suchlauf, Takt, Loop an/aus, Metronom an/aus,
+  Mixer, Notizen, Vollbild.
+- **Autoscroll, das den Zoom kennt** (K5). Das feste Sichtband (35–65 % der
+  Viewporthöhe) aus Phase 16 passt nur, solange das Cursor-Rechteck klein
+  gegen den Viewport ist. Bei starkem Zoom ist ein System höher als das
+  Band – die „überlappt das Band"-Regel meldet dann „alles gut", während
+  die halbe Zeile unter der Kante steht. Neue Regel, weiterhin rein in
+  `scrollPlan.js`: passt das System (mit Rand) in den Viewport, wird es
+  **vollständig** sichtbar gehalten und beim Nachführen so gelegt, dass
+  35 % des freien Platzes über und 65 % unter ihm liegen (Vorausschau auf
+  das Kommende); passt es nicht, wird die Oberkante angelegt. Beides ist
+  nachweisbar stabil: nach einem Nachführen liefert dieselbe Funktion
+  `null`, also kein zweiter Sprung. Dazu ein waagerechtes Pendant für den
+  Fall, dass die Seite breiter als der Viewport ist.
+- **Zoom, der über die Seitenbreite hinausgeht** (K6). `.score-page`
+  bekommt eine echte Breite (`900 · zoom` px) statt `width: 100%` mit
+  Deckel; der Scroll-Container erlaubt waagerechtes Schieben. Startwert ist
+  „Seitenbreite" und bleibt es, solange niemand selbst zoomt – dann folgt
+  er der Fenstergröße wie bisher (`ResizeObserver`). Sobald jemand zoomt,
+  gilt sein Faktor absolut. Zoomgrenzen dadurch weiter (0,25–4 statt
+  0,5–2): auf einem Telefon liegt „Seitenbreite" bei etwa 0,43.
+- **Metronom auf Schlagebene** (K7). `measures.json` liefert nur Taktzeiten
+  (M4) – die Schlaganzahl wird wie beim Einzähler aus Taktdauer und
+  `metadata.tempo` geschätzt (`estimateBeatsInMeasure()`, Phase 17) und der
+  Takt gleichmäßig geteilt. Voreinstellung „jeder Schlag" mit Akzent auf
+  der Eins, umschaltbar auf „nur Taktanfang" (das alte Verhalten). Geklickt
+  wird nicht mehr im Bildwiederholtakt, sondern mit ~60 ms Vorlauf im
+  `AudioContext` terminiert – rAF-Jitter würde man auf Schlagebene hören.
+
+**Abnahme.** Bei jeder Scrollposition und in jedem Zoom sind Play/Pause,
+Takt, Loop, Metronom, Zoom, Mixer und Notizen ohne Scrollen erreichbar. Die
+Leiste kostet höchstens ein Drittel der bisherigen 158 px. Das Taktfeld ist
+schmal und zeigt die laufende Taktnummer. Über eine Wiedergabe bei Zoom
+„Seitenbreite" und bei zweifachem Zoom bleibt das aktuelle System jeweils
+vollständig sichtbar. Das Metronom klickt hörbar auf jedem Schlag, mit
+Akzent auf der Eins, und lässt sich auf „nur Taktanfang" zurückstellen.
+
+**Umsetzungsstand (2026-08-23).** Vollständig umgesetzt und an der
+Testinstanz per Playwright nachgemessen (`wwimf`, 63 Takte, 5 Seiten,
+Viewport 1400×1000 sowie 390×844).
+
+- **Leiste (K1).** 47 px statt vorher 158 px in zwei Leisten, und an jeder
+  Scrollposition an derselben Stelle (bei `scrollTop = 3000` unverändert
+  `top: 50`). Elf Bedienelemente in einer Zeile: Play/Pause, Suchlauf,
+  Laufzeit, Takt, Loop, Tempo/Metronom, Metronom, Zoom, Mixer, Notizen,
+  Vollbild.
+- **Panels (K2).** 404 px breite Karten rechts; das Notenbild verschiebt
+  sich beim Öffnen nachweislich nicht (`.score-page` behält seine Position).
+  Beim ersten Messen waren sie **durchsichtig** – dasselbe `z-index`-Rennen,
+  das bis Phase 21 die sticky Transportleiste hatte: `.score-page-svg`
+  (`z-index: 1`) und `.score-page-marker` (`z-index: 2`) konkurrieren
+  direkt mit dem Panel-Container, weil weder `.scoreview-pages` noch
+  `.score-page` einen eigenen Stacking-Context eröffnen. Behoben über
+  `z-index: 20` (Kommentar an der Regel).
+- **Taktfeld (K3).** 72 px statt 1376 px, zeigt während der Wiedergabe die
+  laufende Taktnummer (bei 0:40 stand dort „14"), Eingabe + Enter springt
+  (Takt 30 → 1:29, Ansicht auf Seite 2 nachgeführt).
+- **Autoscroll (K5).** Über je 20 s Wiedergabe, 80 Stichproben im
+  250-ms-Takt: das Cursor-Rechteck war bei „Seitenbreite" **98 %** und bei
+  zweifachem Zoom **98 %** der Zeit vollständig sichtbar, in 100 % bzw. 99 %
+  mindestens teilweise – die Ausreißer sind die laufende
+  Smooth-Scroll-Animation selbst. Cursorhöhe dabei 346–452 px bei 853 px
+  Sichthöhe. Bei vierfachem Zoom (Systemhöhe 927 px > Sichthöhe 853 px)
+  greift der zweite Zweig: die Oberkante liegt exakt auf dem Rand (24 px).
+  Manuelles Scrollen setzt weiterhin aus und nimmt danach wieder auf
+  (gemessen: 1212 → nach der Pause 121, Cursor wieder vollständig sichtbar).
+- **Zoom (K6).** Startwert „Seitenbreite" (1376 px Seitenbreite bei 1400 px
+  Viewport, 366 px bei 390 px). Bei Zoom 2 ist die Seite 1800 px breit und
+  der Scrollbereich 1812 px – waagerechtes Schieben funktioniert, bis
+  Phase 21 war das an der Containerbreite gedeckelt.
+- **Metronom (K7).** 20 s Wiedergabe bei ♩ = 80, gemessen an den im
+  `AudioContext` terminierten Startzeiten: 27 Klicks, Abstände 747–753 ms
+  (Soll 750 ms), davon 7 mit Akzent – also genau ein Akzent je 4/4-Takt. Auf
+  „nur Taktanfang" umgestellt: 8 Klicks, Abstände 3000 ms, alle mit Akzent.
+- **Nebenbefund, mitbehoben:** ein Sprung bei **angehaltener** Wiedergabe
+  (Taktfeld, Klick auf eine Note, Loop-Start) bewegte den Cursor nicht –
+  die Transportanzeige sprang auf 1:29, der Cursor blieb in Takt 1. Ursache
+  ist der Setter `sequencer.currentTime` in `player.js`: er wirkt nicht
+  synchron, der aus dem `seeked`-Ereignis unmittelbar danach gelesene Wert
+  war noch der alte. `useScoreSync.js` rechnet deshalb jetzt in jedem Frame
+  nach, nicht nur während der Wiedergabe (Kosten: eine Binärsuche pro
+  Frame). Das war ein Fehler seit Phase 10 und fiel erst auf, seit das
+  Taktfeld Anzeige und Sprung vereint.
+- **Einzähler.** Startet die Wiedergabe jetzt einen Schlag NACH dem letzten
+  Klick statt auf ihm – vorher zählte ein Viertakter faktisch nur drei
+  Schläge vor.
+
+**Bewusst offen geblieben:**
+
+- Auf Telefonbreite (390 px) bricht die Leiste in **zwei Zeilen** um (87 px
+  von 744 px). Alles bleibt erreichbar; die Laufzeitanzeige wird unter
+  600 px ausgeblendet. Ein Überlaufmenü für die selteneren Knöpfe wäre der
+  nächste Schritt, wenn sich das in der Probe als störend erweist – es
+  lohnt sich erst mit einem echten Urteil an einem echten Gerät.
+- Das waagerechte Nachführen greift nur, wenn die Seite breiter als das
+  Bild ist; an `wwimf` bei zweifachem Zoom blieb die aktuelle Stelle ohnehin
+  im Bild. Der Zweig ist damit real nur an seiner reinen Funktion
+  (`planHorizontalScroll`, Test) belegt, nicht am laufenden Notenbild.
+
 ## 4. Was ersatzlos entfällt
 
 | Entfällt | Grund |

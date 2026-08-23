@@ -194,10 +194,19 @@ export function measurePositionToTimeMs(measuresTimeline, measureNumber, fractio
 }
 
 // Basisbreite einer Seite bei Zoom 1 (px), siehe ScorePage.vue `pageStyle`
-// (`maxWidth: BASE_PAGE_WIDTH_PX * zoom`). Einzige Quelle für diese Zahl -
+// (`width: BASE_PAGE_WIDTH_PX * zoom`). Einzige Quelle für diese Zahl -
 // die Zoom-Presets unten rechnen relativ dazu, damit ScorePage.vue und
 // scoreLayout.js nie auseinanderlaufen können.
 export const BASE_PAGE_WIDTH_PX = 900
+
+// Zoomgrenzen (Phase 22). Bis Phase 21 lagen sie bei 0,5-2, was zu einer
+// Seite passte, die ohnehin nie breiter als ihr Container werden konnte
+// (`width: 100%` mit `max-width`). Seit die Seite eine echte Breite hat und
+// waagerecht geschoben werden kann, müssen beide Enden weiter reichen: auf
+// einem Telefon liegt "Seitenbreite" bereits bei etwa 0,43, und ein
+// Notenkopf auf Armlänge braucht am anderen Ende deutlich mehr als 2.
+export const MIN_ZOOM = 0.25
+export const MAX_ZOOM = 4
 
 // CSS-px pro mm bei 96 DPI (Standardannahme für den CSS-Pixel, siehe
 // CSS Values and Units Module - 1in = 96px = 25.4mm).
@@ -278,10 +287,10 @@ export function computeActualSizeZoom(sizeMm) {
  * @param {number} startDistance Fingerabstand (px) beim Start der Geste
  * @param {number} currentDistance Fingerabstand (px) aktuell
  * @param {number} startZoom Zoom-Wert bei Gestenbeginn
- * @param {{min?:number,max?:number}} [bounds] wie beim stufenlosen Zoom-Regler (0,5-2)
+ * @param {{min?:number,max?:number}} [bounds] wie beim stufenlosen Zoom-Regler
  * @returns {number}
  */
-export function computePinchZoom(startDistance, currentDistance, startZoom, { min = 0.5, max = 2 } = {}) {
+export function computePinchZoom(startDistance, currentDistance, startZoom, { min = MIN_ZOOM, max = MAX_ZOOM } = {}) {
 	if (startDistance <= 0) {
 		return startZoom
 	}

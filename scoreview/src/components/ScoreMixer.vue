@@ -214,28 +214,38 @@ export default {
 	padding: 8px 0;
 }
 
+/*
+ * Umbruchfähig seit Phase 22: der Mixer steht jetzt in einer Karte von
+ * höchstens 420px über dem Notenbild, nicht mehr über die volle Breite des
+ * Viewers. Ohne Umbruch würde die Instrumentenauswahl den Lautstärkeregler
+ * auf wenige Pixel zusammenquetschen.
+ */
 .scoreview-mixer-channel {
 	display: flex;
 	align-items: center;
+	flex-wrap: wrap;
 	gap: 8px;
 }
 
 .scoreview-mixer-name {
-	flex: 0 0 100px;
+	flex: 0 0 90px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
 .scoreview-mixer-channel input[type="range"] {
-	flex: 1 1 auto;
+	flex: 1 1 60px;
+	min-width: 60px;
 }
 
 .scoreview-mixer-toggle {
 	flex: 0 0 auto;
 }
 
+/* Eigene Zeile innerhalb der Stimme: das Auswahlfeld braucht Breite für
+   GM-Namen wie "Choir Aahs", die Regler-Zeile darüber ebenso. */
 .scoreview-mixer-program {
-	flex: 0 0 160px;
+	flex: 1 0 100%;
 }
 </style>

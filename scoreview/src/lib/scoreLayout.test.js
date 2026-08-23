@@ -9,7 +9,9 @@ import {
 	findElementAtPoint,
 	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
+	MAX_ZOOM,
 	measurePositionToTimeMs,
+	MIN_ZOOM,
 	parseSvgSizeMm,
 	parseViewBox,
 	resolveCursorRect,
@@ -247,9 +249,9 @@ describe('computePinchZoom', () => {
 		expect(computePinchZoom(200, 100, 1)).toBe(0.5)
 	})
 
-	it('begrenzt auf die Standardgrenzen (0,5-2)', () => {
-		expect(computePinchZoom(100, 1000, 1)).toBe(2)
-		expect(computePinchZoom(100, 10, 1)).toBe(0.5)
+	it('begrenzt auf die Standardgrenzen (MIN_ZOOM-MAX_ZOOM)', () => {
+		expect(computePinchZoom(100, 1000, 1)).toBe(MAX_ZOOM)
+		expect(computePinchZoom(100, 10, 1)).toBe(MIN_ZOOM)
 	})
 
 	it('erlaubt eigene Grenzen', () => {
