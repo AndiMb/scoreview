@@ -97,8 +97,11 @@ den Effektbus und meldet fälschlich „kein Ton".
 - Nach Änderungen an Routen oder ausgelieferten Assets die Version in
   `appinfo/info.xml` erhöhen (Cache-Busting hängt daran) und `occ upgrade`
   laufen lassen.
-- Ein Commit passiert nur, wenn er ausdrücklich gewünscht ist. Das Repo hat
-  kein Remote; alles liegt auf `master`.
+- Ein Commit passiert nur, wenn er ausdrücklich gewünscht ist, ein Push
+  ebenso. Alles liegt auf `master`; das Remote ist `origin`
+  (`git@github.com:AndiMb/scoreview.git`) und **öffentlich** – vor dem Push
+  darauf achten, dass weder Geheimnisse noch fremdlizenziertes Material
+  mitgehen (siehe „Nie committen").
 
 ## Fallstricke, die schon Zeit gekostet haben
 
