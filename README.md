@@ -42,8 +42,12 @@ Aus dem Codereview vom 2026-08-23 (Phase 23, 24 Befunde) ist **Schritt 1**
 umgesetzt: das Phase-2-Gerüst ist entfernt (die App hat damit keine eigene
 Seite mehr – `/apps/scoreview/` antwortet 404, Einstieg ist ausschließlich
 der Viewer aus Files), fünf überholte Kommentare sind korrigiert. Die
-Schritte 2–7 (Linter/Tests/CI, `IAppConfig`, Sidecar-Härtung, Zerlegung von
-`ScoreViewer.vue`) stehen mit Reihenfolge und Begründung in `PLAN.md`.
+**Schritt 2** ebenfalls: ESLint und Stylelint nach Nextcloud-Standard, 32
+PHPUnit-Tests gegen OCP-Mocks, 13 pytest-Tests für den Sidecar-Parser und
+GitHub-Actions für CI und Release-Tarball – zusammen mit den 99 vitest-Tests
+prüft jetzt für alle drei Sprachen des Repos etwas automatisch. Die Schritte
+3–7 (`IAppConfig`, Sidecar-Härtung, Zerlegung von `ScoreViewer.vue`) stehen
+mit Reihenfolge und Begründung in `PLAN.md`.
 Siehe `PLAN.md` für den vollständigen Stand inklusive offener Punkte.
 
 **Vorausgesetzt:** ein erreichbarer MuseScore-Sidecar (siehe `sidecar/`) -

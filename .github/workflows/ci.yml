@@ -1,0 +1,116 @@
+# Durchgehende Pruefung fuer alle drei Sprachen des Repos (Codereview
+# Phase 23/Schritt 2, Befund C6). Bis hierher gab es gar keine CI - gepruegt
+# wurde von Hand gegen die Testinstanz, und ob das auf einer anderen Maschine
+# ueberhaupt baut, war unbekannt.
+#
+# Bewusst drei getrennte Jobs statt eines grossen: sie laufen parallel, und
+# ein roter Job sagt sofort, WO es klemmt (Frontend, Backend, Sidecar).
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend (Build, Tests, Linter, l10n)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scoreview
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Deckt sich mit "engines" in package.json.
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scoreview/package-lock.json
+
+      - run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Stylelint
+        run: npm run stylelint
+
+      - name: Unit-Tests (vitest)
+        run: npm test
+
+      # Muss NACH den Tests laufen und ist trotzdem eine eigene Stufe: der
+      # l10n-Vollstaendigkeitstest ist Teil von `npm test`, aber die
+      # Skriptausgabe nennt die fehlenden Strings einzeln (siehe
+      # tools/l10n.mjs) - das spart beim Roten das Nachschlagen.
+      - name: Uebersetzungen vollstaendig
+        run: npm run l10n:extract
+
+      # Der Build ist Pflicht, weil scoreview/js/ gitignored ist: was hier
+      # nicht baut, existiert in einem Release-Tarball gar nicht.
+      - name: Produktionsbuild
+        run: npm run build
+
+  backend:
+    name: Backend (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Unter- und Obergrenze aus appinfo/info.xml.
+        php: ['8.1', '8.4']
+    defaults:
+      run:
+        working-directory: scoreview
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - run: composer install --no-interaction --no-progress
+
+      - name: Syntaxpruefung
+        run: find lib templates appinfo -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      # Nur auf einer Version pruefen - der Codingstandard ist nicht
+      # versionsabhaengig, und zwei identische Diffs helfen niemandem.
+      - name: Codingstandard (nextcloud/coding-standard)
+        if: matrix.php == '8.4'
+        run: composer run cs:check
+
+      - name: Unit-Tests (PHPUnit)
+        run: composer run test:unit
+
+  sidecar:
+    name: Sidecar (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 ist die Systemversion von Ubuntu 22.04, auf dem das Image
+        # aufsetzt (siehe sidecar/Dockerfile). Die zweite Version faengt
+        # Unvertraeglichkeiten ab, bevor ein Basiswechsel sie zum Problem
+        # macht.
+        python: ['3.10', '3.12']
+    defaults:
+      run:
+        working-directory: sidecar
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - run: pip install -r requirements-dev.txt
+
+      - name: Unit-Tests (pytest)
+        run: python -m pytest

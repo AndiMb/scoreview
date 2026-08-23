@@ -1,0 +1,85 @@
+# Baut den App-Tarball zu einem Tag (Codereview Phase 23/Schritt 2, Befund
+# C6). Der Grund, warum das ueberhaupt eine eigene Automatik braucht:
+# `scoreview/js/` ist gitignored, ein aus dem Repo gepacktes `scoreview/`
+# enthaelt also KEIN einziges Frontend-Bundle und waere unbrauchbar. Der
+# Tarball muss aus einem echten Build entstehen, nicht aus einem Checkout.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  # Zum Ausprobieren, ohne einen Tag setzen zu muessen.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tarball:
+    name: App-Tarball bauen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scoreview/package-lock.json
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: Frontend bauen
+        working-directory: scoreview
+        run: |
+          npm ci
+          npm run build
+
+      # --no-dev ist hier wesentlich: autoload-dev haengt die OCP-Stubs aus
+      # nextcloud/ocp ein (siehe composer.json). Die duerfen NIE mit
+      # ausgeliefert werden - auf einer echten Instanz kommen die
+      # OCP-Klassen vom Server, eine mitgelieferte Kopie wuerde sie
+      # ueberschatten.
+      - name: Autoloader ohne dev-Abhaengigkeiten
+        working-directory: scoreview
+        run: composer install --no-dev --no-interaction --no-progress --optimize-autoloader
+
+      - name: Gegenprobe - keine OCP-Stubs im Autoloader
+        working-directory: scoreview
+        run: |
+          if grep -q "nextcloud/ocp" vendor/composer/autoload_static.php; then
+            echo "OCP-Stubs im Produktions-Autoloader - Release abgebrochen." >&2
+            exit 1
+          fi
+
+      - name: Tarball packen
+        run: |
+          tar --create --gzip --file "scoreview.tar.gz" \
+            --exclude='scoreview/node_modules' \
+            --exclude='scoreview/src' \
+            --exclude='scoreview/tests' \
+            --exclude='scoreview/tools' \
+            --exclude='scoreview/.php-cs-fixer*' \
+            --exclude='scoreview/.stylelintrc.json' \
+            --exclude='scoreview/eslint.config.mjs' \
+            --exclude='scoreview/package*.json' \
+            --exclude='scoreview/webpack.config.js' \
+            --exclude='scoreview/composer.json' \
+            --exclude='scoreview/composer.lock' \
+            scoreview
+          tar --list --file scoreview.tar.gz | head -40
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scoreview-app
+          path: scoreview.tar.gz
+
+      - name: An das Release haengen
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: scoreview.tar.gz

@@ -86,12 +86,12 @@ class AnnotationService {
 
 	/**
 	 * @throws \RuntimeException wenn eine geteilte Notiz ohne Schreibrecht
-	 *   geändert werden soll (Controller macht daraus 403 - eine geteilte
-	 *   Notiz ist für jeden mit Dateizugriff ohnehin sichtbar, es gibt also
-	 *   nichts zu verbergen, anders als beim null-Fall unten).
+	 *                           geändert werden soll (Controller macht daraus 403 - eine geteilte
+	 *                           Notiz ist für jeden mit Dateizugriff ohnehin sichtbar, es gibt also
+	 *                           nichts zu verbergen, anders als beim null-Fall unten).
 	 * @return ?Annotation null, wenn die ID zu dieser Datei nicht existiert,
-	 *   ODER eine private Notiz einer anderen Nutzerin gehört (Controller
-	 *   macht daraus 404 - bewusst ohne Existenz zu bestätigen).
+	 *                     ODER eine private Notiz einer anderen Nutzerin gehört (Controller
+	 *                     macht daraus 404 - bewusst ohne Existenz zu bestätigen).
 	 */
 	public function updateContent(int $id, int $fileId, string $userId, bool $canWriteShared, string $content): ?Annotation {
 		$annotation = $this->mapper->findByIdAndFileId($id, $fileId);
@@ -112,11 +112,11 @@ class AnnotationService {
 
 	/**
 	 * @throws \RuntimeException wenn eine geteilte Notiz ohne Schreibrecht
-	 *   gelöscht werden soll (siehe updateContent())
+	 *                           gelöscht werden soll (siehe updateContent())
 	 * @return bool false, wenn die ID zu dieser Datei nicht existiert ODER
-	 *   eine private Notiz einer anderen Nutzerin gehört (Controller macht
-	 *   daraus 404) - eigener Rückgabetyp statt null/Annotation wie bei
-	 *   updateContent(), weil "gelöscht" kein Objekt zum Zurückgeben hat.
+	 *              eine private Notiz einer anderen Nutzerin gehört (Controller macht
+	 *              daraus 404) - eigener Rückgabetyp statt null/Annotation wie bei
+	 *              updateContent(), weil "gelöscht" kein Objekt zum Zurückgeben hat.
 	 */
 	public function delete(int $id, int $fileId, string $userId, bool $canWriteShared): bool {
 		$annotation = $this->mapper->findByIdAndFileId($id, $fileId);

@@ -27,12 +27,14 @@ dieses Leitprinzip bitte nicht aufweichen, es hält E3 revidierbar.
 
 ## Befehle
 
-Alles aus `scoreview/`:
+Frontend, aus `scoreview/`:
 
 ```sh
 npm run build       # Pflicht nach jeder Änderung unter src/ - js/ ist gitignored
 npm run watch       # während der Frontend-Arbeit
 npm test            # vitest, die reinen Module unter src/lib/ plus die l10n-Vollständigkeit
+npm run lint        # ESLint (@nextcloud/eslint-config), --fix über npm run lint:fix
+npm run stylelint   # Stylelint für die <style scoped>-Blöcke
 npm run l10n:extract  # nach jedem neuen/geänderten t()/$l->t() - meldet fehlende/verwaiste Übersetzungen
 ```
 
@@ -41,8 +43,30 @@ Die reine Logik liegt bewusst in `src/lib/` (`scoreLayout.js`,
 `AudioContext` und ohne Nextcloud testbar. Neue Logik dorthin, nicht in die
 Komponenten.
 
-Für PHP gibt es **keine** Testsuite (`scoreview/tests/` ist leer). Prüfung
-läuft über `php -l` und einen echten Durchlauf gegen die Testinstanz.
+Backend, ebenfalls aus `scoreview/`:
+
+```sh
+composer install                # einmalig, bringt phpunit + php-cs-fixer + OCP-Stubs
+composer run test:unit          # PHPUnit gegen Interface-Mocks, keine Instanz nötig
+composer run cs:check           # Nextcloud-Codingstandard, --fix über composer run cs:fix
+```
+
+Die PHP-Tests sind **reine Unit-Tests gegen `nextcloud/ocp`-Mocks** und
+laufen in Sekunden ohne Container. `composer.json` hängt die OCP-Stubs dafür
+in `autoload-dev` ein – das Paket selbst deklariert keinen Autoload, es ist
+für Psalm gedacht. Wichtig: **im Release muss `--no-dev` laufen**, sonst
+würden die Stubs mit ausgeliefert; die Release-Action prüft das eigens nach.
+Was echte Nextcloud-Integration braucht (Routen, Migrationen, IAppData),
+bleibt Sache eines Durchlaufs gegen die Testinstanz.
+
+Sidecar, aus `sidecar/`:
+
+```sh
+python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest      # Parser-Unit-Tests, ohne MuseScore/Xvfb/Container
+```
+
+Alles drei läuft zusätzlich in CI (`.github/workflows/ci.yml`).
 
 ## Testumgebung
 

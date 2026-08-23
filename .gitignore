@@ -3,8 +3,16 @@ node_modules/
 /scoreview/js/
 vendor/
 *.log
+
+# Werkzeug-Caches und lokale Umgebungen (Phase 23/Schritt 2 - Linter, Tests)
 .phpunit.cache/
 .phpunit.result.cache
+.php-cs-fixer.cache
+.eslintcache
+.stylelintcache
+.venv/
+__pycache__/
+.pytest_cache/
 
 # Spike scratch output (regenerated from test-scores/)
 spike/output/

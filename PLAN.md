@@ -2210,7 +2210,7 @@ den man sonst in Schritt 6 mit umbaut.
 | # | Schritt | Befunde | Stand |
 |---|---|---|---|
 | 1 | Aufräumen: Phase-2-Gerüst, überholte Kommentare | D1, F | **umgesetzt** |
-| 2 | Netz spannen: ESLint/Stylelint, PHP-Tests, Sidecar-Tests, CI | C4, C5, C6, B4, B5 | offen |
+| 2 | Netz spannen: ESLint/Stylelint, PHP-Tests, Sidecar-Tests, CI | C4, C5, C6, B4, B5 | **umgesetzt** |
 | 3 | Mechanische Modernisierung: `IAppConfig`, Secret als sensibel, Einstellungsseite auf `@nextcloud/vue` | C1, C2, C3 | offen |
 | 4 | Echte Fehler: CSP-Reichweite, Seitenladefehler, Klick-Trefferradius, Aufräumen bei Lösch-Events | A1, A2, A3, A4, A7 | offen |
 | 5 | Sidecar produktionsfähig: Nebenläufigkeitsgrenze, WSGI-Server, Modulaufteilung | A5, A6, B3 | offen |
@@ -2276,6 +2276,108 @@ die das *Warum* erklären; ein falsches Warum kostet mehr Zeit als gar keins.
 und `php -l` über alle PHP-Dateien laufen durch. Version auf 0.0.20 erhöht
 und `occ upgrade` ausgeführt (Routenänderung – siehe Fallstrick
 `CachingRouter`).
+
+**Umsetzungsstand Schritt 2 (2026-08-23).** Das Netz steht für alle drei
+Sprachen des Repos. Vorher: 99 JS-Tests und sonst nichts – kein Linter, keine
+PHP-Tests, keine Sidecar-Tests, keine CI.
+
+*C4 – ESLint und Stylelint.* `@nextcloud/eslint-config` 9
+(`recommendedJavascript`, weil die `<script>`-Blöcke JavaScript sind) und
+`@nextcloud/stylelint-config`, dazu vier npm-Skripte. Beim ersten Lauf: 263
+Befunde, davon 171 maschinell behebbar. Drei Entscheidungen dabei, die
+festzuhalten sind, weil sie von außen wie Nachlässigkeit aussehen könnten:
+
+1. **`jsdoc/require-jsdoc` ist abgeschaltet.** Die Regel ist autofixbar und
+   setzt dabei leere `/** */`-Blöcke über jede Funktion – gemessen 35 allein
+   in `player.js` und `silentClock.js`. Das widerspricht der Konvention aus
+   `CLAUDE.md` direkt und verdünnt genau die dichte, handgeschriebene
+   Kommentierung, die dieser Bestand als Stärke hat. Dasselbe für
+   `require-param-description`/`-type`.
+2. **Die Allowlists in `svgSanitizer.js` behalten ihre Gruppierung**
+   (`exp-list-style` lokal aus). Bei einer Allowlist *ist* die Liste der
+   sicherheitsrelevante Inhalt, und die Gruppierung (Struktur / Formen /
+   Text / Verläufe) sagt, warum ein Eintrag drinsteht. Ein Eintrag pro Zeile
+   macht daraus 74 Zeilen ohne diese Aussage.
+3. **Der Notiz-Marker in `ScorePage.vue` bleibt bei `margin-left`**, obwohl
+   Stylelint `margin-inline-start` verlangt: er wird über `left`/`top` in
+   Prozent der SVG-`viewBox` positioniert, und ein Notenbild spiegelt sich in
+   einer RTL-Oberfläche nicht mit. Die Bedienfläche drumherum ist dagegen auf
+   logische Eigenschaften umgestellt (`border-inline-start`,
+   `inset-inline-end`, `text-align: start`) – das ist zugleich die Vorarbeit
+   für den RTL-Punkt aus Abschnitt 7.
+
+Die einzige **Verhaltensänderung**: Custom-Events heißen jetzt camelCase
+(`noteClick`, `markerClick`, `volumesChanged`, `programChanged`, `jumpTo`);
+die Templates bleiben kebab-case, weil Vue 3 beides auf denselben
+`onNoteClick`-Prop auflöst. Weil keine Komponente unit-getestet ist, wurde
+jeder der fünf Pfade einzeln am laufenden Viewer belegt: Klick ins Notenbild
+springt (22 % der Seite → 7 s, 80 % → 37 s, stabil bei Wiederholung), Mute im
+Mixer erreicht nachweislich `player.applyChannelVolumes()` (Nachrichten an
+das Synth-Worklet steigen bei angehaltener Wiedergabe von 5 auf 9), Klick auf
+eine Notiz und auf ihren Seitenmarker springen beide, und das unveränderte
+`loaded` trägt weiterhin den Startzoom.
+
+Nebenbefund, den der Linter selbst geliefert hat: `OC.generateUrl` in
+`src/settings.js` ist seit Nextcloud 19 deprecated. Das bestätigt C3
+unabhängig und bleibt bewusst als **Warnung** stehen, bis Schritt 3 die
+Einstellungsseite umstellt.
+
+`.gitattributes` setzt jetzt `* text=auto eol=lf`. Die committeten Blobs
+waren ohnehin LF, aber der Windows-Working-Tree bekam CRLF – womit
+`@stylistic/linebreak-style` für jede frisch ausgecheckte Datei einen Fehler
+meldete, den es im Repo gar nicht gibt. Der Linter wäre lokal unbenutzbar
+gewesen, während CI grün ist.
+
+*B5/C5 – PHP-Tests und Codingstandard.* `phpunit` 10.5,
+`nextcloud/coding-standard` 1.5 und `nextcloud/ocp` 31 als `require-dev`;
+**32 Tests, 63 Assertions**, Laufzeit 0,06 s. Getestet ist genau das, was
+bisher nur von Hand gegen die Testinstanz geprüft wurde und beim Umbau in
+Schritt 6 still umkippen könnte:
+
+- `AnnotationService` – alle vier Rechte-Verzweigungen je Schreiboperation,
+  einschließlich der bewussten Unterscheidung „null → 404, ohne Existenz zu
+  bestätigen" gegen „Exception → 403", und dass `serialize()` die rohe
+  `userId` gar nicht erst ausliefert.
+- `SoundFontService` – die Rückfallpfade, an denen allein die Zusage hängt,
+  dass Wiedergabe den Sidecar nicht braucht.
+- `AddCspListener` – geprüft wird die gebaute Policy-Zeichenkette, nicht der
+  interne Zustand. Diese Tests halten fest, was heute gilt, **bevor**
+  Schritt 4 die Reichweite eingrenzt (A1).
+
+Beide Testsuiten sind gegen einen Mutationstest abgesichert, nicht nur als
+„läuft grün" abgehakt: das Aushebeln der `canWriteShared`-Prüfung lässt 3
+PHP-Tests fallen, das Aushebeln der M3-Markersuche 2 Sidecar-Tests. Der
+erste Versuch dieses Mutationstests hat *nichts* verändert (ein Backslash
+ging in der Shell verloren) und trotzdem „grün" gemeldet – der Beleg zählt
+erst, seit die Ersetzung selbst geprüft wird.
+
+Der Codingstandard fand **1 von 31 Dateien** abweichend, und nur bei der
+Docblock-Ausrichtung. Übernommen statt ausgenommen – anders als bei den drei
+Punkten oben trägt die Abweichung hier keine Aussage.
+
+*B4 – Sidecar-Tests.* **13 pytest-Tests**, ohne MuseScore, ohne Xvfb, ohne
+Container. Sie decken die Division durch 12 (M4), die Sortierung nach Zeit,
+das Erhalten mehrfacher `elid`s bei Wiederholungen (M7) und vor allem M3: das
+Wegschneiden des Qt-Rauschens vor dem JSON, samt der Unterscheidung zwischen
+„Marker fehlt" und „JSON kaputt". Dass `xvfb-run` und `timeout` im Aufruf
+stehen, ist ebenfalls festgenagelt – beides darf bei einem Umbau nicht
+stillschweigend wegfallen. `conftest.py` setzt Secret und `JOBS_DIR` vorab,
+statt `server.py` dafür schon jetzt aufzuteilen; das Aufteilen ist Befund B3
+und gehört zu Schritt 5 – die Tests sollen davor da sein, nicht danach.
+
+*C6 – CI und Release.* `.github/workflows/ci.yml` mit drei parallelen Jobs
+(Frontend, Backend über PHP 8.1/8.4, Sidecar über Python 3.10/3.12), damit
+ein roter Job sofort sagt, wo es klemmt. Dazu `release.yml`: der Tarball
+**muss** aus einem echten Build entstehen, weil `scoreview/js/` gitignored ist
+– ein aus dem Repo gepacktes `scoreview/` enthielte kein einziges
+Frontend-Bundle. Die Action baut deshalb Frontend und Autoloader und prüft
+danach ausdrücklich nach, dass keine OCP-Stubs im Produktions-Autoloader
+gelandet sind. Lokal gegengeprüft: mit `--no-dev` enthält der Classmap 27
+Klassen (nur `lib/`), und `class_exists('OCP\AppFramework\Db\Entity')` ist
+`false`. Ebenfalls gegengeprüft, weil es ein neues Risiko im
+Entwicklungs-Checkout wäre: das jetzt vorhandene `scoreview/vendor/`
+verdeckt die echten OCP-Klassen **nicht** – in der Testinstanz kommt
+`OCP\AppFramework\Db\Entity` weiterhin aus `/var/www/html/lib/public/`.
 
 ## 4. Was ersatzlos entfällt
 
