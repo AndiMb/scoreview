@@ -7,13 +7,14 @@
 			:key="marker.id"
 			class="score-page-marker"
 			:style="marker.style"
-			:title="'Notiz'"
+			:title="t('Note')"
 			@click.stop="$emit('marker-click', marker.id)" />
 	</div>
 </template>
 
 <script>
 import axios from '@nextcloud/axios'
+import { translate } from '@nextcloud/l10n'
 import { parseViewBox, sanitizeSvg } from '../lib/scoreLayout.js'
 
 /**
@@ -124,6 +125,10 @@ export default {
 	},
 
 	methods: {
+		t(text, vars) {
+			return translate('scoreview', text, vars)
+		},
+
 		async load() {
 			if (this.svgMarkup) {
 				return

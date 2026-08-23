@@ -7,6 +7,7 @@ namespace OCA\ScoreView\BackgroundJob;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\SidecarClient;
+use OCA\ScoreView\Service\SidecarException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\QueuedJob;
@@ -59,7 +60,7 @@ class PollConversionJob extends QueuedJob {
 				'message' => $e->getMessage(),
 				'exception' => $e,
 			]);
-			$this->conversionService->markError($conversion, $e->getMessage());
+			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof SidecarException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
 			return;
 		}
 
@@ -68,13 +69,22 @@ class PollConversionJob extends QueuedJob {
 			return;
 		}
 		if ($result['status'] === 'error') {
-			$this->conversionService->markError($conversion, (string)($result['error'] ?? 'Unbekannter Sidecar-Fehler'));
+			$message = (string)($result['error'] ?? 'Unbekannter Sidecar-Fehler');
+			// Einzige textbasierte Codeerkennung hier (statt eines eigenen
+			// Sidecar-Fehlerformats): sidecar/server.py wirft fuer eine
+			// Partitur ohne Seiten exakt diese RuntimeException-Message (siehe
+			// dort) - alles andere aus mscore4portable/der Konvertierung selbst
+			// landet unter conversion_failed.
+			$errorCode = str_contains($message, 'returned no SVG pages')
+				? ScoreConversion::ERROR_NO_PAGES
+				: ScoreConversion::ERROR_CONVERSION_FAILED;
+			$this->conversionService->markError($conversion, $message, $errorCode);
 			return;
 		}
 
 		// Noch pending/processing.
 		if ($this->time->getTime() >= $deadline) {
-			$this->conversionService->markError($conversion, 'Sidecar-Timeout: Konvertierung nicht rechtzeitig abgeschlossen.');
+			$this->conversionService->markError($conversion, 'Sidecar-Timeout: Konvertierung nicht rechtzeitig abgeschlossen.', ScoreConversion::ERROR_TIMEOUT);
 			return;
 		}
 		$this->jobList->scheduleAfter(self::class, $this->time->getTime() + self::POLL_INTERVAL_SECONDS, $argument);
@@ -98,7 +108,7 @@ class PollConversionJob extends QueuedJob {
 				'message' => $e->getMessage(),
 				'exception' => $e,
 			]);
-			$this->conversionService->markError($conversion, $e->getMessage());
+			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof SidecarException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
 		}
 	}
 }

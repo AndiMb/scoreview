@@ -27,6 +27,17 @@ class ConversionService {
 	private const MEASURES_FILE = 'measures.json';
 	private const META_FILE = 'meta.json';
 
+	/**
+	 * Erhoehen bei jedem kuenftigen Cache-Formatwechsel (z.B. ein zweites
+	 * serverseitiges Layout, siehe PLAN.md Phase 16/20) - `status()`/
+	 * `serveCachedFile()` behandeln einen Datensatz mit kleinerer
+	 * `format_version` dann automatisch wie "nicht fertig" statt Cache-Dateien
+	 * eines nicht mehr passenden Formats auszuliefern oder mit 500 zu enden
+	 * (PLAN.md Phase 12 "Neu gefundene Luecke"/Phase 14). In DIESER Runde ist
+	 * kein Formatwechsel geplant - die Konstante existiert vorsorglich.
+	 */
+	public const CURRENT_FORMAT_VERSION = 1;
+
 	public function __construct(
 		private ScoreConversionMapper $mapper,
 		private IAppData $appData,
@@ -52,8 +63,9 @@ class ConversionService {
 		$this->updateStatus($conversion, ScoreConversion::STATUS_PROCESSING);
 	}
 
-	public function markError(ScoreConversion $conversion, string $message): void {
+	public function markError(ScoreConversion $conversion, string $message, string $errorCode = ScoreConversion::ERROR_UNKNOWN): void {
 		$conversion->setErrorMessage($message);
+		$conversion->setErrorCode($errorCode);
 		$this->updateStatus($conversion, ScoreConversion::STATUS_ERROR);
 	}
 
@@ -69,8 +81,14 @@ class ConversionService {
 		$this->writeFile($folder, self::TIMING_FILE, $timingJson);
 		$this->writeFile($folder, self::MEASURES_FILE, $measuresJson);
 		$this->writeFile($folder, self::META_FILE, $metaJson);
+		$conversion->setFormatVersion(self::CURRENT_FORMAT_VERSION);
 		$this->updateStatus($conversion, ScoreConversion::STATUS_READY);
 		$this->gcOldVersions($conversion->getFileId(), $conversion->getEtag());
+	}
+
+	/** Phase 14 - siehe CURRENT_FORMAT_VERSION. */
+	public function isCurrentFormat(ScoreConversion $conversion): bool {
+		return $conversion->getFormatVersion() === self::CURRENT_FORMAT_VERSION;
 	}
 
 	private function updateStatus(ScoreConversion $conversion, string $status): void {

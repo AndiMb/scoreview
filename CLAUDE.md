@@ -30,9 +30,10 @@ dieses Leitprinzip bitte nicht aufweichen, es hält E3 revidierbar.
 Alles aus `scoreview/`:
 
 ```sh
-npm run build     # Pflicht nach jeder Änderung unter src/ - js/ ist gitignored
-npm run watch     # während der Frontend-Arbeit
-npm test          # vitest, nur die reinen Module unter src/lib/
+npm run build       # Pflicht nach jeder Änderung unter src/ - js/ ist gitignored
+npm run watch       # während der Frontend-Arbeit
+npm test            # vitest, die reinen Module unter src/lib/ plus die l10n-Vollständigkeit
+npm run l10n:extract  # nach jedem neuen/geänderten t()/$l->t() - meldet fehlende/verwaiste Übersetzungen
 ```
 
 Die reine Logik liegt bewusst in `src/lib/` (`scoreLayout.js`,
@@ -71,9 +72,23 @@ den Effektbus und meldet fälschlich „kein Ton".
 
 ## Konventionen
 
-- **Deutsch** für Kommentare, Dokumentation und UI-Texte. Commit-Messages
-  ebenfalls, aber in ASCII-Umschrift (`ue`/`ae`/`oe`/`ss`), passend zur
-  bestehenden Historie.
+- **Deutsch** für Kommentare, Dokumentation und Commit-Messages, letztere in
+  ASCII-Umschrift (`ue`/`ae`/`oe`/`ss`), passend zur bestehenden Historie.
+- **UI-Texte dagegen: englische Quellstrings, Deutsch ist eine im Repo
+  gepflegte Übersetzung** (E4 in `PLAN.md`, umgesetzt in Phase 14) –
+  `l10n/de.json` für PHP (`$l->t('…')`), `l10n/de.js` für den Browser
+  (`t('scoreview', '…')`/lokaler `t()`-Wrapper in den Vue-Komponenten).
+  Grund: Nextclouds l10n-Format benutzt den Quellstring selbst als
+  Übersetzungsschlüssel – deutsche Schlüssel würden jede weitere Sprache aus
+  dem Deutschen übersetzen und die Rückfallsprache bei fehlender
+  Übersetzungsdatei wäre Deutsch statt Englisch. Nach jedem neuen/geänderten
+  `t()`/`$l->t()`-Aufruf `npm run l10n:extract` laufen lassen (meldet
+  fehlende und verwaiste Übersetzungen) – `npm test` schlägt sonst über
+  `tools/l10n.test.js` fehl, weil Nextclouds `JSResourceLocator` eine
+  fehlende Übersetzungsdatei sonst stillschweigend ignoriert und der Fehler
+  nie auffiele. Nicht übersetzt wird Inhalt aus der Partitur selbst
+  (Stimmennamen, Titel, Komponist, GM-Instrumentennamen) – das ist Material,
+  keine Oberfläche.
 - **Kommentare erklären das Warum**, nicht das Was – vor allem bei
   Entscheidungen, die von außen falsch aussehen. Der Bestand ist so
   geschrieben; bitte in dieser Dichte weiterführen statt sie zu verwässern.

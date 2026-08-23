@@ -1,3 +1,12 @@
+import { translate } from '@nextcloud/l10n'
+
+// Einzelargument-Wrapper wie in den Vue-Komponenten (siehe ScoreViewer.vue) -
+// haelt tools/l10n.mjs' Extraktionsmuster fuer diese Datei gueltig, obwohl
+// sie kein Vue-Setup ist.
+function t(text, vars) {
+	return translate('scoreview', text, vars)
+}
+
 // Eigenes Bundle statt Inline-<script> im PHP-Template: Nextclouds
 // Content-Security-Policy blockt Inline-Scripts ohne Nonce, ein per
 // Util::addScript geladenes Bundle bekommt die Nonce automatisch.
@@ -24,10 +33,10 @@
 			}),
 		}).then(function(res) {
 			if (!res.ok) { throw new Error('HTTP ' + res.status) }
-			status.textContent = '✓ gespeichert'
+			status.textContent = '✓ ' + t('Saved')
 			document.getElementById('scoreview-sidecar-secret').value = ''
 		}).catch(function(err) {
-			status.textContent = 'Fehler: ' + err.message
+			status.textContent = t('Error: {message}', { message: err.message })
 		})
 	})
 })()

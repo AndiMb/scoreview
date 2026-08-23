@@ -8,10 +8,12 @@
 		"build": "webpack --node-env production --progress",
 		"dev": "webpack --node-env development --progress",
 		"watch": "webpack --node-env development --progress --watch",
-		"test": "vitest run"
+		"test": "vitest run",
+		"l10n:extract": "node tools/l10n.mjs"
 	},
 	"dependencies": {
 		"@nextcloud/axios": "^2.5.0",
+		"@nextcloud/l10n": "^3.1.0",
 		"@nextcloud/router": "^3.1.0",
 		"spessasynth_lib": "^4.3.14",
 		"vue": "^3.5.18"

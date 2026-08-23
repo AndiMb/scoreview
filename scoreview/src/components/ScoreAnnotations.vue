@@ -1,24 +1,24 @@
 <template>
 	<div class="scoreview-annotations">
 		<div class="scoreview-annotations-header">
-			<h3>Notizen</h3>
+			<h3>{{ t('Notes') }}</h3>
 			<button type="button" @click="startNewAtCurrentPosition">
-				+ An aktueller Stelle
+				{{ t('+ At current position') }}
 			</button>
 		</div>
 		<p v-if="annotations.length === 0 && !draft" class="scoreview-annotations-empty">
-			Noch keine Notizen. Klicke auf eine Note oder „+ An aktueller Stelle", um eine anzulegen.
+			{{ t('No notes yet. Click a note or use "+ At current position" to add one.') }}
 		</p>
 		<ul class="scoreview-annotations-list">
 			<li v-if="draft" class="scoreview-annotation scoreview-annotation-draft">
-				<span class="scoreview-annotation-anchor">Takt {{ draft.measureNumber }}</span>
-				<textarea v-model="draft.content" rows="2" placeholder="Notiz…" />
+				<span class="scoreview-annotation-anchor">{{ t('Measure {n}', { n: draft.measureNumber }) }}</span>
+				<textarea v-model="draft.content" rows="2" :placeholder="t('Note…')" />
 				<div class="scoreview-annotation-actions">
 					<button type="button" @click="saveDraft">
-						Speichern
+						{{ t('Save') }}
 					</button>
 					<button type="button" @click="draft = null">
-						Abbrechen
+						{{ t('Cancel') }}
 					</button>
 				</div>
 			</li>
@@ -28,17 +28,17 @@
 				class="scoreview-annotation"
 				:class="{ orphaned: a.orphaned }">
 				<span class="scoreview-annotation-anchor" @click="$emit('jump-to', a)">
-					Takt {{ a.measureNumber }}
-					<em v-if="a.orphaned">(verwaist)</em>
+					{{ t('Measure {n}', { n: a.measureNumber }) }}
+					<em v-if="a.orphaned">{{ t('(orphaned)') }}</em>
 				</span>
 				<template v-if="editingId === a.id">
 					<textarea v-model="editContent" rows="2" />
 					<div class="scoreview-annotation-actions">
 						<button type="button" @click="saveEdit(a)">
-							Speichern
+							{{ t('Save') }}
 						</button>
 						<button type="button" @click="editingId = null">
-							Abbrechen
+							{{ t('Cancel') }}
 						</button>
 					</div>
 				</template>
@@ -48,10 +48,10 @@
 					</p>
 					<div class="scoreview-annotation-actions">
 						<button type="button" @click="startEdit(a)">
-							Bearbeiten
+							{{ t('Edit') }}
 						</button>
 						<button type="button" @click="$emit('delete', a)">
-							Löschen
+							{{ t('Delete') }}
 						</button>
 					</div>
 				</template>
@@ -61,6 +61,8 @@
 </template>
 
 <script>
+import { translate } from '@nextcloud/l10n'
+
 /**
  * Liste + Editor für private Notizen (Phase 11). Hält nur UI-Zustand
  * (Entwurf/Bearbeitung) - Laden/Speichern/Löschen passiert in
@@ -95,6 +97,10 @@ export default {
 	},
 
 	methods: {
+		t(text, vars) {
+			return translate('scoreview', text, vars)
+		},
+
 		startNewAtCurrentPosition() {
 			if (!this.currentAnchor) {
 				return

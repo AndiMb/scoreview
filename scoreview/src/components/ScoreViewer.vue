@@ -1,10 +1,14 @@
 <template>
 	<div class="scoreview-viewer">
 		<div v-if="state === 'converting' || state === 'loading'" class="scoreview-status">
-			{{ state === 'loading' ? 'Wird geladen…' : 'Wird konvertiert…' }}
+			{{ state === 'loading' ? t('Loading…') : t('Converting…') }}
 		</div>
 		<div v-else-if="state === 'error'" class="scoreview-status scoreview-error">
-			Fehler: {{ errorMessage }}
+			<p>{{ t('Error: {message}', { message: errorText }) }}</p>
+			<details v-if="errorCode && errorMessage" class="scoreview-error-detail">
+				<summary>{{ t('Technical detail') }}</summary>
+				<pre>{{ errorMessage }}</pre>
+			</details>
 		</div>
 		<template v-else>
 			<div class="scoreview-transport">
@@ -32,16 +36,16 @@
 							@input="onTempoInput">
 					</label>
 					<button type="button" @click="showMixer = !showMixer">
-						Mixer
+						{{ t('Mixer') }}
 					</button>
 				</template>
 				<button type="button" @click="showAnnotations = !showAnnotations">
-					Notizen
+					{{ t('Notes') }}
 				</button>
 			</div>
 			<div class="scoreview-rehearsal">
 				<label>
-					Takt
+					{{ t('Measure') }}
 					<input
 						v-model.number="measureInput"
 						type="number"
@@ -50,24 +54,24 @@
 						@keyup.enter="jumpToMeasure(measureInput)">
 				</label>
 				<button type="button" @click="jumpToMeasure(measureInput)">
-					Los
+					{{ t('Go') }}
 				</button>
 				<span class="scoreview-loop-fields">
-					Loop
-					<input v-model.number="loopFromMeasure" type="number" min="1" class="scoreview-measure-input" placeholder="von">
-					<input v-model.number="loopToMeasure" type="number" min="1" class="scoreview-measure-input" placeholder="bis">
+					{{ t('Loop') }}
+					<input v-model.number="loopFromMeasure" type="number" min="1" class="scoreview-measure-input" :placeholder="t('from')">
+					<input v-model.number="loopToMeasure" type="number" min="1" class="scoreview-measure-input" :placeholder="t('to')">
 					<button type="button" :class="{ active: loopActive }" @click="toggleLoop">
-						{{ loopActive ? 'Loop an' : 'Loop aus' }}
+						{{ loopActive ? t('Loop on') : t('Loop off') }}
 					</button>
 				</span>
 				<label class="scoreview-zoom-label">
-					Zoom
+					{{ t('Zoom') }}
 					<input type="range" min="0.5" max="2" step="0.1" :value="zoom" @input="onZoomInput">
 				</label>
 			</div>
 			<div v-if="!hasRealPlayer" class="scoreview-status scoreview-hint">
-				Kein Ton: {{ playbackError || 'Wiedergabe ist nicht verfügbar.' }}
-				Der Notenansicht-Cursor läuft unabhängig davon mit.
+				{{ t('No sound: {reason}', { reason: playbackError || t('Playback is not available.') }) }}
+				{{ t('The score cursor keeps running independently of this.') }}
 			</div>
 			<ScoreMixer
 				v-if="hasRealPlayer && showMixer && mixerChannels.length > 0"
@@ -102,6 +106,7 @@
 
 <script>
 import { generateUrl } from '@nextcloud/router'
+import { translate } from '@nextcloud/l10n'
 import axios from '@nextcloud/axios'
 import ScorePage from './ScorePage.vue'
 import ScoreMixer from './ScoreMixer.vue'
@@ -145,6 +150,15 @@ export default {
 			// loading | converting | ready | error
 			state: 'loading',
 			errorMessage: '',
+			// sidecar_unreachable | sidecar_rejected | conversion_failed |
+			// timeout | no_pages | unknown | '' (kein Fehler bzw. Fehler kam
+			// nicht vom Server, siehe pollStatus()) - Phase 14: gespeicherte
+			// Fehlertexte werden von beliebigen Nutzerinnen in beliebigen
+			// Sprachen gelesen, IL10N kann serverseitig also nicht greifen
+			// (siehe ConversionController). Uebersetzt wird erst hier, beim
+			// Anzeigen, anhand des Codes - errorMessage bleibt das
+			// unveraenderte technische Detail dazu.
+			errorCode: '',
 			pageUrls: [],
 			cursorRect: null,
 			currentTimeMs: 0,
@@ -194,6 +208,15 @@ export default {
 	},
 
 	computed: {
+		// Uebersetzter Satz fuer den Fehlerzustand: bei einem serverseitig
+		// gespeicherten errorCode dessen feste Uebersetzung, sonst (Netzwerkfehler
+		// beim Abruf des status()-Endpunkts selbst, siehe pollStatus()) die rohe
+		// JS-Fehlermeldung - die ist ohnehin umgebungsspezifisch und nicht sinnvoll
+		// uebersetzbar.
+		errorText() {
+			return this.errorCode ? this.errorCodeText(this.errorCode) : (this.errorMessage || this.t('Unknown error.'))
+		},
+
 		// Musikalischer Anker der aktuellen Wiedergabeposition (Phase 11,
 		// "+ An aktueller Stelle") - null solange measuresTimeline/durationMs
 		// noch nicht geladen sind.
@@ -242,6 +265,30 @@ export default {
 	},
 
 	methods: {
+		// Einzelargument-Wrapper um @nextcloud/l10n translate() (siehe
+		// tools/l10n.mjs zur Extraktion) - hier statt auf Modulebene definiert,
+		// damit t() dort ausgewertet wird, wo der Text gebraucht wird (Template/
+		// computed), nicht einmalig beim Modulimport (PLAN.md Phase 14).
+		t(text, vars) {
+			return translate('scoreview', text, vars)
+		},
+
+		// Uebersetzung je error_code (siehe ConversionController::status()) -
+		// unknown ist sowohl der explizite Code als auch der Fallback fuer einen
+		// unbekannten/fehlenden Code (z.B. aeltere, vor Phase 14 gespeicherte
+		// Fehlerdatensaetze ohne error_code).
+		errorCodeText(code) {
+			const messages = {
+				sidecar_unreachable: this.t('The conversion service could not be reached.'),
+				sidecar_rejected: this.t('The conversion service rejected the file.'),
+				conversion_failed: this.t('The score could not be converted.'),
+				timeout: this.t('The conversion did not finish in time.'),
+				no_pages: this.t('The score contains no pages that could be converted.'),
+				unknown: this.t('An unknown error occurred during conversion.'),
+			}
+			return messages[code] ?? messages.unknown
+		},
+
 		setPageRef(el, index) {
 			if (el) {
 				this.pageRefs[index] = el
@@ -254,6 +301,7 @@ export default {
 			this.cleanup()
 			this.state = 'loading'
 			this.errorMessage = ''
+			this.errorCode = ''
 			this.autoRetried = false
 			this.pageUrls = []
 			this.cursorRect = null
@@ -310,6 +358,7 @@ export default {
 			} catch (err) {
 				this.state = 'error'
 				this.errorMessage = err.message
+				this.errorCode = ''
 				return
 			}
 
@@ -319,7 +368,8 @@ export default {
 				await this.loadScore(body)
 			} else if (body.status === 'error') {
 				this.state = 'error'
-				this.errorMessage = body.error || 'Unbekannter Fehler bei der Konvertierung.'
+				this.errorMessage = body.error || ''
+				this.errorCode = body.errorCode || 'unknown'
 				// Der Status-Endpunkt stößt bei einem gespeicherten Fehler selbst
 				// schon einen erneuten Versuch an (z.B. nach einem Sidecar-
 				// Konfigurationsfix). Einmalig automatisch nachschauen, ob der
@@ -354,7 +404,7 @@ export default {
 				if (soundFontUrl) {
 					await this.setUpRealPlayer(files.midi, soundFontUrl)
 				} else {
-					this.playbackError = 'Es ist kein SoundFont verfügbar (siehe Einstellungen → ScoreView).'
+					this.playbackError = this.t('No SoundFont is available (see Settings → ScoreView).')
 					this.setUpSilentClock(timeline)
 				}
 
@@ -637,6 +687,18 @@ export default {
 
 .scoreview-error {
 	color: var(--color-error);
+}
+
+.scoreview-error-detail {
+	display: inline-block;
+	text-align: left;
+	color: var(--color-text-maxcontrast);
+	font-size: 0.9em;
+}
+
+.scoreview-error-detail pre {
+	white-space: pre-wrap;
+	word-break: break-word;
 }
 
 .scoreview-hint {

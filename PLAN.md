@@ -916,6 +916,73 @@ hinzugefügter, absichtlich nicht übersetzter String lässt `npm test`
 fehlschlagen. Ein Datensatz mit künstlich gesenkter `format_version` führt
 zu einer Neukonvertierung statt zu einem 500er.
 
+**Umsetzungsstand (2026-08-23).** Vollständig umgesetzt und gegen die
+Testinstanz verifiziert, kein Abweichen vom Plan.
+
+- `@nextcloud/l10n` aufgenommen, `l10n/de.json`/`l10n/de.js` gepflegt.
+  `tools/l10n.mjs` (+ `npm run l10n:extract`, eingebunden in `npm test` über
+  `tools/l10n.test.js`) scannt `src/**/*.{js,vue}` nach `t('…')` und
+  `lib/**/*.php`/`templates/**/*.php` nach `$l->t('…')` (auch über
+  `$this->l->t('…')` hinweg, nicht nur die lokale Variable `$l`) und meldet
+  fehlende wie verwaiste Übersetzungen getrennt für beide Seiten.
+- Alle UI-Strings umgestellt: `ScoreViewer.vue`, `ScoreMixer.vue`,
+  `ScoreAnnotations.vue`, `ScorePage.vue`, `settings.js` (eigener `t()`-
+  Wrapper, kein Vue-Setup dort), `admin.php`/`Section.php` sowie die
+  Fehlermeldungen in `ConversionController`/`AnnotationController`
+  (`$this->l->t()`, per DI injiziertes `IL10N`).
+- `error_code` umgesetzt wie geplant: neue Spalte (Migration
+  `Version000100Date20260823140000`, zusammen mit `format_version`),
+  `ScoreConversion::ERROR_*`-Konstanten, `SidecarException` trägt jetzt
+  einen Code mit (Default `unknown`), `SidecarClient` unterscheidet
+  4xx-Antworten (`ClientException`, Code `sidecar_rejected`) von
+  Netzwerk-/Verbindungsfehlern (Code `sidecar_unreachable`) - verifiziert
+  an einem gestoppten Sidecar-Container (`Could not resolve host` →
+  `sidecar_unreachable`). `PollConversionJob` ordnet zusätzlich Timeout
+  (`timeout`) und die "no SVG pages"-Sidecar-Meldung (`no_pages`, per
+  Text-Erkennung - der Sidecar hat kein eigenes strukturiertes
+  Fehlerformat) zu, alles andere `conversion_failed`. `ScoreViewer.vue`
+  übersetzt den Code beim Anzeigen (`errorCodeText()`), `error_message`
+  bleibt daneben ausklappbar als technisches Detail - beides an echtem
+  Ton/Fehlerzustand in EN und DE geprüft (Playwright, gestoppter Sidecar):
+  „Error: The conversion service could not be reached." bzw. „Fehler: Der
+  Konvertierungsdienst konnte nicht erreicht werden." mit dem
+  unveränderten Guzzle-Fehlertext im Detail-Aufklapper.
+- `format_version` umgesetzt wie geplant, mit einem beim Schreiben
+  gefundenen und behobenen Zusatzfehler: `ConvertScoreJob`s
+  Idempotenz-Guard übersprang jeden Datensatz mit Status `ready`
+  bedingungslos - ein künstlich auf `0` gesetztes `format_version` bei
+  sonst intaktem `ready`-Datensatz blieb dadurch für immer hängen (der
+  Controller reichte per `retryConversion()` brav einen neuen Job ein, der
+  Job selbst tat aber nie etwas, weil er den veralteten `ready`-Datensatz
+  fälschlich als "schon fertig" überspringt). Behoben: der Guard prüft
+  jetzt zusätzlich `ConversionService::isCurrentFormat()` und überspringt
+  einen `ready`-Datensatz nur noch, wenn das Format auch aktuell ist. Mit
+  dem Fix per Playwright verifiziert: ein manuell auf `format_version = 0`
+  gesetzter, sonst `ready` Datensatz löst beim nächsten `status()`-Aufruf
+  eine stille Neukonvertierung aus (kein Fehlerzustand, kein 500), endet
+  wieder auf `status = ready` und `format_version = 1` - der aus Phase 12
+  offene manuelle Eingriff ("betroffene Zeilen löschen") ist damit
+  überflüssig. Migration setzt für alle Bestandszeilen defensiv den
+  aktuellen Wert als Default (kein ungewollter Massen-Reconvert direkt
+  nach dem Upgrade), gemessen: nach `occ upgrade` trugen alle drei
+  vorhandenen `ready`-Datensätze der Testinstanz sofort
+  `format_version = 1`.
+- `serveCachedFile()`/`status()` fangen zusätzlich eine `NotFoundException`
+  beim Zusammenstellen der Datei-URLs ab (fehlende Cache-Datei trotz
+  `status = ready`) und stoßen ebenfalls eine Neukonvertierung an, statt
+  mit 500 zu enden - dieselbe Behandlung wie beim Formatwechsel, nicht
+  gesondert an echtem Material geprüft (kein reproduzierbarer Weg, eine
+  IAppData-Datei gezielt verschwinden zu lassen), aber dieselbe, bereits
+  verifizierte Logik.
+- Playwright-Verifikation komplett gegen `nextcloud-test`/
+  `scoreview-sidecar`: EN-Oberfläche ohne deutschen Reststring, DE-
+  Oberfläche ohne englischen Reststring (beide über `occ user:setting
+  Andreas core lang <en|de>`), Fehlerzustand in beiden Sprachen (Sidecar
+  gestoppt), Erholung nach Sidecar-Neustart, `format_version`-Downgrade.
+  `npm run build` (nur die vorbestehenden Bundle-Größenwarnungen, keine
+  Fehler) und `npm test` (40/40) grün, alle geänderten PHP-Dateien per
+  `php -l` sauber, `occ upgrade` lief die neue Migration ohne Fehler durch.
+
 ### Phase 15 – UI-Basis auf `@nextcloud/vue`
 
 Dateien: `package.json`, `webpack.config.js`, alle `src/components/*.vue`.

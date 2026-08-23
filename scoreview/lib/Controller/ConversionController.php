@@ -18,6 +18,7 @@ use OCP\AppFramework\Http\StreamResponse;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\NotFoundException;
 use OCP\IConfig;
+use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
 
@@ -46,6 +47,7 @@ class ConversionController extends Controller {
 		private IJobList $jobList,
 		private IURLGenerator $urlGenerator,
 		private IConfig $config,
+		private IL10N $l,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -59,7 +61,7 @@ class ConversionController extends Controller {
 	public function status(int $fileId): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
-			return new JSONResponse(['status' => 'error', 'error' => 'Datei nicht gefunden oder kein Zugriff.'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 
 		$etag = $node->getEtag();
@@ -76,16 +78,19 @@ class ConversionController extends Controller {
 			// (status !== error => überspringen) fälschlich als "läuft
 			// schon" überspringen - die Konvertierung würde für immer auf
 			// "pending" hängen bleiben.
-			$this->jobList->add(ConvertScoreJob::class, [
-				'userId' => $this->fileResolver->currentUserId(),
-				'fileId' => $fileId,
-			]);
+			$this->retryConversion($fileId);
 			return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 		}
 
 		$body = ['status' => $conversion->getStatus()];
 		if ($conversion->getStatus() === ScoreConversion::STATUS_ERROR) {
 			$body['error'] = $conversion->getErrorMessage();
+			// error_code statt uebersetztem error_message (Phase 14): der Text wird
+			// einmal beim Konvertieren geschrieben, aber von beliebigen Nutzerinnen
+			// in beliebigen Sprachen gelesen - IL10N ist an die Sprache der GERADE
+			// ANFRAGENDEN Person gebunden, waere hier also falsch. error_message
+			// bleibt daneben als unveraendertes technisches Detail bestehen.
+			$body['errorCode'] = $conversion->getErrorCode() ?? ScoreConversion::ERROR_UNKNOWN;
 			// Ein einmal fehlgeschlagener Versuch blieb sonst für immer auf
 			// "error" hängen, auch wenn die eigentliche Ursache (z.B. ein
 			// falsch konfiguriertes Sidecar-Secret) längst behoben wurde -
@@ -93,18 +98,40 @@ class ConversionController extends Controller {
 			// stehengebliebenen Fehler statt es einfach nochmal zu
 			// versuchen. ConvertScoreJob::run() erlaubt genau das (sein
 			// Idempotenz-Guard überspringt nur status !== error).
-			$this->jobList->add(ConvertScoreJob::class, [
-				'userId' => $this->fileResolver->currentUserId(),
-				'fileId' => $fileId,
-			]);
+			$this->retryConversion($fileId);
 		} elseif ($conversion->getStatus() === ScoreConversion::STATUS_READY) {
-			$body['files'] = $this->buildFileUrls($fileId, $etag);
+			if (!$this->conversionService->isCurrentFormat($conversion)) {
+				// Aeltere Cache-Formatversion (PLAN.md Phase 12 "Neu gefundene
+				// Luecke"/Phase 14 format_version) - wie "nicht fertig" behandeln
+				// statt Cache-Dateien auszuliefern, die nicht mehr zum aktuellen
+				// Controller/Sidecar-Format passen, und eine Neukonvertierung
+				// anstossen statt manuellem Eingriff in der DB.
+				$this->retryConversion($fileId);
+				return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
+			}
+			try {
+				$body['files'] = $this->buildFileUrls($fileId, $etag);
+			} catch (NotFoundException) {
+				// Cache-Datei fehlt trotz status=ready (z.B. Ordner ausserhalb der
+				// App geloescht) - wie "nicht fertig" behandeln statt eines 500ers,
+				// analog zur format_version-Pruefung oben (PLAN.md Phase 12).
+				$this->retryConversion($fileId);
+				return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
+			}
 			// Kein Cache-Artefakt einer bestimmten Partitur, sondern eine
 			// instanzweite Ressource (Phase 9/E1) - deshalb hier statt in
 			// buildFileUrls() mitgegeben.
 			$body['soundFontUrl'] = $this->soundFontUrl();
 		}
 		return new JSONResponse($body);
+	}
+
+	/** Reiht eine (Neu-)Konvertierung ein - Idempotenz/Ueberspringen bereits laufender Jobs regelt ConvertScoreJob selbst. */
+	private function retryConversion(int $fileId): void {
+		$this->jobList->add(ConvertScoreJob::class, [
+			'userId' => $this->fileResolver->currentUserId(),
+			'fileId' => $fileId,
+		]);
 	}
 
 	#[NoAdminRequired]
@@ -143,19 +170,19 @@ class ConversionController extends Controller {
 	private function serveCachedFile(int $fileId, string $mimeType, callable $fileGetter): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
-			return new JSONResponse(['error' => 'Datei nicht gefunden oder kein Zugriff.'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 
 		$etag = $node->getEtag();
 		$conversion = $this->conversionService->find($fileId, $etag);
-		if ($conversion === null || $conversion->getStatus() !== ScoreConversion::STATUS_READY) {
-			return new JSONResponse(['error' => 'Konvertierung noch nicht fertig.'], Http::STATUS_NOT_FOUND);
+		if ($conversion === null || $conversion->getStatus() !== ScoreConversion::STATUS_READY || !$this->conversionService->isCurrentFormat($conversion)) {
+			return new JSONResponse(['error' => $this->l->t('Conversion not finished yet.')], Http::STATUS_NOT_FOUND);
 		}
 
 		try {
 			$file = $fileGetter($fileId, $etag);
 		} catch (NotFoundException) {
-			return new JSONResponse(['error' => 'Angeforderte Datei existiert nicht.'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l->t('Requested file does not exist.')], Http::STATUS_NOT_FOUND);
 		}
 
 		// StreamResponse akzeptiert auch ein resource-Handle (ISimpleFile::read())

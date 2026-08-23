@@ -12,6 +12,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\IL10N;
 use OCP\IRequest;
 
 /**
@@ -27,6 +28,7 @@ class AnnotationController extends Controller {
 		private UserFileResolver $fileResolver,
 		private AnnotationService $annotationService,
 		private ConversionService $conversionService,
+		private IL10N $l,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -36,7 +38,7 @@ class AnnotationController extends Controller {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
 		if ($node === null || $userId === null) {
-			return new JSONResponse(['error' => 'Datei nicht gefunden oder kein Zugriff.'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 
 		$currentMeasureCount = null;
@@ -56,10 +58,10 @@ class AnnotationController extends Controller {
 	public function create(int $fileId, int $measureNumber, float $fraction, string $content, ?int $elid = null, ?string $anchorEtag = null): JSONResponse {
 		$userId = $this->requireOwnAccess($fileId);
 		if ($userId === null) {
-			return new JSONResponse(['error' => 'Datei nicht gefunden oder kein Zugriff.'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 		if (trim($content) === '') {
-			return new JSONResponse(['error' => 'Notiz darf nicht leer sein.'], Http::STATUS_BAD_REQUEST);
+			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
 		}
 
 		$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content);
@@ -70,16 +72,19 @@ class AnnotationController extends Controller {
 	public function update(int $fileId, int $id, string $content): JSONResponse {
 		$userId = $this->requireOwnAccess($fileId);
 		if ($userId === null) {
-			return new JSONResponse(['error' => 'Datei nicht gefunden oder kein Zugriff.'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 		if (trim($content) === '') {
-			return new JSONResponse(['error' => 'Notiz darf nicht leer sein.'], Http::STATUS_BAD_REQUEST);
+			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
 		}
 
 		try {
 			$annotation = $this->annotationService->updateContent($id, $fileId, $userId, $content);
-		} catch (\RuntimeException $e) {
-			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_NOT_FOUND);
+		} catch (\RuntimeException) {
+			// AnnotationService signalisiert nur EINEN Fehlerfall darueber (kein
+			// eigener Zugriff auf diese Notiz) - die Exception-Message selbst ist
+			// interne Diagnose, nicht fuer IL10N gedacht (siehe deren Kommentar).
+			return new JSONResponse(['error' => $this->l->t('Note not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 		return new JSONResponse($annotation->jsonSerialize());
 	}
@@ -88,13 +93,13 @@ class AnnotationController extends Controller {
 	public function destroy(int $fileId, int $id): JSONResponse {
 		$userId = $this->requireOwnAccess($fileId);
 		if ($userId === null) {
-			return new JSONResponse(['error' => 'Datei nicht gefunden oder kein Zugriff.'], Http::STATUS_NOT_FOUND);
+			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 
 		try {
 			$this->annotationService->delete($id, $fileId, $userId);
-		} catch (\RuntimeException $e) {
-			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_NOT_FOUND);
+		} catch (\RuntimeException) {
+			return new JSONResponse(['error' => $this->l->t('Note not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 		return new JSONResponse(['status' => 'ok']);
 	}

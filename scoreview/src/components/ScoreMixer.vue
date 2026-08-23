@@ -13,7 +13,7 @@
 				type="button"
 				class="scoreview-mixer-toggle"
 				:class="{ active: states[ch.channel].muted }"
-				:title="'Stummschalten: ' + (ch.name || ch.instrumentId)"
+				:title="t('Mute: {name}', { name: ch.name || ch.instrumentId })"
 				@click="toggleMute(ch.channel)">
 				M
 			</button>
@@ -21,7 +21,7 @@
 				type="button"
 				class="scoreview-mixer-toggle"
 				:class="{ active: states[ch.channel].solo }"
-				:title="'Solo: ' + (ch.name || ch.instrumentId)"
+				:title="t('Solo: {name}', { name: ch.name || ch.instrumentId })"
 				@click="toggleSolo(ch.channel)">
 				S
 			</button>
@@ -39,6 +39,7 @@
 </template>
 
 <script>
+import { translate } from '@nextcloud/l10n'
 import { computeEffectiveVolumes } from '../lib/mixerLayout.js'
 
 /**
@@ -80,6 +81,10 @@ export default {
 	},
 
 	methods: {
+		t(text, vars) {
+			return translate('scoreview', text, vars)
+		},
+
 		emitVolumes() {
 			const channelStates = this.channels.map((ch) => ({ channel: ch.channel, ...this.states[ch.channel] }))
 			this.$emit('volumes-changed', computeEffectiveVolumes(channelStates))

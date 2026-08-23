@@ -7,6 +7,7 @@ namespace OCA\ScoreView\BackgroundJob;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\SidecarClient;
+use OCA\ScoreView\Service\SidecarException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\QueuedJob;
@@ -62,11 +63,20 @@ class ConvertScoreJob extends QueuedJob {
 
 		$etag = $node->getEtag();
 		$conversion = $this->conversionService->find($fileId, $etag);
-		if ($conversion !== null && $conversion->getStatus() !== ScoreConversion::STATUS_ERROR) {
-			// Bereits angestoßen oder fertig (z.B. NodeCreatedEvent UND
-			// NodeWrittenEvent für denselben Upload, oder Status-Endpunkt hat
-			// zwischenzeitlich schon selbst nachgelegt) - nicht doppelt tun.
-			return;
+		if ($conversion !== null) {
+			$alreadyInProgress = in_array($conversion->getStatus(), [ScoreConversion::STATUS_PENDING, ScoreConversion::STATUS_PROCESSING], true);
+			// "ready" allein reicht nicht mehr aus (Phase 14): ein Datensatz kann
+			// "ready" UND veraltet sein (aeltere format_version, siehe
+			// ConversionController::status() -> retryConversion()) - der reicht
+			// diesen Job gezielt fuer GENAU diesen Fall neu ein und braucht ihn
+			// nicht uebersprungen.
+			$alreadyReadyAndCurrent = $conversion->getStatus() === ScoreConversion::STATUS_READY && $this->conversionService->isCurrentFormat($conversion);
+			if ($alreadyInProgress || $alreadyReadyAndCurrent) {
+				// Bereits angestoßen oder fertig (z.B. NodeCreatedEvent UND
+				// NodeWrittenEvent für denselben Upload, oder Status-Endpunkt hat
+				// zwischenzeitlich schon selbst nachgelegt) - nicht doppelt tun.
+				return;
+			}
 		}
 		if ($conversion === null) {
 			$conversion = $this->conversionService->createPending($fileId, $etag);
@@ -82,7 +92,7 @@ class ConvertScoreJob extends QueuedJob {
 				'message' => $e->getMessage(),
 				'exception' => $e,
 			]);
-			$this->conversionService->markError($conversion, $e->getMessage());
+			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof SidecarException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
 			return;
 		}
 

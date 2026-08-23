@@ -1,0 +1,18 @@
+{ "translations": {
+    "ScoreView" : "ScoreView",
+    "File not found or no access." : "Datei nicht gefunden oder kein Zugriff.",
+    "Note must not be empty." : "Notiz darf nicht leer sein.",
+    "Note not found or no access." : "Notiz nicht gefunden oder kein Zugriff.",
+    "Conversion not finished yet." : "Konvertierung noch nicht fertig.",
+    "Requested file does not exist." : "Angeforderte Datei existiert nicht.",
+    "Address and shared secret of the MuseScore sidecar container (see sidecar/README.md)." : "Adresse und Shared Secret des MuseScore-Sidecar-Containers (siehe sidecar/README.md).",
+    "Sidecar URL" : "Sidecar-URL",
+    "Shared secret" : "Shared Secret",
+    "••••••• (set, leave empty = unchanged)" : "••••••• (gesetzt, leer lassen = unverändert)",
+    "not set yet" : "noch nicht gesetzt",
+    "Convert new/changed scores immediately (instead of on first open)" : "Neue/geänderte Partituren sofort konvertieren (statt erst beim ersten Öffnen)",
+    "Custom SoundFont URL (SF2/SF3, optional)" : "Eigene SoundFont-URL (SF2/SF3, optional)",
+    "Leave empty: playback then uses the SoundFont that the sidecar brings along (MuseScore General Lite, ~40 MB), delivered by the app itself. Only fill in if a different SoundFont should be used - that address must then be reachable via HTTP(S) from the browser and allow CORS." : "Leer lassen genügt: die Wiedergabe verwendet dann das SoundFont, das der Sidecar mitbringt (MuseScore General Lite, ~40 MB), ausgeliefert über die App selbst. Nur eintragen, wenn ein anderes SoundFont klingen soll - die Adresse muss dann vom Browser aus per HTTP(S) erreichbar sein und CORS erlauben.",
+    "Save" : "Speichern"
+},"pluralForm" :"nplurals=2; plural=(n != 1);"
+}

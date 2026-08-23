@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Service;
 
+use GuzzleHttp\Exception\ClientException;
+use OCA\ScoreView\Db\ScoreConversion;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
 
@@ -44,7 +46,7 @@ class SidecarClient {
 	 */
 	public function submitConversion(string $msczContent, string $filename): string {
 		if (!$this->isConfigured()) {
-			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).');
+			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).', errorCode: ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
 		$client = $this->clientService->newClient();
 		try {
@@ -58,8 +60,14 @@ class SidecarClient {
 					],
 				],
 			]);
+		} catch (ClientException $e) {
+			// 4xx: der Sidecar wurde erreicht und hat die Anfrage explizit
+			// abgelehnt (falsches Secret, Upload-Groessenlimit, …) - das ist ein
+			// anderer Befund als "nicht erreichbar" und verdient einen eigenen
+			// Code (siehe ScoreConversion::ERROR_*).
+			throw new SidecarException('Sidecar-Anfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
 		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar-Anfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e);
+			throw new SidecarException('Sidecar-Anfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
 		$body = json_decode($response->getBody(), true);
 		if (!is_array($body) || !isset($body['jobId'])) {
@@ -78,8 +86,10 @@ class SidecarClient {
 			$response = $client->get($this->getBaseUrl() . "/convert/{$jobId}", [
 				'headers' => $this->headers(),
 			]);
+		} catch (ClientException $e) {
+			throw new SidecarException('Sidecar-Statusabfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
 		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar-Statusabfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e);
+			throw new SidecarException('Sidecar-Statusabfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
 		$body = json_decode($response->getBody(), true);
 		if (!is_array($body) || !isset($body['status'])) {
@@ -151,8 +161,10 @@ class SidecarClient {
 			$response = $client->get($this->getBaseUrl() . $relativeUrl, [
 				'headers' => $this->headers(),
 			]);
+		} catch (ClientException $e) {
+			throw new SidecarException('Sidecar-Dateiabruf fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
 		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar-Dateiabruf fehlgeschlagen: ' . $e->getMessage(), 0, $e);
+			throw new SidecarException('Sidecar-Dateiabruf fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
 		return $response->getBody();
 	}
