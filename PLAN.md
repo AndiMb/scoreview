@@ -435,7 +435,15 @@ der den Web-Audio-Graph unmittelbar vor `AudioContext.destination` anzapft
 (`AnalyserNode` pro Worklet-Ausgang) und Pegel misst – in einem
 Headless-Browser gibt es kein Ausgabegerät, „es klingt" muss also gemessen
 werden. Testpartitur `What_Was_I_Made_For.mscz` (SATB), Wiedergabe ab
-Takt 30:
+Takt 30.
+
+**Wichtig für jede Wiederholung dieser Messung:** Das Synth-Worklet hat
+viele Ausgänge und ruft `connect(destination, i)` einzeln pro Ausgang auf.
+Ein Abgriff, der den Ausgangsindex ignoriert (`connect(analyser)` statt
+`connect(analyser, i)`), misst deshalb ausschließlich Ausgang 0 – und der
+führt den Effektbus, der bei manchen Partituren komplett stumm ist. Genau
+das hat in dieser Sitzung zunächst „kein Ton" gemeldet, obwohl längst
+welcher da war. Ergebnis der korrekten Messung:
 
 - **Es kommt Signal an.** Ausgänge 1–4 des Synth-Worklets führen die vier
   Stimmen (Spitzenpegel 0,051 / 0,029 / 0,020 / 0,036), Ausgang 0 den
