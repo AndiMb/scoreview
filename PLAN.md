@@ -311,6 +311,27 @@ mit der Angabe zur Testpartitur oben), `pages` deckt sich mit der Zahl der
 gelieferten SVG-Seiten – die Herleitung der Seitenzahl aus `meta.json`
 (`ConversionService::getPageCount()`) steht damit auf gemessenem Grund.
 
+**M9 – Das MuseScore-SVG trägt keine Kennung, die sich mit `elid` verbinden
+lässt.** Gemessen am 2026-08-23 (Phase 16) am gecachten `page-1.svg` von
+`repeat-test.mscz` (109.967 Byte, `nextcloud-test`-Testinstanz):
+kein einziges `id="…"`-Attribut im gesamten Dokument (`grep -c ' id='` → 0),
+weder auf `<path>`- noch auf `<polyline>`-Elementen. Adressierbar ist nur
+über `class`: `Note`, `BarLine`, `StaffLines`, `Clef`, `InstrumentName`,
+`LedgerLine`, `Stem`, `Text`, `StaffText`, `TimeSig`, `VoltaSegment` – eine
+Kategorie, kein Bezug zu einer einzelnen Note oder zu `elid`. Echte
+Hervorhebung des Notenkopfs (Füllfarbe/`filter` auf das getroffene Element)
+ist damit **nicht** möglich; der in Phase 8 gebaute Overlay-Ansatz bleibt
+also die einzige Option (siehe Konsequenz in Phase 16).
+
+Nebenbefund, für die Overlay-Umsetzung wichtig: Das allererste Element im
+Dokument ist ein deckendes, weißes Hintergrundrechteck über die volle
+`viewBox` (`<path class="" fill="#ffffff" … />`) – als einziges Element mit
+leerem `class`-Attribut im ganzen Dokument (`grep -c 'class=""'` → 1), also
+zuverlässig über `path[class=""]` adressierbar, ohne von der
+Dokumentreihenfolge abhängig zu sein. Ein rein DOM-nachgelagertes
+Cursor-Overlay hinter dem SVG (statt davor) bleibt ohne diese Regel
+unsichtbar, weil dieses Rechteck es sonst vollständig verdeckt.
+
 ## 2. Zielarchitektur
 
 ```
@@ -1163,6 +1184,160 @@ wieder auf. Die Taktangabe stimmt an drei Stichproben mit dem Notenbild
 überein und ist ohne Scrollen sichtbar. Der Notenkopf unter dem Cursor ist
 lesbar (Vorher/Nachher-Screenshot). Eine A4-Seite füllt im Vollbild die
 Höhe.
+
+**Umsetzungsstand (2026-08-23).** Vollständig umgesetzt, gegen die
+Testinstanz per Playwright verifiziert. M9 (SVG trägt keine mit `elid`
+verbindbare Kennung, siehe Abschnitt 1) hat den Overlay-Zweig aus dem Plan
+ausgelöst, nicht echte Notenkopf-Einfärbung.
+
+- **Cursor hinter statt vor dem Notenbild** (`ScorePage.vue`): entscheidend
+  ist dabei CSS-Stapelreihenfolge, nicht die Template-Reihenfolge - ein
+  `position: absolute`-Element (der Cursor) malt laut Spezifikation immer
+  NACH nicht-positionierten Elementen, unabhängig davon, wo es im Markup
+  steht. Erst ein explizites `.score-page-svg { position: relative;
+  z-index: 1 }` bringt das Notenbild über den Cursor. Das deckende weiße
+  Hintergrundrechteck, das MuseScore als erstes SVG-Element rendert (M9),
+  wird über `path[class=""] { fill: none }` transparent geschaltet - sonst
+  bliebe der dahinterliegende Cursor unsichtbar. Stil von Balken+Rahmen auf
+  einen weichen `radial-gradient`-Schein umgestellt (`transform: scale(2.2)`
+  über die Notenkopf-Bounding-Box hinaus). Per Playwright-Screenshot
+  bestätigt: Notenlinien, Notenhals und Notenkopf bleiben unter dem Schein
+  vollständig lesbar; `getComputedStyle` bestätigt `z-index: 1`/`position:
+  relative` auf dem SVG-Wrapper und `fill: none` auf dem Hintergrundpfad.
+- **`src/lib/scrollPlan.js`** (neu, rein, unit-getestet: `planAutoScroll()`
+  berechnet ein Ziel-`scrollTop`, das den Cursor in einem Sichtband hält
+  (Default 35-65 % der Viewporthöhe), oder `null`, wenn er schon im Band
+  liegt; `shouldSuppressAutoScroll()` ist ein reiner Zeitvergleich für die
+  Scroll-Pause nach manuellem Eingriff. Beide kennen kein DOM, nur Zahlen
+  (Dokumentkoordinaten) - `ScoreViewer.vue` liefert die per
+  `getBoundingClientRect()`/`scrollTop`.
+- **Autoscroll-Verdrahtung** (`ScoreViewer.vue::updateAutoScroll()`):
+  läuft im selben `useScoreSync`-Callback, der bisher nur bei Seitenwechsel
+  scrollte (`lastScrolledPage`-Logik komplett entfernt) - jetzt bei jedem
+  Notenwechsel. Manuelles Scrollen wird über einen `scroll`-Listener auf dem
+  Viewer-Root erkannt; um die eigenen `scrollTo()`-Aufrufe nicht
+  selbst als Nutzereingriff misszuverstehen, markiert `performAutoScroll()`
+  ein kurzes Ignorierfenster (700 ms, siehe `PROGRAMMATIC_SCROLL_WINDOW_MS`)
+  vor jedem eigenen Scroll.
+- **Beim Testen gefundene und behobene Lücke: weite Sprünge auf eine noch
+  nicht geladene Seite.** Ein Playwright-Lauf mit groben Sprüngen über die
+  ganze Partitur (z.B. „springe zu Takt 60") zeigte zunächst, dass der
+  Cursor bei den hinteren Seiten schlicht nicht auftauchte (`.score-page-cursor`
+  nicht im DOM). Ursache: `ScorePage.vue` rendert den Cursor nur, wenn die
+  eigene SVG bereits geladen ist (`cursorStyle` braucht die `viewBox`), eine
+  noch nie in die Nähe gescrollte Seite lädt aber erst, wenn ihr
+  IntersectionObserver auslöst (Phase 8, `rootMargin: 600px`) - ein
+  klassisches Henne-Ei-Problem, das die alte, rein seitenwechsel-basierte
+  `scrollToPage()`-Logik nicht hatte (die scrollte immer zum Platzhalter-Div
+  der Zielseite, unabhängig vom SVG-Ladezustand). Behoben: `updateAutoScroll()`
+  scrollt jetzt, wenn `getCursorClientRect()` noch nichts liefert, grob zum
+  Seiten-Platzhalter selbst (der reserviert seine Höhe schon vor dem Laden,
+  siehe `pageStyle`/`aspectRatio`) - das bringt die Seite ins Ladefenster,
+  der nächste Notenwechsel-Tick übernimmt dann die genaue Position über den
+  jetzt verfügbaren Cursor. Bewusst über `performAutoScroll()` (nicht
+  `scrollIntoView()`), damit auch dieser Grobschritt als programmatisch
+  markiert wird - sonst hätte er die nachfolgende Feinjustierung selbst
+  wieder unterdrückt.
+- **Bekannte Grenze am Stückende, kein Fehler:** Bei den letzten ~20 % der
+  Partitur (gemessen bei `frac` 0,75/0,95 der Gesamtdauer) sitzt der Cursor
+  im Playwright-Lauf einige Pixel oberhalb des Sichtbands
+  (`cursorTopRelative` -29 px bzw. -101 px statt im Band). Ursache: nahe dem
+  Dokumentende reicht der verbleibende scrollbare Bereich unterhalb des
+  Cursors nicht mehr aus, um ihn bis zur Bandmitte hochzuziehen -
+  `performAutoScroll()` klemmt korrekt auf `maxScrollTop`. Dieselbe Grenze
+  hätte jeder Editor/Teleprompter mit Sichtband-Nachführung am Dokumentende;
+  kein Bug, aber dokumentiert, damit es bei einer künftigen Messung nicht
+  neu als Fehler gilt.
+- **Taktangabe + Titel** (`ScoreViewer.vue`, computed `currentMeasureDisplay`,
+  Daten `scoreTitle`/`totalMeasures` aus `meta.json`): in der ohnehin schon
+  `position: sticky` Transportleiste, wie im Plan vorgezeichnet. Neuer
+  l10n-String `"Measure {current} of {total}"`. Der Partiturtitel selbst
+  bleibt unübersetzt (Material aus der Partitur, kein UI-Text, siehe
+  CLAUDE.md). Playwright: „WWIMF / Takt 3 von 63" nach Sprung zu Takt 3,
+  deckt sich mit der bekannten M7/Phase-10-Zeitbasis (0:06 = 6000 ms).
+- **Zoom-Presets** (`scoreLayout.js`: `computeFitWidthZoom()`,
+  `computeFitPageZoom()`, `computeActualSizeZoom()`, `parseSvgSizeMm()`,
+  neue Konstante `BASE_PAGE_WIDTH_PX` als einzige Quelle für die bisher in
+  `ScorePage.vue` hartkodierte 900px-Basisbreite). „Ganze Seite" rechnet die
+  Höhenschranke in eine äquivalente Breite um (bei fester `aspect-ratio`
+  legt die Breite die Höhe vollständig fest) - der im Plan befürchtete
+  zweite CSS-Mechanismus für „höhenbezogene Skalierung" war dadurch nicht
+  nötig, `max-width` bleibt der einzige Hebel. `ScorePage.vue` liefert die
+  Seitengeometrie (`viewBox`, `sizeMm`) beim Laden per neuem `loaded`-Event,
+  `ScoreViewer.vue` sammelt sie in `pageDimensions`. Playwright bei 1400 px
+  Viewport-Breite: „Seitenbreite" trifft die Containerbreite exakt
+  (1376 px), „ganze Seite" liefert eine in sich konsistente Höhen/Breiten-
+  Kombination (642×496 px bei 800 px Viewporthöhe abzüglich Bedienleisten),
+  „100 %" liefert 816 px - **nebenbei gemessen: `wwimf` ist keine A4-,
+  sondern eine US-Letter-Seite** (215,9 mm statt 210 mm Breite; 816 px
+  deckt sich mit 215,9 mm × 96/25,4 px/mm, nicht mit den erwarteten 793,9 px
+  für A4) - `computeActualSizeZoom()` liest die reale `width="…mm"`-Angabe
+  aus dem SVG und nimmt bewusst keine feste A4-Annahme an, genau für diesen
+  Fall.
+- **Vollbild** (`toggleFullscreen()`/`onFullscreenChange()`): fullscreent
+  den gesamten Viewer (nicht eine einzelne Seite), damit die Transportleiste
+  bedienbar bleibt; beim Betreten wird automatisch `applyZoomPreset('page')`
+  angewendet. Per Playwright bestätigt - auch im headless Chromium dieser
+  Sitzung funktionierte `requestFullscreen()` aus einem echten Klick-Event
+  heraus (`document.fullscreenElement` zeigte danach auf den Viewer).
+- **l10n**: sechs neue Strings (`Measure {current} of {total}`, `Fit page
+  width`, `Fit whole page`, `Actual size`, `Fullscreen`, `Exit fullscreen`),
+  `npm run l10n:extract` danach „alle Übersetzungen vollständig". `npm test`
+  56/56 grün (9 neue Tests in `scrollPlan.test.js`, 9 neue in
+  `scoreLayout.test.js` für die Zoom-Presets). `npm run build` ohne neue
+  Fehler (nur die vorbestehenden Bundle-Größenwarnungen, `scoreview-viewer.js`
+  714 KiB → 720 KiB durch vier zusätzliche Icons). `appinfo/info.xml` auf
+  `0.0.12`, `occ upgrade` auf der Testinstanz gelaufen.
+- **Umgebungshinweis zur Verifikation, nicht Teil des Produktcodes:** Diese
+  Sitzung lief als Background-Job ohne echtes Audio-Ausgabegerät -
+  `createPlayer()` (`player.js`) blieb dadurch unbegrenzt in
+  `context.audioWorklet.addModule()`/`synth.isReady` hängen (kein Reject,
+  kein Timeout), unabhängig von Phase 16 und ohne Zusammenhang mit den
+  hier geänderten Dateien. Für die Playwright-Verifikation wurde deshalb
+  die `status()`-Antwort per `page.route()` clientseitig um `soundFontUrl`
+  bereinigt, damit `ScoreViewer.vue` den synchronen `silentClock`-Pfad nimmt
+  (Phase 8/9) - exakt derselbe Cursor-/Timeline-/Scroll-Code wie mit echtem
+  Player, nur ohne den Audio-Teil. Alle Cursor-/Autoscroll-/Zoom-/Taktangabe-
+  Befunde oben gelten unverändert für den echten Player, weil dieser Code
+  strikt hinter `useScoreSync`/`this.clock` liegt und die Zeitquelle nicht
+  kennt. Die Playwright-EN/DE-Prüfung (siehe l10n oben) sowie der
+  Kern-Loop-Test aus Phase 10 liefen zusätzlich unverändert gegen den
+  echten `nextcloud-test`-Sidecar, nur die Audiosynthese selbst wurde für
+  diese eine Sitzung umgangen.
+- Getestet an `What_Was_I_Made_For.mscz` (SATB, 191 s, 5 Seiten, 63 Takte)
+  in Englisch und Deutsch - keine ScoreView-eigenen Konsolenfehler in beiden
+  Sprachen (die einzige verbleibende Meldung ist die vorbestehende,
+  Phase-15-dokumentierte Tiptap-Warnung der `text`-App).
+
+**Nachtrag (2026-08-23), zwei Nutzer-Rückmeldungen nach dem ersten
+Durchlauf.**
+
+1. **Ellipse ragte über das System hinaus.** Der weiche Schein
+   (`radial-gradient` + `transform: scale(2.2)`) sollte den Notenkopf
+   dezent hinterlegen, wuchs damit aber deutlich über die
+   Notenkopf-Bounding-Box hinaus und überlappte benachbarte Systeme. Zurück
+   auf ein Rechteck ohne Skalierung (`background: rgba(...)`, `border`,
+   `border-radius: 2px`) - inhaltlich dieselbe Deckkraft/Farbe wie vor Phase
+   16, nur weiterhin hinter statt vor dem Notenbild (siehe M9), wodurch das
+   ursprüngliche Verdeckungsproblem trotzdem gelöst bleibt: die Notenlinien
+   werden vom SVG darüber gezeichnet, ein scharfkantiges Rechteck darunter
+   stört sie nicht.
+2. **Play/Pause-Button nur ganz oben bedienbar - echter, durch Phase 16
+   eingeführter Bug.** Ursache: `.score-page-svg` bekam in Phase 16 ein
+   explizites `position: relative; z-index: 1`, um vor dem Cursor zu malen
+   (siehe oben). Weder `.scoreview-pages` noch `.score-page` eröffnen einen
+   eigenen Stacking-Context, das SVG (und der bereits seit Phase 11
+   bestehende Notiz-Marker mit `z-index: 2`) konkurrierten dadurch direkt
+   mit der sticky Transportleiste (`z-index: 1`) um dieselbe Stapelebene -
+   bei gleichem/höherem Wert gewinnt das später im DOM stehende Element
+   (`.scoreview-pages` steht nach `.scoreview-transport`), Seiteninhalt
+   deckte die Transportleiste also, sobald man vom obersten Bildschirmrand
+   wegscrollte, obwohl sie optisch weiter sichtbar blieb. Behoben:
+   `.scoreview-transport` auf `z-index: 10` angehoben - klar über jedem
+   innerhalb einer Seite verwendeten Wert. Per Playwright verifiziert: nach
+   600px Scrollen liegt `document.elementFromPoint()` auf dem Play-Button
+   selbst (nicht mehr auf der SVG-Seite darunter), ein Klick dort schaltet
+   `aria-label` zuverlässig zwischen „Abspielen"/„Pause" um.
 
 ### Phase 17 – Probentauglichkeit II: Steuern
 

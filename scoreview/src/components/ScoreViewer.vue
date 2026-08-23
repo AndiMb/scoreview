@@ -16,6 +16,17 @@
 		</div>
 		<template v-else>
 			<div class="scoreview-transport">
+				<!--
+					Dauerhaft sichtbare Taktangabe (Phase 16, "wer wissen will, wo er
+					ist, scrollt nach oben zum Eingabefeld") - in der ohnehin schon
+					sticky Transportleiste, nicht in einer eigenen Kopfzeile. Der Titel
+					ist Material aus der Partitur selbst, kein UI-Text (CLAUDE.md) und
+					bleibt deshalb unübersetzt.
+				-->
+				<span v-if="scoreTitle || totalMeasures" class="scoreview-position" :title="scoreTitle">
+					<strong v-if="scoreTitle" class="scoreview-position-title">{{ scoreTitle }}</strong>
+					<span class="scoreview-position-measure">{{ t('Measure {current} of {total}', { current: currentMeasureDisplay, total: totalMeasures || '–' }) }}</span>
+				</span>
 				<NcButton
 					class="scoreview-play"
 					:aria-label="isPlaying ? t('Pause') : t('Play')"
@@ -105,6 +116,25 @@
 					{{ t('Zoom') }}
 					<input type="range" min="0.5" max="2" step="0.1" :value="zoom" :aria-label="t('Zoom')" @input="onZoomInput">
 				</label>
+				<NcButton :aria-label="t('Fit page width')" @click="applyZoomPreset('width')">
+					<template #icon>
+						<ArrowExpandHorizontal :size="20" />
+					</template>
+				</NcButton>
+				<NcButton :aria-label="t('Fit whole page')" @click="applyZoomPreset('page')">
+					<template #icon>
+						<FitToPage :size="20" />
+					</template>
+				</NcButton>
+				<NcButton :aria-label="t('Actual size')" @click="applyZoomPreset('actual')">
+					100%
+				</NcButton>
+				<NcButton :pressed="isFullscreen" :aria-label="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')" @click="toggleFullscreen">
+					<template #icon>
+						<FullscreenExit v-if="isFullscreen" :size="20" />
+						<Fullscreen v-else :size="20" />
+					</template>
+				</NcButton>
 			</div>
 			<NcNoteCard v-if="!hasRealPlayer" type="warning" class="scoreview-hint">
 				{{ t('No sound: {reason}', { reason: playbackError || t('Playback is not available.') }) }}
@@ -135,7 +165,8 @@
 					:zoom="zoom"
 					:markers="annotationMarkers"
 					@note-click="onNoteClick"
-					@marker-click="onAnnotationJumpToById" />
+					@marker-click="onAnnotationJumpToById"
+					@loaded="onPageLoaded" />
 			</div>
 		</template>
 	</div>
@@ -157,11 +188,18 @@ import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
 import ArrowRight from 'vue-material-design-icons/ArrowRight.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
+import ArrowExpandHorizontal from 'vue-material-design-icons/ArrowExpandHorizontal.vue'
+import FitToPage from 'vue-material-design-icons/FitToPage.vue'
+import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
+import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
 import ScorePage from './ScorePage.vue'
 import ScoreMixer from './ScoreMixer.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
 import {
 	buildTimeline,
+	computeActualSizeZoom,
+	computeFitPageZoom,
+	computeFitWidthZoom,
 	findElementAtPoint,
 	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
@@ -170,9 +208,20 @@ import {
 } from '../lib/scoreLayout.js'
 import { findStepIndex } from '../lib/timingSync.js'
 import { resolveMixerChannels } from '../lib/mixerLayout.js'
+import { planAutoScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
 import { useScoreSync } from '../composables/useScoreSync.js'
 import { createSilentClock } from '../lib/silentClock.js'
 import { createPlayer } from '../lib/player.js'
+
+// Pausendauer für das Autoscroll-Nachführen nach manuellem Scrollen (Phase
+// 16, siehe scrollPlan.js) - lang genug, um in Ruhe zu lesen, kurz genug, um
+// nicht wie ein Hänger zu wirken.
+const MANUAL_SCROLL_RESUME_MS = 2500
+// Wie lange nach einem selbst ausgelösten scrollTo() eingehende scroll-Events
+// als "programmatisch" gelten, nicht als manuelles Scrollen (siehe
+// onViewerScroll) - großzügig über der CSS-smooth-scroll-Dauer, damit kein
+// Nachzittern fälschlich als Nutzereingriff gilt.
+const PROGRAMMATIC_SCROLL_WINDOW_MS = 700
 
 const POLL_INTERVAL_MS = 2000
 // Näherung für die Transport-Gesamtdauer im stummen Platzhalter-Modus
@@ -200,6 +249,10 @@ export default {
 		ArrowRight,
 		Repeat,
 		AlertCircleOutline,
+		ArrowExpandHorizontal,
+		FitToPage,
+		Fullscreen,
+		FullscreenExit,
 	},
 
 	props: {
@@ -250,10 +303,19 @@ export default {
 			autoRetried: false,
 			pageRefs: [],
 			timeDisplayHandle: null,
-			// 0, nicht -1: Wiedergabe beginnt immer auf Seite 0 (erste Note),
-			// die beim Mounten ohnehin schon sichtbar ist - ein initialer
-			// Scroll-Aufruf dorthin wäre nur unnötige Animation.
-			lastScrolledPage: 0,
+			// Phase 16: Autoscroll (siehe scrollPlan.js) und Kopfangaben.
+			scoreTitle: '',
+			totalMeasures: 0,
+			// Geometrie der jeweils zuletzt geladenen Seite je Index (Phase 16,
+			// Zoom-Presets) - {viewBox, sizeMm}, gefüllt über ScorePage.vue "loaded".
+			pageDimensions: {},
+			// Zeitstempel (Date.now()) des letzten erkannten MANUELLEN Scrollens,
+			// oder null - siehe shouldSuppressAutoScroll()/onViewerScroll().
+			lastManualScrollAt: null,
+			// Bis zu diesem Zeitpunkt gelten scroll-Events als von uns selbst
+			// ausgelöst (performAutoScroll), nicht als manueller Nutzereingriff.
+			ignoreScrollUntil: 0,
+			isFullscreen: false,
 			// Phase 10: Probenarbeit.
 			timeline: null, // timing.json (Note-Ebene) - für Klick-auf-Note.
 			measuresTimeline: null, // measures.json (Takt-Ebene) - für Taktnavigation/Loop.
@@ -301,6 +363,12 @@ export default {
 			return { ...position, elid: this.currentElid, anchorEtag: this.currentEtag }
 		},
 
+		// Für die Taktangabe in der Transportleiste (Phase 16) - '–' vor dem
+		// ersten berechneten Anker (currentAnchor braucht measuresTimeline).
+		currentMeasureDisplay() {
+			return this.currentAnchor ? this.currentAnchor.measureNumber : '–'
+		},
+
 		// Koordinaten je Notiz für die Seiten-Overlays: bevorzugt die exakte
 		// Note (elid, falls noch im aktuellen etag auffindbar), sonst die
 		// Takt-Koordinate als Näherung (measuresTimeline.elements) - eine
@@ -330,8 +398,20 @@ export default {
 		},
 	},
 
+	mounted() {
+		// Passive Listener am Root-Element (nicht an window/document, siehe
+		// PLAN.md Phase 16) - .scoreview-viewer ist der scrollende Container
+		// selbst (overflow: auto), this.$el ist hier stabil über die gesamte
+		// Lebensdauer der Komponente (anders als die ScorePage-Refs, die pro
+		// Partitur neu entstehen).
+		this.$el.addEventListener('scroll', this.onViewerScroll, { passive: true })
+		document.addEventListener('fullscreenchange', this.onFullscreenChange)
+	},
+
 	beforeUnmount() {
 		this.cleanup()
+		this.$el.removeEventListener('scroll', this.onViewerScroll)
+		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
 	},
 
 	methods: {
@@ -385,7 +465,10 @@ export default {
 			this.presetList = []
 			this.showMixer = false
 			this.pageRefs = []
-			this.lastScrolledPage = 0
+			this.scoreTitle = ''
+			this.totalMeasures = 0
+			this.pageDimensions = {}
+			this.lastManualScrollAt = null
 			this.timeline = null
 			this.measuresTimeline = null
 			this.measureInput = 1
@@ -469,6 +552,8 @@ export default {
 				this.pageUrls = files.pages
 				this.currentEtag = files.etag
 				this.mixerChannels = resolveMixerChannels(metaRes.data.tracks, metaRes.data.parts)
+				this.scoreTitle = metaRes.data.title || ''
+				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
 				this.loadAnnotations()
 
 				if (soundFontUrl) {
@@ -480,14 +565,10 @@ export default {
 
 				this.sync = useScoreSync(timeline, this.clock, (rect) => {
 					this.cursorRect = rect
-					// Nur bei echtem Seitenwechsel scrollen (PLAN.md Phase 8) - nicht
-					// bei jedem Notenwechsel auf derselben, ohnehin schon sichtbaren
-					// Seite erneut anstoßen (sonst überlagert eine noch laufende
-					// smooth-Scroll-Animation die nächste).
-					if (rect && rect.page !== this.lastScrolledPage) {
-						this.lastScrolledPage = rect.page
-						this.scrollToPage(rect.page)
-					}
+					// Nachführen statt nur beim Seitenwechsel zu springen (PLAN.md
+					// Phase 16) - ersetzt die frühere lastScrolledPage-Logik aus
+					// Phase 8, die nur beim Wechsel der Seite überhaupt scrollte.
+					this.updateAutoScroll(rect)
 				})
 
 				this.pumpTimeDisplay()
@@ -725,8 +806,129 @@ export default {
 			}
 		},
 
-		scrollToPage(pageIndex) {
-			this.pageRefs[pageIndex]?.$el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+		// Reine Sichtband-Rechnung in scrollPlan.js, hier nur die DOM-Messung
+		// dazu (Phase 16, ersetzt die frühere reine Seitenwechsel-Erkennung).
+		// Läuft bei jedem Notenwechsel (siehe useScoreSync.js), nicht jeden
+		// rAF-Frame - dieselbe Drosselung wie beim bisherigen Cursor-Update.
+		updateAutoScroll(rect) {
+			if (!rect) {
+				return
+			}
+			if (shouldSuppressAutoScroll(this.lastManualScrollAt, Date.now(), MANUAL_SCROLL_RESUME_MS)) {
+				return
+			}
+			const pageEl = this.pageRefs[rect.page]
+			const containerRect = this.$el.getBoundingClientRect()
+			const cursorClientRect = pageEl?.getCursorClientRect?.()
+			if (!cursorClientRect) {
+				// Die Zielseite ist noch nicht geladen (IntersectionObserver hat sie
+				// noch nicht ausgelöst, siehe ScorePage.vue) - kommt bei einem weiten
+				// Sprung vor (z.B. "springe zu Takt 60"), bei dem noch nie in die Nähe
+				// dieser Seite gescrollt wurde. Grob zur Seite selbst scrollen (die
+				// reserviert ihre Höhe schon vor dem Laden, siehe dortiger Kommentar
+				// zu aspectRatio, ist also schon jetzt messbar) - das bringt sie ins
+				// Ladefenster, der nächste Notenwechsel-Tick übernimmt dann über den
+				// dann verfügbaren Cursor die genaue Position. performAutoScroll()
+				// (nicht scrollIntoView) hier bewusst, damit dieser Scroll ebenfalls
+				// als "programmatisch" markiert wird (siehe onViewerScroll) - sonst
+				// würde er sich selbst als manuelles Scrollen auslegen und den
+				// nachfolgenden genauen Scroll sofort wieder unterdrücken.
+				const pageClientRect = pageEl?.$el?.getBoundingClientRect?.()
+				if (pageClientRect) {
+					const pageTop = this.$el.scrollTop + (pageClientRect.top - containerRect.top)
+					this.performAutoScroll(pageTop)
+				}
+				return
+			}
+			const cursorTop = this.$el.scrollTop + (cursorClientRect.top - containerRect.top)
+			const target = planAutoScroll({
+				cursorTop,
+				cursorHeight: cursorClientRect.height,
+				scrollTop: this.$el.scrollTop,
+				viewportHeight: this.$el.clientHeight,
+			})
+			if (target !== null) {
+				this.performAutoScroll(target)
+			}
+		},
+
+		performAutoScroll(targetScrollTop) {
+			const maxScrollTop = Math.max(0, this.$el.scrollHeight - this.$el.clientHeight)
+			const clamped = Math.min(Math.max(0, targetScrollTop), maxScrollTop)
+			// Markiert die eigenen, dadurch ausgelösten scroll-Events als
+			// "programmatisch" (siehe onViewerScroll) - sonst würde unser
+			// eigenes Nachführen sich selbst als manuellen Scroll auslegen und
+			// sofort wieder pausieren.
+			this.ignoreScrollUntil = Date.now() + PROGRAMMATIC_SCROLL_WINDOW_MS
+			this.$el.scrollTo({ top: clamped, behavior: 'smooth' })
+		},
+
+		// Erkennt manuelles Scrollen (PLAN.md: "bei manuellem Scrollen
+		// aussetzen und nach kurzer Zeit wieder übernehmen") - jedes scroll-
+		// Event, das nicht innerhalb des Ignorierfensters eines eigenen
+		// performAutoScroll() liegt, gilt als Nutzereingriff.
+		onViewerScroll() {
+			if (Date.now() < this.ignoreScrollUntil) {
+				return
+			}
+			this.lastManualScrollAt = Date.now()
+		},
+
+		// Seitengeometrie für die Zoom-Presets (Phase 16) - ScorePage.vue kennt
+		// nur die eigene Seite, hier wird sie gesammelt.
+		onPageLoaded({ index, viewBox, sizeMm }) {
+			this.pageDimensions[index] = { viewBox, sizeMm }
+		},
+
+		applyZoomPreset(preset) {
+			const pagesEl = this.$el.querySelector('.scoreview-pages')
+			if (!pagesEl) {
+				return
+			}
+			// Seite 0 ist praktisch immer zuerst geladen (Phase 8: sichtbare
+			// Seiten zuerst) - als Fallback irgendeine geladene Seite, falls die
+			// Partitur mit Seite 0 aus dem Bild gescrollt sein sollte.
+			const dims = this.pageDimensions[0] ?? Object.values(this.pageDimensions)[0]
+			if (preset === 'width') {
+				this.zoom = computeFitWidthZoom(pagesEl.clientWidth)
+			} else if (preset === 'page') {
+				if (!dims?.viewBox) {
+					return
+				}
+				// Verfügbare Höhe ohne die sticky Transport-/Probenleiste, die über
+				// der Seite sichtbar bleiben (sonst rechnet sich "ganze Seite" zu
+				// groß und die Seite ragt darunter).
+				const reserved = (this.$el.querySelector('.scoreview-transport')?.offsetHeight ?? 0)
+					+ (this.$el.querySelector('.scoreview-rehearsal')?.offsetHeight ?? 0)
+				this.zoom = computeFitPageZoom(dims.viewBox, pagesEl.clientWidth, this.$el.clientHeight - reserved)
+			} else if (preset === 'actual') {
+				this.zoom = computeActualSizeZoom(dims?.sizeMm ?? null)
+			}
+		},
+
+		// Vollbild einer A4-Seite (Phase 16) - fullscreent den ganzen Viewer
+		// (nicht nur eine einzelne Seite), damit die Transportleiste bedienbar
+		// bleibt; "ganze Seite"-Zoom übernimmt das Ausfüllen der Höhe.
+		async toggleFullscreen() {
+			try {
+				if (document.fullscreenElement) {
+					await document.exitFullscreen()
+				} else {
+					await this.$el.requestFullscreen()
+				}
+			} catch (err) {
+				// z.B. Fullscreen per Permissions-Policy im umgebenden iframe
+				// gesperrt - Notenansicht bleibt trotzdem nutzbar, nur ohne Vollbild.
+				// eslint-disable-next-line no-console
+				console.error('ScoreView: Vollbild konnte nicht umgeschaltet werden.', err)
+			}
+		},
+
+		onFullscreenChange() {
+			this.isFullscreen = document.fullscreenElement === this.$el
+			if (this.isFullscreen) {
+				this.applyZoomPreset('page')
+			}
 		},
 
 		formatTime(ms) {
@@ -781,10 +983,44 @@ export default {
 	gap: 12px;
 	position: sticky;
 	top: 0;
-	z-index: 1;
+	/*
+	 * Muss über JEDEM Seiteninhalt liegen, auch beim Scrollen (Nutzer-
+	 * Feedback: der Play/Pause-Button war nur bedienbar, wenn ganz oben
+	 * gescrollt war). Grund: weder .scoreview-pages noch .score-page
+	 * eröffnen einen eigenen Stacking-Context, daher konkurrieren
+	 * .score-page-svg (z-index: 1, siehe ScorePage.vue) und
+	 * .score-page-marker (z-index: 2) direkt mit diesem z-index - ohne
+	 * einen klar höheren Wert hier hätte das zuletzt im DOM stehende
+	 * Seitenelement bei gleichem/höherem z-index den Klick auf die sticky
+	 * Transportleiste abgefangen, sobald sich beide beim Scrollen optisch
+	 * überlappen.
+	 */
+	z-index: 10;
 	background: var(--color-main-background);
 	padding: 8px 0;
 	margin-bottom: 12px;
+}
+
+.scoreview-position {
+	flex: 0 1 auto;
+	display: flex;
+	flex-direction: column;
+	line-height: 1.2;
+	min-width: 0;
+	max-width: 220px;
+	overflow: hidden;
+}
+
+.scoreview-position-title {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.scoreview-position-measure {
+	font-size: 0.85em;
+	color: var(--color-text-maxcontrast);
+	white-space: nowrap;
 }
 
 .scoreview-play {

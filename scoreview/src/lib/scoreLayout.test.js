@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+	BASE_PAGE_WIDTH_PX,
 	buildTimeline,
+	computeActualSizeZoom,
+	computeFitPageZoom,
+	computeFitWidthZoom,
 	findElementAtPoint,
 	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
 	measurePositionToTimeMs,
+	parseSvgSizeMm,
 	parseViewBox,
 	resolveCursorRect,
 	resolveMeasurePosition,
@@ -181,6 +186,51 @@ describe('parseViewBox', () => {
 
 	it('liefert null ohne viewBox-Attribut', () => {
 		expect(parseViewBox('<svg width="1" height="1">')).toBeNull()
+	})
+})
+
+describe('parseSvgSizeMm', () => {
+	it('parst die physische Seitengröße aus dem SVG-Wurzelelement', () => {
+		const svg = '<svg width="210.058mm" height="296.926mm" viewBox="0 0 9924 14028" xmlns="http://www.w3.org/2000/svg">'
+		expect(parseSvgSizeMm(svg)).toEqual({ widthMm: 210.058, heightMm: 296.926 })
+	})
+
+	it('liefert null ohne mm-Größenangabe', () => {
+		expect(parseSvgSizeMm('<svg viewBox="0 0 1 1">')).toBeNull()
+	})
+})
+
+describe('Zoom-Presets (Phase 16)', () => {
+	it('computeFitWidthZoom liefert 1 bei Basisbreite, skaliert linear', () => {
+		expect(computeFitWidthZoom(BASE_PAGE_WIDTH_PX)).toBe(1)
+		expect(computeFitWidthZoom(BASE_PAGE_WIDTH_PX * 2)).toBe(2)
+		expect(computeFitWidthZoom(BASE_PAGE_WIDTH_PX / 2)).toBe(0.5)
+	})
+
+	it('computeFitPageZoom wählt die engere von Breiten-/Höhenschranke (Hochformat, niedriger Container)', () => {
+		// A4-Seitenverhältnis (aus M4: viewBox 0 0 9924 14028). Container ist
+		// breiter als hoch (Querformat-Fullscreen) - die Höhe limitiert.
+		const viewBox = { width: 9924, height: 14028 }
+		const zoom = computeFitPageZoom(viewBox, 2000, 800)
+		// äquivalente Breite für volle Höhe: 800 * (9924/14028)
+		const expectedWidthPx = 800 * (9924 / 14028)
+		expect(zoom).toBeCloseTo(expectedWidthPx / BASE_PAGE_WIDTH_PX, 6)
+	})
+
+	it('computeFitPageZoom wählt die Breitenschranke, wenn die Höhe reichlich vorhanden ist', () => {
+		const viewBox = { width: 9924, height: 14028 }
+		const zoom = computeFitPageZoom(viewBox, 400, 5000)
+		expect(zoom).toBeCloseTo(400 / BASE_PAGE_WIDTH_PX, 6)
+	})
+
+	it('computeActualSizeZoom rechnet A4-Breite (210mm) auf CSS-Pixel bei 96dpi um', () => {
+		const zoom = computeActualSizeZoom({ widthMm: 210, heightMm: 297 })
+		const expectedWidthPx = 210 * (96 / 25.4)
+		expect(zoom).toBeCloseTo(expectedWidthPx / BASE_PAGE_WIDTH_PX, 6)
+	})
+
+	it('computeActualSizeZoom liefert 1 ohne bekannte Seitengröße', () => {
+		expect(computeActualSizeZoom(null)).toBe(1)
 	})
 })
 

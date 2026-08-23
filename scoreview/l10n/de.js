@@ -44,6 +44,12 @@ OC.L10N.register(
     "The conversion did not finish in time." : "Die Konvertierung wurde nicht rechtzeitig abgeschlossen.",
     "The score contains no pages that could be converted." : "Die Partitur enthält keine Seiten, die konvertiert werden konnten.",
     "An unknown error occurred during conversion." : "Bei der Konvertierung ist ein unbekannter Fehler aufgetreten.",
-    "No SoundFont is available (see Settings → ScoreView)." : "Es ist kein SoundFont verfügbar (siehe Einstellungen → ScoreView)."
+    "No SoundFont is available (see Settings → ScoreView)." : "Es ist kein SoundFont verfügbar (siehe Einstellungen → ScoreView).",
+    "Measure {current} of {total}" : "Takt {current} von {total}",
+    "Fit page width" : "Seitenbreite einpassen",
+    "Fit whole page" : "Ganze Seite einpassen",
+    "Actual size" : "Originalgröße",
+    "Fullscreen" : "Vollbild",
+    "Exit fullscreen" : "Vollbild verlassen"
 },
 "nplurals=2; plural=(n != 1);");

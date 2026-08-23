@@ -17,9 +17,11 @@ Sandboxing, Admin-Health-UI) ist teilweise umgesetzt (non-root
 Sidecar-Prozess); Phase 13 (Korrektur-Layer) ist bewusst zurückgestellt.
 Aus der zweiten Planungsrunde (Phasen 14-21) sind Phase 14
 (Mehrsprachigkeit DE+EN, verständliche Konvertierungsfehler über
-`error_code`, `format_version` für einen künftigen Cache-Formatwechsel) und
-Phase 15 (Bedienelemente auf `@nextcloud/vue`, E5) umgesetzt. Siehe
-`PLAN.md` für den vollständigen Stand inklusive offener Punkte.
+`error_code`, `format_version` für einen künftigen Cache-Formatwechsel),
+Phase 15 (Bedienelemente auf `@nextcloud/vue`, E5) und Phase 16
+(Probentauglichkeit I: Autoscroll im Sichtband, dauerhafte Taktangabe,
+Zoom-Presets, Vollbild) umgesetzt. Siehe `PLAN.md` für den vollständigen
+Stand inklusive offener Punkte.
 
 **Vorausgesetzt:** ein erreichbarer MuseScore-Sidecar (siehe `sidecar/`) -
 die App läuft nicht ohne ihn (E3 in `PLAN.md`).

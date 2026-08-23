@@ -193,6 +193,82 @@ export function measurePositionToTimeMs(measuresTimeline, measureNumber, fractio
 	return measureStartMs + fraction * (nextMs - measureStartMs)
 }
 
+// Basisbreite einer Seite bei Zoom 1 (px), siehe ScorePage.vue `pageStyle`
+// (`maxWidth: BASE_PAGE_WIDTH_PX * zoom`). Einzige Quelle für diese Zahl -
+// die Zoom-Presets unten rechnen relativ dazu, damit ScorePage.vue und
+// scoreLayout.js nie auseinanderlaufen können.
+export const BASE_PAGE_WIDTH_PX = 900
+
+// CSS-px pro mm bei 96 DPI (Standardannahme für den CSS-Pixel, siehe
+// CSS Values and Units Module - 1in = 96px = 25.4mm).
+const CSS_PX_PER_MM = 96 / 25.4
+
+/**
+ * Parst die physische Seitengröße `width="…mm" height="…mm"` aus dem
+ * SVG-Wurzelelement (Phase 16, Zoom-Preset "100%") - getrennt von
+ * `parseViewBox`, weil beide Angaben unabhängig gebraucht werden (viewBox
+ * für Koordinaten, diese hier nur für die echte Größe).
+ *
+ * @param {string} svgText
+ * @returns {{widthMm:number,heightMm:number}|null}
+ */
+export function parseSvgSizeMm(svgText) {
+	const match = svgText.match(/width="([\d.]+)mm"\s+height="([\d.]+)mm"/)
+	if (!match) {
+		return null
+	}
+	const [widthMm, heightMm] = match.slice(1).map(Number)
+	return { widthMm, heightMm }
+}
+
+/**
+ * Zoom-Preset "Seitenbreite" (Phase 16): die Seite füllt die verfügbare
+ * Breite. Reine Dreisatzrechnung gegen BASE_PAGE_WIDTH_PX, weil
+ * ScorePage.vue seine `max-width` genauso ausdrückt.
+ *
+ * @param {number} containerWidthPx verfügbare Breite (z.B. Breite von
+ *   `.scoreview-pages`)
+ * @returns {number} zoom
+ */
+export function computeFitWidthZoom(containerWidthPx) {
+	return containerWidthPx / BASE_PAGE_WIDTH_PX
+}
+
+/**
+ * Zoom-Preset "ganze Seite" (Phase 16): die komplette A4-Seite (Breite UND
+ * Höhe) muss in den verfügbaren Bereich passen. Weil ScorePage.vue Höhe nur
+ * indirekt über `aspect-ratio` aus der Breite ableitet (siehe dortiger
+ * Kommentar zur "höhenbezogenen Skalierung"), rechnet diese Funktion die
+ * Höhenschranke in eine äquivalente Breite um: bei fester `aspect-ratio` legt
+ * die Breite die Höhe vollständig fest, ein zweiter CSS-Mechanismus ist
+ * dafür nicht nötig.
+ *
+ * @param {{width:number,height:number}} viewBox aus parseViewBox()
+ * @param {number} containerWidthPx
+ * @param {number} containerHeightPx
+ * @returns {number} zoom
+ */
+export function computeFitPageZoom(viewBox, containerWidthPx, containerHeightPx) {
+	const widthForFullHeight = containerHeightPx * (viewBox.width / viewBox.height)
+	const targetWidthPx = Math.min(containerWidthPx, widthForFullHeight)
+	return targetWidthPx / BASE_PAGE_WIDTH_PX
+}
+
+/**
+ * Zoom-Preset "100%" (Phase 16): die Seite in ihrer echten physischen Größe
+ * (A4 = 210mm Breite), umgerechnet auf CSS-Pixel bei 96 DPI - unabhängig vom
+ * gewählten BASE_PAGE_WIDTH_PX-Basiswert.
+ *
+ * @param {{widthMm:number,heightMm:number}|null} sizeMm aus parseSvgSizeMm()
+ * @returns {number} zoom, 1 falls sizeMm unbekannt (z.B. Seite noch nicht geladen)
+ */
+export function computeActualSizeZoom(sizeMm) {
+	if (!sizeMm) {
+		return 1
+	}
+	return (sizeMm.widthMm * CSS_PX_PER_MM) / BASE_PAGE_WIDTH_PX
+}
+
 /**
  * Minimale, regex-basierte Bereinigung von SVG-Text vor dem direkten
  * Einbetten ins DOM (v-html in ScorePage.vue): entfernt <script>-Elemente

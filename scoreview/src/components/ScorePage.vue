@@ -1,7 +1,16 @@
 <template>
 	<div ref="root" class="score-page" :style="pageStyle" @click="onClick">
+		<!--
+			Overlay HINTER dem Notenbild (siehe PLAN.md M9): das SVG hat keine
+			id-Attribute, mit denen sich der Notenkopf selbst einfärben ließe,
+			daher bleibt es beim Cursor-Overlay - jetzt aber hinter statt vor dem
+			Notenbild, damit es keinen Notenkopf verdeckt. Die Stapelreihenfolge
+			kommt aus dem CSS (.score-page-svg bekommt ein explizites z-index),
+			nicht aus dieser Template-Reihenfolge - siehe Kommentar dort. Nur
+			messbar/anfassbar über ref="cursor" (siehe getCursorClientRect()).
+		-->
+		<div v-if="cursorStyle" ref="cursor" class="score-page-cursor" :style="cursorStyle" />
 		<div v-if="svgMarkup" class="score-page-svg" v-html="svgMarkup" />
-		<div v-if="cursorStyle" class="score-page-cursor" :style="cursorStyle" />
 		<div
 			v-for="marker in pageMarkers"
 			:key="marker.id"
@@ -15,7 +24,7 @@
 <script>
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
-import { parseViewBox, sanitizeSvg } from '../lib/scoreLayout.js'
+import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox, sanitizeSvg } from '../lib/scoreLayout.js'
 
 /**
  * Eine Seite als eingebettetes SVG (E2: MuseScore-eigenes Rendering statt
@@ -58,12 +67,13 @@ export default {
 		},
 	},
 
-	emits: ['note-click', 'marker-click'],
+	emits: ['note-click', 'marker-click', 'loaded'],
 
 	data() {
 		return {
 			svgMarkup: null,
 			viewBox: null,
+			sizeMm: null,
 		}
 	},
 
@@ -76,7 +86,7 @@ export default {
 			const box = this.viewBox
 			return {
 				aspectRatio: box ? `${box.width} / ${box.height}` : '210 / 297',
-				maxWidth: `${900 * this.zoom}px`,
+				maxWidth: `${BASE_PAGE_WIDTH_PX * this.zoom}px`,
 			}
 		},
 
@@ -136,7 +146,12 @@ export default {
 			this.observer?.disconnect()
 			const res = await axios.get(this.svgUrl, { responseType: 'text' })
 			this.viewBox = parseViewBox(res.data)
+			this.sizeMm = parseSvgSizeMm(res.data)
 			this.svgMarkup = sanitizeSvg(res.data)
+			// Für die Zoom-Presets (Phase 16, "Seitenbreite/ganze Seite/100%") -
+			// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
+			// jeweils geladene ScorePage.
+			this.$emit('loaded', { index: this.pageIndex, viewBox: this.viewBox, sizeMm: this.sizeMm })
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid, Phase 10 "Klick auf eine Note
@@ -158,6 +173,16 @@ export default {
 				y: this.viewBox.minY + fracY * this.viewBox.height,
 			})
 		},
+
+		// Für den Autoscroll (Phase 16, src/lib/scrollPlan.js): der Aufrufer
+		// (ScoreViewer.vue) kennt nur ein SVG-Rechteck (page/x/y/w/h), nicht die
+		// tatsächliche Bildschirmposition des gerenderten Cursor-Overlays -
+		// getBoundingClientRect() liefert genau die, inklusive Zoom/Scroll, ohne
+		// dass ScoreViewer.vue selbst rechnen müsste. null, solange kein Cursor
+		// auf dieser Seite gerendert ist (siehe cursorStyle).
+		getCursorClientRect() {
+			return this.$refs.cursor?.getBoundingClientRect() ?? null
+		},
 	},
 }
 </script>
@@ -173,6 +198,16 @@ export default {
 }
 
 .score-page-svg {
+	/*
+	 * position+z-index (nicht die DOM-Reihenfolge im Template) entscheidet
+	 * hier über die Stapelreihenfolge: ein absolut positioniertes Element
+	 * (score-page-cursor) malt CSS-spezifikationsgemäß immer NACH
+	 * nicht-positionierten Elementen, unabhängig von der DOM-Reihenfolge -
+	 * ohne dieses z-index läge der Cursor also trotz der Template-Reihenfolge
+	 * weiter oben, nicht hinter dem Notenbild (PLAN.md Phase 16/M9).
+	 */
+	position: relative;
+	z-index: 1;
 	width: 100%;
 	height: 100%;
 }
@@ -194,6 +229,25 @@ export default {
 	display: block;
 }
 
+/*
+ * MuseScore rendert als allererstes Element ein deckendes weißes
+ * Hintergrundrechteck über die volle viewBox (siehe PLAN.md M9) - ohne
+ * diese Regel würde es den dahinterliegenden Cursor vollständig verdecken.
+ * path[class=""] ist laut M9 im ganzen Dokument eindeutig nur dieses eine
+ * Element (kein id-Attribut vorhanden, das sich sonst anbieten würde).
+ * :deep() aus demselben Grund wie oben (v-html, kein Scoped-Attribut).
+ */
+.score-page-svg :deep(path[class=""]) {
+	fill: none;
+}
+
+/*
+ * Rechteck statt Ellipse (Nutzer-Feedback nach Phase 16: eine hochskalierte
+ * Ellipse ragte deutlich über das eigentliche System hinaus). Das Overlay
+ * liegt hinter dem Notenbild (siehe .score-page-svg oben) und darf den
+ * Notenkopf deshalb ohne Weichzeichnung markieren - die Notenlinien werden
+ * ohnehin vom SVG darüber gezeichnet, kein Scale-Trick nötig.
+ */
 .score-page-cursor {
 	position: absolute;
 	background: rgba(0, 130, 201, 0.25);
