@@ -114,6 +114,23 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		return synth.presetList
 	}
 
+	/**
+	 * Die tatsächlich verwendeten MIDI-Kanäle je Spur, in Dokumentreihenfolge
+	 * (Phase 17) - aus dem geladenen MIDI selbst gelesen
+	 * (`sequencer.midiData.tracks[].channels`, spessasynth_core), NICHT aus
+	 * einer Index-Annahme. Grund: an duckwerk.mscz gemessen vergibt MuseScores
+	 * MIDI-Export Kanäle nicht in Track-Reihenfolge (Sopran/Alt/Tenor/Bariton/
+	 * Bass landeten auf Kanal 0/2/3/1/6, nicht 0-4) - siehe mixerLayout.js für
+	 * die Konsequenz. `sequencer.midiData.tracks[i].events` ist zwar absichtlich
+	 * leer (siehe spessasynth_lib-Typdefinition), `.channels` bleibt aber
+	 * gefüllt.
+	 *
+	 * @returns {number[][]} pro Spur die Menge ihrer MIDI-Kanäle (meist genau einer)
+	 */
+	function getTrackChannels() {
+		return (sequencer.midiData?.tracks ?? []).map((track) => [...(track.channels ?? [])])
+	}
+
 	function destroy() {
 		sequencer.pause()
 		synth.disconnect(context.destination)
@@ -136,6 +153,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		applyChannelVolumes,
 		setProgram,
 		getPresetList,
+		getTrackChannels,
 		destroy,
 	}
 }
