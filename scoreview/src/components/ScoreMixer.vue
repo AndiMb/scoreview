@@ -8,38 +8,44 @@
 				max="127"
 				:value="states[ch.channel].volume"
 				:disabled="states[ch.channel].muted"
+				:aria-label="t('Volume: {name}', { name: ch.name || ch.instrumentId })"
 				@input="onVolumeInput(ch.channel, $event)">
-			<button
-				type="button"
+			<NcButton
 				class="scoreview-mixer-toggle"
-				:class="{ active: states[ch.channel].muted }"
-				:title="t('Mute: {name}', { name: ch.name || ch.instrumentId })"
+				:pressed="states[ch.channel].muted"
+				:aria-label="t('Mute: {name}', { name: ch.name || ch.instrumentId })"
 				@click="toggleMute(ch.channel)">
-				M
-			</button>
-			<button
-				type="button"
+				<template #icon>
+					<VolumeOff :size="20" />
+				</template>
+			</NcButton>
+			<NcButton
 				class="scoreview-mixer-toggle"
-				:class="{ active: states[ch.channel].solo }"
-				:title="t('Solo: {name}', { name: ch.name || ch.instrumentId })"
+				:pressed="states[ch.channel].solo"
+				:aria-label="t('Solo: {name}', { name: ch.name || ch.instrumentId })"
 				@click="toggleSolo(ch.channel)">
-				S
-			</button>
-			<select
+				<template #icon>
+					<Headphones :size="20" />
+				</template>
+			</NcButton>
+			<NcSelect
 				v-if="presetList && presetList.length > 0"
 				class="scoreview-mixer-program"
-				:value="states[ch.channel].program"
-				@change="onProgramChange(ch.channel, $event)">
-				<option v-for="preset in presetList" :key="`${preset.bank}-${preset.program}`" :value="preset.program">
-					{{ preset.name }}
-				</option>
-			</select>
+				:model-value="selectedPreset(ch.channel)"
+				:options="presetList"
+				label="name"
+				:clearable="false"
+				@update:model-value="(preset) => onProgramChange(ch.channel, preset.program)" />
 		</div>
 	</div>
 </template>
 
 <script>
 import { translate } from '@nextcloud/l10n'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcSelect from '@nextcloud/vue/components/NcSelect'
+import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
+import Headphones from 'vue-material-design-icons/Headphones.vue'
 import { computeEffectiveVolumes } from '../lib/mixerLayout.js'
 
 /**
@@ -50,6 +56,8 @@ import { computeEffectiveVolumes } from '../lib/mixerLayout.js'
  */
 export default {
 	name: 'ScoreMixer',
+
+	components: { NcButton, NcSelect, VolumeOff, Headphones },
 
 	props: {
 		// Aus lib/mixerLayout.js resolveMixerChannels(metadata.tracks).
@@ -105,10 +113,24 @@ export default {
 			this.emitVolumes()
 		},
 
-		onProgramChange(channel, event) {
-			const program = Number(event.target.value)
+		onProgramChange(channel, program) {
 			this.states[channel].program = program
 			this.$emit('program-changed', { channel, program })
+		},
+
+		// NcSelect (vue-select) bekommt hier bewusst das volle Preset-Objekt aus
+		// presetList statt nur states[channel].program als modelValue: mehrere
+		// GM-Presets teilen sich denselben program-Wert über verschiedene Banks
+		// hinweg (z.B. mehrere Bank-Varianten von Programm 52), ein reiner
+		// Zahlen-modelValue mit :reduce="preset => preset.program" lässt sich
+		// dann nicht eindeutig zu einem Options-Objekt zurückauflösen -
+		// vue-select zeigt in dem Fall den rohen Wert ("52") statt eines Namens
+		// an. Nur der Program-Kanal geht an setProgram() (player.js kennt
+		// ohnehin keine Bank-Auswahl), die Anzeige braucht trotzdem ein
+		// eindeutiges Objekt.
+		selectedPreset(channel) {
+			const program = this.states[channel].program
+			return this.presetList.find((preset) => preset.program === program) ?? null
 		},
 	},
 }
@@ -141,12 +163,6 @@ export default {
 
 .scoreview-mixer-toggle {
 	flex: 0 0 auto;
-	width: 24px;
-}
-
-.scoreview-mixer-toggle.active {
-	background: var(--color-primary-element);
-	color: var(--color-primary-element-text);
 }
 
 .scoreview-mixer-program {

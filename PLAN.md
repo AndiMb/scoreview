@@ -1015,6 +1015,100 @@ wiederfinden). Die gesamte Transportleiste ist mit der Tastatur erreichbar
 und bedienbar. Dark Mode folgt dem Nextcloud-Theme ohne eigene Regeln.
 Bundle-Größe vorher/nachher dokumentiert.
 
+**Umsetzungsstand (2026-08-23).** Vollständig umgesetzt, gegen die
+Testinstanz verifiziert, mit zwei dabei gefundenen und behobenen Fehlern.
+
+- `@nextcloud/vue@9.9.0` und `vue-material-design-icons@5.3.1` aufgenommen.
+  Import ausschließlich einzeln über den Subpath-Export
+  `@nextcloud/vue/components/<Name>` (die Paket-`exports` von v9 bieten gar
+  keinen Sammelimport mehr an) bzw. `vue-material-design-icons/<Icon>.vue` -
+  "gezielte Einzelimporte" war damit keine Entscheidung, sondern die einzige
+  Option.
+- Ersetzt wie geplant: alle Buttons (`ScoreViewer.vue`, `ScoreMixer.vue`,
+  `ScoreAnnotations.vue`) durch `NcButton` mit Icon-Slot (vue-material-
+  design-icons) und `aria-label`, dabei Toggle-Zustände (Mixer/Notizen-
+  Panel, Loop an/aus, Mute, Solo) über `NcButton`s `pressed`-Prop statt
+  eigener `.active`-CSS-Klasse - liefert `aria-pressed` gratis mit. Die
+  Zahlenfelder (Takt-Sprung, Loop von/bis) durch `NcTextField`, die
+  Instrumentenauswahl durch `NcSelect`, Lade-/Fehlerzustand durch
+  `NcLoadingIcon`/`NcEmptyContent`, der "Kein Ton"-Hinweis durch
+  `NcNoteCard`.
+- **Regler bewusst nativ geblieben** (Lautstärke, Tempo, Zoom, Seek): vorher
+  nachgesehen wie im Plan gefordert - `@nextcloud/vue@9.9.0` hat kein
+  Slider-/Range-Pendant (vollständige Komponentenliste aus dem
+  npm-Tarball geprüft, weder "Slider" noch "Range" im Namen). Bleibt
+  `<input type="range">` mit den bestehenden NC-CSS-Variablen.
+- **Bug 1, gefunden und behoben: `NcTextField` wirft bei `null` als
+  `modelValue`.** `loopFromMeasure`/`loopToMeasure` waren mit `null`
+  initialisiert (Platzhalter für "noch nichts eingegeben") - beim ersten
+  Rendern zwei Konsolenfehler `TypeError: Cannot read properties of null
+  (reading 'toString')` aus `NcTextField`, die Felder blieben leere
+  Kommentar-Platzhalter statt Eingabefelder. Ein natives `<input>` verträgt
+  `null` stillschweigend (DOM wandelt es in `""`), `NcTextField` nicht (Prop-
+  Typ `string | number`). Behoben: Default auf `''` statt `null` - bleibt
+  für die bestehende `!this.loopFromMeasure`-Leerprüfung in `toggleLoop()`
+  genauso falsy, kein Verhaltensunterschied.
+- **Bug 2, gefunden und behoben: `NcSelect` zeigte die rohe Programmnummer
+  statt des Instrumentennamens.** Erster Versuch band
+  `states[channel].program` (nur die Zahl) als `modelValue` mit
+  `:reduce="preset => preset.program"`. Sichtbares Ergebnis im Screenshot:
+  die Instrumentenauswahl zeigte `"52"` statt `"Choir Aahs"`. Ursache in
+  `@nextcloud/vue-select`s `findOptionFromReducedValue()` gefunden (Quelle
+  im npm-Tarball gelesen): sie versucht, aus dem reduzierten Wert wieder ein
+  Options-Objekt aufzulösen, gibt aber bei **mehrdeutigem** Treffer (mehrere
+  Presets mit demselben `program`, aber unterschiedlicher Bank - im
+  General-MIDI-Soundfont der Regelfall) den rohen Wert unverändert zurück,
+  statt eines Objekts mit `.name`. Das bestand schon im alten reinen
+  `<select>` genauso (`:value="preset.program"` mit potenziell doppelten
+  Werten), fiel dort aber nie auf, weil der Browser bei einem
+  HTML-`value`-Konflikt trotzdem irgendeinen passenden Namen anzeigt statt
+  eine nackte Zahl. Behoben ohne `:reduce`: `modelValue` bekommt jetzt über
+  eine neue Methode `selectedPreset(channel)` direkt das volle
+  Preset-Objekt aus `presetList` (Default-`reduce` von vue-select ist
+  Identität, matcht also per Objektinhalt eindeutig); nur beim Auslösen von
+  `program-changed` wird weiterhin die reine Programmnummer verschickt -
+  `player.js::setProgram()` kennt ohnehin keine Bank-Auswahl, das ändert
+  also nichts am Klang, nur an der Anzeige.
+- Drei neue, beim Umbau tatsächlich gebrauchte UI-Strings (`aria-label`s für
+  Play/Pause/Lautstärke-Regler/Zeitschieberegler/Tempo-Regler sowie
+  `NcEmptyContent`s "Error"-Überschrift) in `l10n/de.js` ergänzt
+  (`npm run l10n:extract` meldete sie zunächst als fehlend, danach
+  "alle Übersetzungen vollständig"); `l10n/de.json` unverändert, keine
+  PHP-Strings betroffen. `npm test` 40/40 grün.
+- **Bundle-Größe, vor/nach gemessen** (`scoreview-viewer.js`, production-
+  Build, derselbe Checkout vor/nach den Component-Änderungen):
+  515.774 Byte (503,7 KiB) vorher → 714.134 Byte (697,4 KiB) nachher, also
+  +193,7 KiB (+37,6 %) für `@nextcloud/vue` + `vue-material-design-icons`
+  zusammen. `scoreview-main.js`/`scoreview-settings.js` unverändert (dort
+  wird `@nextcloud/vue` nicht verwendet - `App.vue` ist weiterhin der
+  Platzhalter aus Phase 4).
+- Gegen `nextcloud-test`/`scoreview-sidecar` per Playwright verifiziert, **im
+  Viewer-Kontext** (E5-Vorgabe: eigener, zweiter Vue-Baum), an
+  `What_Was_I_Made_For.mscz`, in Englisch und Deutsch: Play/Pause togglet
+  Icon **und** `aria-label` korrekt, Taktsprung zu Takt 3 landet bei 0:06
+  (deckt sich mit der bekannten Zeitbasis), Loop-Button liefert
+  `aria-pressed="true"`/`"false"`, Mixer zeigt alle 5 Kanäle
+  (Soprano/Alto/Tenor/Bass/metronome) mit korrektem Instrumentennamen
+  ("Choir Aahs" bzw. "Grand Piano" fürs Metronom, deckt sich mit dem
+  Phase-9-Befund), Solo-Button liefert `aria-pressed`, Notiz anlegen und
+  wieder löschen funktioniert über die neuen `NcButton`-Aktionen. Keine
+  ScoreView-eigenen Konsolenfehler in beiden Sprachen (die einzige
+  verbleibende Konsolenmeldung ist eine vorbestehende, von Nextclouds
+  `text`-App beim Verlassen der Dateivorschau ausgelöste Tiptap-Warnung,
+  unabhängig von dieser Phase). Dark Mode per Screenshot geprüft
+  (`colorScheme: 'dark'`) - alle neuen Komponenten übernehmen das
+  Nextcloud-Theme ohne eigene Farben, wie erwartet, weil keine der
+  Ersetzungen eigene Farbregeln definiert.
+- **Nicht separat Schritt-für-Schritt geprüft:** die vollständige
+  Tab-Reihenfolge der Transportleiste per echtem Tastendruck. Stattdessen
+  aus dem gerenderten DOM bestätigt, dass `NcButton`/`NcTextField` auf
+  echte `<button>`/`<input>`-Elemente abbilden (per `innerHTML`-Dump
+  geprüft) - native Tastaturbedienbarkeit ist damit eine Eigenschaft der
+  Elemente selbst, nicht gesondert nachgestellt.
+- `appinfo/info.xml` auf `0.0.11` erhöht, `occ upgrade` auf der Testinstanz
+  gelaufen (Cache-Busting für das neue Bundle, siehe `CLAUDE.md`-
+  Fallstricke).
+
 ### Phase 16 – Probentauglichkeit I: Mitlesen
 
 Dateien: `ScorePage.vue`, `ScoreViewer.vue`, neu `src/lib/scrollPlan.js`,

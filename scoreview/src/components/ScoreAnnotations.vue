@@ -2,9 +2,12 @@
 	<div class="scoreview-annotations">
 		<div class="scoreview-annotations-header">
 			<h3>{{ t('Notes') }}</h3>
-			<button type="button" @click="startNewAtCurrentPosition">
+			<NcButton :aria-label="t('+ At current position')" @click="startNewAtCurrentPosition">
+				<template #icon>
+					<PlusCircleOutline :size="20" />
+				</template>
 				{{ t('+ At current position') }}
-			</button>
+			</NcButton>
 		</div>
 		<p v-if="annotations.length === 0 && !draft" class="scoreview-annotations-empty">
 			{{ t('No notes yet. Click a note or use "+ At current position" to add one.') }}
@@ -14,12 +17,18 @@
 				<span class="scoreview-annotation-anchor">{{ t('Measure {n}', { n: draft.measureNumber }) }}</span>
 				<textarea v-model="draft.content" rows="2" :placeholder="t('Note…')" />
 				<div class="scoreview-annotation-actions">
-					<button type="button" @click="saveDraft">
+					<NcButton :aria-label="t('Save')" @click="saveDraft">
+						<template #icon>
+							<Check :size="20" />
+						</template>
 						{{ t('Save') }}
-					</button>
-					<button type="button" @click="draft = null">
+					</NcButton>
+					<NcButton :aria-label="t('Cancel')" @click="draft = null">
+						<template #icon>
+							<Close :size="20" />
+						</template>
 						{{ t('Cancel') }}
-					</button>
+					</NcButton>
 				</div>
 			</li>
 			<li
@@ -34,12 +43,18 @@
 				<template v-if="editingId === a.id">
 					<textarea v-model="editContent" rows="2" />
 					<div class="scoreview-annotation-actions">
-						<button type="button" @click="saveEdit(a)">
+						<NcButton :aria-label="t('Save')" @click="saveEdit(a)">
+							<template #icon>
+								<Check :size="20" />
+							</template>
 							{{ t('Save') }}
-						</button>
-						<button type="button" @click="editingId = null">
+						</NcButton>
+						<NcButton :aria-label="t('Cancel')" @click="editingId = null">
+							<template #icon>
+								<Close :size="20" />
+							</template>
 							{{ t('Cancel') }}
-						</button>
+						</NcButton>
 					</div>
 				</template>
 				<template v-else>
@@ -47,12 +62,18 @@
 						{{ a.content }}
 					</p>
 					<div class="scoreview-annotation-actions">
-						<button type="button" @click="startEdit(a)">
+						<NcButton :aria-label="t('Edit')" @click="startEdit(a)">
+							<template #icon>
+								<Pencil :size="20" />
+							</template>
 							{{ t('Edit') }}
-						</button>
-						<button type="button" @click="$emit('delete', a)">
+						</NcButton>
+						<NcButton :aria-label="t('Delete')" @click="$emit('delete', a)">
+							<template #icon>
+								<Delete :size="20" />
+							</template>
 							{{ t('Delete') }}
-						</button>
+						</NcButton>
 					</div>
 				</template>
 			</li>
@@ -62,6 +83,12 @@
 
 <script>
 import { translate } from '@nextcloud/l10n'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import PlusCircleOutline from 'vue-material-design-icons/PlusCircleOutline.vue'
+import Check from 'vue-material-design-icons/Check.vue'
+import Close from 'vue-material-design-icons/Close.vue'
+import Pencil from 'vue-material-design-icons/Pencil.vue'
+import Delete from 'vue-material-design-icons/Delete.vue'
 
 /**
  * Liste + Editor für private Notizen (Phase 11). Hält nur UI-Zustand
@@ -72,6 +99,8 @@ import { translate } from '@nextcloud/l10n'
  */
 export default {
 	name: 'ScoreAnnotations',
+
+	components: { NcButton, PlusCircleOutline, Check, Close, Pencil, Delete },
 
 	props: {
 		annotations: {

@@ -1,10 +1,14 @@
 <template>
 	<div class="scoreview-viewer">
 		<div v-if="state === 'converting' || state === 'loading'" class="scoreview-status">
-			{{ state === 'loading' ? t('Loading…') : t('Converting…') }}
+			<NcLoadingIcon :size="32" :name="state === 'loading' ? t('Loading…') : t('Converting…')" />
 		</div>
 		<div v-else-if="state === 'error'" class="scoreview-status scoreview-error">
-			<p>{{ t('Error: {message}', { message: errorText }) }}</p>
+			<NcEmptyContent :name="t('Error')" :description="errorText">
+				<template #icon>
+					<AlertCircleOutline :size="48" />
+				</template>
+			</NcEmptyContent>
 			<details v-if="errorCode && errorMessage" class="scoreview-error-detail">
 				<summary>{{ t('Technical detail') }}</summary>
 				<pre>{{ errorMessage }}</pre>
@@ -12,15 +16,22 @@
 		</div>
 		<template v-else>
 			<div class="scoreview-transport">
-				<button type="button" class="scoreview-play" @click="togglePlay">
-					{{ isPlaying ? '⏸' : '▶' }}
-				</button>
+				<NcButton
+					class="scoreview-play"
+					:aria-label="isPlaying ? t('Pause') : t('Play')"
+					@click="togglePlay">
+					<template #icon>
+						<Pause v-if="isPlaying" :size="20" />
+						<Play v-else :size="20" />
+					</template>
+				</NcButton>
 				<input
 					type="range"
 					class="scoreview-seek"
 					min="0"
 					:max="durationMs"
 					:value="currentTimeMs"
+					:aria-label="t('Playback position')"
 					@input="onSeekInput">
 				<span class="scoreview-time">{{ formatTime(currentTimeMs) }} / {{ formatTime(durationMs) }}</span>
 				<template v-if="hasRealPlayer">
@@ -33,46 +44,72 @@
 							max="1.5"
 							step="0.05"
 							:value="tempo"
+							:aria-label="t('Tempo')"
 							@input="onTempoInput">
 					</label>
-					<button type="button" @click="showMixer = !showMixer">
+					<NcButton :pressed="showMixer" :aria-label="t('Mixer')" @click="showMixer = !showMixer">
+						<template #icon>
+							<Tune :size="20" />
+						</template>
 						{{ t('Mixer') }}
-					</button>
+					</NcButton>
 				</template>
-				<button type="button" @click="showAnnotations = !showAnnotations">
+				<NcButton :pressed="showAnnotations" :aria-label="t('Notes')" @click="showAnnotations = !showAnnotations">
+					<template #icon>
+						<NotebookOutline :size="20" />
+					</template>
 					{{ t('Notes') }}
-				</button>
+				</NcButton>
 			</div>
 			<div class="scoreview-rehearsal">
-				<label>
-					{{ t('Measure') }}
-					<input
-						v-model.number="measureInput"
+				<NcTextField
+					v-model.number="measureInput"
+					type="number"
+					min="1"
+					class="scoreview-measure-input"
+					:label="t('Measure')"
+					label-outside
+					@keyup.enter="jumpToMeasure(measureInput)" />
+				<NcButton :aria-label="t('Go')" @click="jumpToMeasure(measureInput)">
+					<template #icon>
+						<ArrowRight :size="20" />
+					</template>
+					{{ t('Go') }}
+				</NcButton>
+				<span class="scoreview-loop-fields">
+					{{ t('Loop') }}
+					<NcTextField
+						v-model.number="loopFromMeasure"
 						type="number"
 						min="1"
 						class="scoreview-measure-input"
-						@keyup.enter="jumpToMeasure(measureInput)">
-				</label>
-				<button type="button" @click="jumpToMeasure(measureInput)">
-					{{ t('Go') }}
-				</button>
-				<span class="scoreview-loop-fields">
-					{{ t('Loop') }}
-					<input v-model.number="loopFromMeasure" type="number" min="1" class="scoreview-measure-input" :placeholder="t('from')">
-					<input v-model.number="loopToMeasure" type="number" min="1" class="scoreview-measure-input" :placeholder="t('to')">
-					<button type="button" :class="{ active: loopActive }" @click="toggleLoop">
+						:label="t('from')"
+						label-outside
+						:placeholder="t('from')" />
+					<NcTextField
+						v-model.number="loopToMeasure"
+						type="number"
+						min="1"
+						class="scoreview-measure-input"
+						:label="t('to')"
+						label-outside
+						:placeholder="t('to')" />
+					<NcButton :pressed="loopActive" :aria-label="loopActive ? t('Loop on') : t('Loop off')" @click="toggleLoop">
+						<template #icon>
+							<Repeat :size="20" />
+						</template>
 						{{ loopActive ? t('Loop on') : t('Loop off') }}
-					</button>
+					</NcButton>
 				</span>
 				<label class="scoreview-zoom-label">
 					{{ t('Zoom') }}
-					<input type="range" min="0.5" max="2" step="0.1" :value="zoom" @input="onZoomInput">
+					<input type="range" min="0.5" max="2" step="0.1" :value="zoom" :aria-label="t('Zoom')" @input="onZoomInput">
 				</label>
 			</div>
-			<div v-if="!hasRealPlayer" class="scoreview-status scoreview-hint">
+			<NcNoteCard v-if="!hasRealPlayer" type="warning" class="scoreview-hint">
 				{{ t('No sound: {reason}', { reason: playbackError || t('Playback is not available.') }) }}
 				{{ t('The score cursor keeps running independently of this.') }}
-			</div>
+			</NcNoteCard>
 			<ScoreMixer
 				v-if="hasRealPlayer && showMixer && mixerChannels.length > 0"
 				:channels="mixerChannels"
@@ -108,6 +145,18 @@
 import { generateUrl } from '@nextcloud/router'
 import { translate } from '@nextcloud/l10n'
 import axios from '@nextcloud/axios'
+import NcButton from '@nextcloud/vue/components/NcButton'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
+import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import Play from 'vue-material-design-icons/Play.vue'
+import Pause from 'vue-material-design-icons/Pause.vue'
+import Tune from 'vue-material-design-icons/Tune.vue'
+import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
+import ArrowRight from 'vue-material-design-icons/ArrowRight.vue'
+import Repeat from 'vue-material-design-icons/Repeat.vue'
+import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
 import ScorePage from './ScorePage.vue'
 import ScoreMixer from './ScoreMixer.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
@@ -135,7 +184,23 @@ const DURATION_PADDING_MS = 2000
 export default {
 	name: 'ScoreViewer',
 
-	components: { ScorePage, ScoreMixer, ScoreAnnotations },
+	components: {
+		ScorePage,
+		ScoreMixer,
+		ScoreAnnotations,
+		NcButton,
+		NcTextField,
+		NcLoadingIcon,
+		NcEmptyContent,
+		NcNoteCard,
+		Play,
+		Pause,
+		Tune,
+		NotebookOutline,
+		ArrowRight,
+		Repeat,
+		AlertCircleOutline,
+	},
 
 	props: {
 		// Von OCA.Viewer übergeben (siehe registerHandler in src/viewer.js).
@@ -193,8 +258,13 @@ export default {
 			timeline: null, // timing.json (Note-Ebene) - für Klick-auf-Note.
 			measuresTimeline: null, // measures.json (Takt-Ebene) - für Taktnavigation/Loop.
 			measureInput: 1,
-			loopFromMeasure: null,
-			loopToMeasure: null,
+			// '', nicht null: NcTextField (anders als ein natives <input>) nimmt
+			// als modelValue nur string|number entgegen und wirft bei null einen
+			// Laufzeitfehler ("Cannot read properties of null"). '' bleibt wie
+			// null falsy für die toggleLoop()-Leerprüfung, verhält sich also
+			// gleich.
+			loopFromMeasure: '',
+			loopToMeasure: '',
 			loopActive: false,
 			loopStartMs: null,
 			loopEndMs: null,
@@ -319,8 +389,8 @@ export default {
 			this.timeline = null
 			this.measuresTimeline = null
 			this.measureInput = 1
-			this.loopFromMeasure = null
-			this.loopToMeasure = null
+			this.loopFromMeasure = ''
+			this.loopToMeasure = ''
 			this.loopActive = false
 			this.loopStartMs = null
 			this.loopEndMs = null
@@ -754,18 +824,13 @@ export default {
 }
 
 .scoreview-measure-input {
-	width: 60px;
+	width: 70px;
 }
 
 .scoreview-loop-fields {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-}
-
-.scoreview-loop-fields button.active {
-	background: var(--color-primary-element);
-	color: var(--color-primary-element-text);
 }
 
 .scoreview-zoom-label {
