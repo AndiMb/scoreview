@@ -103,37 +103,23 @@ foreach ($qb->executeQuery()->fetchAll() as $row) { print_r($row); }
 z.B. `21` (`application/octet-stream`).
 
 **Der Viewer öffnet sich, zeigt aber „Fehler: Request failed with status
-code 500".** Prüfe `data/nextcloud.log` auf eine `OCP\Files\NotFoundException`
-beim Lesen von `meta.json` aus `ConversionService`. Ursache: ein
+code 500".** War bis PLAN.md Phase 12 ein bekanntes Problem bei einem
 `scoreview_conversions`-Datensatz mit `status = ready`, dessen
-IAppData-Cache-Ordner noch im **alten** Format vorliegt (z.B. aus der Zeit
+IAppData-Cache-Ordner noch im **alten** Format vorlag (z.B. aus der Zeit
 vor der Umstellung auf `--score-media`/`page-N.svg`+`meta.json` in
 PLAN.md Phase 6/7) - der Cache-Schlüssel ist `(fileId, etag)`, und ein
-unverändertes `etag` verhindert, dass eine neue Konvertierung automatisch
-angestoßen wird, obwohl das Cache-Format nicht mehr zum aktuellen
-Sidecar/Controller passt. **Kein automatischer Migrationspfad vorhanden**
-(siehe PLAN.md Phase 12/Risiken) - Abhilfe: die betroffene(n) Zeile(n) aus
-`scoreview_conversions` löschen, das erzwingt eine Neukonvertierung beim
-nächsten Öffnen:
+unverändertes `etag` verhinderte, dass eine neue Konvertierung automatisch
+angestoßen wurde, obwohl das Cache-Format nicht mehr zum aktuellen
+Sidecar/Controller passte.
 
-```sh
-docker exec -u www-data nextcloud-test php -r '
-require "/var/www/html/lib/base.php";
-$db = \OCP\Server::get(\OCP\IDBConnection::class);
-$qb = $db->getQueryBuilder();
-$qb->select("id","file_id","etag","status","updated_at")->from("scoreview_conversions");
-foreach ($qb->executeQuery()->fetchAll() as $row) { print_r($row); }
-'
-# betroffene id(s) identifizieren (typischerweise die mit dem ältesten
-# updated_at, von vor einem Pipeline-Umbau), dann:
-docker exec -u www-data nextcloud-test php -r '
-require "/var/www/html/lib/base.php";
-$db = \OCP\Server::get(\OCP\IDBConnection::class);
-$qb = $db->getQueryBuilder();
-$qb->delete("scoreview_conversions")->where($qb->expr()->eq("id", $qb->createNamedParameter(<ID>, \OCP\DB\QueryBuilder\IQueryBuilder::PARAM_INT)));
-echo $qb->executeStatement() . " Zeile(n) geloescht\n";
-'
-```
+**Seit PLAN.md Phase 14 behoben:** die Spalte `format_version` markiert
+jeden Datensatz mit seiner Cache-Formatversion; `status()`/
+`serveCachedFile()` behandeln einen Datensatz mit älterer Version (oder
+eine dabei fehlende Cache-Datei) automatisch wie „nicht fertig" und stoßen
+selbst eine Neukonvertierung an - kein manuelles Löschen von Zeilen mehr
+nötig. Tritt der 500er trotzdem noch auf, ist das ein neuer, noch nicht
+dokumentierter Fall - `data/nextcloud.log` auf die konkrete Exception
+prüfen, bevor man dieselbe manuelle Zeilen-Löschung wie früher versucht.
 
 **Der Viewer zeigt „Kein Ton: …" über der Notenansicht.** Die Notenansicht
 funktioniert dann weiter, nur die Wiedergabe nicht - der Text hinter dem
