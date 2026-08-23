@@ -28,9 +28,11 @@ use OCP\Migration\SimpleMigrationStep;
  *   über etags hinweg stabil.
  * - Bewusst NICHT an `etag` gebunden (anders als `scoreview_conversions`):
  *   Notizen müssen einen Re-Upload überleben, der Cache-Eintrag nicht.
- * - `visibility`: aktuell immer 'private', Spalte existiert bereits fürs
- *   spätere "geteilte Notiz der Chorleitung" (Phase 11, im Datenmodell
- *   vorgesehen, aber nicht umgesetzt).
+ * - `visibility`: 'private' | 'shared'. In Phase 11 war die Spalte reine
+ *   Vorsorge (immer 'private'); seit Phase 18 wird sie tatsächlich benutzt -
+ *   'shared' heißt für jede Person mit Dateizugriff sichtbar, Schreibrecht
+ *   daran hängt an `PERMISSION_UPDATE` der Datei (siehe
+ *   AnnotationController::canWriteShared()).
  */
 class Version000100Date20260823130000 extends SimpleMigrationStep {
 

@@ -77,7 +77,10 @@ class SidecarClient {
 	}
 
 	/**
-	 * @return array{status: string, error?: string, files?: array{musicxml: string, audio: string, timingJson: string}}
+	 * Die `files`-Pfade sind sidecar-relativ und werden unveraendert an
+	 * fetchFile() zurueckgereicht (siehe BackgroundJob\PollConversionJob).
+	 *
+	 * @return array{status: string, error?: string, files?: array{pages: string[], midi: string, timingJson: string, measuresJson: string, metaJson: string}}
 	 * @throws SidecarException
 	 */
 	public function pollStatus(string $jobId): array {
@@ -98,17 +101,6 @@ class SidecarClient {
 		return $body;
 	}
 
-	/**
-	 * Verfuegbarkeit/Version des vom Sidecar mitgelieferten SoundFonts
-	 * (Phase 9 - siehe Service\SoundFontService fuer den Grund, warum der
-	 * Sidecar das ausliefert). Antwortet bewusst mit HTTP 200 +
-	 * `available: false` statt 404, wenn das Image keins hat: ein 404 waere
-	 * fuer Guzzle ein Fehler und liesse sich hier nicht mehr von einem
-	 * echten Verbindungsproblem unterscheiden.
-	 *
-	 * @return array{available: bool, name?: string, size?: int, version?: string}
-	 * @throws SidecarException
-	 */
 	/**
 	 * Health-Abfrage fuer die Admin-Anzeige (Phase 21). Bewusst gegen
 	 * `/health` statt gegen einen der Arbeits-Endpunkte: `/health` verlangt
@@ -162,6 +154,17 @@ class SidecarClient {
 		return $body;
 	}
 
+	/**
+	 * Verfuegbarkeit/Version des vom Sidecar mitgelieferten SoundFonts
+	 * (Phase 9 - siehe Service\SoundFontService fuer den Grund, warum der
+	 * Sidecar das ausliefert). Der Sidecar antwortet bewusst mit HTTP 200 +
+	 * `available: false` statt 404, wenn das Image keins hat: ein 404 waere
+	 * fuer Guzzle ein Fehler und liesse sich hier nicht mehr von einem
+	 * echten Verbindungsproblem unterscheiden.
+	 *
+	 * @return array{available: bool, name?: string, size?: int, version?: string}
+	 * @throws SidecarException
+	 */
 	public function fetchSoundFontInfo(): array {
 		if (!$this->isConfigured()) {
 			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).');

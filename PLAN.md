@@ -2197,6 +2197,86 @@ Viewport 1400×1000 sowie 390×844).
   im Bild. Der Zweig ist damit real nur an seiner reinen Funktion
   (`planHorizontalScroll`, Test) belegt, nicht am laufenden Notenbild.
 
+### Phase 23 – Codereview-Nacharbeit (Prototyp → Produktiv-App)
+
+Anlass: vollständiger Codereview am 2026-08-23 auf Stand `b419f17`
+(24 Befunde, Bericht als Artifact). Schwerpunkte laut Auftrag: Wartbarkeit,
+Modularisierung, Vereinfachung über Nextcloud-Standard, Aktualität der
+Bibliotheken. Diese Phase hält fest, was daraus abgearbeitet ist und was in
+welcher Reihenfolge folgt – die Reihenfolge ist begründet, nicht beliebig:
+Schritt 2 spannt das Netz, das Schritt 6 braucht, und Schritt 1 löscht Code,
+den man sonst in Schritt 6 mit umbaut.
+
+| # | Schritt | Befunde | Stand |
+|---|---|---|---|
+| 1 | Aufräumen: Phase-2-Gerüst, überholte Kommentare | D1, F | **umgesetzt** |
+| 2 | Netz spannen: ESLint/Stylelint, PHP-Tests, Sidecar-Tests, CI | C4, C5, C6, B4, B5 | offen |
+| 3 | Mechanische Modernisierung: `IAppConfig`, Secret als sensibel, Einstellungsseite auf `@nextcloud/vue` | C1, C2, C3 | offen |
+| 4 | Echte Fehler: CSP-Reichweite, Seitenladefehler, Klick-Trefferradius, Aufräumen bei Lösch-Events | A1, A2, A3, A4, A7 | offen |
+| 5 | Sidecar produktionsfähig: Nebenläufigkeitsgrenze, WSGI-Server, Modulaufteilung | A5, A6, B3 | offen |
+| 6 | Der große Umbau: `ScoreViewer.vue` in Composables, Auslieferungsrouten zusammenführen | B1, B2 | offen |
+| 7 | Feinschliff: rAF-Schleifen, SVG-Entladen, Store-Metadaten | E1, E2, E3, C7 | offen |
+
+**Aktualität – nichts zu tun.** `npm outdated` liefert nichts: Vue 3.5.41,
+`@nextcloud/vue` 9.9.0, spessasynth_lib 4.3.14, DOMPurify 3.4.14,
+vitest 4.1.11, webpack 5.109.2. Gegenprobe zu E5 mitgemacht:
+`@nextcloud/vue` 9.9 hat weiterhin **keine** Slider-Komponente – die
+Entscheidung, für Seek/Tempo/Zoom bei `<input type="range">` zu bleiben, gilt
+unverändert. Die einzige Aktualitätslücke ist PHP-seitig (C1, Schritt 3).
+
+**Umsetzungsstand Schritt 1 (2026-08-23).**
+
+*D1 – Phase-2-Gerüst entfernt.* Gelöscht: `Controller\PageController`,
+`templates/main.php`, `src/main.js`, `src/components/App.vue`, die Route
+`page#index` und der Webpack-Entry `scoreview-main`. Der Befund war nicht
+bloß toter Code, sondern nach außen sichtbar: `/apps/scoreview/` lieferte
+jeder eingeloggten Nutzerin „App-Grundgerüst läuft. Konvertierungs-Pipeline
+und Viewer-Integration folgen in späteren Phasen." – ein hartkodierter
+deutscher Text, der zusätzlich an E4 vorbeigeht und den
+`tools/l10n.mjs` nicht bemerken konnte, weil er nicht in einem `t()` steckte.
+Dazu wurde ein 66-KB-Bundle gebaut und ausgeliefert, das nichts tat.
+
+Verifiziert gegen `nextcloud-test` (Playwright, als eingeloggte Nutzerin –
+ein anonymer Aufruf hätte nur den Login-Redirect gemessen und nichts belegt):
+`/apps/scoreview/` antwortet **404**, der Platzhaltertext ist nicht mehr im
+DOM. Der Viewer läuft unverändert: Leiste mit 7 Knöpfen, 5 Seitencontainer,
+Seite 1 mit 351 `<path>`-Knoten geladen, Suchlauf und Taktfeld vorhanden,
+Cursor-Overlay nach dem Start sichtbar, Gesamtdauer 3:11 (= die 191 s aus
+M2/M8). **Null fehlgeschlagene Requests, keine ScoreView-Konsolenfehler**
+(die einzige verbliebene Meldung stammt aus Nextclouds `text`-App).
+Zusätzliches Indiz, dass der Viewer nicht angefasst wurde:
+`scoreview-viewer.js` ist vor und nach der Änderung byte-identisch
+(929.283 B).
+
+*F – fünf überholte Kommentare korrigiert.* CLAUDE.md verlangt Kommentare,
+die das *Warum* erklären; ein falsches Warum kostet mehr Zeit als gar keins.
+
+- `SettingsController::update()` behauptete „Leer = keine echte Wiedergabe,
+  ScoreViewer.vue fällt auf den stummen Phase-8-Cursor-Modus zurück" – seit
+  der Korrektur in Phase 9 ist es genau umgekehrt: leer heißt, die App
+  liefert das SoundFont des Sidecars selbst aus. Der Kommentar beschrieb den
+  Zustand, dessen Beseitigung Phase 9 ausdrücklich als Fehler festhält.
+- `SidecarClient`: Der Docblock zu `fetchSoundFontInfo()` stand verwaist über
+  `checkHealth()` (zwei gestapelte Docblocks), `fetchSoundFontInfo()` selbst
+  hatte keinen – jetzt an der richtigen Methode. `pollStatus()`s `@return`
+  nannte noch `{musicxml, audio, timingJson}` aus Phase 3 statt
+  `{pages, midi, timingJson, measuresJson, metaJson}`.
+- `AnnotationMapper::findByIdAndFileId()` verwies auf
+  `AnnotationService::canModify()` – diese Methode existiert nicht, die
+  Entscheidung liegt in `updateContent()`/`delete()`.
+- Migration `…130000`: „`visibility`: aktuell immer 'private'" – seit
+  Phase 18 nicht mehr.
+- `ScoreFileListener`: „ein eigenes mimetypemapping.json kommt erst in
+  Phase 4". Es existiert längst – aber Nextcloud lädt es nicht aus
+  `appinfo/`. Der Kommentar nennt jetzt den *heute gültigen* Grund für die
+  Endungsprüfung: ein Mimetype-Vergleich würde den Trigger davon abhängig
+  machen, ob der Betreiber die Datei nach `config/` kopiert hat.
+
+`npm test` (99 grün), `npm run build`, `npm run l10n:extract` (vollständig)
+und `php -l` über alle PHP-Dateien laufen durch. Version auf 0.0.20 erhöht
+und `occ upgrade` ausgeführt (Routenänderung – siehe Fallstrick
+`CachingRouter`).
+
 ## 4. Was ersatzlos entfällt
 
 | Entfällt | Grund |
@@ -2208,6 +2288,7 @@ Viewport 1400×1000 sowie 390×844).
 | Zwei der drei `mscore`-Aufrufe | M2 |
 | MusicXML als Auslieferungsformat | Wird vom Viewer nicht mehr gebraucht |
 | Eager-Konvertierung im Listener | Phase 7 |
+| Phase-2-Gerüst (`PageController`, Route `page#index`, `templates/main.php`, `src/main.js`, `App.vue`, Bundle `scoreview-main`) | Phase 23/D1 – die App hat bewusst keine eigene Seite, nur die Viewer-Integration |
 
 `.mpos` kehrt zurück: Im Spike wurde es als Cursor-Treiber verworfen (zu grob
 für Notenschritte) – für Taktnavigation ist es genau das richtige Format. Die

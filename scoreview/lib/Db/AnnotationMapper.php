@@ -44,9 +44,11 @@ class AnnotationMapper extends QBMapper {
 	 * als der bisherige Name suggerieren wuerde) - seit Phase 18 duerfen
 	 * geteilte Notizen von JEDER Nutzerin mit Schreibrecht auf die Datei
 	 * geaendert werden, nicht nur von der Autorin. Die eigentliche
-	 * Zugriffsentscheidung (Owner bei privat, Schreibrecht bei geteilt)
-	 * trifft AnnotationService::canModify(), nicht diese Abfrage - sie liefert
-	 * nur "existiert diese ID zu dieser Datei ueberhaupt".
+	 * Zugriffsentscheidung (Owner bei privat, Schreibrecht bei geteilt) treffen
+	 * AnnotationService::updateContent()/delete() anhand des von
+	 * AnnotationController::canWriteShared() durchgereichten Rechts, nicht
+	 * diese Abfrage - sie liefert nur "existiert diese ID zu dieser Datei
+	 * ueberhaupt".
 	 */
 	public function findByIdAndFileId(int $id, int $fileId): ?Annotation {
 		$qb = $this->db->getQueryBuilder();

@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 return [
 	'routes' => [
-		// Hello-World-Verifikationsseite für Phase 2. Kein Navigations-Eintrag
-		// (siehe info.xml) - geplant ist ausschließlich Viewer-Integration
-		// (Phase 4), die Seite wird direkt per URL aufgerufen.
-		['name' => 'page#index', 'url' => '/', 'verb' => 'GET'],
+		// Kein '/'-Einstieg und kein Navigations-Eintrag (siehe info.xml): die
+		// App hat bewusst keine eigene Seite, sie klinkt sich ausschliesslich in
+		// Files/Viewer ein (Listener\FilesLoadAdditionalScriptsListener). Bis
+		// Phase 22 stand hier noch die Hello-World-Seite aus Phase 2 - sie war
+		// unter /apps/scoreview/ fuer jede eingeloggte Nutzerin erreichbar und
+		// zeigte einen hartkodierten deutschen Platzhaltertext.
 
 		// Konvertierungs-Pipeline (Phase 7: page-N/midi/timing/measures/meta
 		// statt musicxml/audio - siehe PLAN.md E1/E2)

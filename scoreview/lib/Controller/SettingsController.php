@@ -60,12 +60,15 @@ class SettingsController extends Controller {
 		// Default 'aus' (siehe Listener\ScoreFileListener - Phase 7): jeder
 		// Upload sofort konvertieren ist die Ausnahme, kein Standardverhalten.
 		$this->config->setAppValue(Application::APP_ID, 'eager_conversion', $eagerConversion ? '1' : '0');
-		// Bewusst eine externe URL statt eines mitgelieferten Binaries (E1,
-		// Phase 9): welches SoundFont ausgeliefert wird und wie es gehostet
-		// wird, ist eine Lizenz-/Betriebsentscheidung des Betreibers, keine
-		// Entscheidung, die im App-Code vorweggenommen werden sollte. Leer =
-		// keine echte Wiedergabe, ScoreViewer.vue faellt sichtbar auf den
-		// stummen Phase-8-Cursor-Modus zurueck (siehe ScoreViewer.vue).
+		// Uebersteuerung, nicht Voraussetzung: leer heisst NICHT "kein Ton",
+		// sondern "die App liefert das SoundFont selbst aus, das der ohnehin
+		// vorausgesetzte Sidecar mitbringt" (Service\SoundFontService,
+		// Controller\ConversionController::soundFontUrl()). Genau umgekehrt war
+		// es bis zur Korrektur in Phase 9 - da war das leere Feld der
+		// Auslieferungszustand und die App damit standardmaessig stumm. Gefuellt
+		// wird das Feld nur, wer ein anderes/besseres SoundFont selbst hostet;
+		// dessen Host muss dann per HTTP(S) erreichbar sein und CORS erlauben
+		// (und wird von Listener\AddCspListener in connect-src freigegeben).
 		$this->config->setAppValue(Application::APP_ID, 'soundfont_url', trim($soundFontUrl));
 		return new JSONResponse(['status' => 'ok']);
 	}
