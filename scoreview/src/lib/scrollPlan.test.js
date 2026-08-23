@@ -38,6 +38,25 @@ describe('planAutoScroll', () => {
 		})
 		expect(target).toBeNull()
 	})
+
+	// Regression: bei SATB-/Mehrsystem-Partituren deckt das Cursor-Rechteck
+	// die ganze Notenzeile ab (siehe scrollPlan.js-Kommentar) und kann damit
+	// höher als das Band selbst sein - dann darf die Funktion nicht
+	// abwechselnd "Oberkante ins Band" und "Unterkante ins Band" verlangen
+	// (das wären zwei unerfüllbare, sich widersprechende Ziele), sonst
+	// springt der Viewport bei jedem Notenwechsel hin und her, obwohl sich
+	// die Note gar nicht bewegt hat. Nachgestellt am real beobachteten Fall.
+	it('oszilliert nicht, wenn der Cursor höher als das Band ist', () => {
+		const params = { cursorTop: 1000, cursorHeight: 500, viewportHeight: 1000 }
+		const firstTarget = planAutoScroll({ ...params, scrollTop: 0 })
+		expect(firstTarget).not.toBeNull()
+		// Zweiter Aufruf mit UNVERÄNDERTER Cursorposition (wie bei mehreren
+		// Noten im selben System, siehe PLAN.md M4-Nachbarschaft), aber dem
+		// soeben berechneten scrollTop - muss sich stabilisieren (null),
+		// nicht ein neues, gegenläufiges Ziel liefern.
+		const secondTarget = planAutoScroll({ ...params, scrollTop: firstTarget })
+		expect(secondTarget).toBeNull()
+	})
 })
 
 describe('shouldSuppressAutoScroll', () => {

@@ -36,13 +36,27 @@ export function planAutoScroll({
 	const bandBottomAbs = scrollTop + viewportHeight * bandEnd
 	const cursorBottom = cursorTop + cursorHeight
 
-	if (cursorTop < bandTopAbs) {
+	// Ueberlappt der Cursor das Band bereits irgendwo, ist nichts zu tun -
+	// unabhaengig davon, ob BEIDE Kanten (Ober-/Unterkante) im Band liegen.
+	// Das ist bewusst so und kein Sonderfall: bei einer Partitur mit mehreren
+	// Systemen/Stimmen (SATB etc.) liefert der Sidecar pro Note ein
+	// Cursor-Rechteck, das die GESAMTE Zeile/das gesamte System abdeckt (M4/
+	// M9-Nachbarschaft) - dessen Hoehe kann die Bandhoehe locker uebersteigen.
+	// Ein Cursor, der groesser als das Band ist, kann NIE gleichzeitig mit
+	// Ober- UND Unterkante im Band liegen; ein Fix "verlangte" frueher
+	// abwechselnd mal die eine, mal die andere Kante ins Band zu ziehen - bei
+	// UNVERAENDERTER Notenposition (mehrere Noten im selben System teilen
+	// sich dieselbe y/h, siehe PLAN.md) fuehrte das zu endlosem Hoch-Runter-
+	// Springen bei jedem Notenwechsel, real beobachtet bei SATB-Partituren
+	// (gefunden per Nutzer-Feedback, nicht in den zwei kleineren Testpartituren
+	// reproduzierbar, weil deren Notenzeilen-Cursor schmaler als das Band ist).
+	if (cursorBottom >= bandTopAbs && cursorTop <= bandBottomAbs) {
+		return null
+	}
+	if (cursorBottom < bandTopAbs) {
 		return cursorTop - viewportHeight * bandStart
 	}
-	if (cursorBottom > bandBottomAbs) {
-		return cursorBottom - viewportHeight * bandEnd
-	}
-	return null
+	return cursorBottom - viewportHeight * bandEnd
 }
 
 /**

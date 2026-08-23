@@ -1338,6 +1338,40 @@ Durchlauf.**
    600px Scrollen liegt `document.elementFromPoint()` auf dem Play-Button
    selbst (nicht mehr auf der SVG-Seite darunter), ein Klick dort schaltet
    `aria-label` zuverlässig zwischen „Abspielen"/„Pause" um.
+3. **Bei manchen Partituren sprang die Ansicht während der Wiedergabe bei
+   jedem Notenwechsel ein Stück nach oben und unten - dritte
+   Nutzer-Rückmeldung, echter Logikfehler in `planAutoScroll()`.** Ursache:
+   Bei mehrstimmigen/mehrsystemigen Partituren (SATB u.ä.) deckt das vom
+   Sidecar gelieferte Cursor-Rechteck einer Note nicht nur die eine Stimme
+   ab, sondern die **gesamte Notenzeile/das gesamte System** (gemessen an
+   `What_Was_I_Made_For.mscz`: alle Elemente einer Zeile teilen sich
+   exakt dieselben `y`/`h`-Werte in `timing.json`, unabhängig von der
+   Stimme) - dessen gerenderte Höhe kann die Bandhöhe (30 % der
+   Viewporthöhe) locker übersteigen. `planAutoScroll()` prüfte Ober- und
+   Unterkante bislang unabhängig voneinander („Oberkante zu weit oben? ->
+   scrollen, bis sie im Band ist" / „Unterkante zu weit unten? -> scrollen,
+   bis SIE im Band ist") - ist der Cursor höher als das Band, sind diese
+   beiden Ziele unerfüllbar UND gegenläufig: ein Scroll, der die Oberkante
+   ins Band zieht, reißt die Unterkante sofort wieder heraus (und umgekehrt)
+   - bei **unveränderter** Notenposition (mehrere Noten im selben System
+   teilen sich dieselbe Cursor-Geometrie) ergab das bei jedem
+   Notenwechsel-Tick ein neues, gegenläufiges Scrollziel und damit
+   endloses Hoch-Runter-Springen. In den beiden kleineren Testpartituren
+   (`repeat-test.mscz`: 1 Stimme, Cursorhöhe ~330 Einheiten; `duckwerk`)
+   trat das nicht auf, weil deren Cursor-Rechtecke schmaler als das Band
+   blieben - daher „bei einigen Dateien". Behoben: „im Band" heißt jetzt
+   „Cursor überlappt das Band irgendwo", nicht mehr „beide Kanten liegen
+   im Band" - ein zu hoher Cursor braucht dafür nur einmal in Überlappung
+   gebracht zu werden, nicht bei jedem Tick neu ausgerichtet. Alle
+   bestehenden `scrollPlan.test.js`-Fälle liefern dieselben Ergebnisse wie
+   vorher (die Änderung wirkt sich nur aus, wenn Cursor- und Bandhöhe in
+   Konflikt stehen); neuer Regressionstest deckt genau diesen Fall ab.
+   Per Playwright an `What_Was_I_Made_For.mscz` mit einem bewusst kleinen
+   Viewport (400 px, Cursorhöhe 233 px > Bandhöhe 120 px, damit der Konflikt
+   sicher auftritt) verifiziert: `scrollTop` läuft einmalig auf einen
+   stabilen Wert ein (`0 → 237 → 459`) und bleibt über 8 weitere
+   Notenwechsel-Samples (400 ms-Takt) exakt bei `459` stehen, statt wie vor
+   dem Fix zwischen zwei Werten zu pendeln.
 
 ### Phase 17 – Probentauglichkeit II: Steuern
 
