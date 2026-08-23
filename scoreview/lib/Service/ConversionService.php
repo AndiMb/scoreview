@@ -8,21 +8,24 @@ use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreConversionMapper;
 use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
+use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\SimpleFS\ISimpleFolder;
 
 /**
  * Cached konvertierte Dateien nach fileId+etag in IAppData
- * (appdata_<instanceid>/scoreview/<fileId>/<etag>/{score.musicxml,audio.mp3,timing.json}),
+ * (appdata_<instanceid>/scoreview/<fileId>/<etag>/{page-1.svg…page-N.svg,score.mid,timing.json,measures.json,meta.json}),
  * und verwaltet den zugehörigen Status-Datensatz. Ein Re-Upload/eine
  * Bearbeitung ändert den etag und landet damit automatisch in einem neuen
- * Unterordner statt den Cache einer älteren Version zu überschreiben; alte
- * Unterordner werden für den Prototyp nicht aktiv aufgeräumt (kein GC nötig,
- * kleine Testpartituren, siehe Plan Risiko 8).
+ * Unterordner statt den Cache einer älteren Version zu überschreiben; der
+ * alte Unterordner (und sein DB-Datensatz) wird beim nächsten erfolgreichen
+ * markReady() derselben fileId aufgeräumt (gcOldVersions) - vorher (Phase 3)
+ * wuchs das unbegrenzt, siehe PLAN.md Phase 7.
  */
 class ConversionService {
-	private const MUSICXML_FILE = 'score.musicxml';
-	private const AUDIO_FILE = 'audio.mp3';
+	private const MIDI_FILE = 'score.mid';
 	private const TIMING_FILE = 'timing.json';
+	private const MEASURES_FILE = 'measures.json';
+	private const META_FILE = 'meta.json';
 
 	public function __construct(
 		private ScoreConversionMapper $mapper,
@@ -54,12 +57,20 @@ class ConversionService {
 		$this->updateStatus($conversion, ScoreConversion::STATUS_ERROR);
 	}
 
-	public function markReady(ScoreConversion $conversion, string $musicxml, string $audio, string $timingJson): void {
+	/**
+	 * @param string[] $pageSvgs Seiteninhalte, 1-indiziert in Reihenfolge.
+	 */
+	public function markReady(ScoreConversion $conversion, array $pageSvgs, string $midi, string $timingJson, string $measuresJson, string $metaJson): void {
 		$folder = $this->getOrCreateFolder($conversion->getFileId(), $conversion->getEtag());
-		$this->writeFile($folder, self::MUSICXML_FILE, $musicxml);
-		$this->writeFile($folder, self::AUDIO_FILE, $audio);
+		foreach (array_values($pageSvgs) as $i => $svg) {
+			$this->writeFile($folder, $this->pageFileName($i + 1), $svg);
+		}
+		$this->writeFile($folder, self::MIDI_FILE, $midi);
 		$this->writeFile($folder, self::TIMING_FILE, $timingJson);
+		$this->writeFile($folder, self::MEASURES_FILE, $measuresJson);
+		$this->writeFile($folder, self::META_FILE, $metaJson);
 		$this->updateStatus($conversion, ScoreConversion::STATUS_READY);
+		$this->gcOldVersions($conversion->getFileId(), $conversion->getEtag());
 	}
 
 	private function updateStatus(ScoreConversion $conversion, string $status): void {
@@ -68,24 +79,34 @@ class ConversionService {
 		$this->mapper->update($conversion);
 	}
 
-	public function getMusicXml(int $fileId, string $etag): string {
-		return $this->readFile($fileId, $etag, self::MUSICXML_FILE);
+	/** Aus meta.json (`metadata.pages` von MuseScore) statt einer eigenen Spalte - siehe PLAN.md Phase 7. */
+	public function getPageCount(int $fileId, string $etag): int {
+		$meta = json_decode($this->getMetaJsonFile($fileId, $etag)->getContent(), true);
+		return (int)($meta['pages'] ?? 0);
 	}
 
-	public function getAudio(int $fileId, string $etag): string {
-		return $this->readFile($fileId, $etag, self::AUDIO_FILE);
+	public function getPage(int $fileId, string $etag, int $pageNumber): ISimpleFile {
+		return $this->getFolder($fileId, $etag)->getFile($this->pageFileName($pageNumber));
 	}
 
-	public function getTimingJson(int $fileId, string $etag): string {
-		return $this->readFile($fileId, $etag, self::TIMING_FILE);
+	public function getMidi(int $fileId, string $etag): ISimpleFile {
+		return $this->getFolder($fileId, $etag)->getFile(self::MIDI_FILE);
 	}
 
-	private function readFile(int $fileId, string $etag, string $name): string {
-		try {
-			return $this->getFolder($fileId, $etag)->getFile($name)->getContent();
-		} catch (NotFoundException $e) {
-			throw new \RuntimeException("Cache-Datei {$name} fehlt für fileId={$fileId} etag={$etag}", 0, $e);
-		}
+	public function getTimingJson(int $fileId, string $etag): ISimpleFile {
+		return $this->getFolder($fileId, $etag)->getFile(self::TIMING_FILE);
+	}
+
+	public function getMeasuresJson(int $fileId, string $etag): ISimpleFile {
+		return $this->getFolder($fileId, $etag)->getFile(self::MEASURES_FILE);
+	}
+
+	public function getMetaJsonFile(int $fileId, string $etag): ISimpleFile {
+		return $this->getFolder($fileId, $etag)->getFile(self::META_FILE);
+	}
+
+	private function pageFileName(int $pageNumber): string {
+		return "page-{$pageNumber}.svg";
 	}
 
 	private function writeFile(ISimpleFolder $folder, string $name, string $content): void {
@@ -122,6 +143,28 @@ class ConversionService {
 			return $parent->getFolder($name);
 		} catch (NotFoundException) {
 			return $parent->newFolder($name);
+		}
+	}
+
+	/**
+	 * Löscht Cache-Ordner und DB-Zeile jeder anderen (aelteren) etag-Version
+	 * derselben fileId. ISimpleFolder::getDirectoryListing() listet nur
+	 * Dateien, keine Unterordner (Kern-Implementierung filtert Folder-Nodes
+	 * heraus) - deshalb ueber die DB gehen statt ueber eine
+	 * Verzeichnisauflistung des fileId-Ordners.
+	 */
+	private function gcOldVersions(int $fileId, string $currentEtag): void {
+		foreach ($this->mapper->findAllByFileId($fileId) as $old) {
+			if ($old->getEtag() === $currentEtag) {
+				continue;
+			}
+			try {
+				$this->appData->getFolder('scoreview')->getFolder((string)$fileId)->getFolder($old->getEtag())->delete();
+			} catch (NotFoundException) {
+				// Ordner existierte nie (z.B. Konvertierung kam nie bis
+				// markReady()) - nichts aufzuraeumen.
+			}
+			$this->mapper->delete($old);
 		}
 	}
 }

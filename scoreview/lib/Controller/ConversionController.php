@@ -8,41 +8,56 @@ use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
-use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\AppFramework\Http\StreamResponse;
 use OCP\BackgroundJob\IJobList;
-use OCP\Files\IRootFolder;
-use OCP\Files\Node;
+use OCP\Files\NotFoundException;
+use OCP\IConfig;
 use OCP\IRequest;
 use OCP\IURLGenerator;
-use OCP\IUserSession;
 
 /**
  * Nie eine rohe fileId ungeprueft vertrauen: jede Anfrage loest die Datei
- * ueber den Dateibaum des eingeloggten Nutzers auf (resolveOwnNode), nicht
- * per direktem DB-Lookup - Nextclouds Node-API liefert nur, worauf der
- * Nutzer tatsaechlich Zugriff hat.
+ * ueber den Dateibaum der eingeloggten Nutzerin auf (UserFileResolver),
+ * nicht per direktem DB-Lookup - Nextclouds Node-API liefert nur, worauf
+ * die Nutzerin tatsaechlich Zugriff hat.
+ *
+ * Alle Auslieferungsrouten (page/midi/timing/measures/meta) sind
+ * unveraenderlich (der etag steckt bereits im IAppData-Cache-Pfad, siehe
+ * ConversionService) - ETag/Last-Modified/Cache-Control:immutable setzen,
+ * damit ein zweites Oeffnen derselben Datei 304 statt einer erneuten
+ * Uebertragung bekommt (Phase 7 - vorher wurde bei jedem Oeffnen alles neu
+ * uebertragen). Die eigentliche 304-Antwort baut Nextclouds
+ * NotModifiedMiddleware anhand von setETag()/setLastModified() automatisch,
+ * hier wird nur gesetzt.
  */
 class ConversionController extends Controller {
+	private const IMMUTABLE_CACHE_SECONDS = 31536000;
+
 	public function __construct(
 		IRequest $request,
-		private IRootFolder $rootFolder,
-		private IUserSession $userSession,
+		private UserFileResolver $fileResolver,
 		private ConversionService $conversionService,
 		private IJobList $jobList,
 		private IURLGenerator $urlGenerator,
+		private IConfig $config,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
 
+	/**
+	 * Kein #[NoCSRFRequired] hier (anders als auf den reinen
+	 * Auslieferungsrouten unten) - dieser Endpunkt hat mit jobList->add()
+	 * einen Seiteneffekt (siehe PLAN.md Phase 7).
+	 */
 	#[NoAdminRequired]
-	#[NoCSRFRequired]
 	public function status(int $fileId): JSONResponse {
-		$node = $this->resolveOwnNode($fileId);
+		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
 			return new JSONResponse(['status' => 'error', 'error' => 'Datei nicht gefunden oder kein Zugriff.'], Http::STATUS_NOT_FOUND);
 		}
@@ -51,16 +66,18 @@ class ConversionController extends Controller {
 		$conversion = $this->conversionService->find($fileId, $etag);
 		if ($conversion === null) {
 			// Lazy-Trigger: Datei existierte schon vor App-Aktivierung, oder
-			// der Event-Listener ist aus irgendeinem Grund nicht gelaufen.
-			// Bewusst KEIN eigenes createPending() hier: ConvertScoreJob::run()
-			// legt die Zeile selbst an. Würde der Controller sie vorab anlegen,
+			// der Event-Listener hat die Konvertierung nicht eager angestoßen
+			// (Standardfall seit Phase 7 - siehe ScoreFileListener). Bewusst
+			// KEIN eigenes createPending() hier: ConvertScoreJob::run() legt
+			// die Zeile selbst an. Würde der Controller sie vorab anlegen,
 			// fände der Job beim Start bereits eine (von ihm selbst noch gar
-			// nicht bearbeitete) "pending"-Zeile vor und würde die Konvertierung
-			// wegen seiner eigenen Idempotenz-Prüfung (status !== error =>
-			// überspringen) fälschlich als "läuft schon" überspringen - die
-			// Konvertierung würde für immer auf "pending" hängen bleiben.
+			// nicht bearbeitete) "pending"-Zeile vor und würde die
+			// Konvertierung wegen seiner eigenen Idempotenz-Prüfung
+			// (status !== error => überspringen) fälschlich als "läuft
+			// schon" überspringen - die Konvertierung würde für immer auf
+			// "pending" hängen bleiben.
 			$this->jobList->add(ConvertScoreJob::class, [
-				'userId' => $this->userSession->getUser()?->getUID(),
+				'userId' => $this->fileResolver->currentUserId(),
 				'fileId' => $fileId,
 			]);
 			return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
@@ -71,45 +88,60 @@ class ConversionController extends Controller {
 			$body['error'] = $conversion->getErrorMessage();
 			// Ein einmal fehlgeschlagener Versuch blieb sonst für immer auf
 			// "error" hängen, auch wenn die eigentliche Ursache (z.B. ein
-			// falsch konfiguriertes Sidecar-Secret) längst behoben wurde - ein
-			// erneutes Öffnen derselben Datei zeigte dann nur den alten,
-			// stehengebliebenen Fehler statt es einfach nochmal zu versuchen.
-			// ConvertScoreJob::run() erlaubt genau das (sein Idempotenz-Guard
-			// überspringt nur status !== error).
+			// falsch konfiguriertes Sidecar-Secret) längst behoben wurde -
+			// ein erneutes Öffnen derselben Datei zeigte dann nur den alten,
+			// stehengebliebenen Fehler statt es einfach nochmal zu
+			// versuchen. ConvertScoreJob::run() erlaubt genau das (sein
+			// Idempotenz-Guard überspringt nur status !== error).
 			$this->jobList->add(ConvertScoreJob::class, [
-				'userId' => $this->userSession->getUser()?->getUID(),
+				'userId' => $this->fileResolver->currentUserId(),
 				'fileId' => $fileId,
 			]);
 		} elseif ($conversion->getStatus() === ScoreConversion::STATUS_READY) {
-			$body['files'] = [
-				'musicxml' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.musicxml', ['fileId' => $fileId]),
-				'audio' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.audio', ['fileId' => $fileId]),
-				'timingJson' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.timing', ['fileId' => $fileId]),
-			];
+			$body['files'] = $this->buildFileUrls($fileId, $etag);
+			// Kein Cache-Artefakt einer bestimmten Partitur, sondern eine
+			// instanzweite Ressource (Phase 9/E1) - deshalb hier statt in
+			// buildFileUrls() mitgegeben.
+			$body['soundFontUrl'] = $this->soundFontUrl();
 		}
 		return new JSONResponse($body);
 	}
 
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
-	public function musicxml(int $fileId): Http\Response {
-		return $this->serveCachedFile($fileId, 'musicxml', 'application/vnd.recordare.musicxml+xml');
+	public function page(int $fileId, int $page): Http\Response {
+		return $this->serveCachedFile($fileId, 'image/svg+xml', fn (int $id, string $etag) => $this->conversionService->getPage($id, $etag, $page));
 	}
 
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
-	public function audio(int $fileId): Http\Response {
-		return $this->serveCachedFile($fileId, 'audio', 'audio/mpeg');
+	public function midi(int $fileId): Http\Response {
+		return $this->serveCachedFile($fileId, 'audio/midi', fn (int $id, string $etag) => $this->conversionService->getMidi($id, $etag));
 	}
 
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	public function timing(int $fileId): Http\Response {
-		return $this->serveCachedFile($fileId, 'timing', 'application/json');
+		return $this->serveCachedFile($fileId, 'application/json', fn (int $id, string $etag) => $this->conversionService->getTimingJson($id, $etag));
 	}
 
-	private function serveCachedFile(int $fileId, string $kind, string $mimeType): Http\Response {
-		$node = $this->resolveOwnNode($fileId);
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	public function measures(int $fileId): Http\Response {
+		return $this->serveCachedFile($fileId, 'application/json', fn (int $id, string $etag) => $this->conversionService->getMeasuresJson($id, $etag));
+	}
+
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	public function meta(int $fileId): Http\Response {
+		return $this->serveCachedFile($fileId, 'application/json', fn (int $id, string $etag) => $this->conversionService->getMetaJsonFile($id, $etag));
+	}
+
+	/**
+	 * @param callable(int, string): \OCP\Files\SimpleFS\ISimpleFile $fileGetter
+	 */
+	private function serveCachedFile(int $fileId, string $mimeType, callable $fileGetter): Http\Response {
+		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
 			return new JSONResponse(['error' => 'Datei nicht gefunden oder kein Zugriff.'], Http::STATUS_NOT_FOUND);
 		}
@@ -120,25 +152,63 @@ class ConversionController extends Controller {
 			return new JSONResponse(['error' => 'Konvertierung noch nicht fertig.'], Http::STATUS_NOT_FOUND);
 		}
 
-		$content = match ($kind) {
-			'musicxml' => $this->conversionService->getMusicXml($fileId, $etag),
-			'audio' => $this->conversionService->getAudio($fileId, $etag),
-			'timing' => $this->conversionService->getTimingJson($fileId, $etag),
-		};
-		return new DataDisplayResponse($content, Http::STATUS_OK, ['Content-Type' => $mimeType]);
+		try {
+			$file = $fileGetter($fileId, $etag);
+		} catch (NotFoundException) {
+			return new JSONResponse(['error' => 'Angeforderte Datei existiert nicht.'], Http::STATUS_NOT_FOUND);
+		}
+
+		// StreamResponse akzeptiert auch ein resource-Handle (ISimpleFile::read())
+		// statt eines Pfads - IAppData kann auf Objektspeicher liegen, ein lokaler
+		// Dateipfad ist nicht garantiert. So landet der Dateiinhalt nie komplett
+		// als PHP-String im Speicher (vorher: getContent()/DataDisplayResponse).
+		$response = new StreamResponse($file->read());
+		$response->addHeader('Content-Type', $mimeType);
+		// $etag ist der Nextcloud-Datei-etag, nicht IAppData's eigener - bewusst
+		// so: Inhalt ist fuer (fileId, etag) invariant (siehe ConversionService),
+		// er reicht also als stabiler HTTP-ETag, ohne von
+		// Speicher-Backend-Details von IAppData abzuhaengen.
+		$response->setETag($etag);
+		$response->setLastModified($conversion->getUpdatedAt());
+		$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
+		return $response;
 	}
 
-	private function resolveOwnNode(int $fileId): ?Node {
-		$user = $this->userSession->getUser();
-		if ($user === null) {
-			return null;
+	/**
+	 * Woher der Browser sein SoundFont holt. Eine gesetzte
+	 * Admin-Einstellung gewinnt (eigenes Hosting, anderes/besseres
+	 * SoundFont); ohne sie liefert die App selbst aus, was der ohnehin
+	 * vorausgesetzte Sidecar mitbringt (Controller\SoundFontController).
+	 *
+	 * Vorher hiess "keine Admin-URL gesetzt" schlicht "kein Ton" - und weil
+	 * das der Auslieferungszustand ist, war die App fuer jeden stumm, der
+	 * nicht selbst ein 40-MB-SF3 CORS-faehig gehostet hat.
+	 */
+	private function soundFontUrl(): string {
+		$configured = trim($this->config->getAppValue(Application::APP_ID, 'soundfont_url', ''));
+		if ($configured !== '') {
+			return $configured;
 		}
-		try {
-			$userFolder = $this->rootFolder->getUserFolder($user->getUID());
-			$nodes = $userFolder->getById($fileId);
-		} catch (\Throwable) {
-			return null;
+		return $this->urlGenerator->linkToRoute(Application::APP_ID . '.sound_font.get');
+	}
+
+	private function buildFileUrls(int $fileId, string $etag): array {
+		$pageCount = $this->conversionService->getPageCount($fileId, $etag);
+		$pages = [];
+		for ($n = 1; $n <= $pageCount; $n++) {
+			$pages[] = $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.page', ['fileId' => $fileId, 'page' => $n]);
 		}
-		return $nodes[0] ?? null;
+		return [
+			'pageCount' => $pageCount,
+			'pages' => $pages,
+			'midi' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.midi', ['fileId' => $fileId]),
+			'timingJson' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.timing', ['fileId' => $fileId]),
+			'measuresJson' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.measures', ['fileId' => $fileId]),
+			'metaJson' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.meta', ['fileId' => $fileId]),
+			// Anker-Etag für Notizen (Phase 11) - der aktuelle etag dieser
+			// Konvertierung, damit der Client neue Notizen mit einem gültigen
+			// Sekundäranker (elid + anchorEtag) anlegen kann.
+			'etag' => $etag,
+		];
 	}
 }

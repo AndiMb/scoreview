@@ -29,4 +29,19 @@ class ScoreConversionMapper extends QBMapper {
 			return null;
 		}
 	}
+
+	/**
+	 * Fuer die Cache-GC alter etag-Versionen einer Datei (siehe
+	 * ConversionService::gcOldVersions) - Verzeichnisauflistung ueber
+	 * ISimpleFolder liefert keine Unterordner, daher hier ueber die DB.
+	 *
+	 * @return ScoreConversion[]
+	 */
+	public function findAllByFileId(int $fileId): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)));
+		return $this->findEntities($qb);
+	}
 }

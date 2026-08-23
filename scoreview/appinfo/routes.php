@@ -9,13 +9,27 @@ return [
 		// (Phase 4), die Seite wird direkt per URL aufgerufen.
 		['name' => 'page#index', 'url' => '/', 'verb' => 'GET'],
 
-		// Konvertierungs-Pipeline (Phase 3)
+		// Konvertierungs-Pipeline (Phase 7: page-N/midi/timing/measures/meta
+		// statt musicxml/audio - siehe PLAN.md E1/E2)
 		['name' => 'conversion#status', 'url' => '/api/scores/{fileId}/status', 'verb' => 'GET'],
-		['name' => 'conversion#musicxml', 'url' => '/api/scores/{fileId}/musicxml', 'verb' => 'GET'],
-		['name' => 'conversion#audio', 'url' => '/api/scores/{fileId}/audio', 'verb' => 'GET'],
+		['name' => 'conversion#page', 'url' => '/api/scores/{fileId}/page/{page}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+', 'page' => '\d+']],
+		['name' => 'conversion#midi', 'url' => '/api/scores/{fileId}/midi', 'verb' => 'GET'],
 		['name' => 'conversion#timing', 'url' => '/api/scores/{fileId}/timing', 'verb' => 'GET'],
+		['name' => 'conversion#measures', 'url' => '/api/scores/{fileId}/measures', 'verb' => 'GET'],
+		['name' => 'conversion#meta', 'url' => '/api/scores/{fileId}/meta', 'verb' => 'GET'],
 
-		// Admin-Einstellungen (Sidecar-URL/Secret)
+		// SoundFont fuer die Browser-Wiedergabe (Phase 9/E1). Nicht an eine
+		// fileId gebunden - eine Datei fuer die gesamte Instanz, siehe
+		// Service\SoundFontService.
+		['name' => 'sound_font#get', 'url' => '/api/soundfont', 'verb' => 'GET'],
+
+		// Private Notizen (Phase 11)
+		['name' => 'annotation#index', 'url' => '/api/scores/{fileId}/annotations', 'verb' => 'GET'],
+		['name' => 'annotation#create', 'url' => '/api/scores/{fileId}/annotations', 'verb' => 'POST'],
+		['name' => 'annotation#update', 'url' => '/api/scores/{fileId}/annotations/{id}', 'verb' => 'PUT'],
+		['name' => 'annotation#destroy', 'url' => '/api/scores/{fileId}/annotations/{id}', 'verb' => 'DELETE'],
+
+		// Admin-Einstellungen (Sidecar-URL/Secret, Eager-Konvertierung)
 		['name' => 'settings#update', 'url' => '/api/settings', 'verb' => 'POST'],
 	],
 ];

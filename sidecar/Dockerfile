@@ -45,5 +45,16 @@ COPY server.py /opt/scoreview-sidecar/server.py
 # conversion job indefinitely.
 ENV MSCORE_TIMEOUT_SECONDS=120
 
+# Phase 12 (Haertung, Minimum aus PLAN.md): der Konvertierungsprozess
+# (mscore4portable, eine grosse C++/Qt-Codebasis auf beliebigen,
+# nicht vertrauenswuerdigen .mscz-Uploads) laeuft nicht mehr als root.
+# HOME wird explizit gesetzt, weil das AppImage/Qt sonst versucht, unter
+# root's Home-Verzeichnis Konfiguration/Cache abzulegen, worauf der
+# scoreview-Nutzer keinen Zugriff hat.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin scoreview && \
+    chown -R scoreview:scoreview /data
+ENV HOME=/home/scoreview
+USER scoreview
+
 EXPOSE 8765
 ENTRYPOINT ["python3", "/opt/scoreview-sidecar/server.py"]

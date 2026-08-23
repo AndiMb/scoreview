@@ -19,6 +19,8 @@
 			body: JSON.stringify({
 				sidecarUrl: document.getElementById('scoreview-sidecar-url').value,
 				sidecarSecret: document.getElementById('scoreview-sidecar-secret').value,
+				eagerConversion: document.getElementById('scoreview-eager-conversion').checked,
+				soundFontUrl: document.getElementById('scoreview-soundfont-url').value,
 			}),
 		}).then(function(res) {
 			if (!res.ok) { throw new Error('HTTP ' + res.status) }

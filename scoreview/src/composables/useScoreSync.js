@@ -1,83 +1,63 @@
-import { buildStepTimes, findStepIndex } from '../lib/timingSync.js'
-
-// Läuft den OSMD-Cursor einmal von Anfang bis Ende durch, nur um die Anzahl
-// der Stopp-Positionen zu zählen - wird gegen die Timing-Event-Anzahl
-// verglichen, um zu entscheiden, ob eine ordinale 1:1-Zuordnung gilt (siehe
-// lib/timingSync.js).
-function countCursorSteps(osmd) {
-	const cursor = osmd.cursor
-	cursor.reset()
-	let steps = 0
-	const MAX_STEPS = 20000 // Schutz gegen eine unerwartete Endlosschleife
-	while (!cursor.iterator.EndReached && steps < MAX_STEPS) {
-		steps++
-		cursor.next()
-	}
-	cursor.reset()
-	return steps
-}
+import { resolveCursorRect } from '../lib/scoreLayout.js'
 
 /**
- * Treibt osmd.cursor synchron zur Wiedergabe von audioEl, portiert aus dem
- * Phase-1-Spike (spike/main.js) - inklusive der dort gefundenen und
- * behobenen Bugs (Off-by-one bei currentIndex, Nearest-Neighbour-Snapping
- * bei einer gröberen Timing-Quelle als der Cursor-Schrittzahl).
+ * Treibt eine reaktive Cursor-Position aus einer Zeitquelle (bis Phase 9
+ * lib/silentClock.js, danach lib/player.js - beide erfüllen dieselbe
+ * kleine Schnittstelle, siehe dort). Reine rAF-Schleife, die reine
+ * Zuordnungslogik (Zeit -> Element-Koordinate) steckt in
+ * lib/scoreLayout.js.
  *
- * @param {import('opensheetmusicdisplay').OpenSheetMusicDisplay} osmd bereits geladen & gerendert
- * @param {HTMLAudioElement} audioEl
- * @param {Array<{elid: number, timeMs: number}>} timingEvents aus timing.json (Sidecar-geparste .spos)
- * @returns {{ exact: boolean, cursorStepCount: number, eventCount: number, stop: () => void }}
+ * Tempo-unabhängig: die Zeitquelle liefert bereits Original-Partiturzeit,
+ * kein Umrechnen hier - eine Tempoänderung (Phase 9) skaliert
+ * `getCurrentTimeMs()` an der Quelle, nicht die Timingdaten selbst (siehe
+ * PLAN.md Phase 8, "Tempo-unabhängig rechnen").
+ *
+ * Ersetzt vollständig den vorherigen OSMD-Cursor-Ansatz: kein
+ * `countCursorSteps()` (lief die ganze Partitur nur zum Zählen durch), kein
+ * ordinales Index-Matching, kein `currentIndex`-Sonderfall für den
+ * allerersten Tick - der Overlay-Cursor braucht nichts davon, weil er kein
+ * Renderer-interner Zustand ist, sondern bei jedem Tick direkt aus der Zeit
+ * berechnet wird (siehe PLAN.md Abschnitt 2/4).
+ *
+ * @param {import('../lib/scoreLayout.js').Timeline} timeline
+ * @param {{getCurrentTimeMs():number, isPlaying():boolean, addEventListener:Function, removeEventListener:Function}} clock
+ * @param {(rect: {page:number,x:number,y:number,w:number,h:number}|null) => void} onCursorChange
+ * @returns {{ stop: () => void }}
  */
-export function useScoreSync(osmd, audioEl, timingEvents) {
-	const cursorStepCount = countCursorSteps(osmd)
-	const { times: stepTimesMs, exact } = buildStepTimes(cursorStepCount, timingEvents)
-
-	// null = "Cursor-Position unbekannt / braucht vollen reset()+iterate"; mit
-	// einer Zahl (z.B. -1) würde 0 === -1 + 1 den allerersten Tick fälschlich
-	// als Ein-Schritt-Vorwärtsbewegung lesen und den Cursor sofort über die
-	// erste Note hinaus springen lassen (Bug aus dem Spike, siehe main.js).
-	let currentIndex = null
+export function useScoreSync(timeline, clock, onCursorChange) {
 	let rafHandle = null
+	let lastRect
 
-	function moveCursorTo(index) {
-		if (stepTimesMs.length === 0 || index === currentIndex) {
-			return
+	function update() {
+		const rect = resolveCursorRect(timeline, clock.getCurrentTimeMs())
+		// Objektreferenz aus timeline.elements ist für dasselbe elid stabil
+		// (siehe scoreLayout.js) - so löst ein unveränderter Notenkopf über
+		// mehrere rAF-Frames hinweg keine unnötige Vue-Reaktivität aus.
+		if (rect !== lastRect) {
+			lastRect = rect
+			onCursorChange(rect)
 		}
-		const cursor = osmd.cursor
-		if (currentIndex !== null && index === currentIndex + 1) {
-			cursor.next()
-		} else {
-			cursor.reset()
-			for (let i = 0; i < index; i++) cursor.next()
-		}
-		currentIndex = index
 	}
 
 	function tick() {
-		if (stepTimesMs.length > 0 && !audioEl.paused && !audioEl.ended) {
-			moveCursorTo(findStepIndex(stepTimesMs, audioEl.currentTime * 1000))
+		if (clock.isPlaying()) {
+			update()
 		}
 		rafHandle = requestAnimationFrame(tick)
 	}
 
 	function onSeeked() {
-		if (stepTimesMs.length === 0) {
-			return
-		}
-		currentIndex = null // erzwingt den reset()+iterate-Pfad auch bei einem kleinen Sprung
-		moveCursorTo(findStepIndex(stepTimesMs, audioEl.currentTime * 1000))
+		update()
 	}
 
-	osmd.cursor.show()
-	osmd.cursor.reset()
-	currentIndex = 0 // reset() hat den Cursor bereits visuell auf Schritt 0 gesetzt
-	audioEl.addEventListener('seeked', onSeeked)
+	clock.addEventListener('seeked', onSeeked)
+	update()
 	rafHandle = requestAnimationFrame(tick)
 
 	function stop() {
 		cancelAnimationFrame(rafHandle)
-		audioEl.removeEventListener('seeked', onSeeked)
+		clock.removeEventListener('seeked', onSeeked)
 	}
 
-	return { exact, cursorStepCount, eventCount: timingEvents.length, stop }
+	return { stop }
 }

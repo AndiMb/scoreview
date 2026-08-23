@@ -88,6 +88,62 @@ class SidecarClient {
 		return $body;
 	}
 
+	/**
+	 * Verfuegbarkeit/Version des vom Sidecar mitgelieferten SoundFonts
+	 * (Phase 9 - siehe Service\SoundFontService fuer den Grund, warum der
+	 * Sidecar das ausliefert). Antwortet bewusst mit HTTP 200 +
+	 * `available: false` statt 404, wenn das Image keins hat: ein 404 waere
+	 * fuer Guzzle ein Fehler und liesse sich hier nicht mehr von einem
+	 * echten Verbindungsproblem unterscheiden.
+	 *
+	 * @return array{available: bool, name?: string, size?: int, version?: string}
+	 * @throws SidecarException
+	 */
+	public function fetchSoundFontInfo(): array {
+		if (!$this->isConfigured()) {
+			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).');
+		}
+		$client = $this->clientService->newClient();
+		try {
+			$response = $client->get($this->getBaseUrl() . '/soundfont/info', [
+				'headers' => $this->headers(),
+			]);
+		} catch (\Exception $e) {
+			throw new SidecarException('Sidecar-Abfrage des SoundFonts fehlgeschlagen: ' . $e->getMessage(), 0, $e);
+		}
+		$body = json_decode($response->getBody(), true);
+		if (!is_array($body) || !isset($body['available'])) {
+			throw new SidecarException('Sidecar-Antwort auf /soundfont/info ohne available-Feld.');
+		}
+		return $body;
+	}
+
+	/**
+	 * Laedt den SoundFont in eine lokale Datei statt in einen PHP-String -
+	 * ein SF3 ist ~40 MB und wuerde als String unnoetig am memory_limit
+	 * kratzen. Guzzles `sink` schreibt den Body direkt streamend dorthin.
+	 *
+	 * @throws SidecarException
+	 */
+	public function downloadSoundFontTo(string $targetPath): void {
+		if (!$this->isConfigured()) {
+			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).');
+		}
+		$client = $this->clientService->newClient();
+		try {
+			$client->get($this->getBaseUrl() . '/soundfont', [
+				'headers' => $this->headers(),
+				'sink' => $targetPath,
+				// Deutlich groesser als der Default: 40 MB ueber eine langsame
+				// Verbindung zwischen zwei Containern darf nicht mittendrin
+				// abbrechen.
+				'timeout' => 120,
+			]);
+		} catch (\Exception $e) {
+			throw new SidecarException('SoundFont-Download vom Sidecar fehlgeschlagen: ' . $e->getMessage(), 0, $e);
+		}
+	}
+
 	/** @throws SidecarException */
 	public function fetchFile(string $relativeUrl): string {
 		$client = $this->clientService->newClient();

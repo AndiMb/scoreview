@@ -28,6 +28,8 @@ class AdminSettings implements ISettings {
 		return new TemplateResponse(Application::APP_ID, 'settings/admin', [
 			'sidecarUrl' => $this->config->getAppValue(Application::APP_ID, 'sidecar_url', ''),
 			'sidecarSecretSet' => $this->config->getAppValue(Application::APP_ID, 'sidecar_secret', '') !== '',
+			'eagerConversion' => $this->config->getAppValue(Application::APP_ID, 'eager_conversion', '0') === '1',
+			'soundFontUrl' => $this->config->getAppValue(Application::APP_ID, 'soundfont_url', ''),
 		], TemplateResponse::RENDER_AS_BLANK);
 	}
 

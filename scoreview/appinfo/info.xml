@@ -10,31 +10,40 @@
 	<summary lang="en">Open sheet music from Files: converted once, played back in sync</summary>
 	<description lang="de"><![CDATA[
 **Prototyp.** ScoreView zeigt MuseScore-Partituren (.mscz) direkt aus Files an
-- als Notation mit einem Wiedergabe-Cursor, der synchron zur Audiospur
-mitläuft, statt als starrer PDF-Export.
+- als originalgetreue MuseScore-Notation (SVG) mit einem Wiedergabe-Cursor,
+der synchron zur clientseitig synthetisierten MIDI-Wiedergabe mitläuft,
+statt als starrer PDF-Export.
 
-Eine hochgeladene .mscz-Datei wird serverseitig einmalig zu MusicXML, Audio
-und Timing-Daten konvertiert und danach gecacht: erneutes Öffnen derselben
-Datei rendert nicht neu, sondern bedient sich aus dem Cache. Erst ein
-Re-Upload/eine Änderung der Datei stößt eine erneute Konvertierung an.
+Eine hochgeladene .mscz-Datei wird über einen separaten MuseScore-Sidecar
+einmalig zu Notenseiten (SVG), MIDI und Timing-Daten konvertiert und danach
+gecacht: erneutes Öffnen derselben Datei rendert nicht neu, sondern bedient
+sich aus dem Cache. Erst ein Re-Upload/eine Änderung der Datei stößt eine
+erneute Konvertierung an. Voraussetzung ist ein erreichbarer
+MuseScore-Sidecar (separat betrieben, nicht Teil dieses App-Pakets) sowie
+ein vom Administrator konfiguriertes SoundFont für die Wiedergabe.
 
-Aktueller Stand: Grundgerüst der App, die eigentliche Konvertierungs-Pipeline
-und Viewer-Integration folgen in den nächsten Phasen.
+Funktionsumfang: Taktnavigation, Loop, Zoom, Klick-auf-Note-Sprung, Mixer
+(Lautstärke/Mute/Solo pro Stimme, Tempo), private Notizen an musikalischen
+Ankern (Takt-Position, übersteht einen Re-Upload).
 	]]></description>
 	<description lang="en"><![CDATA[
 **Prototype.** ScoreView displays MuseScore scores (.mscz) directly from
-Files - as notation with a playback cursor that follows the audio track in
-sync, instead of a static PDF export.
+Files - as faithful MuseScore notation (SVG) with a playback cursor that
+follows client-side synthesized MIDI playback in sync, instead of a static
+PDF export.
 
-An uploaded .mscz file is converted once, server-side, to MusicXML, audio
-and timing data, then cached: opening the same file again does not
-re-render, it is served from the cache. Only a re-upload/change of the file
-triggers a new conversion.
+An uploaded .mscz file is converted once, via a separate MuseScore sidecar,
+to notation pages (SVG), MIDI and timing data, then cached: opening the
+same file again does not re-render, it is served from the cache. Only a
+re-upload/change of the file triggers a new conversion. Requires a
+reachable MuseScore sidecar (operated separately, not part of this app
+package) and an administrator-configured SoundFont for playback.
 
-Current state: application skeleton only - the actual conversion pipeline
-and Viewer integration follow in upcoming phases.
+Feature set: measure navigation, loop, zoom, click-to-note jump, mixer
+(per-voice volume/mute/solo, tempo), private annotations anchored to
+musical position (survives a re-upload).
 	]]></description>
-	<version>0.0.7</version>
+	<version>0.0.9</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>

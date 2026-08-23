@@ -19,6 +19,11 @@ spike/test-scores/*.musicxml
 spike/test-scores/*.spos
 spike/test-scores/*.mpos
 
+# Exception: self-composed, license-clean fixture for Phase 5 (repeats /
+# volta / D.C.) - see spike/test-scores/README.md.
+!spike/test-scores/repeat-test.mscz
+!spike/test-scores/repeat-test.musicxml
+
 # Converted spike assets served to the browser - derived from the same
 # not-guaranteed-public-domain sources as spike/test-scores/.
 spike/public/scores/
