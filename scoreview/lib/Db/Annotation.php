@@ -60,6 +60,12 @@ class Annotation extends Entity implements \JsonSerializable {
 			'id' => $this->getId(),
 			'measureNumber' => $this->measureNumber,
 			'fraction' => $this->fraction,
+			// Bislang nie ausgeliefert (bis Phase 18 unbemerkt) - der Sekundär-
+			// anker aus Phase 11 (exakte Notenkoordinate innerhalb desselben
+			// etags, siehe scoreLayout.js annotationMarkers) konnte dadurch nie
+			// greifen, jede Notiz landete immer auf der gröberen Takt-Näherung.
+			'elid' => $this->elid,
+			'anchorEtag' => $this->anchorEtag,
 			'content' => $this->content,
 			'visibility' => $this->visibility,
 			'createdAt' => $this->createdAt?->format(\DateTimeInterface::ATOM),

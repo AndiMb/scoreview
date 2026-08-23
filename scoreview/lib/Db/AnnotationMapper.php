@@ -18,31 +18,42 @@ class AnnotationMapper extends QBMapper {
 	}
 
 	/**
+	 * Alles, was eine Nutzerin zu dieser Datei sehen darf (Phase 18): die
+	 * eigenen privaten Notizen PLUS alle geteilten Notizen dieser Datei
+	 * (unabhängig davon, wer sie angelegt hat - "geteilt" heißt für jeden
+	 * mit Dateizugriff sichtbar, siehe PLAN.md Phase 18).
+	 *
 	 * @return Annotation[]
 	 */
-	public function findByFileIdAndUser(int $fileId, string $userId): array {
+	public function findVisibleForUser(int $fileId, string $userId): array {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')
 			->from($this->getTableName())
 			->where($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
+			->andWhere($qb->expr()->orX(
+				$qb->expr()->eq('user_id', $qb->createNamedParameter($userId)),
+				$qb->expr()->eq('visibility', $qb->createNamedParameter(Annotation::VISIBILITY_SHARED)),
+			))
 			->orderBy('measure_number', 'ASC')
 			->addOrderBy('fraction', 'ASC');
 		return $this->findEntities($qb);
 	}
 
 	/**
-	 * Nie eine Annotation ueber die reine ID laden, ohne zugleich Datei UND
-	 * Owner zu pruefen - sonst koennte eine Nutzerin ueber eine erratene ID
-	 * eine fremde Notiz lesen/aendern/loeschen.
+	 * Nur ueber Datei-ID gefiltert, bewusst OHNE Owner-Einschraenkung (anders
+	 * als der bisherige Name suggerieren wuerde) - seit Phase 18 duerfen
+	 * geteilte Notizen von JEDER Nutzerin mit Schreibrecht auf die Datei
+	 * geaendert werden, nicht nur von der Autorin. Die eigentliche
+	 * Zugriffsentscheidung (Owner bei privat, Schreibrecht bei geteilt)
+	 * trifft AnnotationService::canModify(), nicht diese Abfrage - sie liefert
+	 * nur "existiert diese ID zu dieser Datei ueberhaupt".
 	 */
-	public function findOwnById(int $id, int $fileId, string $userId): ?Annotation {
+	public function findByIdAndFileId(int $id, int $fileId): ?Annotation {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')
 			->from($this->getTableName())
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
-			->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)));
+			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)));
 		try {
 			return $this->findEntity($qb);
 		} catch (DoesNotExistException) {

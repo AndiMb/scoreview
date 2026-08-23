@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Db\Annotation;
 use OCA\ScoreView\Service\AnnotationService;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\UserFileResolver;
@@ -12,15 +13,20 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\Constants;
 use OCP\IL10N;
 use OCP\IRequest;
 
 /**
- * Private Notizen (Phase 11) - immer nur zur eigenen Sicht auf eine Datei,
- * nie fremde Notizen. fileId wird wie in ConversionController ausschliesslich
- * ueber UserFileResolver aufgeloest (Zugriffskontrolle ueber den Dateibaum),
- * die eigentliche Annotation-Zeile zusaetzlich ueber (id, fileId, userId) in
- * AnnotationService/-Mapper (Zugriffskontrolle auf die Notiz selbst).
+ * Notizen: privat (Phase 11) und geteilt (Phase 18). fileId wird wie in
+ * ConversionController ausschliesslich ueber UserFileResolver aufgeloest
+ * (Zugriffskontrolle ueber den Dateibaum), die eigentliche Annotation-Zeile
+ * zusaetzlich ueber (id, fileId) in AnnotationService/-Mapper geprueft -
+ * bei privaten Notizen gegen die userId (Owner-only, wie bisher), bei
+ * geteilten gegen `PERMISSION_UPDATE` am aufgeloesten Node (siehe
+ * canWriteShared() - wer die Datei bearbeiten darf, darf auch geteilte
+ * Notizen dazu anlegen/aendern/loeschen, unabhaengig davon, wer sie
+ * urspruenglich angelegt hat).
  */
 class AnnotationController extends Controller {
 	public function __construct(
@@ -55,7 +61,7 @@ class AnnotationController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	public function create(int $fileId, int $measureNumber, float $fraction, string $content, ?int $elid = null, ?string $anchorEtag = null): JSONResponse {
+	public function create(int $fileId, int $measureNumber, float $fraction, string $content, ?int $elid = null, ?string $anchorEtag = null, string $visibility = Annotation::VISIBILITY_PRIVATE): JSONResponse {
 		$userId = $this->requireOwnAccess($fileId);
 		if ($userId === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
@@ -63,9 +69,17 @@ class AnnotationController extends Controller {
 		if (trim($content) === '') {
 			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
 		}
+		// Unbekannte Werte defensiv auf 'private' abbilden statt sie
+		// ungeprueft in die Spalte zu schreiben - visibility steuert
+		// Sichtbarkeit fuer ALLE mit Dateizugriff, ein Tippfehler im Client
+		// darf hier nicht versehentlich "geteilt" bedeuten.
+		$visibility = $visibility === Annotation::VISIBILITY_SHARED ? Annotation::VISIBILITY_SHARED : Annotation::VISIBILITY_PRIVATE;
+		if ($visibility === Annotation::VISIBILITY_SHARED && !$this->canWriteShared($fileId)) {
+			return new JSONResponse(['error' => $this->l->t('You do not have permission to create shared notes for this file.')], Http::STATUS_FORBIDDEN);
+		}
 
-		$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content);
-		return new JSONResponse($annotation->jsonSerialize(), Http::STATUS_CREATED);
+		$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content, $visibility);
+		return new JSONResponse($this->annotationService->serialize($annotation, $userId), Http::STATUS_CREATED);
 	}
 
 	#[NoAdminRequired]
@@ -79,14 +93,14 @@ class AnnotationController extends Controller {
 		}
 
 		try {
-			$annotation = $this->annotationService->updateContent($id, $fileId, $userId, $content);
+			$annotation = $this->annotationService->updateContent($id, $fileId, $userId, $this->canWriteShared($fileId), $content);
 		} catch (\RuntimeException) {
-			// AnnotationService signalisiert nur EINEN Fehlerfall darueber (kein
-			// eigener Zugriff auf diese Notiz) - die Exception-Message selbst ist
-			// interne Diagnose, nicht fuer IL10N gedacht (siehe deren Kommentar).
+			return new JSONResponse(['error' => $this->l->t('You do not have permission to change this note.')], Http::STATUS_FORBIDDEN);
+		}
+		if ($annotation === null) {
 			return new JSONResponse(['error' => $this->l->t('Note not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
-		return new JSONResponse($annotation->jsonSerialize());
+		return new JSONResponse($this->annotationService->serialize($annotation, $userId));
 	}
 
 	#[NoAdminRequired]
@@ -97,8 +111,11 @@ class AnnotationController extends Controller {
 		}
 
 		try {
-			$this->annotationService->delete($id, $fileId, $userId);
+			$deleted = $this->annotationService->delete($id, $fileId, $userId, $this->canWriteShared($fileId));
 		} catch (\RuntimeException) {
+			return new JSONResponse(['error' => $this->l->t('You do not have permission to change this note.')], Http::STATUS_FORBIDDEN);
+		}
+		if (!$deleted) {
 			return new JSONResponse(['error' => $this->l->t('Note not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 		return new JSONResponse(['status' => 'ok']);
@@ -109,6 +126,23 @@ class AnnotationController extends Controller {
 			return null;
 		}
 		return $this->fileResolver->currentUserId();
+	}
+
+	/**
+	 * Ob die anfragende Nutzerin geteilte Notizen dieser Datei anlegen/
+	 * aendern/loeschen darf (PLAN.md Phase 18: "an den Dateirechten
+	 * festmachen, statt eine eigene Rechteverwaltung zu bauen"). Der
+	 * aufgeloeste Node spiegelt bereits die Rechte AUS SICHT der anfragenden
+	 * Nutzerin wider (UserFileResolver liest ueber deren eigenen
+	 * Dateibaum) - bei einer geteilten Datei ist das genau die vom Share
+	 * gewaehrte Berechtigung.
+	 */
+	private function canWriteShared(int $fileId): bool {
+		$node = $this->fileResolver->resolveOwnNode($fileId);
+		if ($node === null) {
+			return false;
+		}
+		return ($node->getPermissions() & Constants::PERMISSION_UPDATE) !== 0;
 	}
 
 	private function currentMeasureCount(int $fileId, string $etag): ?int {
