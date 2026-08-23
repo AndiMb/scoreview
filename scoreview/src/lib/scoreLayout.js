@@ -270,21 +270,28 @@ export function computeActualSizeZoom(sizeMm) {
 }
 
 /**
- * Minimale, regex-basierte Bereinigung von SVG-Text vor dem direkten
- * Einbetten ins DOM (v-html in ScorePage.vue): entfernt <script>-Elemente
- * und on*-Eventhandler-Attribute. Kein Ersatz für einen echten
- * SVG-Sanitizer (z.B. DOMPurify) - hier bewusst ohne neue Abhängigkeit
- * gelöst, weil die Quelle MuseScores eigener, gut getesteter
- * SVG-Serializer ist (kein Fremd-/Nutzer-HTML), aber .mscz-Dateien selbst
- * sind Nutzer-Uploads, daher diese zusätzliche Schutzschicht statt
- * blindem Vertrauen in die Quelle.
+ * Pinch-Zoom (Phase 19): reine Verhältnisrechnung aus zwei Fingerabständen,
+ * relativ zum Zoom bei Gestenbeginn - die eigentliche Touch-Ereignisverarbeitung
+ * (Geste erkennen, Abstand messen, Browser-eigenen Seiten-Zoom währenddessen
+ * unterdrücken) lebt in ScoreViewer.vue, hier nur die Zahl.
  *
- * @param {string} svgText
- * @returns {string}
+ * @param {number} startDistance Fingerabstand (px) beim Start der Geste
+ * @param {number} currentDistance Fingerabstand (px) aktuell
+ * @param {number} startZoom Zoom-Wert bei Gestenbeginn
+ * @param {{min?:number,max?:number}} [bounds] wie beim stufenlosen Zoom-Regler (0,5-2)
+ * @returns {number}
  */
-export function sanitizeSvg(svgText) {
-	return svgText
-		.replace(/<script[\s\S]*?<\/script>/gi, '')
-		.replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, '')
-		.replace(/\son[a-z]+\s*=\s*'[^']*'/gi, '')
+export function computePinchZoom(startDistance, currentDistance, startZoom, { min = 0.5, max = 2 } = {}) {
+	if (startDistance <= 0) {
+		return startZoom
+	}
+	const zoom = startZoom * (currentDistance / startDistance)
+	return Math.min(max, Math.max(min, zoom))
 }
+
+// `sanitizeSvg()` lebte bis Phase 20 hier als regexbasierte Fassung und ist
+// nach `svgSanitizer.js` gewandert (DOMPurify, echtes Parsen statt
+// Textersetzung). Grund war eine Messung, keine Stilfrage: die alte Fassung
+// liess 9 von 15 geprueften Umgehungsmustern durch - siehe PLAN.md Phase 20
+// und den Kommentar in svgSanitizer.js. Diese Datei bleibt bewusst DOM-frei
+// (CLAUDE.md), der Sanitizer braucht dagegen ein DOM.

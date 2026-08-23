@@ -46,18 +46,31 @@
 					@input="onSeekInput">
 				<span class="scoreview-time">{{ formatTime(currentTimeMs) }} / {{ formatTime(durationMs) }}</span>
 				<template v-if="hasRealPlayer">
-					<label class="scoreview-tempo-label">
-						{{ Math.round(tempo * 100) }}%
+					<!--
+						BPM statt Prozent (Phase 17, auf Basis von M8: metadata.tempo ist
+						Viertel-BPM) - der Notensymbol-Text "♩ = 80" statt "100%" ist die
+						Einheit, die eine Chorleitung tatsächlich ansagt. tempoGuessed
+						markiert Partituren ohne eigene Tempoangabe (M8: tempo kann 0
+						sein) sichtbar als geschätzt, statt eine Genauigkeit vorzutäuschen,
+						die nicht da ist.
+					-->
+					<label class="scoreview-tempo-label" :title="tempoGuessed ? t('No tempo marking in the score – 120 BPM assumed.') : ''">
+						♩ = {{ effectiveTempoBpm }}{{ tempoGuessed ? '*' : '' }}
 						<input
 							type="range"
 							class="scoreview-tempo"
-							min="0.5"
-							max="1.5"
-							step="0.05"
-							:value="tempo"
-							:aria-label="t('Tempo')"
-							@input="onTempoInput">
+							:min="minTempoBpm"
+							:max="maxTempoBpm"
+							step="1"
+							:value="effectiveTempoBpm"
+							:aria-label="t('Tempo (BPM)')"
+							@input="onTempoBpmInput">
 					</label>
+					<NcButton :pressed="metronomeEnabled" :aria-label="metronomeEnabled ? t('Metronome on') : t('Metronome off')" @click="metronomeEnabled = !metronomeEnabled">
+						<template #icon>
+							<Metronome :size="20" />
+						</template>
+					</NcButton>
 					<NcButton :pressed="showMixer" :aria-label="t('Mixer')" @click="showMixer = !showMixer">
 						<template #icon>
 							<Tune :size="20" />
@@ -93,18 +106,23 @@
 						v-model.number="loopFromMeasure"
 						type="number"
 						min="1"
-						class="scoreview-measure-input"
-						:label="t('from')"
+						class="scoreview-loop-input"
+						:label="t('From measure')"
 						label-outside
 						:placeholder="t('from')" />
 					<NcTextField
 						v-model.number="loopToMeasure"
 						type="number"
 						min="1"
-						class="scoreview-measure-input"
-						:label="t('to')"
+						class="scoreview-loop-input"
+						:label="t('To measure')"
 						label-outside
 						:placeholder="t('to')" />
+					<NcButton :aria-label="t('Loop from current measure')" :title="t('Loop from current measure')" @click="loopFromCurrentMeasure">
+						<template #icon>
+							<CrosshairsGps :size="20" />
+						</template>
+					</NcButton>
 					<NcButton :pressed="loopActive" :aria-label="loopActive ? t('Loop on') : t('Loop off')" @click="toggleLoop">
 						<template #icon>
 							<Repeat :size="20" />
@@ -116,19 +134,32 @@
 					{{ t('Zoom') }}
 					<input type="range" min="0.5" max="2" step="0.1" :value="zoom" :aria-label="t('Zoom')" @input="onZoomInput">
 				</label>
-				<NcButton :aria-label="t('Fit page width')" @click="applyZoomPreset('width')">
-					<template #icon>
-						<ArrowExpandHorizontal :size="20" />
-					</template>
-				</NcButton>
-				<NcButton :aria-label="t('Fit whole page')" @click="applyZoomPreset('page')">
-					<template #icon>
-						<FitToPage :size="20" />
-					</template>
-				</NcButton>
-				<NcButton :aria-label="t('Actual size')" @click="applyZoomPreset('actual')">
-					100%
-				</NcButton>
+				<!--
+					Zoom-Presets in ein Aktionsmenue statt drei einzelne Knoepfe
+					(Phase 19: "selten Benutztes in ein Aktionsmenue", der stufenlose
+					Regler direkt daneben bleibt der primaere Zoom-Weg) - entlastet die
+					Leiste auf schmalen/Touch-Bildschirmen.
+				-->
+				<NcActions :aria-label="t('More zoom options')">
+					<NcActionButton @click="applyZoomPreset('width')">
+						<template #icon>
+							<ArrowExpandHorizontal :size="20" />
+						</template>
+						{{ t('Fit page width') }}
+					</NcActionButton>
+					<NcActionButton @click="applyZoomPreset('page')">
+						<template #icon>
+							<FitToPage :size="20" />
+						</template>
+						{{ t('Fit whole page') }}
+					</NcActionButton>
+					<NcActionButton @click="applyZoomPreset('actual')">
+						<template #icon>
+							<Magnify :size="20" />
+						</template>
+						{{ t('Actual size') }}
+					</NcActionButton>
+				</NcActions>
 				<NcButton :pressed="isFullscreen" :aria-label="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')" @click="toggleFullscreen">
 					<template #icon>
 						<FullscreenExit v-if="isFullscreen" :size="20" />
@@ -136,7 +167,13 @@
 					</template>
 				</NcButton>
 			</div>
-			<NcNoteCard v-if="!hasRealPlayer" type="warning" class="scoreview-hint">
+			<NcNoteCard v-if="soundFontLoading" type="info" class="scoreview-hint">
+				{{ t('Loading sound ({percent}%)…', { percent: soundFontLoadPercent }) }}
+				<NcButton @click="skipSoundFontLoad">
+					{{ t('Continue without sound') }}
+				</NcButton>
+			</NcNoteCard>
+			<NcNoteCard v-else-if="!hasRealPlayer" type="warning" class="scoreview-hint">
 				{{ t('No sound: {reason}', { reason: playbackError || t('Playback is not available.') }) }}
 				{{ t('The score cursor keeps running independently of this.') }}
 			</NcNoteCard>
@@ -150,11 +187,30 @@
 				v-if="showAnnotations"
 				:annotations="annotations"
 				:current-anchor="currentAnchor"
+				:error="annotationError"
 				@create="onAnnotationCreate"
 				@update="onAnnotationUpdate"
 				@delete="onAnnotationDelete"
 				@jump-to="onAnnotationJumpTo" />
-			<div class="scoreview-pages">
+			<!--
+				Pinch-Zoom (Phase 19): eigene, zweifingrige Geste statt der
+				nativen Browser-Seiten-Zoom (die waere fuer die ganze
+				Nextcloud-Oberflaeche, nicht nur die Partitur) - siehe
+				onTouchMove(), das den Browser-Zoom waehrend der Geste bewusst
+				unterdrueckt (preventDefault). Einfingriges Scrollen bleibt
+				unangetastet (kein preventDefault dafuer), "Wischen zum
+				Blaettern" ist deshalb bewusst NICHT als zusaetzliche
+				Horizontal-Geste umgesetzt: das vertikale Scrollen deckt das
+				Blaettern in diesem fortlaufenden Einspaltenlayout bereits ab,
+				eine eigene Wischgeste haette zudem mit Nextcloud Viewers
+				eigener Wisch-zum-naechsten-Datei-Geste auf Mobilgeraeten
+				kollidieren koennen (siehe PLAN.md Phase 19).
+			-->
+			<div
+				class="scoreview-pages"
+				@touchstart="onTouchStart"
+				@touchmove="onTouchMove"
+				@touchend="onTouchEnd">
 				<ScorePage
 					v-for="(url, i) in pageUrls"
 					:key="url"
@@ -164,6 +220,7 @@
 					:cursor-rect="cursorRect"
 					:zoom="zoom"
 					:markers="annotationMarkers"
+					:loop-markers="loopMarkers"
 					@note-click="onNoteClick"
 					@marker-click="onAnnotationJumpToById"
 					@loaded="onPageLoaded" />
@@ -181,6 +238,8 @@ import NcTextField from '@nextcloud/vue/components/NcTextField'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import NcActions from '@nextcloud/vue/components/NcActions'
+import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import Play from 'vue-material-design-icons/Play.vue'
 import Pause from 'vue-material-design-icons/Pause.vue'
 import Tune from 'vue-material-design-icons/Tune.vue'
@@ -192,6 +251,9 @@ import ArrowExpandHorizontal from 'vue-material-design-icons/ArrowExpandHorizont
 import FitToPage from 'vue-material-design-icons/FitToPage.vue'
 import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
 import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
+import Metronome from 'vue-material-design-icons/Metronome.vue'
+import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
+import Magnify from 'vue-material-design-icons/Magnify.vue'
 import ScorePage from './ScorePage.vue'
 import ScoreMixer from './ScoreMixer.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
@@ -200,6 +262,7 @@ import {
 	computeActualSizeZoom,
 	computeFitPageZoom,
 	computeFitWidthZoom,
+	computePinchZoom,
 	findElementAtPoint,
 	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
@@ -212,6 +275,8 @@ import { planAutoScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
 import { useScoreSync } from '../composables/useScoreSync.js'
 import { createSilentClock } from '../lib/silentClock.js'
 import { createPlayer } from '../lib/player.js'
+import { computeCountInDelaysMs, estimateBeatsInMeasure } from '../lib/metronome.js'
+import { createMetronomeClick } from '../lib/metronomeClick.js'
 
 // Pausendauer für das Autoscroll-Nachführen nach manuellem Scrollen (Phase
 // 16, siehe scrollPlan.js) - lang genug, um in Ruhe zu lesen, kurz genug, um
@@ -229,6 +294,15 @@ const POLL_INTERVAL_MS = 2000
 // Puffer für den Ausklang der letzten Note. Mit echtem Player kommt die
 // Dauer stattdessen von player.durationMs (tatsächliche MIDI-Länge).
 const DURATION_PADDING_MS = 2000
+// MuseScores eigene Vorgabe für Partituren ohne Tempoangabe (M8: metadata.tempo
+// kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als Bezugswert für die
+// BPM-Anzeige/-Eingabe, gekennzeichnet über tempoGuessed (Phase 17).
+const DEFAULT_TEMPO_BPM = 120
+// Grenzen des Tempofaktors auf playbackRate, wie schon vor der BPM-Anzeige
+// (Phase 9 hat nur in diesem Bereich gemessen, dass die Zeitachse
+// tempounabhängig bleibt) - die BPM-Eingabe rechnet innerhalb dieser Grenzen.
+const MIN_TEMPO_FACTOR = 0.5
+const MAX_TEMPO_FACTOR = 1.5
 
 export default {
 	name: 'ScoreViewer',
@@ -242,6 +316,8 @@ export default {
 		NcLoadingIcon,
 		NcEmptyContent,
 		NcNoteCard,
+		NcActions,
+		NcActionButton,
 		Play,
 		Pause,
 		Tune,
@@ -253,6 +329,9 @@ export default {
 		FitToPage,
 		Fullscreen,
 		FullscreenExit,
+		Metronome,
+		CrosshairsGps,
+		Magnify,
 	},
 
 	props: {
@@ -295,6 +374,11 @@ export default {
 			// der SoundFont-Abruf oder der Synthesizer gescheitert war. Genau
 			// das machte "die App gibt keinen Ton aus" von außen undiagnostizierbar.
 			playbackError: '',
+			// metadata.tracks/parts (Phase 17) - für den zweiten resolveMixerChannels()-
+			// Aufruf in setUpRealPlayer() aufgehoben, sobald die echten MIDI-Kanäle
+			// bekannt sind (siehe dort).
+			metaTracks: null,
+			metaParts: null,
 			mixerChannels: [],
 			presetList: [],
 			showMixer: false,
@@ -331,11 +415,43 @@ export default {
 			loopStartMs: null,
 			loopEndMs: null,
 			zoom: 1,
-			// Phase 11: private Notizen.
+			// Phase 11: private Notizen, Phase 18: zusaetzlich geteilte.
 			annotations: [],
 			showAnnotations: false,
+			annotationError: '',
 			currentEtag: null,
 			currentElid: null,
+			// Phase 17: Tempo in BPM statt Prozent. baseTempoBpm ist
+			// metadata.tempo (Viertel-BPM, M8) bzw. DEFAULT_TEMPO_BPM, wenn die
+			// Partitur keine Tempoangabe trägt (tempoGuessed dann true) - `tempo`
+			// bleibt intern weiterhin der Faktor auf playbackRate (Phase 9: die
+			// Zeitachse bleibt davon unberührt), nur die Anzeige/Eingabe ist jetzt BPM.
+			baseTempoBpm: DEFAULT_TEMPO_BPM,
+			tempoGuessed: false,
+			// Phase 17: Metronom/Einzähler - Klick unabhängig vom Haupt-Synth
+			// (score.mid trägt nachweislich keine Metronomnoten, siehe
+			// lib/metronome.js), deshalb ein eigener AudioContext-Klick statt
+			// eines MIDI-Kanals.
+			metronomeEnabled: false,
+			metronomeClick: null,
+			lastClickedMeasureNumber: null,
+			countInTimers: [],
+			isCountingIn: false,
+			// Phase 19: Pinch-Zoom-Gestenzustand (siehe onTouchStart/-Move/-End).
+			isPinching: false,
+			pinchStartDistance: 0,
+			pinchStartZoom: 1,
+			// Phase 19: Bildschirm waehrend der Wiedergabe wachhalten
+			// (navigator.wakeLock) - das Sentinel-Objekt selbst wird nie im
+			// Template gebraucht, nur zum spaeteren release() aufgehoben.
+			wakeLockSentinel: null,
+			// Phase 19: SoundFont-Ladefortschritt (~40MB, "das wird auf dem
+			// Tablet zuerst wehtun", siehe PLAN.md) statt stummem Warten -
+			// getrennt vom permanenten playbackError (der bedeutet "geht nicht",
+			// hier heisst es nur "noch nicht fertig").
+			soundFontLoading: false,
+			soundFontLoadPercent: 0,
+			soundFontAbortController: null,
 		}
 	},
 
@@ -382,9 +498,49 @@ export default {
 				.map((a) => {
 					const rect = (a.elid !== null && a.anchorEtag === this.currentEtag ? this.timeline.elements[String(a.elid)] : null)
 						?? this.measuresTimeline.elements[String(a.measureNumber - 1)]
-					return rect ? { id: a.id, ...rect } : null
+					// mine/visibility fuers Marker-Styling in ScorePage.vue (Phase
+					// 18: eigene und geteilte Notizen sollen unterscheidbar sein).
+					return rect ? { id: a.id, mine: a.mine, visibility: a.visibility, ...rect } : null
 				})
 				.filter(Boolean)
+		},
+
+		// BPM-Anzeige/-Eingabe (Phase 17, auf Basis von M8: metadata.tempo ist
+		// Viertel-BPM) - gerundet, weil der interne Faktor (this.tempo) in
+		// Schritten von 0.05 läuft und eine Nachkommastelle hier keine
+		// zusätzliche Genauigkeit ausdrücken würde.
+		effectiveTempoBpm() {
+			return Math.round(this.baseTempoBpm * this.tempo)
+		},
+
+		minTempoBpm() {
+			return Math.round(this.baseTempoBpm * MIN_TEMPO_FACTOR)
+		},
+
+		maxTempoBpm() {
+			return Math.round(this.baseTempoBpm * MAX_TEMPO_FACTOR)
+		},
+
+		// Sichtbare Markierung des Loop-Bereichs im Notenbild (Phase 17) - zwei
+		// Flaggen an Start-/Ende-Takt, an dieselben Elementkoordinaten wie die
+		// Notiz-Marker angelehnt (measuresTimeline.elements), aber eigene
+		// Farbe/Form (siehe ScorePage.vue). Markiert bewusst nur den JEWEILIGEN
+		// TAKTANFANG, nicht die volle Taktbreite - measures.json liefert nur
+		// Punktkoordinaten (M4), keine Taktausdehnung.
+		loopMarkers() {
+			if (!this.loopActive || !this.measuresTimeline) {
+				return []
+			}
+			const fromRect = this.measuresTimeline.elements[String(Number(this.loopFromMeasure) - 1)]
+			const toRect = this.measuresTimeline.elements[String(Number(this.loopToMeasure) - 1)]
+			const markers = []
+			if (fromRect) {
+				markers.push({ id: 'loop-start', kind: 'start', ...fromRect })
+			}
+			if (toRect) {
+				markers.push({ id: 'loop-end', kind: 'end', ...toRect })
+			}
+			return markers
 		},
 	},
 
@@ -396,6 +552,18 @@ export default {
 				this.pollStatus()
 			},
 		},
+
+		// Bildschirm waehrend der Wiedergabe wachhalten (Phase 19) - als
+		// Watcher statt in togglePlay() verdrahtet, damit JEDER Weg, der die
+		// Wiedergabe startet (Tastaturkuerzel, Einzaehler-Ende, Loop-Neustart),
+		// automatisch erfasst ist, ohne an jeder Stelle einzeln daran zu denken.
+		isPlaying(playing) {
+			if (playing) {
+				this.requestWakeLock()
+			} else {
+				this.releaseWakeLock()
+			}
+		},
 	},
 
 	mounted() {
@@ -406,12 +574,18 @@ export default {
 		// Partitur neu entstehen).
 		this.$el.addEventListener('scroll', this.onViewerScroll, { passive: true })
 		document.addEventListener('fullscreenchange', this.onFullscreenChange)
+		// Tastaturkürzel (Phase 17) NICHT passiv: Leertaste/Pfeiltasten sollen
+		// die Seite nicht zusätzlich scrollen (siehe onKeydown - preventDefault
+		// nur für die tatsächlich behandelten Tasten, alles andere bleibt
+		// unangetastet, insbesondere Nextclouds eigene Kürzel).
+		this.$el.addEventListener('keydown', this.onKeydown)
 	},
 
 	beforeUnmount() {
 		this.cleanup()
 		this.$el.removeEventListener('scroll', this.onViewerScroll)
 		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
+		this.$el.removeEventListener('keydown', this.onKeydown)
 	},
 
 	methods: {
@@ -480,8 +654,20 @@ export default {
 			this.zoom = 1
 			this.annotations = []
 			this.showAnnotations = false
+			this.annotationError = ''
 			this.currentEtag = null
 			this.currentElid = null
+			this.metaTracks = null
+			this.metaParts = null
+			this.baseTempoBpm = DEFAULT_TEMPO_BPM
+			this.tempoGuessed = false
+			this.metronomeEnabled = false
+			this.lastClickedMeasureNumber = null
+			this.isCountingIn = false
+			this.isPinching = false
+			this.soundFontLoading = false
+			this.soundFontLoadPercent = 0
+			this.soundFontAbortController = null
 		},
 
 		cleanup() {
@@ -493,6 +679,9 @@ export default {
 				this.sync.stop()
 				this.sync = null
 			}
+			this.clearCountIn()
+			this.metronomeClick?.destroy?.()
+			this.metronomeClick = null
 			if (this.timeDisplayHandle) {
 				cancelAnimationFrame(this.timeDisplayHandle)
 				this.timeDisplayHandle = null
@@ -501,6 +690,9 @@ export default {
 			// silentClock hat kein destroy(), daher der Guard.
 			this.clock?.destroy?.()
 			this.clock = null
+			this.soundFontAbortController?.abort()
+			this.soundFontAbortController = null
+			this.releaseWakeLock()
 		},
 
 		async pollStatus() {
@@ -551,7 +743,16 @@ export default {
 				this.measuresTimeline = buildTimeline(measuresRes.data)
 				this.pageUrls = files.pages
 				this.currentEtag = files.etag
-				this.mixerChannels = resolveMixerChannels(metaRes.data.tracks, metaRes.data.parts)
+				this.metaTracks = metaRes.data.tracks
+				this.metaParts = metaRes.data.parts
+				// Vorlaeufig ohne echte Kanaldaten (der Player ist noch nicht
+				// geladen) - resolveMixerChannels() faellt dann auf den
+				// Spurindex zurueck. setUpRealPlayer() ersetzt das unten durch
+				// die tatsaechlichen, aus dem MIDI gelesenen Kanaele (Phase 17,
+				// siehe mixerLayout.js zur Index!=Kanal-Falle).
+				this.mixerChannels = resolveMixerChannels(this.metaTracks, this.metaParts)
+				this.baseTempoBpm = metaRes.data.tempo || DEFAULT_TEMPO_BPM
+				this.tempoGuessed = !metaRes.data.tempo
 				this.scoreTitle = metaRes.data.title || ''
 				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
 				this.loadAnnotations()
@@ -586,44 +787,96 @@ export default {
 		},
 
 		async setUpRealPlayer(midiUrl, soundFontUrl) {
+			// Ladefortschritt statt stummem Warten (Phase 19: "die
+			// SoundFont-Groesse (~40MB) wird hier zuerst weh tun") - eigener
+			// AbortController fuers "Noten ohne Ton"-Weg (skipSoundFontLoad()).
+			this.soundFontAbortController = new AbortController()
+			this.soundFontLoading = true
+			this.soundFontLoadPercent = 0
 			try {
 				const [midiRes, soundFontBuffer] = await Promise.all([
 					axios.get(midiUrl, { responseType: 'arraybuffer' }),
-					// Bewusst fetch() statt @nextcloud/axios: die SoundFont-URL ist
-					// eine vom Admin frei konfigurierbare, potenziell fremde Adresse
-					// (siehe PLAN.md E1/Phase 9) - @nextcloud/axios hängt an jede
-					// Anfrage automatisch den CSRF-requesttoken-Header an, der dort
-					// weder gebraucht wird noch hin sollte, und erzwingt dadurch
-					// unnötig einen CORS-Preflight.
-					fetch(soundFontUrl).then(async (res) => {
-						if (!res.ok) {
-							// Die app-eigene Route antwortet im Fehlerfall mit
-							// {"error": "…"} (SoundFontController) - die Meldung ist
-							// für die Nutzerin brauchbarer als "HTTP 503".
-							const detail = await res.json().then((b) => b?.error).catch(() => null)
-							throw new Error(detail || `SoundFont-Abruf fehlgeschlagen: HTTP ${res.status}`)
-						}
-						return res.arrayBuffer()
-					}),
+					this.fetchSoundFontWithProgress(soundFontUrl, this.soundFontAbortController.signal),
 				])
 				const player = await createPlayer(midiRes.data, soundFontBuffer)
 				this.clock = player
 				this.hasRealPlayer = true
 				this.durationMs = player.durationMs
 				this.presetList = player.getPresetList() ?? []
+				// Jetzt mit den echten, aus dem geladenen MIDI gelesenen Kanaelen
+				// neu aufloesen (siehe mixerLayout.js) - vorher (s.o.) stand hier
+				// nur die Index-Naeherung, weil player.getTrackChannels() ein
+				// geladenes MIDI braucht.
+				this.mixerChannels = resolveMixerChannels(this.metaTracks, this.metaParts, player.getTrackChannels())
 			} catch (err) {
-				// SoundFont evtl. nicht erreichbar (falsche URL, CORS, Netzwerk) -
-				// Notenansicht bleibt trotzdem nutzbar, nur ohne Ton (siehe
-				// PLAN.md Risiko "SoundFont-Auslieferung").
-				// eslint-disable-next-line no-console
-				console.error('ScoreView: echte Wiedergabe konnte nicht initialisiert werden, falle auf stummen Modus zurück.', err)
-				this.playbackError = err.message
+				if (err.name === 'AbortError') {
+					// "Noten ohne Ton"-Weg (Phase 19) - bewusster Nutzerwunsch,
+					// kein Fehler, deshalb ohne console.error.
+					this.playbackError = this.t('Sound loading skipped.')
+				} else {
+					// SoundFont evtl. nicht erreichbar (falsche URL, CORS, Netzwerk) -
+					// Notenansicht bleibt trotzdem nutzbar, nur ohne Ton (siehe
+					// PLAN.md Risiko "SoundFont-Auslieferung").
+					// eslint-disable-next-line no-console
+					console.error('ScoreView: echte Wiedergabe konnte nicht initialisiert werden, falle auf stummen Modus zurück.', err)
+					this.playbackError = err.message
+				}
 				// buildTimeline({events: []}) wäre eine leere Zeitachse: der
 				// Transport hätte danach Dauer 0 und die Partitur ließe sich
 				// nicht mehr durchfahren. Die echte Timeline steht hier bereits
 				// zur Verfügung - sie ist auch im stummen Modus die richtige.
 				this.setUpSilentClock(this.timeline)
+			} finally {
+				this.soundFontLoading = false
+				this.soundFontAbortController = null
 			}
+		},
+
+		// Liest den SoundFont-Abruf gestreamt statt in einem Rutsch, um den
+		// Ladefortschritt zu kennen (Phase 19) - Content-Length ist bei einer
+		// gleichbleibenden, cachebaren Datei (siehe Phase 9 Cache-Header)
+		// zuverlaessig gesetzt; ohne sie (z.B. bei komprimiertem Transfer ohne
+		// bekannte Endlaenge) bleibt der Fortschritt bei 0%, der Abruf
+		// funktioniert trotzdem unveraendert.
+		//
+		// Bewusst fetch() statt @nextcloud/axios: die SoundFont-URL ist eine
+		// vom Admin frei konfigurierbare, potenziell fremde Adresse (siehe
+		// PLAN.md E1/Phase 9) - @nextcloud/axios haengt an jede Anfrage
+		// automatisch den CSRF-requesttoken-Header an, der dort weder
+		// gebraucht wird noch hin sollte, und erzwingt dadurch unnoetig einen
+		// CORS-Preflight.
+		async fetchSoundFontWithProgress(url, signal) {
+			const res = await fetch(url, { signal })
+			if (!res.ok) {
+				// Die app-eigene Route antwortet im Fehlerfall mit {"error": "…"}
+				// (SoundFontController) - die Meldung ist fuer die Nutzerin
+				// brauchbarer als "HTTP 503".
+				const detail = await res.json().then((b) => b?.error).catch(() => null)
+				throw new Error(detail || `SoundFont-Abruf fehlgeschlagen: HTTP ${res.status}`)
+			}
+			const total = Number(res.headers.get('Content-Length')) || 0
+			if (!total || !res.body?.getReader) {
+				return res.arrayBuffer()
+			}
+			const reader = res.body.getReader()
+			const chunks = []
+			let received = 0
+			for (;;) {
+				const { done, value } = await reader.read()
+				if (done) {
+					break
+				}
+				chunks.push(value)
+				received += value.length
+				this.soundFontLoadPercent = Math.round((received / total) * 100)
+			}
+			const buffer = new Uint8Array(received)
+			let offset = 0
+			for (const chunk of chunks) {
+				buffer.set(chunk, offset)
+				offset += chunk.length
+			}
+			return buffer.buffer
 		},
 
 		// Eigene rAF-Schleife statt Vue-Reaktivität direkt aus useScoreSync,
@@ -651,6 +904,19 @@ export default {
 					if (this.loopActive && this.loopEndMs !== null && this.currentTimeMs >= this.loopEndMs) {
 						this.clock.seek(this.loopStartMs)
 					}
+					// Metronom-Klick auf Taktebene (Phase 17): einmal pro Takt, sobald
+					// currentAnchor.measureNumber wechselt - measures.json liefert
+					// keine Schlagauflösung (siehe lib/metronome.js), ein Klick pro
+					// Schlag ist daraus nicht ableitbar. Während des Einzählers
+					// (isCountingIn) übernimmt startCountIn() die Klicks selbst, damit
+					// hier keine doppelten entstehen.
+					if (this.metronomeEnabled && this.isPlaying && !this.isCountingIn) {
+						const measureNumber = this.currentAnchor?.measureNumber
+						if (measureNumber && measureNumber !== this.lastClickedMeasureNumber) {
+							this.lastClickedMeasureNumber = measureNumber
+							this.ensureMetronomeClick().click(true)
+						}
+					}
 				}
 				this.timeDisplayHandle = requestAnimationFrame(step)
 			}
@@ -672,9 +938,59 @@ export default {
 			this.clock?.seek(Number(event.target.value))
 		},
 
-		onTempoInput(event) {
-			this.tempo = Number(event.target.value)
+		// BPM statt Prozent (Phase 17, M8) - rechnet die eingegebene Ziel-BPM in
+		// den internen playbackRate-Faktor um (Phase 9: die Zeitachse bleibt
+		// davon unberührt), begrenzt auf denselben Faktorbereich wie zuvor der
+		// Prozent-Regler (0,5-1,5, siehe MIN_/MAX_TEMPO_FACTOR).
+		onTempoBpmInput(event) {
+			const bpm = Number(event.target.value)
+			const factor = this.baseTempoBpm > 0 ? bpm / this.baseTempoBpm : 1
+			this.tempo = Math.min(MAX_TEMPO_FACTOR, Math.max(MIN_TEMPO_FACTOR, factor))
 			this.clock?.setTempo?.(this.tempo)
+		},
+
+		ensureMetronomeClick() {
+			if (!this.metronomeClick) {
+				this.metronomeClick = createMetronomeClick()
+			}
+			return this.metronomeClick
+		},
+
+		clearCountIn() {
+			this.countInTimers.forEach((id) => clearTimeout(id))
+			this.countInTimers = []
+			this.isCountingIn = false
+		},
+
+		// Einzähler vor dem Loop-Start (Phase 17: "mehr wert als die meiste
+		// übrige Mixer-Funktionalität"). Schätzt die Schlagzahl des Zieltaktes
+		// aus seiner Dauer und der aktuellen BPM (lib/metronome.js - measures.json
+		// trägt keine eigene Taktart), zählt in Echtzeit herunter und startet
+		// danach die Wiedergabe selbst.
+		startCountIn(targetMs) {
+			this.clearCountIn()
+			if (!this.measuresTimeline || this.measuresTimeline.events.length === 0) {
+				this.clock?.play()
+				return
+			}
+			const index = findStepIndex(this.measuresTimeline.times, targetMs)
+			const measureStartMs = this.measuresTimeline.events[index].timeMs
+			const nextMs = index + 1 < this.measuresTimeline.events.length
+				? this.measuresTimeline.events[index + 1].timeMs
+				: this.durationMs
+			const beatsInMeasure = estimateBeatsInMeasure(nextMs - measureStartMs, this.baseTempoBpm)
+			const bpm = this.effectiveTempoBpm > 0 ? this.effectiveTempoBpm : DEFAULT_TEMPO_BPM
+			const delays = computeCountInDelaysMs(beatsInMeasure, 60000 / bpm)
+			this.isCountingIn = true
+			const click = this.ensureMetronomeClick()
+			this.countInTimers = delays.map((delay, i) => setTimeout(() => {
+				click.click(i === 0)
+				if (i === delays.length - 1) {
+					this.isCountingIn = false
+					this.countInTimers = []
+					this.clock?.play()
+				}
+			}, delay))
 		},
 
 		onVolumesChanged(effectiveVolumes) {
@@ -700,6 +1016,7 @@ export default {
 				this.loopActive = false
 				this.loopStartMs = null
 				this.loopEndMs = null
+				this.clearCountIn()
 				return
 			}
 			if (!this.measuresTimeline || !this.loopFromMeasure || !this.loopToMeasure) {
@@ -717,10 +1034,57 @@ export default {
 			this.loopEndMs = endMs
 			this.loopActive = true
 			this.clock?.seek(startMs)
+			// Nur einzählen, wenn noch nicht gespielt wird - sonst würde eine
+			// laufende Probe unterbrochen statt unterstützt.
+			if (this.clock && !this.clock.isPlaying()) {
+				this.startCountIn(startMs)
+			}
+		},
+
+		// "Loop ab aktuellem Takt" (Phase 17: "der häufigste Fall in der Probe:
+		// man ist schon an der Stelle") - füllt nur das Feld, aktiviert den Loop
+		// nicht automatisch (der "bis"-Takt bleibt eine bewusste Entscheidung).
+		loopFromCurrentMeasure() {
+			const current = this.currentAnchor?.measureNumber
+			if (current) {
+				this.loopFromMeasure = current
+			}
 		},
 
 		onZoomInput(event) {
 			this.zoom = Number(event.target.value)
+		},
+
+		// Tastaturkürzel für die Probe (Phase 17) - greifen nur, wenn der Viewer
+		// den Fokus hat (Listener sitzt auf this.$el, keydown bubbelt dorthin,
+		// siehe mounted()) und der Fokus nicht in einem Eingabefeld liegt (sonst
+		// würde z.B. das Pfeiltasten-Navigieren im Takt-Eingabefeld gestohlen).
+		onKeydown(event) {
+			const tag = event.target?.tagName
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable) {
+				return
+			}
+			if (event.code === 'Space') {
+				event.preventDefault()
+				this.togglePlay()
+			} else if (event.code === 'ArrowRight') {
+				event.preventDefault()
+				this.jumpRelativeMeasure(1)
+			} else if (event.code === 'ArrowLeft') {
+				event.preventDefault()
+				this.jumpRelativeMeasure(-1)
+			} else if (event.code === 'KeyL') {
+				event.preventDefault()
+				this.toggleLoop()
+			}
+		},
+
+		jumpRelativeMeasure(delta) {
+			const current = this.currentAnchor?.measureNumber
+			if (!current) {
+				return
+			}
+			this.jumpToMeasure(Math.max(1, current + delta))
 		},
 
 		// Umkehrung von M4 (Phase 10, "Klick auf eine Note springt dorthin") -
@@ -754,6 +1118,7 @@ export default {
 		},
 
 		async onAnnotationCreate(draft) {
+			this.annotationError = ''
 			try {
 				const res = await axios.post(generateUrl('/apps/scoreview/api/scores/{fileId}/annotations', { fileId: this.fileid }), {
 					measureNumber: draft.measureNumber,
@@ -761,31 +1126,37 @@ export default {
 					elid: draft.elid,
 					anchorEtag: draft.anchorEtag,
 					content: draft.content,
+					visibility: draft.visibility,
 				})
 				this.annotations = [...this.annotations, { ...res.data, orphaned: false }]
 			} catch (err) {
 				// eslint-disable-next-line no-console
 				console.error('ScoreView: Notiz konnte nicht gespeichert werden.', err)
+				this.annotationError = err.response?.data?.error || err.message
 			}
 		},
 
 		async onAnnotationUpdate({ id, content }) {
+			this.annotationError = ''
 			try {
 				const res = await axios.put(generateUrl('/apps/scoreview/api/scores/{fileId}/annotations/{id}', { fileId: this.fileid, id }), { content })
 				this.annotations = this.annotations.map((a) => (a.id === id ? { ...a, ...res.data } : a))
 			} catch (err) {
 				// eslint-disable-next-line no-console
 				console.error('ScoreView: Notiz konnte nicht aktualisiert werden.', err)
+				this.annotationError = err.response?.data?.error || err.message
 			}
 		},
 
 		async onAnnotationDelete(annotation) {
+			this.annotationError = ''
 			try {
 				await axios.delete(generateUrl('/apps/scoreview/api/scores/{fileId}/annotations/{id}', { fileId: this.fileid, id: annotation.id }))
 				this.annotations = this.annotations.filter((a) => a.id !== annotation.id)
 			} catch (err) {
 				// eslint-disable-next-line no-console
 				console.error('ScoreView: Notiz konnte nicht gelöscht werden.', err)
+				this.annotationError = err.response?.data?.error || err.message
 			}
 		},
 
@@ -937,6 +1308,84 @@ export default {
 			const seconds = totalSeconds % 60
 			return `${minutes}:${String(seconds).padStart(2, '0')}`
 		},
+
+		// Bildschirm waehrend der Wiedergabe wachhalten (Phase 19: "ein
+		// Display, das mitten im Satz ausgeht, macht die ganze uebrige Arbeit
+		// wertlos") - die Wake Lock API ist nicht ueberall verfuegbar
+		// (z.B. Firefox ohne Flag, manche iOS-Versionen), deshalb defensiv:
+		// ohne sie bleibt die App exakt so nutzbar wie vorher, nur eben ohne
+		// Wachhalte-Effekt.
+		async requestWakeLock() {
+			if (!navigator.wakeLock || this.wakeLockSentinel) {
+				return
+			}
+			try {
+				this.wakeLockSentinel = await navigator.wakeLock.request('screen')
+				// Das Sentinel wird vom Browser selbst geloest, wenn der Tab in
+				// den Hintergrund wechselt (z.B. Tab-Wechsel) - beim
+				// Zurueckkehren waehrend laufender Wiedergabe erneut anfordern,
+				// sonst bliebe der Bildschirm nach einem Tab-Wechsel wieder
+				// ungeschuetzt, obwohl isPlaying weiterhin true ist.
+				this.wakeLockSentinel.addEventListener('release', () => {
+					this.wakeLockSentinel = null
+					if (this.isPlaying && document.visibilityState === 'visible') {
+						this.requestWakeLock()
+					}
+				})
+			} catch (err) {
+				// z.B. Permissions-Policy verbietet Wake Lock im umgebenden iframe
+				// - Wiedergabe bleibt trotzdem nutzbar, nur ohne Wachhalte-Effekt.
+				// eslint-disable-next-line no-console
+				console.error('ScoreView: Bildschirm konnte nicht wachgehalten werden.', err)
+			}
+		},
+
+		releaseWakeLock() {
+			this.wakeLockSentinel?.release?.()
+			this.wakeLockSentinel = null
+		},
+
+		// Pinch-Zoom (Phase 19, siehe scoreLayout.js computePinchZoom) - reagiert
+		// nur auf echte Zweifinger-Gesten, ein einzelner Finger scrollt normal
+		// weiter (kein preventDefault dafuer, siehe Template-Kommentar).
+		touchDistance(touches) {
+			const dx = touches[0].clientX - touches[1].clientX
+			const dy = touches[0].clientY - touches[1].clientY
+			return Math.sqrt((dx * dx) + (dy * dy))
+		},
+
+		onTouchStart(event) {
+			if (event.touches.length === 2) {
+				this.isPinching = true
+				this.pinchStartDistance = this.touchDistance(event.touches)
+				this.pinchStartZoom = this.zoom
+			}
+		},
+
+		onTouchMove(event) {
+			if (this.isPinching && event.touches.length === 2) {
+				// Unterdrueckt den nativen Browser-Seiten-Zoom waehrend der Geste
+				// (der wuerde sonst die GESAMTE Nextcloud-Oberflaeche vergroessern,
+				// nicht nur die Partitur) - siehe Template-Kommentar zu
+				// .scoreview-pages.
+				event.preventDefault()
+				const distance = this.touchDistance(event.touches)
+				this.zoom = computePinchZoom(this.pinchStartDistance, distance, this.pinchStartZoom)
+			}
+		},
+
+		onTouchEnd(event) {
+			if (event.touches.length < 2) {
+				this.isPinching = false
+			}
+		},
+
+		// "Noten ohne Ton"-Weg (Phase 19): bricht den laufenden SoundFont-Abruf
+		// ab und faellt sofort auf den stummen Platzhalter zurueck, statt die
+		// verbleibenden ~40MB abzuwarten.
+		skipSoundFontLoad() {
+			this.soundFontAbortController?.abort()
+		},
 	},
 }
 </script>
@@ -949,6 +1398,35 @@ export default {
 	box-sizing: border-box;
 	padding: 12px;
 	background: var(--color-main-background);
+}
+
+/*
+ * Touch-Zielgroessen (Phase 19: ">= 44px") - gemessen statt angenommen:
+ * Nextclouds eigenes --default-clickable-area liegt in dieser Instanz bei
+ * 34px, NICHT bei 44px (siehe PLAN.md Umsetzungsstand). NcButton liest diese
+ * Variable zur Laufzeit (--button-size: var(--default-clickable-area)) - ein
+ * Override hier auf dem gemeinsamen Wurzelelement wirkt dadurch auf alle
+ * NcButtons in dieser Komponente UND in ScoreMixer.vue/ScoreAnnotations.vue
+ * (CSS-Variablen vererben sich durchs echte DOM, unabhaengig von Vues
+ * Style-Scoping-Grenzen). Nur unter (pointer: coarse) (Touch-Geraete), damit
+ * die Maus-Bedienung auf dem Desktop kompakt bleibt.
+ */
+@media (pointer: coarse) {
+	.scoreview-viewer {
+		--default-clickable-area: 44px;
+	}
+
+	/* Range-Regler (Seek/Tempo/Zoom) haben keine eigene NcButton-Variable -
+	   der Daumen wird hier direkt vergroessert. */
+	.scoreview-viewer input[type="range"]::-webkit-slider-thumb {
+		width: 24px;
+		height: 24px;
+	}
+
+	.scoreview-viewer input[type="range"]::-moz-range-thumb {
+		width: 24px;
+		height: 24px;
+	}
 }
 
 .scoreview-status {
@@ -1061,6 +1539,16 @@ export default {
 
 .scoreview-measure-input {
 	width: 70px;
+}
+
+/*
+ * Breiter als scoreview-measure-input (Phase 17, Nutzer-Rückmeldung: die
+ * Felder waren 60px breit und zeigten die "from"/"to"-Beschriftung nur
+ * abgeschnitten an) - Platz für Label ("From measure"/"To measure") UND
+ * eine mehrstellige Taktnummer samt Zahlenfeld-Spinner.
+ */
+.scoreview-loop-input {
+	width: 130px;
 }
 
 .scoreview-loop-fields {

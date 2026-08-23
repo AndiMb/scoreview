@@ -5,6 +5,7 @@ import {
 	computeActualSizeZoom,
 	computeFitPageZoom,
 	computeFitWidthZoom,
+	computePinchZoom,
 	findElementAtPoint,
 	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
@@ -13,7 +14,6 @@ import {
 	parseViewBox,
 	resolveCursorRect,
 	resolveMeasurePosition,
-	sanitizeSvg,
 } from './scoreLayout.js'
 
 describe('buildTimeline / resolveCursorRect', () => {
@@ -234,19 +234,29 @@ describe('Zoom-Presets (Phase 16)', () => {
 	})
 })
 
-describe('sanitizeSvg', () => {
-	it('entfernt script-Elemente', () => {
-		const svg = '<svg><script>alert(1)</script><rect/></svg>'
-		expect(sanitizeSvg(svg)).toBe('<svg><rect/></svg>')
+// Die sanitizeSvg-Tests sind nach svgSanitizer.test.js gewandert (Phase 20,
+// DOMPurify statt Regex - braucht ein DOM, siehe dortiger
+// @vitest-environment-Hinweis). Diese Datei bleibt DOM-frei.
+
+describe('computePinchZoom', () => {
+	it('verdoppelt den Zoom, wenn sich der Fingerabstand verdoppelt', () => {
+		expect(computePinchZoom(100, 200, 1)).toBe(2)
 	})
 
-	it('entfernt on*-Eventhandler-Attribute', () => {
-		const svg = '<svg><rect onclick="alert(1)" onmouseover=\'alert(2)\' fill="red"/></svg>'
-		expect(sanitizeSvg(svg)).toBe('<svg><rect fill="red"/></svg>')
+	it('halbiert den Zoom, wenn sich der Fingerabstand halbiert', () => {
+		expect(computePinchZoom(200, 100, 1)).toBe(0.5)
 	})
 
-	it('lässt normales SVG unverändert', () => {
-		const svg = '<svg viewBox="0 0 1 1"><rect fill="red"/></svg>'
-		expect(sanitizeSvg(svg)).toBe(svg)
+	it('begrenzt auf die Standardgrenzen (0,5-2)', () => {
+		expect(computePinchZoom(100, 1000, 1)).toBe(2)
+		expect(computePinchZoom(100, 10, 1)).toBe(0.5)
+	})
+
+	it('erlaubt eigene Grenzen', () => {
+		expect(computePinchZoom(100, 1000, 1, { min: 0.2, max: 3 })).toBe(3)
+	})
+
+	it('liefert den Startzoom unverändert bei ungültigem Startabstand (Divisionsschutz)', () => {
+		expect(computePinchZoom(0, 100, 1.5)).toBe(1.5)
 	})
 })

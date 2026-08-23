@@ -15,16 +15,30 @@
 			v-for="marker in pageMarkers"
 			:key="marker.id"
 			class="score-page-marker"
+			:class="{ 'score-page-marker--shared': marker.visibility === 'shared' }"
 			:style="marker.style"
 			:title="t('Note')"
 			@click.stop="$emit('marker-click', marker.id)" />
+		<!--
+			Sichtbare Loop-Bereichsmarkierung (Phase 17) - zwei schmale, farbige
+			Flaggen an Start-/Ende-Takt statt eines vollflächigen Bereichs:
+			measures.json liefert nur Punktkoordinaten je Takt (M4), keine
+			Taktbreite, ein Vollbereich wäre also erfunden.
+		-->
+		<div
+			v-for="marker in pageLoopMarkers"
+			:key="marker.id"
+			class="score-page-loop-marker"
+			:class="`score-page-loop-marker--${marker.kind}`"
+			:style="marker.style" />
 	</div>
 </template>
 
 <script>
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
-import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox, sanitizeSvg } from '../lib/scoreLayout.js'
+import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
+import { sanitizeSvg } from '../lib/svgSanitizer.js'
 
 /**
  * Eine Seite als eingebettetes SVG (E2: MuseScore-eigenes Rendering statt
@@ -62,6 +76,12 @@ export default {
 		// Notiz-Marker (Phase 11): {id, page, x, y, w, h} in SVG-Einheiten,
 		// unabhängig von der Seite gefiltert - siehe pageMarkers.
 		markers: {
+			type: Array,
+			default: () => [],
+		},
+		// Loop-Bereichsmarkierung (Phase 17): {id, kind:'start'|'end', page, x,
+		// y, w, h}, siehe pageLoopMarkers.
+		loopMarkers: {
 			type: Array,
 			default: () => [],
 		},
@@ -113,9 +133,28 @@ export default {
 				.filter((m) => m.page === this.pageIndex)
 				.map((m) => ({
 					id: m.id,
+					visibility: m.visibility,
 					style: {
 						left: `${((m.x - box.minX) / box.width) * 100}%`,
 						top: `${((m.y - box.minY) / box.height) * 100}%`,
+					},
+				}))
+		},
+
+		pageLoopMarkers() {
+			const box = this.viewBox
+			if (!box) {
+				return []
+			}
+			return this.loopMarkers
+				.filter((m) => m.page === this.pageIndex)
+				.map((m) => ({
+					id: m.id,
+					kind: m.kind,
+					style: {
+						left: `${((m.x - box.minX) / box.width) * 100}%`,
+						top: `${((m.y - box.minY) / box.height) * 100}%`,
+						height: `${(m.h / box.height) * 100}%`,
 					},
 				}))
 		},
@@ -257,6 +296,23 @@ export default {
 	transition: left 0.08s linear, top 0.08s linear;
 }
 
+.score-page-loop-marker {
+	position: absolute;
+	width: 3px;
+	pointer-events: none;
+	z-index: 2;
+}
+
+.score-page-loop-marker--start {
+	background: var(--color-success, #2e7d32);
+	box-shadow: 2px 0 0 rgba(46, 125, 50, 0.3);
+}
+
+.score-page-loop-marker--end {
+	background: var(--color-error, #c62828);
+	box-shadow: -2px 0 0 rgba(198, 40, 40, 0.3);
+}
+
 .score-page-marker {
 	position: absolute;
 	width: 14px;
@@ -269,5 +325,15 @@ export default {
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 	cursor: pointer;
 	z-index: 2;
+}
+
+/*
+ * Geteilte Notizen bekommen eine eigene Farbe (Phase 18: "eigene und
+ * geteilte Notizen unterscheidbar, Markerfarbe") - dieselbe Primärfarbe wie
+ * der linke Akzentbalken in ScoreAnnotations.vue, damit Notenbild und Liste
+ * dieselbe Sprache sprechen.
+ */
+.score-page-marker--shared {
+	background: var(--color-primary-element, #0082c9);
 }
 </style>
