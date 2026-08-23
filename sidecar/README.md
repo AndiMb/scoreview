@@ -43,8 +43,17 @@ kein einzelnes `docker run`-Flag - siehe PLAN.md Risiken.
 
 Weitere Env-Vars (alle optional):
 
-- `MSCORE_TIMEOUT_SECONDS` (Default `120`) - harter Timeout-Guard pro
-  Konvertierung.
+- `MSCORE_TIMEOUT_SECONDS` (Default `600`) - harter Timeout-Guard pro
+  Konvertierung. Der Default lag bis Phase 20 bei `120` und war damit zu
+  knapp: gemessen braucht eine Konvertierung **~5,4 s pro gerenderter Seite**
+  plus ~1 s Grundlast (1/4/5-seitige Testpartituren: 6,3 s / 23,0 s /
+  27,7 s auf der Testmaschine). Bei 120 s brach damit alles ab etwa **22
+  Seiten** ab - also ausgerechnet die Orchesterpartituren, für die die App
+  gedacht ist, und zwar mit einem nichtssagenden „timeout". 600 s decken
+  rechnerisch ~110 Seiten ab. Wer sehr große Partituren erwartet, rechnet
+  mit dieser Faustformel hoch (Seitenzahl × 5,4 s + Puffer); die Zahl hängt
+  spürbar von der CPU ab, ist also als Größenordnung zu lesen, nicht als
+  Garantie.
 - `SCOREVIEW_MAX_UPLOAD_BYTES` (Default `209715200`, 200 MB) - Upload-
   Größenlimit; größere Requests werden von Flask mit `413` abgelehnt,
   bevor MuseScore überhaupt startet.
@@ -100,6 +109,31 @@ Weitere Env-Vars (alle optional):
 - `GET /convert/{jobId}/meta` - `meta.json`, die von MuseScore gelieferte
   `metadata` unverändert (Titel, Takte, `tracks[]`/`parts[]` für den
   Mixer - siehe M6).
+- `GET /selftest` (Header `X-ScoreView-Secret`) → `{"ok": true|false,
+  "error": "…"|null, "details": {…}}`. Konvertiert die mitgelieferte
+  Minipartitur (`selftest-score.mscz`, Kopie von
+  `spike/test-scores/repeat-test.mscz`) und prüft das Ergebnis auf die
+  Zusagen, auf denen die App aufbaut: alle erwarteten `--score-media`-
+  Schlüssel vorhanden (M2), mindestens eine SVG-Seite, Timing-Events und
+  Elementkoordinaten vorhanden (M4), Event-Zeiten monoton steigend, **und
+  mindestens ein `elid` mehrfach** – letzteres ist die M7-Zusage, dass
+  MuseScore Wiederholungen ausrollt; bricht sie, wäre der Cursor bei
+  Wiederholungen still falsch statt sichtbar kaputt.
+
+  Antwortet auch im Negativfall mit **HTTP 200 und `ok: false`** (gleiche
+  Überlegung wie bei `/soundfont/info`: ein 5xx wäre von „Sidecar nicht
+  erreichbar" nicht zu unterscheiden). `details.musescoreVersion` kommt aus
+  einer zur Bauzeit gesetzten ENV, nicht aus `mscore4portable --version` –
+  der Aufruf braucht einen X-Server und mischt Qt-Rauschen in die Ausgabe.
+
+  Gedacht für **MuseScore-Versionspflege**: nach einem Wechsel der
+  `MUSESCORE_VERSION`/`MUSESCORE_BUILD`-ARGs im Dockerfile einmal aufrufen,
+  bevor das Image produktiv geht. Die Nextcloud-Admin-Seite (Einstellungen →
+  Verwaltung → ScoreView) hat dafür einen Knopf. Dauert eine echte
+  Konvertierung lang (~7–8 s), läuft deshalb **nicht** automatisch beim
+  Containerstart: das würde jeden Start verzögern und einen sonst
+  benutzbaren Sidecar bei einem Teilproblem gar nicht hochkommen lassen.
+
 - `GET /soundfont/info` →
   `{"available": true, "name": "...", "size": 39978561, "version": "<sha256>"}`
   bzw. `{"available": false}`. Bewusst **200 auch im Negativfall**: ein 404
@@ -148,6 +182,78 @@ handgeschriebenem MusicXML als Eingabe jedenfalls nicht (getestet gegen
 `spike/test-scores/repeat-test.mscz`, siehe PLAN.md M7 für Details und
 vermutete Ursache). Aus der MuseScore-GUI stammende Partituren mit
 echtem Jump/Marker-Element sind damit **nicht** verifiziert.
+
+## Gemessene Grenzwerte (Phase 20)
+
+Alle Zahlen am 2026-08-23 gegen die laufende Testumgebung gemessen, nicht
+geschätzt. Sie stammen von 1–5-seitigen Partituren; alles darüber ist
+**Hochrechnung**, weil kein größeres Testmaterial vorliegt (siehe PLAN.md
+Phase 20, „Was offen bleibt").
+
+| Partitur | Seiten | Takte | `.mscz` | Konvertierung | SVG gesamt | größte Seite | MIDI | Cache gesamt |
+|---|---|---|---|---|---|---|---|---|
+| `repeat-test` | 1 | 5 | 30 KB | **6,3 s** | 107 KB | 107 KB | 0,4 KB | 111 KB |
+| `duckwerk` | 4 | 58 | 114 KB | **23,0 s** | 3236 KB | 1041 KB | 12,4 KB | 5038 KB |
+| `wwimf` | 5 | 63 | 98 KB | **27,7 s** | 1174 KB | 303 KB | 8,3 KB | 4623 KB |
+
+Daraus abgeleitet:
+
+- **Konvertierungsdauer ≈ 5,4 s/Seite + 1 s Grundlast** (lineare Regression
+  über die drei Messpunkte). Bestimmt den Default von
+  `MSCORE_TIMEOUT_SECONDS` (siehe oben).
+- **SVG-Größe schwankt stark pro Seite** (303 KB vs. 1041 KB je nach
+  Notendichte, Faktor ~3,4) - eine Hochrechnung „Seitenzahl × Durchschnitt"
+  ist deshalb grob. Für 30 Seiten dichten Satzes sind ~30 MB SVG im Cache
+  plausibel.
+- **MIDI bleibt vernachlässigbar** (< 15 KB), wie in E1/M2 erwartet.
+- **DOM-Last im Browser**: ~640–1370 Knoten pro gerenderter Seite (gemessen
+  an beiden mehrseitigen Partituren). Die Lazy-Ladung greift nachweislich
+  (bei `wwimf` war vor dem Scrollen nur **1 von 5** Seiten geladen), aber
+  geladene Seiten werden **nicht wieder freigegeben** - wer eine
+  30-Seiten-Partitur einmal ganz durchscrollt, hat danach grob 40.000
+  SVG-Knoten im DOM. Auf Desktop-Hardware blieb die Bedienung dabei flüssig
+  (30 Zoom-Änderungen in 485–493 ms, also ~16 ms pro Änderung bei ~5500–6400
+  Knoten); ob das bei ~40.000 Knoten und auf Tablet-Hardware noch gilt, ist
+  **ungeprüft**.
+- **Upload-Limit** (`SCOREVIEW_MAX_UPLOAD_BYTES`, Default 200 MB) ist von
+  echten Partituren weit entfernt (größte Testdatei: 114 KB) und dient nur
+  als Schutz gegen pathologische Uploads.
+
+## Bereitstellung jenseits von Docker (Phase 21, Konzept)
+
+Bewusst ein **Konzept, keine Umsetzung** – die Entscheidung berührt E3 und
+sollte nicht nebenbei fallen. Ausgangslage: der Sidecar ist Pflicht (E3),
+und damit ist seine Installation die eigentliche Hürde für alle, die kein
+Docker neben Nextcloud betreiben können oder wollen.
+
+Vier Wege, mit ihren echten Kosten:
+
+1. **AppAPI/ExApp** (der im Plan zugesagte Weg). Installation über die
+   Nextcloud-UI, Nextcloud verwaltet den Container. Löst die Hürde für
+   Instanzen, die AppAPI anbieten – verschiebt sie für alle anderen nur.
+   Braucht ein eigenes Manifest, ein registriertes Image und eine
+   Umstellung von „Admin trägt URL+Secret ein" auf „AppAPI vergibt beides".
+   **Nicht umgesetzt**, siehe unten.
+2. **Nativ auf dem Nextcloud-Host** (systemd-Service + venv). Kein Docker
+   nötig, aber MuseScore muss samt Qt/X-Abhängigkeiten auf den Host –
+   genau das, was der Container heute kapselt. Realistisch nur mit einem
+   distributionsspezifischen Paket oder dem AppImage plus `xvfb`. Der
+   Härtungsgewinn aus Phase 12 (eigener Nutzer, `--memory`, `--pids-limit`)
+   müsste über systemd-Direktiven (`User=`, `MemoryMax=`, `TasksMax=`,
+   `PrivateTmp=`, `ProtectSystem=strict`) nachgebaut werden.
+3. **Separater Host** (der Sidecar spricht ohnehin nur HTTP). Funktioniert
+   schon heute unverändert – `sidecar_url` zeigt dann auf eine andere
+   Maschine. Voraussetzung: TLS und ein echtes Secret, denn der
+   Konvertierungsdienst nimmt beliebige Dateien entgegen. Das ist der Weg,
+   der dem High-Performance-Backend-Muster (`nextcloud-talk`) am nächsten
+   kommt.
+4. **Gar kein Sidecar** (clientseitiges Rendern). Würde E3 aufheben, ist
+   aber laut E3 an MuseScore-3-Stand gebunden und damit für aktuelle
+   `.mscz`-Dateien untauglich. Bleibt verworfen.
+
+Empfehlung: (3) ist heute schon möglich und sollte dokumentiert bleiben,
+(1) ist der Weg für die Breite, (2) nur für Betreiber, die ohnehin alles
+nativ fahren.
 
 ## Aufräumen (Phase 6)
 

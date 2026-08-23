@@ -1417,6 +1417,130 @@ sind lesbar und mit der Tastatur bedienbar. „Nur meine Stimme laut" ist ein
 Klick. Der Mixer erscheint auch bei `repeat-test.mscz`. Ein Einzähler ist
 vor dem Loop hörbar – oder es ist dokumentiert, warum nicht.
 
+**Umsetzungsstand (2026-08-23), gefundener Bug in einer als „erledigt"
+markierten Annahme.** Vollständig umgesetzt und gegen die Testinstanz per
+Playwright verifiziert (`wwimf`, `duckwerk`, `repeat-test`, jeweils mit
+echtem Player/Ton, nicht dem stummen Platzhalter).
+
+- **Kernbefund vor der eigentlichen Umsetzung: „MIDI-Kanal = Track-Index"
+  (Phase 9, in der Risikotabelle als „erledigt" geführt) stimmt NICHT
+  allgemein.** Die Phase-9-Messung hatte das nur an `wwimf` verifiziert, wo
+  die Kanäle zufällig 0-3 in Dokumentreihenfolge liegen. Ein eigener,
+  abhängigkeitsfreier MIDI-Parser (`tmp/midi_inspect.py`, nur für diese
+  Messung, nicht Teil des Produktcodes) gegen `duckwerk`s `score.mid`
+  zeigt: Sopran/Alt/Tenor/Bariton/Bass liegen auf den MIDI-Kanälen
+  0/2/3/1/6, nicht 0-4. Mit der alten Index-Annahme hätte der Regler
+  „Alt" tatsächlich Baritons Kanal gesteuert - ein stummer, aber realer
+  Mixer-Fehler, den keine der bisherigen Sitzungen an echtem Ton gehört
+  hatte (beide bisherigen Hörproben liefen an `wwimf`). Zusätzlich
+  gemessen: **die Metronomspur trägt in keiner der beiden Partituren auch
+  nur eine einzige MIDI-Note** (`metadata.tracks` führt sie, aber weder
+  MIDI-Track noch -Kanal existieren dafür in der exportierten Datei) -
+  ein Mixerregler dafür wäre ein Blindregler.
+- **Fix in `mixerLayout.js`/`player.js`:** `player.js` liest nach dem Laden
+  die tatsächlich verwendeten MIDI-Kanäle je Spur aus
+  `sequencer.midiData.tracks[].channels` (spessasynth_core, neue Funktion
+  `getTrackChannels()`). `resolveMixerChannels(tracks, parts, trackChannels)`
+  bevorzugt diese echten Kanäle vor dem Index, schließt `instrumentId ===
+  'metronome'` aus der Liste aus, und fällt bei `tracks: []` (M8,
+  `repeat-test.mscz`) direkt auf `parts` zurück - „Lautstärke darf nie
+  vollständig fehlen". Bei einer Längenabweichung zwischen den echten
+  Kanaldaten und den erwarteten Spuren (z.B. eine künftige Partitur, deren
+  Export doch eine Metronomspur enthält) fällt die Funktion sichtbar auf
+  den Index zurück, statt still falsch zuzuordnen. `ScoreViewer.vue` löst
+  `mixerChannels` deshalb zweimal auf: einmal grob (Index-Näherung, bevor
+  der Player geladen ist), einmal exakt in `setUpRealPlayer()`, sobald
+  `player.getTrackChannels()` verfügbar ist - der Mixer selbst wird erst
+  bei `hasRealPlayer` überhaupt angezeigt, die grobe Zwischenauflösung wird
+  also nie sichtbar. Unit-getestet gegen die tatsächlich gemessenen
+  duckwerk-Werte (`mixerLayout.test.js`).
+- **Stimmgruppen** (`resolveMixerGroups()`): fasst Mixerkanäle mit
+  derselben `partId` zu einer Bedienzeile zusammen (Divisi). An den beiden
+  vorhandenen Testpartituren nie mit mehr als einem Kanal pro Gruppe
+  geprüft (weder `wwimf` noch `duckwerk` haben echtes Divisi in den
+  Metadaten - „6 Tracks auf 5 Parts" bei duckwerk ist die Metronomspur, kein
+  geteilter Part) - die Funktion ist an synthetischen Daten unit-getestet,
+  ein Divisi-Fall an echtem Material bleibt offen (siehe Phase 20).
+- **„Meine Stimme"-Preset** (`computeVoiceFocusVolumes()`, `AccountVoice`-
+  Button je Zeile): hebt die eigene Gruppe auf 127 an, dämpft alle übrigen
+  auf 40 (nicht auf 0 wie Solo) - der Probenfall ist "klar heraushören",
+  nicht "ausblenden". Playwright bestätigt am Mixer von `wwimf`: Klick auf
+  Sopran liefert `[127, 40, 40, 40]`, erneuter Klick setzt wieder
+  `[127, 127, 127, 127]`.
+- **Mixer-Fallback ohne `tracks`**: an `repeat-test.mscz` (M8: `tracks: []`,
+  `parts` gefüllt) per Playwright bestätigt - ein Regler „Test" (der
+  einzige Part) erscheint, keine leere Mixer-Fläche mehr.
+- **Tempo in BPM** (`effectiveTempoBpm`/`minTempoBpm`/`maxTempoBpm`,
+  `onTempoBpmInput()`): Anzeige „♩ = 80", Regler rechnet zwischen BPM und
+  dem internen `playbackRate`-Faktor (weiterhin 0,5-1,5, wie in Phase 9
+  gemessen) um. `tempoGuessed` markiert `tempo == 0` (M8) sichtbar mit „*"
+  plus Tooltip, Bezugswert `DEFAULT_TEMPO_BPM = 120` (MuseScores eigene
+  Vorgabe). Playwright: `wwimf` zeigt „♩ = 80" (deckt sich mit M8),
+  Reglerbereich 40-120 (0,5×/1,5× von 80), ein gesetzter Wert 56 zeigt „♩ =
+  56"; `repeat-test.mscz` zeigt „♩ = 120*" (tempo 0, geraten).
+- **Loop-Felder**: `NcTextField`s jetzt mit vollem Label „From measure"/„To
+  measure" statt „from"/„to" und 130px statt 70px breit (Nutzer-Rückmeldung
+  aus Phase 16-Nachtrag: 60px zeigte nur „v…"/„b…"). Neuer Button „Loop from
+  current measure" (`CrosshairsGps`-Icon, `loopFromCurrentMeasure()`) füllt
+  nur das Von-Feld, aktiviert den Loop nicht automatisch - das Bis-Feld
+  bleibt eine bewusste Entscheidung. Playwright: nach Sprung zu Takt 5 setzt
+  der Button das Von-Feld auf „5".
+- **Sichtbare Loop-Markierung im Notenbild** (`ScorePage.vue`, neue
+  `loopMarkers`-Prop, `.score-page-loop-marker`): zwei schmale, farbige
+  Flaggen (grün = Start, rot = Ende) an den Takt-Koordinaten aus
+  `measuresTimeline.elements` - bewusst nur der Taktanfang, nicht die volle
+  Taktbreite, weil `measures.json` nur Punktkoordinaten liefert (M4), keine
+  Taktausdehnung. Playwright bestätigt beide Marker im DOM nach Loop-Aktivierung.
+- **Einzähler** (`src/lib/metronome.js`, rein/unit-getestet:
+  `estimateBeatsInMeasure()`, `computeCountInDelaysMs()`; `metronomeClick.js`,
+  AudioContext-Oszillator, ungetestet wie player.js/silentClock.js):
+  schätzt die Schlagzahl des Zieltaktes aus seiner Dauer und der aktuellen
+  BPM (measures.json trägt keine eigene Taktart) und zählt in Echtzeit
+  herunter, bevor `toggleLoop()` die Wiedergabe selbst startet - nur wenn
+  beim Aktivieren noch nicht gespielt wird, sonst würde eine laufende Probe
+  unterbrochen. Playwright (Oszillator-Aufrufe gezählt statt Audiopegel
+  gemessen, siehe unten): 4 Klicks vor dem Loop-Start bei Takt 5 (4/4,
+  deckt sich mit der 4/4-Struktur von `wwimf`), danach läuft die Wiedergabe
+  automatisch an (`aria-label` wechselt auf „Pause").
+- **Metronom-Klick während der Wiedergabe** (`metronomeEnabled`-Toggle in
+  der Transportleiste, `Metronome`-Icon): ein Klick pro Takt (nicht pro
+  Schlag - measures.json liefert nur Taktebene, siehe oben), unabhängig vom
+  Haupt-Synth (score.mid hat nachweislich keine Metronomnoten, siehe
+  Kernbefund oben) über einen eigenen `AudioContext`. Playwright bestätigt
+  mehrere Klicks über 4s laufende Wiedergabe.
+- **Tastaturkürzel** (`onKeydown()`, Listener auf `this.$el`, greift also
+  nur, wenn ein Nachfahre des Viewers den Fokus hat - genau die
+  Plan-Vorgabe „nur wenn der Viewer den Fokus hat"): Leertaste
+  Play/Pause, Pfeiltasten Takt vor/zurück (`jumpRelativeMeasure()`), `L`
+  Loop an/aus. Eingabefelder (`INPUT`/`TEXTAREA`/`SELECT`,
+  `isContentEditable`) sind explizit ausgenommen, damit z.B. das
+  Pfeiltasten-Navigieren im Takt-Eingabefeld nicht gestohlen wird.
+  Playwright: Leertaste auf dem fokussierten Play-Button togglet genau
+  einmal pro Druck (kein Doppel-Toggle durch die native Button-Space-
+  Aktivierung - `preventDefault()` auf `keydown` unterdrückt sie), Pfeil
+  rechts/links von Takt 3 aus landet auf „Measure 4 of 63"/„Measure 3 of 63".
+- **Verifikationsmethode für den Ton ohne Ausgabegerät:** dieselbe
+  Grundidee wie in Phase 9 (Web-Audio-Graph anzapfen statt „hören"), hier
+  aber am Erzeugungspunkt statt am Ausgang: `AudioContext.prototype
+  .createOscillator` wird per `page.addInitScript()` überschrieben, bevor
+  die Seite lädt, und zählt Aufrufe - `metronomeClick.js` ist die einzige
+  Quelle für Oszillatoren (player.js nutzt einen AudioWorkletNode, keine
+  Oszillatoren), Klicks sind damit ohne echtes Ausgabegerät zuverlässig
+  zählbar.
+- Keine ScoreView-eigenen Konsolenfehler in allen drei Testpartituren (die
+  einzige verbleibende Meldung ist die vorbestehende, Phase-15/16-
+  dokumentierte Tiptap-Warnung der `text`-App). Vier neue l10n-Strings
+  (`From measure`/`To measure`/`Loop from current measure`/`Tempo (BPM)`/
+  `No tempo marking…`/`Metronome on`/`Metronome off`/`My voice: {name}`/
+  `Boost this voice…`), `Tempo` (verwaist durch die BPM-Umstellung) entfernt
+  - `npm run l10n:extract` meldet „alle Übersetzungen vollständig". `npm
+  test` 71/71 grün (`mixerLayout.test.js` erweitert für Kanalzuordnung und
+  -gruppierung, neu `metronome.test.js`). `npm run
+  build` ohne neue Fehler (nur die vorbestehende Bundle-Größenwarnung,
+  `scoreview-viewer.js` 720 KiB → 747 KiB durch Metronom/Crosshairs-Icons
+  und die Mixer-Erweiterung). `appinfo/info.xml` auf `0.0.15`, `occ upgrade`
+  auf der Testinstanz gelaufen.
+
 ### Phase 18 – Geteilte Notizen
 
 Dateien: `AnnotationMapper.php`, `AnnotationService.php`,
@@ -1450,6 +1574,96 @@ A sieht sie nicht; B ohne Schreibrecht kann keine geteilte Notiz anlegen
 (403, serverseitig geprüft, nicht bloß ausgeblendet). Damit ist zugleich die
 aus Phase 11 offen gebliebene Zwei-Nutzer-Abnahme nachgeholt.
 
+**Umsetzungsstand (2026-08-23).** Vollständig umgesetzt, gegen die
+Testinstanz mit drei echten Nutzerinnen und zwei echten Freigaben
+(OCS-Share-API: `Andreas` → `Andreas2` mit Schreibrecht, `Andreas` →
+`Andreas3` nur lesend) per Playwright verifiziert - kein Abweichen vom Plan.
+
+- **Rechteprüfung wie geplant an `PERMISSION_UPDATE` festgemacht**
+  (`AnnotationController::canWriteShared()`, liest die Berechtigung vom
+  über `UserFileResolver` aufgelösten Node - der spiegelt bereits die Sicht
+  der anfragenden Nutzerin, bei einer Freigabe also genau die vom Share
+  gewährte Berechtigung). `AnnotationMapper::findOwnById()` (Owner-only)
+  entfällt zugunsten von `findByIdAndFileId()` (nur Existenz zu dieser
+  Datei) + `AnnotationService::canModify()`-Logik direkt in
+  `updateContent()`/`delete()`: eine geteilte Notiz darf JEDE Nutzerin mit
+  Schreibrecht ändern/löschen (nicht nur die Autorin), eine private nur die
+  Eigentümerin selbst - genau die im Plan geforderte Unterscheidung
+  „darf sehen" vs. „darf ändern".
+- **Lesen erweitert** (`AnnotationMapper::findVisibleForUser()`): eigene
+  private Notizen PLUS alle geteilten Notizen der Datei, unabhängig vom
+  Autor.
+- **403 statt nur ausgeblendet, gemessen:** `Andreas3` (nur Lesen) erhält
+  beim Versuch, eine geteilte Notiz anzulegen, serverseitig
+  `{"error":"You do not have permission to create shared notes for this
+  file."}` mit HTTP 403 - die Notiz landet nachweislich nicht in der Liste
+  (`andreas3VisibleCountAfterFailedShare` bleibt bei 2). Derselbe Nutzer
+  darf trotzdem eine PRIVATE Notiz anlegen (kein Schreibrecht auf die Datei
+  nötig, unverändert seit Phase 11) - `andreas3AfterPrivateCreateError`
+  bleibt `null`. Ein Löschversuch derselben Nutzerin auf eine fremde
+  geteilte Notiz liefert ebenfalls 403
+  (`"You do not have permission to change this note."`), die Notiz bleibt
+  unverändert in der Liste.
+- **Schreibrecht-Trägerin darf fremde geteilte Notizen ändern, gemessen:**
+  `Andreas2` (Schreibrecht) bearbeitet erfolgreich die von `Andreas`
+  angelegte geteilte Notiz; die Änderung ist danach für `Andreas3` (nur
+  Lesen) sichtbar - bestätigt, dass die Berechtigung wirklich an der Datei
+  hängt, nicht an der Autorenschaft der Notiz.
+- **Autorenname** (`AnnotationService::serialize()`, `IUserManager`):
+  `Andreas2`s Zeile zeigt bei `Andreas`s geteilter Notiz „by Andreas"
+  (Displayname, nicht die rohe `userId`) - die rohe `userId` wird dafür
+  bewusst gar nicht erst an den Client ausgeliefert (`jsonSerialize()`
+  trägt sie nicht), `mine`/`authorName` werden serverseitig aus der
+  anfragenden Identität berechnet.
+- **„Nur meine"-Filter** (`ScoreAnnotations.vue`, rein clientseitig auf der
+  bereits vom Server gefilterten Liste): reduziert `Andreas2`s Ansicht
+  korrekt von 2 sichtbaren geteilten Notizen auf die eigene (1).
+- **Gefundener und behobener Nebenbefund, unabhängig vom eigentlichen
+  Phase-18-Vorhaben:** `Annotation::jsonSerialize()` hatte `elid`/
+  `anchorEtag` seit Phase 11 nie ausgeliefert - der in
+  `ScoreViewer.vue::annotationMarkers` vorgesehene exakte Sekundäranker
+  (Notenkoordinate statt Takt-Näherung, siehe PLAN.md Phase 11) konnte
+  dadurch nie greifen, jede Notiz landete immer auf der gröberen
+  Takt-Koordinate. Behoben durch Ergänzen beider Felder in
+  `jsonSerialize()`; an der Testinstanz bestätigt (`elid`/`anchorEtag` sind
+  jetzt Teil der API-Antwort, z.B. `"elid":0,"anchorEtag":"ae76a65…"`) -
+  keine gesonderte Pixel-Verifikation, da dieselbe, bereits in Phase 11
+  getestete Auflösungslogik jetzt lediglich echte statt leerer Werte
+  bekommt.
+- **UI-Unterscheidung** (`ScoreAnnotations.vue`, `ScorePage.vue`): geteilte
+  Notizen bekommen einen linken Akzentbalken in der Liste und eine eigene
+  Markerfarbe im Notenbild (`--color-primary-element` statt Orange), plus
+  ein Autoren-Badge für fremde geteilte Notizen. Beim Anlegen ein expliziter
+  Umschalter „Private"/„Shared with everyone who has access to this file" -
+  bewusst nicht vor Nutzerinnen ohne Schreibrecht versteckt (die
+  serverseitige 403-Prüfung ist die eigentliche Durchsetzung, siehe oben);
+  ein Fehlschlag erscheint als `NcNoteCard`-Fehlermeldung im Notizenpanel
+  (`annotationError` in `ScoreViewer.vue`).
+- Fünf neue l10n-Strings (`Private`, `Shared with everyone who has access
+  to this file`, `Only mine`, `by {name}`, plus zwei PHP-Fehlermeldungen),
+  `npm run l10n:extract` meldet „alle Übersetzungen vollständig". `npm
+  test` weiterhin 71/71 grün (keine neuen reinen Funktionen in dieser
+  Phase - die eigentliche Logik ist Berechtigungsprüfung mit
+  Datenbankzugriff, dafür gibt es laut `CLAUDE.md` keine PHP-Testsuite,
+  Verifikation lief über `php -l` plus den echten Playwright-Lauf gegen
+  drei echte Konten). `npm run build` ohne neue Fehler. `appinfo/info.xml`
+  auf `0.0.16`, `occ upgrade` auf der Testinstanz gelaufen (keine neue
+  Migration nötig - die `visibility`-Spalte lag seit Phase 11 bereits im
+  Schema, siehe dortiger Migrationskommentar).
+- **Bei der Verifikation gefundene, harmlose Testumgebungs-Eigenheit,
+  nicht Teil des Produktcodes:** Ein druckfrisches Konto (in dieser Sitzung
+  `Andreas3`, zuvor nie in Files gewesen) zeigt über der Dateiliste ein
+  Willkommens-Panel, das den Klick auf eine Dateizeile im automatisierten
+  Test unzuverlässig machte, obwohl der Server (direkt per
+  `status()`-Abruf geprüft) korrekt antwortete. Kein Produktbug - über
+  einen Deep-Link (`/apps/files/files/{fileId}?openfile=true`) statt eines
+  Zeilenklicks umgangen.
+
+**Nicht umgesetzt / bewusst zurückgestellt:** ein serverseitiger Test für
+„zwei Freigaben mit unterschiedlichen Rechten" ist damit nachgeholt (siehe
+oben), eine automatisierte PHP-Testsuite dafür bleibt außerhalb des Rahmens
+dieser Phase (`CLAUDE.md`: keine PHP-Testsuite vorgesehen).
+
 ### Phase 19 – Mobil und Tablet
 
 Dateien: alle Komponenten, `src/viewer.js`.
@@ -1480,6 +1694,94 @@ ausgeht oder die Bedienung Fingerspitzen erfordert. Gerätemodell und Browser
 im Umsetzungsstand benennen; „funktioniert auf Mobilgeräten" ohne
 Gerätenamen ist keine Aussage.
 
+**Umsetzungsstand (2026-08-23), Code umgesetzt – Abnahme bewusst NICHT
+erfüllt.** Alle fünf Punkte sind implementiert und im Touch-Emulationsmodus
+verifiziert, **aber die eigentliche Abnahme dieser Phase verlangt ein echtes
+Tablet, und in dieser Sitzung stand keines zur Verfügung.** Die Phase gilt
+deshalb ausdrücklich als *nicht abgenommen* – siehe „Was offen bleibt" am
+Ende dieses Abschnitts. Das ist keine Formalie: gerade Touch-Ergonomie,
+Pinch-Gefühl und Wake-Lock-Verhalten sind genau die Dinge, die eine
+Emulation nicht beantwortet.
+
+- **Touch-Zielgrößen ≥ 44 px** (`ScoreViewer.vue`, `@media (pointer:
+  coarse)`). Zuerst gemessen statt angenommen: Nextclouds eigenes
+  `--default-clickable-area` liegt in dieser Instanz bei **34 px**, nicht bei
+  44 – der Play-Button war also real 33×33 px groß. `NcButton` liest diese
+  Variable zur Laufzeit (`--button-size: var(--default-clickable-area)`),
+  ein Override auf `.scoreview-viewer` wirkt deshalb auf alle NcButtons
+  dieser Komponente **und** der Kindkomponenten (CSS-Variablen vererben sich
+  durchs echte DOM, unabhängig von Vues Scoped-Style-Grenzen) – das war der
+  Grund, es dort statt an jedem Button einzeln zu setzen. Nur unter
+  `(pointer: coarse)`, damit die Maus-Bedienung kompakt bleibt. Gemessen im
+  Touch-Kontext: **44×44 px**, `--default-clickable-area: 44px`.
+- **Selten Benutztes ins Aktionsmenü** (`NcActions`/`NcActionButton`): die
+  drei Zoom-Presets aus Phase 16 (Seitenbreite/ganze Seite/100 %) liegen
+  jetzt hinter einem Drei-Punkte-Menü statt als drei Dauerknöpfe in der
+  Leiste; der stufenlose Zoom-Regler daneben bleibt der primäre Weg.
+  Playwright: Menü öffnet, enthält genau die drei erwarteten Einträge.
+- **Pinch-Zoom** (`scoreLayout.js::computePinchZoom()`, rein und
+  unit-getestet; Gestenerkennung in `ScoreViewer.vue`
+  `onTouchStart/-Move/-End`). Bewusst eine eigene Geste statt des nativen
+  Browser-Zooms: der würde die **gesamte** Nextcloud-Oberfläche vergrößern,
+  nicht nur die Partitur – deshalb `preventDefault()` während der
+  Zweifinger-Geste. Einfingriges Scrollen bleibt unangetastet. Verifiziert
+  mit echten Zweifinger-Touchevents über die CDP-Session
+  (`Input.dispatchTouchEvent`; `page.touchscreen` kann nur Einzeltipp):
+  Fingerabstand 40 px → 200 px vergrößert die Seite von 900 px auf 1800 px
+  (Faktor 5 auf den Zoom-Maximalwert 2 geklemmt, wie vorgesehen).
+- **Wischen zum Blättern bewusst NICHT umgesetzt** – und zwar aus dem im
+  Plan selbst genannten Grund: Nextclouds Viewer belegt auf Mobilgeräten
+  eigene Wischgesten für den Dateiwechsel, eine zusätzliche horizontale
+  Geste hätte damit kollidiert. Das vertikale Scrollen deckt das Blättern im
+  fortlaufenden Einspaltenlayout ohnehin ab.
+- **Bildschirm wachhalten** (`navigator.wakeLock`, `requestWakeLock()`/
+  `releaseWakeLock()`): als **Watcher auf `isPlaying`** verdrahtet, nicht in
+  `togglePlay()` – so ist jeder Weg, der die Wiedergabe startet
+  (Tastaturkürzel, Einzähler-Ende, Loop-Neustart), automatisch erfasst,
+  ohne an jeder Stelle einzeln daran zu denken. Defensiv gegen fehlende API
+  (Firefox ohne Flag, ältere iOS-Versionen) und gegen die vom Browser selbst
+  ausgelöste Freigabe beim Tab-Wechsel (`release`-Listener fordert bei
+  weiterlaufender Wiedergabe erneut an). Verifiziert über eine zählende
+  Attrappe (headless Chromium bietet die echte API nicht an):
+  `request:screen` beim Start, `release` beim Pausieren, nichts davor.
+- **SoundFont-Ladefortschritt + „Noten ohne Ton"-Weg**
+  (`fetchSoundFontWithProgress()`, `skipSoundFontLoad()`): der Abruf läuft
+  jetzt gestreamt über einen `ReadableStream`-Reader statt in einem Rutsch,
+  daraus der Prozentwert; ein `AbortController` erlaubt den bewussten
+  Abbruch. `Content-Length` am eigenen Endpunkt geprüft (**39.978.561 Byte**,
+  die im Plan genannten ~40 MB) – ohne den Header bliebe die Anzeige bei 0 %,
+  der Abruf funktionierte aber unverändert. Zwei getrennte Messungen:
+  (a) mit gedrosseltem **Byte-Strom** (CDP `Network.emulateNetworkConditions`,
+  4 MB/s) steigt die Anzeige monoton 0 → 3 → 8 → … → 98 → 100 %, danach ist
+  der echte Player da (Mixer-Knopf vorhanden); (b) „Continue without sound"
+  während des Ladens bricht ab und landet auf dem stummen Platzhalter
+  („No sound: Sound loading skipped."), Transport läuft trotzdem weiter
+  (`.scoreview-seek` bewegt sich) – also genau der im Plan geforderte
+  bewusste Weg statt stummem Warten.
+- Keine ScoreView-eigenen Konsolenfehler in allen drei Läufen. Vier neue
+  l10n-Strings, `npm run l10n:extract` „alle Übersetzungen vollständig".
+  `npm test` 76/76 grün (5 neue Tests für `computePinchZoom`). `npm run
+  build` ohne neue Fehler; `scoreview-viewer.js` 757 KiB → 878 KiB
+  (+121 KiB durch `NcActions`/`NcActionButton` samt Popover-Abhängigkeiten –
+  der bislang größte Einzelzuwachs einer UI-Phase, hier bewusst in Kauf
+  genommen, weil ein selbst gebautes Aktionsmenü Tastatur- und
+  Fokusführung erneut nachbauen müsste, siehe E5). `appinfo/info.xml` auf
+  `0.0.17`, `occ upgrade` gelaufen.
+
+**Was offen bleibt (Abnahme nicht erfüllt):**
+
+- **Die Abnahme selbst** – „eine vollständige Probe auf einem echten
+  Tablet … Gerätemodell und Browser benennen". Emuliert wurde ein
+  768×1024-Touch-Kontext in headless Chromium 1228; das ist ausdrücklich
+  *kein* Gerätename und ersetzt die Abnahme nicht.
+- **Leistung großer Partituren auf Tablet-Hardware** – ungeprüft, und mit
+  dem vorhandenen Material auch gar nicht prüfbar (größte Testpartitur:
+  5 Seiten). Hängt an derselben fehlenden Orchesterpartitur wie Phase 20;
+  dort mitdokumentiert.
+- **Echtes Wake-Lock-Verhalten** – nur gegen eine Attrappe gemessen, weil
+  headless Chromium die API nicht anbietet. Dass der Bildschirm auf einem
+  echten Gerät wirklich anbleibt, ist damit *nicht* gezeigt.
+
 ### Phase 20 – Robustheit an echtem Material
 
 Hier steht kein neues Vorhaben, sondern das Nachziehen der offenen Punkte
@@ -1506,6 +1808,116 @@ aus Abschnitt 5 – Messen statt Vermuten.
 
 **Abnahme.** Für jeden Punkt eine Zahl oder ein dokumentiertes Urteil in
 diesem Dokument – kein „müsste gehen".
+
+**Umsetzungsstand (2026-08-23), teilweise erfüllt – zwei Punkte bleiben
+mangels Material offen.** Drei der fünf Punkte sind mit echten Zahlen
+beantwortet, einer davon führte zu zwei echten Fixes. Zwei Punkte brauchen
+Material, das es hier nicht gibt (eine Orchesterpartitur, eine aus der
+MuseScore-GUI stammende D.C.-Partitur) bzw. ein Urteil am Ohr – die stehen
+weiterhin offen und sind unten benannt statt stillschweigend als erledigt
+behandelt.
+
+**Erledigt: Grenzwerte gemessen und dokumentiert** (Tabelle in
+`sidecar/README.md#gemessene-grenzwerte-phase-20`). Kern der Messung, gegen
+die laufende Testumgebung, nicht geschätzt:
+
+| Partitur | Seiten | `.mscz` | Konvertierung | SVG gesamt | größte Seite | Cache |
+|---|---|---|---|---|---|---|
+| `repeat-test` | 1 | 30 KB | 6,3 s | 107 KB | 107 KB | 111 KB |
+| `duckwerk` | 4 | 114 KB | 23,0 s | 3236 KB | 1041 KB | 5038 KB |
+| `wwimf` | 5 | 98 KB | 27,7 s | 1174 KB | 303 KB | 4623 KB |
+
+Daraus per linearer Regression: **~5,4 s Konvertierung pro Seite + ~1 s
+Grundlast**. Die SVG-Größe schwankt je nach Notendichte um Faktor ~3,4 pro
+Seite (303 KB vs. 1041 KB) – eine Hochrechnung „Seitenzahl × Durchschnitt"
+ist deshalb ausdrücklich grob.
+
+**Dabei gefundener echter Fehler 1: `MSCORE_TIMEOUT_SECONDS` war zu knapp
+für genau den Anwendungsfall, den diese Phase prüfen sollte.** Bei 5,4 s pro
+Seite brach der bisherige Default von 120 s ab etwa **22 Seiten** ab – eine
+Orchesterpartitur mit 30+ Seiten (der ausdrückliche Prüfgegenstand dieser
+Phase) wäre also zuverlässig mit einem nichtssagenden „timeout"
+gescheitert, ohne dass jemand die Ursache gesehen hätte. Default auf 600 s
+angehoben (deckt rechnerisch ~110 Seiten).
+
+**Dabei gefundener echter Fehler 2: der Fix wäre fast wirkungslos
+geblieben.** `sidecar/Dockerfile` setzte `ENV MSCORE_TIMEOUT_SECONDS=120`,
+und ein ENV gewinnt über den Fallback-Default in `server.py` – eine Änderung
+nur an `server.py` hätte im gebauten Image also **nichts** bewirkt. Erst
+aufgefallen, weil nach dem Rebuild `printenv MSCORE_TIMEOUT_SECONDS` im
+Container weiterhin `120` meldete. Beide Stellen sind jetzt auf 600 und
+tragen einen gegenseitigen Verweis, damit sie nicht wieder auseinanderlaufen.
+Nach Rebuild verifiziert: `printenv` → `600`, `/health` → `ok`,
+`whoami` → `scoreview` (die Phase-12-Härtung ist unbeschädigt).
+
+**Erledigt: DOM-Last großer Partituren – Zahl statt Vermutung.** Gemessen im
+Browser: **~640–1370 DOM-Knoten pro gerenderter Seite** (dichtere Partitur
+= mehr). Die Lazy-Ladung aus Phase 8 greift nachweislich – bei `wwimf` war
+vor dem Scrollen **1 von 5** Seiten geladen. **Aber: geladene Seiten werden
+nie wieder freigegeben** (`ScorePage.vue` kennt kein Entladen), wer eine
+30-Seiten-Partitur einmal ganz durchscrollt, hat danach grob **40.000**
+SVG-Knoten im DOM. Interaktionslatenz bei den vorhandenen 5500–6400 Knoten:
+30 Zoom-Änderungen in 485–495 ms, also **~16 ms pro Änderung** – flüssig auf
+Desktop-Hardware. Ob das bei ~40.000 Knoten und auf Tablet-Hardware noch
+gilt, ist **nicht** gezeigt (siehe offene Punkte).
+
+**Erledigt, mit Konsequenz: `sanitizeSvg()` neu bewertet – und ersetzt.**
+Die Neubewertung war keine Stilfrage, sondern eine Messung: die bisherige
+regexbasierte Fassung wurde gegen 15 bekannte Umgehungsmuster geprüft und
+liess **9 davon durch**, darunter `onload=x()` ohne Anführungszeichen, ein
+ungeschlossenes `<script>`, `javascript:`-URLs in `href`/`xlink:href`,
+`<foreignObject>` mit eingebettetem `<iframe>`, `<use href="http://…">` auf
+eine fremde Adresse und `<style>` mit `url()`. Eine Regex kann SVG nicht
+zuverlässig parsen – genau daran scheiterten diese Fälle. Das zählt trotz
+„die Quelle ist MuseScores eigener Serializer", weil die `.mscz` ein
+Nutzer-Upload ist und MuseScore Material aus der Partitur (Titel, Liedtext,
+freie Textfelder) ins SVG rendert.
+
+Ersetzt durch **DOMPurify 3.4.14** in neuer Datei `src/lib/svgSanitizer.js`
+(bewusst getrennt von `scoreLayout.js`, das laut `CLAUDE.md` DOM-frei
+bleiben soll – DOMPurify parst echt und braucht ein DOM). Konfiguriert mit
+einer Allowlist plus expliziten Verboten: `href`/`xlink:href` sind **gar
+nicht** erlaubt (also weder `javascript:` noch Nachladen von fremden
+Adressen), ebenso wenig `<foreignObject>`, `<style>` und die
+`<set>`/`<animate>`-Familie. Ein MuseScore-Notenbild braucht nichts davon.
+
+Verifiziert auf drei Ebenen:
+- **Unit-Tests** (`svgSanitizer.test.js`, jsdom-Umgebung, 16 Tests): alle 9
+  zuvor durchgelassenen Muster sind entschärft, und die für das Notenbild
+  nötigen Merkmale bleiben erhalten (`viewBox`, `width="…mm"`, `class`, das
+  leere `class=""` des weißen Hintergrundpfads aus M9/Phase 16,
+  `transform`, Text).
+- **Kein Inhaltsverlust am echten Material**: DOM-Knotenzahlen pro Seite vor
+  und nach dem Wechsel **exakt identisch** (`wwimf` 642/803/868/806/241,
+  `duckwerk` 1256/1275/1371/362) – DOMPurify hat an den echten SVGs
+  nachweislich nichts entfernt.
+- **Funktion im Browser**: weißer Hintergrundpfad überlebt (`path[class=""]`
+  vorhanden, `fill: none` greift), 151 `.Note`- und 60 `.StaffLines`-
+  Elemente, `viewBox="0 0 10200 13200"`, `width="215.9mm"`, Sprung zu Takt 3
+  zeigt „Measure 3 of 63", Cursor sichtbar mit 16×233 px. Der in Phase 16
+  gebaute Cursor-hinter-dem-Notenbild-Mechanismus ist also unbeschädigt.
+
+`npm test` 89/89 grün (16 neue Sanitizer-Tests, die 3 alten Regex-Tests
+entfernt). Neue Abhängigkeiten: `dompurify` (Laufzeit), `jsdom` (nur
+devDependency, damit sicherheitsrelevanter Code überhaupt testbar ist).
+
+**Was offen bleibt (Abnahme NICHT vollständig erfüllt):**
+
+- **Große Partituren durch die volle Kette** – kein Testmaterial vorhanden
+  (größte Partitur hier: 5 Seiten). Konvertierungsdauer, SVG-Größe und
+  DOM-Last sind oben *hochgerechnet*, nicht gemessen; Speicherbedarf im
+  Sidecar unter Last ist gar nicht erfasst. Die Hochrechnung hat immerhin
+  den Timeout-Fehler sichtbar gemacht – ersetzt aber keine echte Messung.
+- **D.C./D.S./Coda an einer in der MuseScore-GUI erstellten Partitur** –
+  unverändert offen (M7). In dieser Umgebung gibt es keine MuseScore-GUI,
+  und der MusicXML-Weg überträgt die Sprungmarken nachweislich nicht. Der
+  Cursor-Code verlässt sich weiterhin nicht auf lückenlose
+  `elid`-Abdeckung, das Risiko bleibt in der Tabelle stehen.
+- **Klangqualität an mehr als einer Partitur** – das ist laut Plan „ein
+  Urteil am Ohr, keine Messung", und in dieser Umgebung gibt es kein
+  Ausgabegerät. Bewusst **kein** Verstärkungsfaktor eingebaut (Clipping-
+  Risiko), die gemessenen ~7 dB Differenz aus Phase 9 bleiben der einzige
+  belastbare Anhaltspunkt.
 
 ### Phase 21 – Betrieb und Verteilung
 
@@ -1534,6 +1946,99 @@ Der offene Rest aus Phase 12 plus die Betriebsideen aus Abschnitt 7.
 
 **Abnahme.** Jemand, der dieses Repo nicht kennt, bekommt App und Sidecar
 nach der Anleitung zum Laufen, ohne dass wir danebenstehen.
+
+**Umsetzungsstand (2026-08-23), zwei von fünf Punkten umgesetzt.** Die
+beiden Punkte, die die tägliche Fehlersuche betreffen (Selbsttest,
+Admin-Health), sind gebaut und verifiziert. Die AppAPI-Verpackung ist
+**nicht** umgesetzt – sie ist ein eigenständiges Packaging-Vorhaben, und
+die Abnahme dieser Phase („jemand, der dieses Repo nicht kennt, bekommt App
+und Sidecar zum Laufen") ist damit **nicht erfüllt**.
+
+**Umgesetzt: MuseScore-Selbsttest** (`GET /selftest` in `sidecar/server.py`,
+Fixture `sidecar/selftest-score.mscz` als Kopie von
+`spike/test-scores/repeat-test.mscz`). Beantwortet die Planfrage „Wie kommt
+eine neue MuseScore-Version ins Image, ohne dass `--score-media` unbemerkt
+bricht?". Geprüft werden nicht nur „Exit 0", sondern die Zusagen, auf denen
+der Rest steht: alle erwarteten `--score-media`-Schlüssel (M2), mindestens
+eine SVG-Seite, Timing-Events **und** Elementkoordinaten (M4), monoton
+steigende Zeiten, und **mindestens ein mehrfach vorkommendes `elid`** (M7 –
+das Ausrollen von Wiederholungen).
+
+Bewusst **kein** Test beim Containerstart: das würde jeden Start um ~8 s
+verzögern und einen sonst benutzbaren Sidecar bei einem Teilproblem gar
+nicht hochkommen lassen. Stattdessen auf Abruf, mit einem Knopf auf der
+Admin-Seite.
+
+Verifiziert am laufenden Sidecar: `ok: true`, `1 page, 24 events, 20
+elements, 4 repeatedElids, 7.1–7.9 s` – **deckungsgleich mit der
+M7-Messung** (20 Notenelemente, 24 Events, `elid` 0–3 je zweimal). Und, weil
+ein Test der immer „ok" sagt wertlos wäre, die Gegenprobe: dieselbe
+M7-Prüfung gegen `wwimf` (357 Events, 357 verschiedene `elid`s, also keine
+Wiederholung) meldet die Zusage korrekt als **verletzt** – die Prüfung ist
+also nicht vakuum.
+
+**Dabei gefundener Fehler: `--version` ist als Versionsquelle untauglich.**
+Erster Entwurf las die MuseScore-Version zur Laufzeit über
+`mscore4portable --version`; gemessen liefert der Aufruf ohne X-Server gar
+nichts Brauchbares und mit `xvfb` nur Qt-Rauschen (`Session DBus not
+running` u.ä.), die Anzeige stand entsprechend auf „unbekannt". Umgestellt
+auf eine zur **Bauzeit** gesetzte ENV aus den ohnehin vorhandenen
+Dockerfile-ARGs – zeigt jetzt `4.7.4 (4.7.4.260706075)`, passend zu M1.
+
+**Umgesetzt: Admin-Health** (`lib/Service/HealthService.php`,
+`SettingsController::health()`/`selfTest()`, Anzeige in
+`templates/settings/admin.php` + `src/settings.js`). Vier Zeilen, jede mit
+Symbol **und** Text (nicht Farbe allein):
+
+- **Konvertierungsdienst** – gegen `/health` geprüft, den einzigen Endpunkt
+  ohne Secret; damit lässt sich „Sidecar läuft nicht" von „Secret stimmt
+  nicht" unterscheiden.
+- **SoundFont** – Override-URL / Sidecar-Meldung / gecachte Kopie.
+- **Hintergrundjobs (Cron)** – der im Plan ausdrücklich genannte Punkt
+  („Dessen Fehlen hat schon Zeit gekostet"). Gemessen an Nextclouds eigenem
+  `lastcron`-Zeitstempel, Schwelle großzügige 15 min.
+- **Konvertierungen** – fertig/ausstehend/fehlgeschlagen, damit ein hoher
+  `pending`-Stand bei totem Cron als das erkennbar wird, was er ist.
+
+Alle drei Zustände am echten System durchgespielt, nicht nur der gute:
+
+| Zustand | Anzeige |
+|---|---|
+| alles läuft | ✓ Dienst, ✓ SoundFont, ✓ Cron (`last run 13 s ago`), ✓ 3 ready / 0 pending; Selbsttest ✓ `MuseScore 4.7.4 … (1 page(s), 24 events, 7.1 s)` |
+| Sidecar gestoppt | ✗ Dienst mit konkretem cURL-Fehler, Selbsttest ✗ mit derselben Ursache |
+| Cron seit 30 min tot | ✗ `no run in the last 15 minutes (30 min ago) – conversions will stay pending` |
+
+**Dabei gefundener und behobener eigener UI-Fehler:** im Sidecar-gestoppt-
+Zustand zeigte die SoundFont-Zeile ein **✓ neben einer rohen
+cURL-Fehlermeldung** – eine Zeile, die sich selbst widerspricht. Das ✓ war
+sachlich richtig (eine gecachte Kopie liegt vor, Wiedergabe funktioniert
+weiter), der Detailtext nicht. Getrennt: bei erreichbarem Sidecar dessen
+Name, bei unerreichbarem „cached copy in use (conversion service currently
+unreachable)", und die Fehlermeldung nur noch, wenn wirklich nichts da ist.
+
+**Konzipiert, nicht umgesetzt: Sidecar-Bereitstellung jenseits von Docker.**
+Vier Wege samt Kosten in `sidecar/README.md#bereitstellung-jenseits-von-docker-phase-21-konzept`
+gegenübergestellt (AppAPI/ExApp, nativ per systemd, separater Host, kein
+Sidecar). Kernbefund: **Weg 3 (separater Host) funktioniert schon heute
+unverändert** – der Sidecar spricht ohnehin nur HTTP, `sidecar_url` darf auf
+eine andere Maschine zeigen; nötig sind dann TLS und ein echtes Secret. Die
+Entscheidung berührt E3 und ist bewusst nicht nebenbei gefallen.
+
+**Nicht umgesetzt (Abnahme damit NICHT erfüllt):**
+
+- **AppAPI/ExApp-Verpackung** – der eigentliche Kern der E3-Zusage
+  („Installation über die Nextcloud-UI statt `docker run`"). Eigenständiges
+  Packaging-Vorhaben: braucht ein ExApp-Manifest, ein veröffentlichtes
+  Image und die Umstellung der Konfiguration von „Admin trägt URL+Secret
+  ein" auf „AppAPI vergibt beides". Bis dahin bleibt die Installation der
+  dokumentierte `docker run`-Weg plus manueller Cron-Ersatzloop – also
+  weiterhin Prototypenstand im Sinne von E3.
+- **Sandboxing-Rest** (Netzwerkisolation nur für den
+  `mscore4portable`-Subprozess) – unverändert offen, Begründung steht in
+  Phase 12. `--memory`/`--pids-limit` bleiben dokumentierte
+  Betriebsempfehlung, der non-root-Prozess aus Phase 12 ist nach allen
+  Image-Rebuilds dieser Sitzung weiterhin aktiv (`whoami` → `scoreview`
+  nachgeprüft).
 
 ## 4. Was ersatzlos entfällt
 
@@ -1588,7 +2093,7 @@ beurteilt.
 |---|---|---|
 | Wiederholungen im Timing anders als erwartet | Cursor-Datenmodell ändert sich | Phase 5 vor Phase 8 |
 | SoundFont-Größe verschlechtert Erstladezeit spürbar | UX | Kleineren SF3 wählen, aggressiv cachen, Ladefortschritt zeigen |
-| ~~MIDI-Kanalreihenfolge ≠ `metadata.tracks`~~ **erledigt** | Mixer ordnet falsch zu | An echtem Ton bestätigt: Solo auf Mixerkanal 0 lässt genau die Sopranstimme stehen (siehe Phase 9) |
+| ~~MIDI-Kanalreihenfolge ≠ `metadata.tracks`~~ **erledigt (korrigiert in Phase 17)** | Mixer ordnet falsch zu | Phase 9 hatte das nur an `wwimf` bestätigt (Solo auf Kanal 0 = Sopran), wo Kanal zufällig = Index war. Phase 17 hat an `duckwerk` gemessen, dass das NICHT allgemein gilt (Sopran/Alt/Tenor/Bariton/Bass auf MIDI-Kanal 0/2/3/1/6, nicht 0-4) und `resolveMixerChannels()` auf die echten, aus dem geladenen MIDI gelesenen Kanäle umgestellt (`player.js::getTrackChannels()`) statt auf den Index |
 | SVG-Seiten großer Partituren zu schwer fürs DOM | Ruckeln | Nur sichtbare Seiten rendern |
 | `--score-media` in künftiger MuseScore-Version geändert | Pipeline bricht | Version ist gepinnt; Update bewusst und getestet |
 | MuseScore-Sicherheitslücke über präparierte `.mscz` | Server kompromittiert | Phase 12, nicht später |
@@ -1608,7 +2113,7 @@ Ergänzt in der zweiten Planungsrunde (2026-08-23):
 | Fehlende oder unvollständige Übersetzung fällt nicht auf – Nextclouds `JSResourceLocator` ignoriert fehlende l10n-Dateien bewusst („missing translations files will be ignored") | Die Oberfläche mischt still Sprachen, niemand merkt es | Vollständigkeitstest in `npm test` statt Sorgfalt (Phase 14) |
 | `metadata.tracks` leer, obwohl `parts` gefüllt ist (gemessen, M8) | Der Mixer verschwindet komplett, obwohl Ton läuft – keinerlei Lautstärkeregelung | Fallback auf `parts` bzw. mindestens ein Summenregler (Phase 17) |
 | `metadata.tempo == 0` bei Partituren ohne Tempoangabe (gemessen, M8) | Eine BPM-Anzeige hätte keinen echten Bezugswert und behauptete eine Genauigkeit, die nicht da ist | MuseScore-Vorgabe 120 annehmen **und** als geraten kennzeichnen (Phase 17) |
-| Geteilte Notizen sind eine Datenweitergabe an alle mit Dateizugriff | Jemand teilt versehentlich etwas Privates | Sichtbarkeit beim Anlegen unmissverständlich anzeigen, serverseitig an `PERMISSION_UPDATE` binden (Phase 18) |
+| ~~Geteilte Notizen sind eine Datenweitergabe an alle mit Dateizugriff~~ **erledigt** | Jemand teilt versehentlich etwas Privates | Umgesetzt in Phase 18: expliziter Umschalter beim Anlegen, serverseitig an `PERMISSION_UPDATE` gebunden - an drei echten Konten mit unterschiedlichen Freigaberechten verifiziert (403 bei fehlendem Schreibrecht, siehe dort) |
 | Fehlermeldungen der Konvertierung werden einmal geschrieben und später von beliebigen Nutzern gelesen | Eine zum Schreibzeitpunkt übersetzte Meldung wäre für alle anderen in der falschen Sprache | `error_code` speichern, erst beim Anzeigen übersetzen, technisches Detail unübersetzt danebenstellen (Phase 14) |
 
 ## 7. Ideensammlung und ihre Zuordnung

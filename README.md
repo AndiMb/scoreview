@@ -18,10 +18,23 @@ Sidecar-Prozess); Phase 13 (Korrektur-Layer) ist bewusst zurückgestellt.
 Aus der zweiten Planungsrunde (Phasen 14-21) sind Phase 14
 (Mehrsprachigkeit DE+EN, verständliche Konvertierungsfehler über
 `error_code`, `format_version` für einen künftigen Cache-Formatwechsel),
-Phase 15 (Bedienelemente auf `@nextcloud/vue`, E5) und Phase 16
+Phase 15 (Bedienelemente auf `@nextcloud/vue`, E5), Phase 16
 (Probentauglichkeit I: Autoscroll im Sichtband, dauerhafte Taktangabe,
-Zoom-Presets, Vollbild) umgesetzt. Siehe `PLAN.md` für den vollständigen
-Stand inklusive offener Punkte.
+Zoom-Presets, Vollbild) und Phase 17 (Probentauglichkeit II: Tempo in BPM,
+lesbare Loop-Felder samt Bereichsmarkierung, Stimmgruppen/„meine Stimme"-
+Preset, Metronom/Einzähler, Tastaturkürzel - dabei einen realen, seit Phase
+9 unentdeckten Mixer-Bug gefunden und behoben, siehe dort) und Phase 18
+(geteilte Notizen: an Dateirechten statt eigener Rechteverwaltung
+festgemacht, 403 statt nur ausgeblendet bei fehlendem Schreibrecht, an drei
+echten Konten mit unterschiedlichen Freigaben verifiziert) umgesetzt.
+Phase 19 (Touch-Bedienung, Pinch-Zoom, Bildschirm-Wachhalten,
+SoundFont-Ladefortschritt), Phase 20 (gemessene Grenzwerte, echter
+SVG-Sanitizer statt Regex, Timeout-Default korrigiert) und Phase 21
+(Sidecar-Selbsttest, Admin-Betriebsdiagnose inkl. Cron-Prüfung) sind
+**teilweise** umgesetzt: die Abnahmen von 19 (echtes Tablet), 20
+(Orchesterpartitur, D.C. aus der MuseScore-GUI, Klangurteil) und 21
+(AppAPI-Verpackung) sind mangels Material bzw. Umfang ausdrücklich **offen**.
+Siehe `PLAN.md` für den vollständigen Stand inklusive offener Punkte.
 
 **Vorausgesetzt:** ein erreichbarer MuseScore-Sidecar (siehe `sidecar/`) -
 die App läuft nicht ohne ihn (E3 in `PLAN.md`).
