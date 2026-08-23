@@ -1,0 +1,81 @@
+// @vitest-environment jsdom
+//
+// Sicherheitsrelevanter Test (Phase 20): genau die Umgehungsmuster, an denen
+// die frueher regexbasierte Fassung nachweislich gescheitert ist (9 von 15,
+// siehe PLAN.md Phase 20) - damit ein kuenftiger Umbau nicht unbemerkt
+// dorthin zurueckfaellt. Braucht ein DOM, deshalb die jsdom-Umgebung oben.
+import { describe, expect, it } from 'vitest'
+import { sanitizeSvg } from './svgSanitizer.js'
+
+/** Enthaelt das Ergebnis noch einen ausfuehrbaren/nachladenden Vektor? */
+function isDangerous(svg) {
+	return /<script|\son[a-z]+\s*=|javascript:|<foreignObject|<iframe|attributeName|<use|<style|href\s*=/i.test(svg)
+}
+
+describe('sanitizeSvg - Umgehungsmuster, die die alte Regex-Fassung durchliess', () => {
+	const vectors = [
+		['script, ungeschlossen', '<svg><script>x()</svg>'],
+		['onload OHNE Anfuehrungszeichen', '<svg onload=x()></svg>'],
+		['onerror auf image', '<svg><image href="a" onerror=x()></svg>'],
+		['javascript: in href', '<svg><a href="javascript:x()">t</a></svg>'],
+		['javascript: in xlink:href', '<svg><a xlink:href="javascript:x()">t</a></svg>'],
+		['foreignObject mit iframe', '<svg><foreignObject><iframe src="javascript:x()"></iframe></foreignObject></svg>'],
+		['set/animate Attributinjektion', '<svg><set attributeName="onload" to="x()"/></svg>'],
+		['use mit externem Verweis', '<svg><use href="http://evil/x.svg#a"/></svg>'],
+		['style mit url()', '<svg><style>*{background:url("http://evil/x")}</style></svg>'],
+	]
+
+	for (const [name, input] of vectors) {
+		it(`entschaerft: ${name}`, () => {
+			expect(isDangerous(sanitizeSvg(input))).toBe(false)
+		})
+	}
+})
+
+describe('sanitizeSvg - Faelle, die die alte Fassung schon abdeckte', () => {
+	it('entfernt script-Elemente', () => {
+		expect(sanitizeSvg('<svg><script>alert(1)</script><rect/></svg>')).not.toMatch(/script/i)
+	})
+
+	it('entfernt on*-Eventhandler in beiden Anfuehrungszeichen-Varianten', () => {
+		const out = sanitizeSvg('<svg><rect onclick="a()" onmouseover=\'b()\' fill="red"/></svg>')
+		expect(out).not.toMatch(/onclick|onmouseover/i)
+		expect(out).toMatch(/fill="red"/)
+	})
+
+	it('entfernt script auch in Grossschreibung', () => {
+		expect(sanitizeSvg('<svg><SCRIPT>x()</SCRIPT></svg>')).not.toMatch(/script/i)
+	})
+})
+
+describe('sanitizeSvg - das echte Notenbild darf nicht kaputtgehen', () => {
+	it('behaelt die fuer den Cursor noetigen Attribute (viewBox, Groesse in mm)', () => {
+		const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="215.9mm" height="279.4mm" viewBox="0 0 10200 13200"><path class="Note" d="M1 2"/></svg>'
+		const out = sanitizeSvg(svg)
+		expect(out).toMatch(/viewBox="0 0 10200 13200"/)
+		expect(out).toMatch(/width="215\.9mm"/)
+		expect(out).toMatch(/height="279\.4mm"/)
+	})
+
+	it('behaelt class-Attribute (M9: einzige Adressierbarkeit im MuseScore-SVG)', () => {
+		const out = sanitizeSvg('<svg><path class="Note" d="M0 0"/><polyline class="StaffLines" points="1,2 3,4"/></svg>')
+		expect(out).toMatch(/class="Note"/)
+		expect(out).toMatch(/class="StaffLines"/)
+		expect(out).toMatch(/points="1,2 3,4"/)
+	})
+
+	it('behaelt das leere class-Attribut des weissen Hintergrundpfads (M9/Phase 16)', () => {
+		// ScorePage.vue schaltet genau dieses Element ueber path[class=""] auf
+		// fill:none, damit der dahinterliegende Cursor sichtbar bleibt - geht
+		// das Attribut verloren, ist der Cursor unsichtbar.
+		const out = sanitizeSvg('<svg><path class="" fill="#ffffff" d="M0 0"/></svg>')
+		expect(out).toMatch(/class=""/)
+	})
+
+	it('behaelt Text und Transformationen', () => {
+		const out = sanitizeSvg('<svg><g transform="translate(10,20)"><text font-family="Edwin" font-size="20">Sopran</text></g></svg>')
+		expect(out).toMatch(/transform="translate\(10,20\)"/)
+		expect(out).toMatch(/Sopran/)
+		expect(out).toMatch(/font-size="20"/)
+	})
+})
