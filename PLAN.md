@@ -4,6 +4,13 @@ Stand: 2026-08-23. Ersetzt den bisherigen Implementierungsplan ab Phase 5.
 Phasen 1–4 (Spike, App-Gerüst, Sidecar-HTTP-API, Frontend-Integration) sind
 umgesetzt; dieser Plan baut Teile davon bewusst zurück.
 
+**Zweite Planungsrunde, 2026-08-23.** Das Grundgerüst steht: konvertieren,
+anzeigen, abspielen, navigieren, annotieren – alles Ende-zu-Ende verifiziert
+(siehe die Umsetzungsstände der Phasen 8–12). Ergänzt wurden daraufhin die
+Entscheidungen E4/E5, die Messung M8 und die Phasen 14–21. Die Reihenfolge
+und ihre Begründung stehen in Abschnitt 3 unter „Reihenfolge der zweiten
+Runde".
+
 ## 0. Architekturentscheidungen
 
 Drei Grundsatzentscheidungen, getroffen nach dem technischen Review vom
@@ -77,6 +84,73 @@ reiner Backend-Austausch.
 Installation dokumentiert und reproduzierbar sein. Der aktuelle Weg
 (Handstart per `docker run`, manueller Cron-Ersatzloop) ist Prototypenstand
 und wird in Phase 12 auf AppAPI/ExApp umgestellt.
+
+### E4: Englische Quellstrings, Deutsch als gepflegte Übersetzung
+
+Getroffen am 2026-08-23, zweite Planungsrunde. Anlass: Die App muss
+mehrsprachig sein.
+
+**Entscheidung.** Die UI-Strings im Quelltext sind **Englisch**. Deutsch ist
+eine im Repo gepflegte Übersetzung (`l10n/de.json` für PHP, `l10n/de.js` für
+den Browser). Kommentare, dieses Dokument und Commit-Messages bleiben
+Deutsch.
+
+**Grund.** Nextclouds l10n-Format benutzt den Quellstring selbst als
+Schlüssel – verifiziert an `apps/files/l10n/de.js` der Testinstanz:
+`"Added to favorites" : "Zu den Favoriten hinzugefügt"`. Deutsche Schlüssel
+hätten drei Folgen: jede weitere Sprache würde aus dem Deutschen übersetzt,
+die Rückfallsprache bei fehlender Übersetzungsdatei wäre Deutsch, und die
+App antwortete jedem nicht deutschsprachigen Nutzer in einer Sprache, die er
+nicht gewählt hat.
+
+**Konsequenzen.**
+
+- Die Konvention „Deutsch für UI-Texte" in `CLAUDE.md` gilt so nicht mehr.
+  Sie wird **in Phase 14** korrigiert, nicht vorher – sonst entstehen
+  englische Strings, für die es noch keine Übersetzungsdatei gibt.
+- Die vorhandenen `$l->t()`-Aufrufe (`lib/Settings/Section.php`,
+  `templates/settings/admin.php`) tragen heute deutsche Schlüssel und müssen
+  umgestellt werden. Das Frontend kennt `t()` bisher überhaupt nicht.
+- **Fehlende Übersetzungen fallen still aus.** Nextclouds
+  `JSResourceLocator` behandelt l10n-Dateien gesondert und endet mit
+  „missing translations files will be ignored" – ein vergessener String
+  erzeugt keinen Fehler, er erscheint einfach auf Englisch. Deshalb der
+  Vollständigkeitstest in Phase 14; Disziplin allein trägt das nicht.
+- **Nicht übersetzt wird Inhalt**: Stimmennamen aus `metadata.parts[].name`
+  („Sopran"/„Soprano" – steht so in der Partitur), Titel, Komponist, und die
+  GM-Instrumentennamen aus dem SoundFont. Das ist Material, keine
+  Oberfläche.
+- Umfang vorerst **DE + EN, im Repo gepflegt**, ohne Transifex- oder
+  App-Store-Pipeline. Eine weitere Sprache ist damit das Hinzufügen einer
+  Datei, keine Umstellung.
+
+### E5: `@nextcloud/vue` als UI-Basis
+
+Getroffen am 2026-08-23, zweite Planungsrunde.
+
+**Entscheidung.** Die Bedienelemente kommen künftig aus `@nextcloud/vue`
+statt aus handgeschriebenem HTML.
+
+**Grund.** Die Phasen 16–19 sind fast ausschließlich UI-Arbeit
+(Probenbedienung, Tablet). Tastaturbedienung, Fokusführung, Touch-Zielgrößen,
+Theming und Dark Mode dort einzeln nachzubauen kostet mehr als die
+Bibliothek – und die App soll aussehen wie der Rest von Nextcloud.
+
+**Konsequenzen, die dabei zu beachten sind.**
+
+- Der Viewer mountet einen **eigenen, zweiten Vue-3-Baum** neben Viewers
+  eigener Vue-Instanz (`src/viewer.js`, dort ausführlich begründet – zwei
+  Vue-Kopien im selben Baum sind nicht kompatibel). `@nextcloud/vue`-
+  Komponenten werden gegen *unsere* Instanz kompiliert und leben in
+  *unserem* Baum; nur deshalb geht das überhaupt. Die Verifikation muss
+  entsprechend **im Viewer** stattfinden, nicht auf der Einstellungsseite.
+- Bundle-Größe ist der Preis. Gegenmaßnahme: gezielte Einzelimporte statt
+  Sammelimport, Größe vor und nach der Umstellung messen.
+- Stärkere Bindung an die Nextcloud-Version (`info.xml` deklariert 31–35);
+  die Bibliotheksversion muss dazu passen.
+- Für Regler (Lautstärke, Tempo, Zoom) gibt es voraussichtlich keine
+  Entsprechung. Vor der Umstellung nachsehen statt annehmen; falls keine
+  existiert, bleibt `<input type="range">` mit NC-CSS-Variablen.
 
 ## 1. Verifizierte Faktenbasis
 
@@ -203,6 +277,39 @@ liefert die Zuordnung Track → Part, inklusive Metronomspur:
 Metronom zuschaltbar) ohne eigene Analyse des MIDI-Files baubar.
 `metadata.measures` (63) und `mposXML` (63 Elemente, 63 Events) liefern die
 Taktnavigation.
+
+**M8 – `metadata` trägt Tempo und Titel, `tracks` ist aber nicht garantiert.**
+Gemessen am 2026-08-23 (zweite Planungsrunde) gegen alle drei im Testsystem
+gecachten `meta.json` (`appdata_*/scoreview/scoreview/<fileId>/<etag>/`):
+
+| Partitur | `tempo` | `tempoText` | `tracks` | `parts` | `measures` | `pages` | `duration` |
+|---|---|---|---|---|---|---|---|
+| `repeat-test` | **0** | (leer) | **0** | 1 | 5 | 1 | 12 |
+| `duckwerk` | 180 | `<sym>metNoteHalfUp</sym> = 90` | 6 | 5 | 58 | 4 | 77 |
+| `wwimf` | 80 | `<sym>metNoteQuarterUp</sym> = 80` | 5 | 4 | 63 | 5 | 191 |
+
+Vier Folgerungen, alle mit Konsequenz für die zweite Runde:
+
+1. **`tempo` ist Viertel-BPM.** 180 bei notiertem „halbe = 90", 80 bei
+   „Viertel = 80" – konsistent für beide Partituren, die überhaupt eine
+   Tempoangabe tragen. Die BPM-Anzeige aus Phase 17 ist damit aus echten
+   Daten ableitbar statt geschätzt.
+2. **`tempo` kann 0 sein**, wenn die Partitur keine Tempoangabe enthält
+   (`repeat-test`). Eine BPM-Eingabe braucht dann einen Bezugswert
+   (MuseScores Vorgabe: 120) und muss kenntlich machen, dass er geraten ist.
+3. **`tempoText` ist kein anzeigefertiger Text**, sondern trägt
+   SMuFL-Markup (`<sym>…</sym>`) und einen `<font face="Edwin"/>`-Rest.
+4. **`tracks` kann leer sein, während `parts` gefüllt ist.**
+   `resolveMixerChannels()` (`src/lib/mixerLayout.js`) leitet die Kanäle
+   ausschließlich aus `tracks` ab, und `ScoreViewer.vue` blendet den Mixer
+   bei `mixerChannels.length === 0` komplett aus. Bei `repeat-test.mscz`
+   gibt es also Ton, aber keinerlei Lautstärkeregelung – kein theoretischer
+   Fall, sondern die eigene Testpartitur. Behandlung in Phase 17.
+
+Nebenbei bestätigt: `duration` ist in Sekunden (191 s für `wwimf` deckt sich
+mit der Angabe zur Testpartitur oben), `pages` deckt sich mit der Zahl der
+gelieferten SVG-Seiten – die Herleitung der Seitenzahl aus `meta.json`
+(`ConversionService::getPageCount()`) steht damit auf gemessenem Grund.
 
 ## 2. Zielarchitektur
 
@@ -675,6 +782,389 @@ Dynamikänderungen ja, strukturelle Eingriffe eher nicht), und wie wird er
 gerendert – als Overlay über dem SVG oder durch erneutes Rendern einer
 modifizierten Quelle im Sidecar.
 
+**Bleibt auch nach der zweiten Planungsrunde zurückgestellt** – eingereiht
+hinter Phase 21. Die Nummer bleibt, wo sie ist: Phasennummern werden im Code
+und in den Commit-Messages referenziert und dürfen nicht wandern.
+
+---
+
+### Reihenfolge der zweiten Runde (Phasen 14–21)
+
+Die erste Runde hat die App zum Funktionieren gebracht. Die zweite macht
+daraus etwas, das eine Chorprobe erträgt – und das nicht nur auf Deutsch
+funktioniert.
+
+Vier Festlegungen vom 2026-08-23 bestimmen die Reihenfolge:
+
+1. **Probentauglichkeit hat Vorrang vor Verteilung.** Die App soll zuerst in
+   der eigenen Probe taugen; die AppAPI-Verpackung folgt danach (Phase 21).
+2. **Mehrsprachigkeit steht trotzdem vorn** (Phase 14) – nicht weil sie
+   dringender wäre, sondern weil ihr Aufwand mit jeder UI-Phase wächst. Die
+   Oberfläche ist heute noch an einem Nachmittag durchzugehen (11 Strings in
+   den Admin-Einstellungen, 4 Controller-Fehlermeldungen, der Rest in den
+   Vue-Komponenten). Nach den Phasen 15–19 ist es ein Vielfaches,
+   und jeder nachgezogene String ist doppelte Arbeit.
+3. **DE + EN, im Repo gepflegt** (E4), kein externer Übersetzungsdienst.
+4. **`@nextcloud/vue` als UI-Basis** (E5) – und deshalb **vor** den
+   UI-Phasen 16–19. Dieselben Bedienelemente erst von Hand zu bauen und
+   danach zu ersetzen wäre der teuerste mögliche Weg.
+
+Nicht verhandelbare Abhängigkeiten:
+
+- 14 vor 15–19 (Strings), 15 vor 16–19 (Bedienelemente).
+- **Das Feld `format_version` aus Phase 14 muss existieren, bevor
+  irgendeine Phase das Cache-Format ändert.** Es gehört thematisch zu
+  Phase 20, reist aber in Phase 14 mit, weil die Migration dort für die
+  Fehlercodes ohnehin gebraucht wird – eine Migration statt zweier. In
+  dieser Runde ist kein Formatwechsel geplant; sollte einer nötig werden
+  (etwa ein zweites serverseitiges Layout, siehe Phase 16), ist das Feld
+  dann schon da statt erst hinterher.
+- 18 (geteilte Notizen) hängt an keiner anderen Phase und ist vorziehbar,
+  falls in der Probe früher gebraucht.
+
+### Phase 14 – Mehrsprachigkeit und verständliche Fehler
+
+Dateien: `package.json`, `src/components/*.vue`, `lib/Controller/*.php`,
+`lib/Settings/Section.php`, `templates/settings/admin.php`,
+`lib/Db/ScoreConversion.php` + neue Migration, `lib/Service/ConversionService.php`,
+`lib/BackgroundJob/PollConversionJob.php`, neu `l10n/de.json`, `l10n/de.js`,
+neu `tools/l10n.mjs`, `CLAUDE.md`.
+
+Zwei Themen, die auf den ersten Blick nichts miteinander zu tun haben, aber
+dieselbe Wurzel: **Die App kann einem Nutzer nicht in seiner Sprache sagen,
+was los ist** – und bei einem Konvertierungsfehler kann sie es überhaupt
+nicht, weil sie eine rohe Python-Ausnahme durchreicht (`PollConversionJob`
+schreibt die Sidecar-Meldung nach `error_message`, `ScoreViewer.vue` zeigt
+sie als „Fehler: …" an; der Nutzer liest dann
+„mscore4portable --score-media exited 1: …").
+
+**Übersetzungsinfrastruktur.**
+
+- `@nextcloud/l10n` als Abhängigkeit aufnehmen (bisher nicht installiert;
+  `l10n/` existiert, ist aber leer), `t()`/`n()` aus `translate`/
+  `translatePlural`.
+- `l10n/de.json` (PHP/`IL10N`) und `l10n/de.js`
+  (`OC.L10N.register('scoreview', {…}, 'nplurals=2; plural=(n != 1);')`).
+  Format 1:1 wie in den Kern-Apps, an `apps/files/l10n/` verifiziert.
+- Ausliefern muss man dafür nichts: `TemplateLayout` ermittelt die Sprache
+  und `JSResourceLocator` hängt die l10n-Datei der App automatisch an,
+  sobald deren Skripte geladen werden.
+- Genau deshalb `tools/l10n.mjs` + `npm run l10n:extract`: scannt
+  `src/**/*.{js,vue}`, `lib/**/*.php` und `templates/**/*.php` nach
+  `t('scoreview', '…')` bzw. `$l->t('…')`, schreibt die Schlüsselmenge und
+  meldet fehlende wie verwaiste Übersetzungen. Ein vitest-Test ruft dieselbe
+  Logik auf, damit `npm test` fehlschlägt, sobald ein String ohne deutsche
+  Übersetzung dazukommt – das ist der Schutz gegen den stillen Ausfall aus
+  E4, nicht die Sorgfalt beim Schreiben.
+
+**Strings umstellen.**
+
+- Frontend: `ScoreViewer.vue` (Status- und Fehlertexte, Transport,
+  Probenleiste, „Kein Ton"-Hinweis), `ScoreMixer.vue` (die
+  `title`-Attribute „Stummschalten:"/„Solo:"), `ScoreAnnotations.vue`,
+  `ScorePage.vue` (`title="Notiz"`). `console.error`-Ausgaben bleiben
+  unübersetzt – Entwicklerausgabe, keine Oberfläche.
+- `t()` **nicht** auf Modulebene oder in `data()` einfrieren, sondern dort
+  auswerten, wo der Text gebraucht wird (`computed`/Template). Sonst hängt
+  die Sprache am Zeitpunkt des Modulimports.
+- PHP: die bestehenden `$l->t()`-Aufrufe auf englische Schlüssel umstellen,
+  die deutsche Fassung wandert in die l10n-Dateien.
+- Controller-Fehlermeldungen (`'Datei nicht gefunden oder kein Zugriff.'`,
+  `'Konvertierung noch nicht fertig.'`, `'Notiz darf nicht leer sein.'`)
+  über `IL10N` übersetzen. Hier ist das richtig, weil `IL10N` an die Sprache
+  der **anfragenden** Nutzerin gebunden ist.
+
+**Fehlercodes statt gespeicherter Fehlertexte.**
+
+- Für `scoreview_conversions.error_message` wäre `IL10N` dagegen falsch: der
+  Text wird einmal beim Konvertieren geschrieben und danach von beliebigen
+  Nutzern in beliebigen Sprachen gelesen. Die Sprache des Konvertierenden
+  ist keine sinnvolle Eigenschaft einer Datei.
+- Deshalb neue Spalte `error_code` (`sidecar_unreachable`,
+  `sidecar_rejected`, `conversion_failed`, `timeout`, `no_pages`,
+  `unknown`). Übersetzt wird der Code beim Anzeigen; `error_message` bleibt
+  unverändert als technisches Detail für Admin und Log erhalten – im Viewer
+  ausklappbar, nicht als Hauptmeldung.
+- Der Gewinn ist nicht nur sprachlich: Erst ein Code erlaubt einen Satz, mit
+  dem jemand etwas anfangen kann („Die Partitur konnte nicht konvertiert
+  werden." plus Detail), und erst er macht die Fehlerursachen zählbar.
+
+**Cache-Formatversion (reist in derselben Migration mit).**
+
+- Spalte `format_version` (int), gesetzt beim `markReady()` auf die aktuelle
+  Konstante. `ConversionController::status()` und `serveCachedFile()`
+  behandeln einen Datensatz mit älterer Version wie „nicht fertig" und
+  stoßen eine Neukonvertierung an.
+- Zusätzlich defensiv: Eine `NotFoundException` beim Lesen einer
+  Cache-Datei bedeutet „muss neu konvertiert werden", nicht 500 –
+  `getPageCount()` liest `meta.json` heute ungeschützt, genau daran ist der
+  in Phase 12 dokumentierte 500er entstanden.
+- Damit ist die dortige Lücke geschlossen und der manuelle Eingriff
+  („betroffene `scoreview_conversions`-Zeilen löschen") überflüssig.
+
+**`CLAUDE.md`** in derselben Phase korrigieren (E4: englische Quellstrings,
+deutsche Übersetzung, Verweis auf `npm run l10n:extract`) – bewusst erst
+hier, damit die Anweisung nie auf einen Zustand zeigt, in dem es noch keine
+Übersetzungsdateien gibt.
+
+**Abnahme.** Nutzersprache auf Englisch → Oberfläche vollständig englisch,
+Fehlermeldungen eingeschlossen; zurück auf Deutsch → vollständig deutsch,
+kein durchgerutschter Rest. Ein absichtlich provozierter
+Konvertierungsfehler (Sidecar gestoppt) zeigt in beiden Sprachen einen
+übersetzten Satz plus unverändertes technisches Detail. Ein neu
+hinzugefügter, absichtlich nicht übersetzter String lässt `npm test`
+fehlschlagen. Ein Datensatz mit künstlich gesenkter `format_version` führt
+zu einer Neukonvertierung statt zu einem 500er.
+
+### Phase 15 – UI-Basis auf `@nextcloud/vue`
+
+Dateien: `package.json`, `webpack.config.js`, alle `src/components/*.vue`.
+
+Umsetzung von E5. **Reine Substitution, kein neues Verhalten:** Diese Phase
+soll nichts können, was die App vorher nicht konnte – nur so ist eine
+Regression überhaupt erkennbar. Alles Neue steht in 16/17.
+
+- Ersetzt werden: Buttons (`▶`/`⏸`/`M`/`S`/`Los`) durch `NcButton` mit Icon
+  und `aria-label`, die Zahlenfelder durch `NcTextField`, die
+  Instrumentenauswahl durch `NcSelect`, Lade- und Fehlerzustand durch
+  `NcLoadingIcon`/`NcEmptyContent`, der „Kein Ton"-Hinweis durch
+  `NcNoteCard`. Icons aus `vue-material-design-icons` statt der heutigen
+  Unicode-Glyphen – die sind weder benennbar noch für Screenreader
+  brauchbar.
+- **Gezielt einzeln importieren**, nicht als Sammelimport. Bundle-Größe vor
+  und nach der Umstellung messen und im Umsetzungsstand festhalten (die
+  Zahl ist die einzige Kontrolle über den Preis dieser Entscheidung).
+- Für die Regler zuerst nachsehen, ob es eine passende Komponente gibt;
+  falls nicht, bleibt `<input type="range">` mit NC-CSS-Variablen.
+- Verifikation zwingend **im Viewer-Kontext** (E5): die Komponenten laufen
+  in unserem eigenen, zweiten Vue-Baum. Eine Prüfung auf der
+  Einstellungsseite sagt darüber nichts.
+
+**Abnahme.** Der Viewer öffnet ohne Konsolenfehler in Viewers Vue-Kontext,
+alle bisherigen Funktionen unverändert – Playwright-Durchlauf wie in den
+Phasen 8–11 (Cursor auf `elid` 2 bei t=1000 ms, Sprung zu Takt 3 bei
+6000 ms, Loop innerhalb der Taktgrenze, Notiz anlegen und nach Reload
+wiederfinden). Die gesamte Transportleiste ist mit der Tastatur erreichbar
+und bedienbar. Dark Mode folgt dem Nextcloud-Theme ohne eigene Regeln.
+Bundle-Größe vorher/nachher dokumentiert.
+
+### Phase 16 – Probentauglichkeit I: Mitlesen
+
+Dateien: `ScorePage.vue`, `ScoreViewer.vue`, neu `src/lib/scrollPlan.js`,
+ggf. `src/lib/scoreLayout.js`.
+
+Ausgangslage: Der Cursor ist ein halbtransparentes Rechteck **über** der
+Note (`.score-page-cursor`), gescrollt wird nur beim Seitenwechsel
+(`lastScrolledPage`), und die Taktangabe steht nirgends – wer wissen will,
+wo er ist, scrollt nach oben zum Eingabefeld. Für eine Probe ist jeder
+dieser drei Punkte ein Stolperstein.
+
+- **Markierung, die den Notentext nicht überdeckt.** Zuerst messen, dann
+  bauen (**M9**, offen – Ergebnis wie bei M7 in Abschnitt 1 festhalten):
+  Tragen die MuseScore-SVG-Elemente eine Kennung, die
+  sich mit `elid` verbinden lässt? Falls ja, ist echte Hervorhebung des
+  Notenkopfs möglich (Füllfarbe/`filter`) statt eines Overlays. Falls nein,
+  bleibt das Overlay – dann aber **hinter** dem SVG: die Seite hat einen
+  weißen Hintergrund (`.score-page`), das SVG selbst ist transparent, ein
+  Rechteck dazwischen wirkt als Hinterlegung und verdeckt nie einen
+  Notenkopf. Zusätzlich zurückhaltender einfärben (weicher Schein statt
+  Balken plus Rahmen).
+- **Autoscroll im Takt der Wiedergabe.** Die Seite muss dem Cursor folgen,
+  nicht nur beim Seitenwechsel springen. Was dabei zählt: den Cursor in
+  einem ruhigen Sichtband halten statt am Rand, bei manuellem Scrollen
+  aussetzen und nach kurzer Zeit wieder übernehmen, und laufende
+  Animationen nicht überlagern – der bestehende Kommentar an
+  `scrollToPage()` beschreibt genau diesen Konflikt. Die Rechnung
+  „Cursor-Rechteck + Viewport-Maße → gewünschte Scrollposition" gehört als
+  reine Funktion nach `src/lib/` (dort ohne DOM testbar, siehe `CLAUDE.md`),
+  nicht in die Komponente.
+- **Taktangabe dauerhaft sichtbar.** Kopfzeile mit „Takt 42 / 63" und
+  Partiturtitel, gespeist aus `resolveMeasurePosition()` (existiert bereits
+  und wird für die Notiz-Anker ohnehin jeden Frame berechnet) und
+  `meta.json` (`title`, `measures`). Die Transportleiste ist bereits
+  `position: sticky` – dorthin gehört die Angabe.
+- **Zoom-Presets** (Seitenbreite, ganze Seite, 100 %) neben dem stufenlosen
+  Regler. Auch das ist eine reine Rechnung (viewBox + verfügbare Fläche →
+  Faktor) und gehört nach `src/lib/`.
+- **Vollbild einer A4-Seite mit möglichst wenig Rand.** Fullscreen-API auf
+  dem Seitencontainer plus „ganze Seite"-Zoom. Die feste Breitenschranke
+  (`maxWidth: 900 * zoom` px in `ScorePage.vue`) muss dafür einer
+  höhenbezogenen Skalierung weichen.
+- Echter Umbruch („bildschirmfüllend" im Sinne eines anderen Notensatzes)
+  bleibt zurückgestellt: das bräuchte ein zweites serverseitiges Layout
+  (`-S style.mss`) und damit einen Cache-Formatwechsel – dann greift
+  `format_version` aus Phase 14.
+
+**Abnahme.** Über eine vollständige Wiedergabe von `wwimf` (191 s,
+5 Seiten) bleibt der Cursor durchgehend im Sichtfeld, ohne dass jemand
+scrollt; manuelles Scrollen unterbricht das Nachführen und es nimmt danach
+wieder auf. Die Taktangabe stimmt an drei Stichproben mit dem Notenbild
+überein und ist ohne Scrollen sichtbar. Der Notenkopf unter dem Cursor ist
+lesbar (Vorher/Nachher-Screenshot). Eine A4-Seite füllt im Vollbild die
+Höhe.
+
+### Phase 17 – Probentauglichkeit II: Steuern
+
+Dateien: `ScoreViewer.vue`, `ScoreMixer.vue`, `src/lib/mixerLayout.js`,
+ggf. neu `src/lib/click.js`.
+
+- **Tempo in BPM statt Prozent.** `metadata.tempo` ist Viertel-BPM (M8).
+  Anzeige „♩ = 80 → 56", Eingabe absolut, intern weiterhin der Faktor auf
+  `playbackRate` (Phase 9 hat gemessen, dass die Zeitachse davon unberührt
+  bleibt). Zwei Einschränkungen gehören sichtbar in die UI: bei
+  `tempo == 0` (Partitur ohne Tempoangabe – kommt vor, M8) ist der
+  Bezugswert geraten (120), und bei Tempowechseln im Stück beschreibt die
+  Zahl nur das Grundtempo. `tempoText` ist wegen des SMuFL-Markups nicht
+  direkt anzeigbar.
+- **Loop bedienbar machen.** Die Felder sind heute 60 px breit und zeigen
+  von „von"/„bis" nur „v…"/„b…". Beschriftete Felder, dazu „Loop ab
+  aktuellem Takt" (der häufigste Fall in der Probe: man ist schon an der
+  Stelle) und eine sichtbare Markierung des Loop-Bereichs im Notenbild.
+- **Stimmgruppen und „meine Stimme".** Die Zuordnung Track → Part liegt vor
+  (`partId`, M6) – mehrere Tracks eines Parts lassen sich damit zu einem
+  Regler zusammenfassen (`duckwerk`: 6 Tracks auf 5 Parts). Wichtiger noch
+  der Probenfall selbst: „meine Stimme laut, Rest leise" ist heute Solo plus
+  vier Regler; dafür genügt ein Klick pro Stimme (Preset, nicht Solo).
+- **Mixer auch ohne `tracks`.** Gemessen (M8): `repeat-test.mscz` liefert
+  `tracks: []` bei gefüllten `parts`, `resolveMixerChannels()` gibt dann
+  null Kanäle zurück und der Mixer verschwindet ganz, obwohl Ton läuft.
+  Fallback auf `parts`, mindestens ein Summenregler – „Lautstärke" darf nie
+  vollständig fehlen.
+- **Metronom und Einzähler.** `metadata.tracks` führt eine Metronomspur
+  (M6), aber ob die exportierte MIDI überhaupt Metronomnoten enthält, ist
+  ungeprüft – zuerst nachsehen. Falls nicht: Der Klick lässt sich aus
+  `measures.json` clientseitig erzeugen, die Taktzeiten liegen ja vor, ganz
+  ohne MIDI. Ein Einzähler vor dem Loop-Start ist für Probenarbeit mehr wert
+  als die meiste übrige Mixer-Funktionalität.
+- **Tastaturkürzel** für die Probe: Leertaste Play/Pause, Pfeiltasten Takt
+  vor/zurück, ein Kürzel für Loop an/aus. Nur greifen, wenn der Viewer den
+  Fokus hat, und Nextclouds eigene Kürzel nicht überschreiben.
+
+**Abnahme.** Tempo lässt sich in BPM setzen, und die eingestellte Zahl
+stimmt mit einer unabhängigen Messung überein (Taktabstand aus
+`measures.json` gegen Wanduhr, Verfahren wie in Phase 9). Die Loop-Felder
+sind lesbar und mit der Tastatur bedienbar. „Nur meine Stimme laut" ist ein
+Klick. Der Mixer erscheint auch bei `repeat-test.mscz`. Ein Einzähler ist
+vor dem Loop hörbar – oder es ist dokumentiert, warum nicht.
+
+### Phase 18 – Geteilte Notizen
+
+Dateien: `AnnotationMapper.php`, `AnnotationService.php`,
+`AnnotationController.php`, `ScoreAnnotations.vue`, `ScorePage.vue`.
+
+Die Spalte `visibility` (`private`/`shared`) liegt seit Phase 11 im Schema;
+geschrieben und gelesen wird bislang nur `private`. Der Nutzen ist der
+eigentliche Probenfall: „Takt 42, Alt: Einsatz beachten" einmal schreiben
+statt dreißigmal sagen.
+
+- **Wer darf für alle schreiben?** An den Dateirechten festmachen, statt
+  eine eigene Rechteverwaltung zu bauen: Wer die `.mscz` bearbeiten darf
+  (`PERMISSION_UPDATE` am aufgelösten Node), darf geteilte Notizen anlegen
+  und ändern; wer sie lesen darf, sieht sie. Das deckt den realen Fall ab
+  (die Chorleitung besitzt die Datei und teilt sie mit dem Chor) und erbt
+  die Zugriffsprüfung, die `UserFileResolver` bereits leistet.
+- Lesen: `findByFileIdAndUser()` erweitern auf „eigene private **plus** alle
+  geteilten dieser Datei". `requireOwnAccess()` muss künftig zwischen „darf
+  sehen" und „darf ändern" unterscheiden – heute ist beides dasselbe.
+- UI: eigene und geteilte Notizen unterscheidbar (Markerfarbe, Autor über
+  `IUserManager` als Anzeigename), Filter „nur meine". Beim Anlegen muss
+  unmissverständlich sein, dass eine geteilte Notiz für alle mit
+  Dateizugriff sichtbar ist – das ist eine Datenweitergabe, kein
+  Anzeigedetail.
+- Anker (Takt + Bruchteil) und Verwaist-Logik bleiben unverändert; sie sind
+  von der Sichtbarkeit unabhängig.
+
+**Abnahme.** Zwei Nutzer auf einer geteilten Datei: A (Eigentümer) legt eine
+geteilte Notiz an → B sieht sie mit Autorenangabe; B legt eine private an →
+A sieht sie nicht; B ohne Schreibrecht kann keine geteilte Notiz anlegen
+(403, serverseitig geprüft, nicht bloß ausgeblendet). Damit ist zugleich die
+aus Phase 11 offen gebliebene Zwei-Nutzer-Abnahme nachgeholt.
+
+### Phase 19 – Mobil und Tablet
+
+Dateien: alle Komponenten, `src/viewer.js`.
+
+Der Einsatzort ist das Tablet auf dem Notenständer – geprüft ist davon
+bisher nichts. Die Bedienleisten sind für Maus und Desktop-Breite gebaut
+(`flex-wrap`, 24-px-Buttons, Hover-`title`).
+
+- Bedienelemente in eine kompakte, touchtaugliche Leiste (Zielgrößen
+  ≥ 44 px); selten Benutztes in ein Aktionsmenü.
+- Pinch-Zoom auf dem Notenbild und Wischen zum Blättern – dabei prüfen, ob
+  das mit Nextclouds Viewer kollidiert, der auf Mobilgeräten selbst
+  Wischgesten für den Dateiwechsel belegt.
+- **Bildschirm wachhalten** (`navigator.wakeLock`) während der Wiedergabe.
+  Ein Display, das mitten im Satz ausgeht, macht die ganze übrige Arbeit
+  wertlos.
+- Die SoundFont-Größe (~40 MB) wird hier zuerst weh tun. Ladefortschritt
+  zeigen und einen bewussten „Noten ohne Ton"-Weg anbieten, statt beim
+  Warten stumm dazustehen.
+- Leistung großer Partituren im DOM auf Tablet-Hardware messen (Risiko
+  „SVG-Seiten großer Partituren zu schwer fürs DOM"). Die Lazy-Ladung pro
+  Seite existiert (`IntersectionObserver` in `ScorePage.vue`), ist aber nie
+  unter Last geprüft worden.
+
+**Abnahme.** Eine vollständige Probe auf einem echten Tablet: Partitur
+öffnen, Takt ansteuern, loopen, eigene Stimme lauter – ohne dass das Display
+ausgeht oder die Bedienung Fingerspitzen erfordert. Gerätemodell und Browser
+im Umsetzungsstand benennen; „funktioniert auf Mobilgeräten" ohne
+Gerätenamen ist keine Aussage.
+
+### Phase 20 – Robustheit an echtem Material
+
+Hier steht kein neues Vorhaben, sondern das Nachziehen der offenen Punkte
+aus Abschnitt 5 – Messen statt Vermuten.
+
+- **Große Partituren.** Sämtliche Messungen stammen von 1–5 Seiten. Eine
+  Orchesterpartitur (30+ Seiten) durch die volle Kette schicken:
+  Konvertierungsdauer, SVG-Größe, Speicherbedarf im Sidecar, DOM-Verhalten,
+  Reichweite von `MSCORE_TIMEOUT_SECONDS`.
+- **D.C./D.S./Coda an einer in der MuseScore-GUI erstellten Partitur** – M7
+  ist dafür ausdrücklich offen (der MusicXML-Weg hat die Sprungmarken nicht
+  übernommen). Bis dahin gilt weiter: Der Cursor-Code darf sich nicht auf
+  lückenlose `elid`-Abdeckung verlassen.
+- **Klangqualität** an mehr als einer Partitur beurteilen. Das ist ein
+  Urteil am Ohr, keine Messung. Erst danach über einen Verstärkungsfaktor
+  entscheiden – die gemessenen ~7 dB Differenz zu MuseScores eigenem Render
+  stehen in Phase 9.
+- **Grenzwerte dokumentieren** (Partiturgröße, Seitenzahl, Timeout), offen
+  aus Phase 12.
+- `sanitizeSvg()` neu bewerten: bewusst regexbasiert und begründet
+  (`scoreLayout.js`), aber die Quelle ist ein Nutzer-Upload. Spätestens wenn
+  die App verteilt wird (Phase 21), ist das die Stelle, an der ein echter
+  Sanitizer seinen Preis wert sein kann.
+
+**Abnahme.** Für jeden Punkt eine Zahl oder ein dokumentiertes Urteil in
+diesem Dokument – kein „müsste gehen".
+
+### Phase 21 – Betrieb und Verteilung
+
+Der offene Rest aus Phase 12 plus die Betriebsideen aus Abschnitt 7.
+
+- **AppAPI/ExApp-Verpackung** – die Einlösung der Zusage aus E3:
+  Installation über die Nextcloud-UI statt `docker run` plus manuellem
+  Cron-Ersatzloop.
+- **Sidecar-Bereitstellung jenseits von Docker** konzipieren (nativ auf dem
+  Nextcloud-Host oder auf separatem Server), entlang bestehender Muster wie
+  dem High Performance Backend (vgl.
+  https://github.com/sunweaver/nextcloud-high-performance-backend-setup)
+  oder Collabora Office. Berührt E3 und entscheidet mit darüber, wie weit
+  die SaaS-Hürde sinkt.
+- **MuseScore-Versionspflege**: Wie kommt eine neue MuseScore-Version ins
+  Image, ohne dass `--score-media` unbemerkt bricht (Risikotabelle)?
+  Mindestens ein Selbsttest beim Start des Sidecars gegen eine
+  mitgelieferte Minipartitur – `repeat-test.mscz` liegt dafür bereit und
+  deckt mit Wiederholung und Volta genau die Struktur ab, an der ein
+  Formatwechsel zuerst auffiele.
+- **Admin-Health**: Sidecar erreichbar, SoundFont vorhanden – **und läuft
+  der Nextcloud-Cron?** Dessen Fehlen hat schon Zeit gekostet und ist von
+  außen nur als „bleibt auf pending stehen" sichtbar.
+- **Sandboxing-Rest**: Netzwerkisolation für den `mscore4portable`-
+  Subprozess statt für den ganzen Container (Begründung in Phase 12).
+
+**Abnahme.** Jemand, der dieses Repo nicht kennt, bekommt App und Sidecar
+nach der Anleitung zum Laufen, ohne dass wir danebenstehen.
+
 ## 4. Was ersatzlos entfällt
 
 | Entfällt | Grund |
@@ -706,6 +1196,21 @@ damalige Entscheidung war richtig, betraf aber einen anderen Zweck.
 - **Große Partituren.** Alle Messungen stammen von einem fünfseitigen
   SATB-Satz. Das Verhalten bei Orchesterpartituren (Seitenzahl, SVG-Größe,
   Konvertierungsdauer) ist unbekannt.
+- **Offline im Probenraum.** WLAN ist dort oft schlecht oder gar nicht
+  vorhanden. Ob die App ohne Netz brauchbar ist, ist ungeprüft: Die
+  Artefakte sind bereits unveränderlich und aggressiv cachebar (Phase 7),
+  was günstig ist, aber Nextclouds Viewer ist keine installierbare Web-App,
+  und das SoundFont wiegt ~40 MB. Diese Frage entscheidet mit darüber, ob
+  eine eigene Mobil-App überhaupt ein Problem löst, das der Browser nicht
+  löst (Abschnitt 7).
+- **Übersetzungsumfang.** DE + EN sind beschlossen (E4). Ob weitere Sprachen
+  gebraucht werden – und damit ein Community-Übersetzungsweg statt der
+  gepflegten Dateien im Repo – hängt daran, ob die App über den eigenen Chor
+  hinausgeht.
+
+Zwei bisher offene Punkte haben jetzt einen Termin statt nur eine Notiz:
+Klangqualität und große Partituren werden in Phase 20 gemessen bzw.
+beurteilt.
 
 ## 6. Risiken
 
@@ -724,3 +1229,61 @@ damalige Entscheidung war richtig, betraf aber einen anderen Zweck.
 | Neue Route in `appinfo/routes.php` wirkt bis zu 1 h nicht (`CachingRouter` cached die kompilierte Routentabelle je Host-Header) | Endpunkt liefert 404, obwohl korrekt definiert – irreführend, weil derselbe Request mit anderem Host-Header sofort funktioniert | App-Version in `info.xml` erhöhen + `occ upgrade`, oder lokalen Cache leeren; dokumentiert in `scoreview/README.md#troubleshooting` |
 | Cache-Format-Wechsel (wie in dieser Sitzung Phase 6/7) hat keinen Migrationspfad für schon konvertierte Partituren (siehe Phase 12, „Neu gefundene Lücke") | `status()` liefert 500 für jede Datei, die unter einem älteren Cache-Format bereits `status=ready` war | Betroffene `scoreview_conversions`-Zeilen manuell löschen (siehe `scoreview/README.md#troubleshooting`), bis ein Format-Versionsfeld oder eine defensive Fehlerbehandlung existiert |
 | Neu registrierter Mimetype gilt nicht rückwirkend für schon vorhandene Dateien (`occ maintenance:mimetype:update-db` reicht dafür nachweislich NICHT, entgegen einer früheren, jetzt widerlegten Annahme in `scoreview/README.md`) | Alte `.mscz`-Bestandsdateien bieten nur „Herunterladen" an, nicht den Viewer | Nach Registrierung zusätzlich `occ files:scan <Nutzer>` (oder `--all`) für den betroffenen Bestand ausführen - siehe `scoreview/README.md#troubleshooting` |
+
+Ergänzt in der zweiten Planungsrunde (2026-08-23):
+
+| Risiko | Auswirkung | Umgang |
+|---|---|---|
+| `@nextcloud/vue` (E5) verhält sich im selbst gemounteten zweiten Vue-Baum (`src/viewer.js`) anders als in einer gewöhnlichen Nextcloud-App | Die UI-Phasen 16–19 bauen auf einer Basis auf, die ausgerechnet im Viewer bricht | Phase 15 verifiziert ausschließlich im Viewer-Kontext und **vor** 16–19; Bundle-Größe vorher/nachher messen |
+| Fehlende oder unvollständige Übersetzung fällt nicht auf – Nextclouds `JSResourceLocator` ignoriert fehlende l10n-Dateien bewusst („missing translations files will be ignored") | Die Oberfläche mischt still Sprachen, niemand merkt es | Vollständigkeitstest in `npm test` statt Sorgfalt (Phase 14) |
+| `metadata.tracks` leer, obwohl `parts` gefüllt ist (gemessen, M8) | Der Mixer verschwindet komplett, obwohl Ton läuft – keinerlei Lautstärkeregelung | Fallback auf `parts` bzw. mindestens ein Summenregler (Phase 17) |
+| `metadata.tempo == 0` bei Partituren ohne Tempoangabe (gemessen, M8) | Eine BPM-Anzeige hätte keinen echten Bezugswert und behauptete eine Genauigkeit, die nicht da ist | MuseScore-Vorgabe 120 annehmen **und** als geraten kennzeichnen (Phase 17) |
+| Geteilte Notizen sind eine Datenweitergabe an alle mit Dateizugriff | Jemand teilt versehentlich etwas Privates | Sichtbarkeit beim Anlegen unmissverständlich anzeigen, serverseitig an `PERMISSION_UPDATE` binden (Phase 18) |
+| Fehlermeldungen der Konvertierung werden einmal geschrieben und später von beliebigen Nutzern gelesen | Eine zum Schreibzeitpunkt übersetzte Meldung wäre für alle anderen in der falschen Sprache | `error_code` speichern, erst beim Anzeigen übersetzen, technisches Detail unübersetzt danebenstellen (Phase 14) |
+
+## 7. Ideensammlung und ihre Zuordnung
+
+Die am 2026-08-23 gesichtete Ideensammlung ist in der zweiten Planungsrunde
+bewertet und den Phasen 14–21 zugeordnet worden. Diese Tabelle hält
+vollständig fest, wo jede Idee gelandet ist – auch die, die bewusst nicht
+eingeplant wurden. Nichts davon ist stillschweigend verschwunden.
+
+| Idee | Zuordnung |
+|---|---|
+| Automatisch weiterscrollen/blättern im Takt der Wiedergabe | Phase 16 |
+| Standard-Zoom-Presets (Seitenbreite, ganze Seite, …) | Phase 16 |
+| Taktangabe während der Probe dauerhaft sichtbar | Phase 16 |
+| Vollbildmodus einer A4-Seite mit wenig Rand | Phase 16 (Vollbild/Skalierung), Phase 19 (Touch-Bedienung darin) |
+| Bessere Markierung der aktuellen Position (Balken überdeckt Notentext) | Phase 16, mit vorgelagerter Messung M9 |
+| Lautstärke einzelner Stimmen/Stimmgruppen | Phase 17 (Einzelstimmen gibt es seit Phase 9; neu sind Gruppen und das „meine Stimme"-Preset) |
+| Loop-Felder zu schmal, Inhalt nicht lesbar | Phase 17 |
+| Abspielgeschwindigkeit direkt in BPM | Phase 17, auf Basis von M8 |
+| Sidecar-Bereitstellung jenseits von Docker | Phase 21 |
+| MuseScore-Version im Sidecar aktuell halten | Phase 21 |
+| Durchgängige Nutzbarkeit auf Mobilgeräten | Phase 19 |
+| Notizen mit Stift auf dem Tablet | **nicht eingeplant**, siehe unten |
+| Separate Android-/iOS-App | **nicht eingeplant**, siehe unten |
+
+**Notizen mit Stift auf dem Tablet – warum nicht jetzt.** Das ist kein
+Zusatz zu den Notizen aus Phase 11, sondern eine zweite Datenart: freie
+Striche statt Text an einem Anker. Sie müssten an musikalischen Koordinaten
+hängen, um ein Neurendern zu überleben (derselbe Grundsatz wie in Phase 11),
+und ein Strich zieht sich über mehrere Noten – der Anker ist also kein Punkt
+mehr, sondern ein Pfad. Diese Frage lässt sich seriös erst beantworten, wenn
+Phase 19 gezeigt hat, wie sich das Notenbild auf einem Tablet überhaupt
+anfühlt. Bleibt als Idee stehen.
+
+**Separate Android-/iOS-App – warum nicht jetzt.** Der Bedarf dahinter ist
+vermutlich nicht „eine native App", sondern „Noten offline und ohne
+Browser-Umweg am Notenständer". Eine eigene App bedeutet eine zweite
+Codebasis, eine zweite Wiedergabe, einen zweiten Renderer und zwei Stores –
+für ein Ziel, das eine installierbare, offlinefähige Web-App womöglich
+ebenfalls erreicht. Die Artefakte sind bereits unveränderlich und cachebar
+(Phase 7), die Voraussetzungen dafür also günstig. Erst die Offline-Frage
+aus Abschnitt 5 beantworten, dann neu bewerten.
+
+**Was sonst noch bewusst nicht eingeplant ist:** der Korrektur-Layer
+(Phase 13, weiterhin hinter Phase 21), ein zweites serverseitiges Layout für
+echten Umbruch (Phase 16 nennt die Bedingung), sowie
+Rechts-nach-links-Sprachen – bei DE + EN (E4) kein Thema, bei einer
+Ausweitung des Sprachumfangs neu zu prüfen.
