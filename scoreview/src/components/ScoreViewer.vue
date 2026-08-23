@@ -64,7 +64,7 @@
 							min="1"
 							:label="t('Measure')"
 							:title="t('Measure – enter a number and press Enter to jump there')"
-							label-outside
+							labelOutside
 							@focus="measureFieldFocused = true"
 							@blur="onMeasureFieldBlur"
 							@keyup.enter="jumpToMeasure(measureInput)" />
@@ -99,7 +99,11 @@
 								</template>
 								{{ t('Loop from current measure') }}
 							</NcButton>
-							<NcButton wide :pressed="loopActive" :aria-label="loopActive ? t('Loop on') : t('Loop off')" @click="toggleLoop">
+							<NcButton
+								wide
+								:pressed="loopActive"
+								:aria-label="loopActive ? t('Loop on') : t('Loop off')"
+								@click="toggleLoop">
 								<template #icon>
 									<Repeat :size="20" />
 								</template>
@@ -141,10 +145,18 @@
 							</label>
 							<fieldset class="scoreview-popover-group">
 								<legend>{{ t('Metronome') }}</legend>
-								<NcCheckboxRadioSwitch v-model="metronomeBeats" type="radio" value="all" name="scoreview-metronome-beats">
+								<NcCheckboxRadioSwitch
+									v-model="metronomeBeats"
+									type="radio"
+									value="all"
+									name="scoreview-metronome-beats">
 									{{ t('Every beat') }}
 								</NcCheckboxRadioSwitch>
-								<NcCheckboxRadioSwitch v-model="metronomeBeats" type="radio" value="downbeat" name="scoreview-metronome-beats">
+								<NcCheckboxRadioSwitch
+									v-model="metronomeBeats"
+									type="radio"
+									value="downbeat"
+									name="scoreview-metronome-beats">
 									{{ t('Downbeat only') }}
 								</NcCheckboxRadioSwitch>
 							</fieldset>
@@ -212,7 +224,11 @@
 						<Tune :size="20" />
 					</template>
 				</NcButton>
-				<NcButton :pressed="showAnnotations" :aria-label="t('Notes')" :title="t('Notes')" @click="showAnnotations = !showAnnotations">
+				<NcButton
+					:pressed="showAnnotations"
+					:aria-label="t('Notes')"
+					:title="t('Notes')"
+					@click="showAnnotations = !showAnnotations">
 					<template #icon>
 						<NotebookOutline :size="20" />
 					</template>
@@ -267,14 +283,14 @@
 							v-for="(url, i) in pageUrls"
 							:key="url"
 							:ref="(el) => setPageRef(el, i)"
-							:svg-url="url"
-							:page-index="i"
-							:cursor-rect="cursorRect"
+							:svgUrl="url"
+							:pageIndex="i"
+							:cursorRect="cursorRect"
 							:zoom="zoom"
 							:markers="annotationMarkers"
-							:loop-markers="loopMarkers"
-							@note-click="onNoteClick"
-							@marker-click="onAnnotationJumpToById"
+							:loopMarkers="loopMarkers"
+							@noteClick="onNoteClick"
+							@markerClick="onAnnotationJumpToById"
 							@loaded="onPageLoaded" />
 					</div>
 				</div>
@@ -297,9 +313,9 @@
 						</div>
 						<ScoreMixer
 							:channels="mixerChannels"
-							:preset-list="presetList"
-							@volumes-changed="onVolumesChanged"
-							@program-changed="onProgramChanged" />
+							:presetList="presetList"
+							@volumesChanged="onVolumesChanged"
+							@programChanged="onProgramChanged" />
 					</section>
 					<section v-if="showAnnotations" class="scoreview-panel">
 						<div class="scoreview-panel-head">
@@ -312,12 +328,12 @@
 						</div>
 						<ScoreAnnotations
 							:annotations="annotations"
-							:current-anchor="currentAnchor"
+							:currentAnchor="currentAnchor"
 							:error="annotationError"
 							@create="onAnnotationCreate"
 							@update="onAnnotationUpdate"
 							@delete="onAnnotationDelete"
-							@jump-to="onAnnotationJumpTo" />
+							@jumpTo="onAnnotationJumpTo" />
 					</section>
 				</div>
 			</div>
@@ -326,33 +342,38 @@
 </template>
 
 <script>
-import { generateUrl } from '@nextcloud/router'
-import { translate } from '@nextcloud/l10n'
 import axios from '@nextcloud/axios'
+import { translate } from '@nextcloud/l10n'
+import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
-import NcTextField from '@nextcloud/vue/components/NcTextField'
-import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcPopover from '@nextcloud/vue/components/NcPopover'
-import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-import Play from 'vue-material-design-icons/Play.vue'
-import Pause from 'vue-material-design-icons/Pause.vue'
-import Tune from 'vue-material-design-icons/Tune.vue'
-import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
-import Close from 'vue-material-design-icons/Close.vue'
-import Repeat from 'vue-material-design-icons/Repeat.vue'
+import NcTextField from '@nextcloud/vue/components/NcTextField'
 import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
 import ArrowExpandHorizontal from 'vue-material-design-icons/ArrowExpandHorizontal.vue'
+import Close from 'vue-material-design-icons/Close.vue'
+import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
 import FitToPage from 'vue-material-design-icons/FitToPage.vue'
 import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
 import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
-import Metronome from 'vue-material-design-icons/Metronome.vue'
-import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
 import Magnify from 'vue-material-design-icons/Magnify.vue'
-import ScorePage from './ScorePage.vue'
-import ScoreMixer from './ScoreMixer.vue'
+import Metronome from 'vue-material-design-icons/Metronome.vue'
+import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
+import Pause from 'vue-material-design-icons/Pause.vue'
+import Play from 'vue-material-design-icons/Play.vue'
+import Repeat from 'vue-material-design-icons/Repeat.vue'
+import Tune from 'vue-material-design-icons/Tune.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
+import ScoreMixer from './ScoreMixer.vue'
+import ScorePage from './ScorePage.vue'
+import { useScoreSync } from '../composables/useScoreSync.js'
+import { computeCountInDelaysMs, estimateBeatsInMeasure, resolveBeatInMeasure } from '../lib/metronome.js'
+import { createMetronomeClick } from '../lib/metronomeClick.js'
+import { resolveMixerChannels } from '../lib/mixerLayout.js'
+import { createPlayer } from '../lib/player.js'
 import {
 	buildTimeline,
 	computeActualSizeZoom,
@@ -367,14 +388,9 @@ import {
 	MIN_ZOOM,
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
-import { findStepIndex } from '../lib/timingSync.js'
-import { resolveMixerChannels } from '../lib/mixerLayout.js'
 import { planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
-import { useScoreSync } from '../composables/useScoreSync.js'
 import { createSilentClock } from '../lib/silentClock.js'
-import { createPlayer } from '../lib/player.js'
-import { computeCountInDelaysMs, estimateBeatsInMeasure, resolveBeatInMeasure } from '../lib/metronome.js'
-import { createMetronomeClick } from '../lib/metronomeClick.js'
+import { findStepIndex } from '../lib/timingSync.js'
 
 // Pausendauer für das Autoscroll-Nachführen nach manuellem Scrollen (Phase
 // 16, siehe scrollPlan.js) - lang genug, um in Ruhe zu lesen, kurz genug, um
@@ -1770,14 +1786,14 @@ export default {
 
 .scoreview-error-detail {
 	display: inline-block;
-	text-align: left;
+	text-align: start;
 	color: var(--color-text-maxcontrast);
 	font-size: 0.9em;
 }
 
 .scoreview-error-detail pre {
 	white-space: pre-wrap;
-	word-break: break-word;
+	overflow-wrap: break-word;
 }
 
 .scoreview-hint {
@@ -1927,7 +1943,7 @@ export default {
 .scoreview-panels {
 	position: absolute;
 	top: 0;
-	right: 0;
+	inset-inline-end: 0;
 	bottom: 0;
 	/*
 	 * Muss über dem Notenbild liegen: .score-page-svg trägt z-index: 1 und

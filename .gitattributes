@@ -1,4 +1,28 @@
-# Scripts run inside Linux containers - never let Windows checkouts
-# convert them to CRLF (breaks the shebang / `set -eu`).
+# Textdateien werden im Repo als LF gespeichert UND als LF ausgecheckt -
+# auch auf Windows mit core.autocrlf=true (Codereview Phase 23/Schritt 2).
+#
+# Grund: die committeten Blobs waren ohnehin schon LF, aber der Windows-
+# Working-Tree bekam CRLF. Damit meldet ESLints `@stylistic/linebreak-style`
+# (Teil von @nextcloud/eslint-config) fuer jede frisch ausgecheckte Datei
+# einen Fehler, den es im Repo gar nicht gibt - der Linter waere lokal nicht
+# benutzbar, obwohl in CI alles gruen ist. `eol=lf` beseitigt die Differenz
+# an der Wurzel, statt die Regel abzuschalten.
+#
+# `text=auto` laesst Git Binaerdateien selbst erkennen; die bekannten
+# Binaerformate stehen unten trotzdem explizit, damit die Erkennung sie nicht
+# faelschlich als Text behandelt und Zeilenenden darin ersetzt.
+* text=auto eol=lf
+
+# Skripte laufen in Linux-Containern - CRLF wuerde Shebang / `set -eu`
+# zerlegen. Seit `* text=auto eol=lf` redundant, bleibt als ausdrueckliche
+# Zusage stehen.
 *.sh text eol=lf
 *.py text eol=lf
+
+# MuseScore-Partituren sind ZIP-Container, PNG/JPG/SF3 ohnehin binaer.
+*.mscz binary
+*.mid binary
+*.sf2 binary
+*.sf3 binary
+*.png binary
+*.jpg binary

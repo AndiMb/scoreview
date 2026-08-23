@@ -28,7 +28,7 @@
  * @param {number} measureDurationMs
  * @param {number} quarterBpm metadata.tempo, kann 0 sein (M8: Partitur ohne
  *   Tempoangabe) - dann Standardannahme 4/4 ohne Tempobezug.
- * @returns {number} mindestens 1
+ * @return {number} mindestens 1
  */
 export function estimateBeatsInMeasure(measureDurationMs, quarterBpm) {
 	if (!quarterBpm || quarterBpm <= 0 || !measureDurationMs || measureDurationMs <= 0) {
@@ -44,7 +44,7 @@ export function estimateBeatsInMeasure(measureDurationMs, quarterBpm) {
  *
  * @param {number} beatsInMeasure aus estimateBeatsInMeasure()
  * @param {number} beatIntervalMs Schlaglänge in ms (60000 / effektive BPM)
- * @returns {number[]}
+ * @return {number[]}
  */
 export function computeCountInDelaysMs(beatsInMeasure, beatIntervalMs) {
 	return Array.from({ length: Math.max(1, beatsInMeasure) }, (_, i) => i * beatIntervalMs)
@@ -66,7 +66,7 @@ export function computeCountInDelaysMs(beatsInMeasure, beatIntervalMs) {
  * @param {number} quarterBpm metadata.tempo (M8), 0 erlaubt
  * @param {boolean} [everyBeat] false = nur der Taktanfang (Verhalten bis
  *   Phase 21)
- * @returns {{index:number,timeMs:number}|null} null bei unbrauchbaren Zeiten
+ * @return {{index:number,timeMs:number}|null} null bei unbrauchbaren Zeiten
  */
 export function resolveBeatInMeasure(measureStartMs, measureEndMs, timeMs, quarterBpm, everyBeat = true) {
 	const durationMs = measureEndMs - measureStartMs

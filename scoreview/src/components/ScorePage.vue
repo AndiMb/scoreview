@@ -1,5 +1,9 @@
 <template>
-	<div ref="root" class="score-page" :style="pageStyle" @click="onClick">
+	<div
+		ref="root"
+		class="score-page"
+		:style="pageStyle"
+		@click="onClick">
 		<!--
 			Overlay HINTER dem Notenbild (siehe PLAN.md M9): das SVG hat keine
 			id-Attribute, mit denen sich der Notenkopf selbst einfärben ließe,
@@ -9,7 +13,24 @@
 			nicht aus dieser Template-Reihenfolge - siehe Kommentar dort. Nur
 			messbar/anfassbar über ref="cursor" (siehe getCursorClientRect()).
 		-->
-		<div v-if="cursorStyle" ref="cursor" class="score-page-cursor" :style="cursorStyle" />
+		<div
+			v-if="cursorStyle"
+			ref="cursor"
+			class="score-page-cursor"
+			:style="cursorStyle" />
+		<!--
+			v-html ist hier unvermeidbar: das MuseScore-SVG soll als echtes DOM
+			im Dokument liegen, damit Zoom, Scoped-CSS (siehe :deep(svg) unten)
+			und das Koordinaten-Overlay darauf greifen - ein <img>/<object> waere
+			eine eigene Ressource ohne Zugriff darauf. Die Quelle ist ein
+			Nutzer-Upload, MuseScore rendert Titel, Liedtext und freie Textfelder
+			aus der Partitur hinein: `svgMarkup` ist deshalb IMMER durch
+			lib/svgSanitizer.js (DOMPurify) gegangen, nie roher Antworttext -
+			siehe load() unten und PLAN.md Phase 20. Wird diese Regel je gelockert,
+			muss die Zeile hier wieder auffallen, darum nur diese eine Zeile
+			ausgenommen statt der Datei.
+		-->
+		<!-- eslint-disable-next-line vue/no-v-html -->
 		<div v-if="svgMarkup" class="score-page-svg" v-html="svgMarkup" />
 		<div
 			v-for="marker in pageMarkers"
@@ -18,7 +39,7 @@
 			:class="{ 'score-page-marker--shared': marker.visibility === 'shared' }"
 			:style="marker.style"
 			:title="t('Note')"
-			@click.stop="$emit('marker-click', marker.id)" />
+			@click.stop="$emit('markerClick', marker.id)" />
 		<!--
 			Sichtbare Loop-Bereichsmarkierung (Phase 17) - zwei schmale, farbige
 			Flaggen an Start-/Ende-Takt statt eines vollflächigen Bereichs:
@@ -58,27 +79,32 @@ export default {
 			type: String,
 			required: true,
 		},
+
 		// 0-indiziert, wie das "page"-Feld in timing.json/measures.json (M4).
 		pageIndex: {
 			type: Number,
 			required: true,
 		},
+
 		cursorRect: {
 			type: Object,
 			default: null,
 		},
+
 		// Stufenloser Zoom (Phase 10, "über die SVG-Skalierung") - 1 =
 		// Standardbreite, skaliert die max-width linear.
 		zoom: {
 			type: Number,
 			default: 1,
 		},
+
 		// Notiz-Marker (Phase 11): {id, page, x, y, w, h} in SVG-Einheiten,
 		// unabhängig von der Seite gefiltert - siehe pageMarkers.
 		markers: {
 			type: Array,
 			default: () => [],
 		},
+
 		// Loop-Bereichsmarkierung (Phase 17): {id, kind:'start'|'end', page, x,
 		// y, w, h}, siehe pageLoopMarkers.
 		loopMarkers: {
@@ -87,7 +113,7 @@ export default {
 		},
 	},
 
-	emits: ['note-click', 'marker-click', 'loaded'],
+	emits: ['noteClick', 'markerClick', 'loaded'],
 
 	data() {
 		return {
@@ -215,7 +241,7 @@ export default {
 			const rect = this.$refs.root.getBoundingClientRect()
 			const fracX = (event.clientX - rect.left) / rect.width
 			const fracY = (event.clientY - rect.top) / rect.height
-			this.$emit('note-click', {
+			this.$emit('noteClick', {
 				page: this.pageIndex,
 				x: this.viewBox.minX + fracX * this.viewBox.width,
 				y: this.viewBox.minY + fracY * this.viewBox.height,
@@ -327,6 +353,16 @@ export default {
 	position: absolute;
 	width: 14px;
 	height: 14px;
+	/*
+	 * Physisch, nicht logisch - hier ausnahmsweise mit Absicht: der Marker
+	 * wird ueber `left`/`top` in Prozent der SVG-viewBox positioniert
+	 * (pageMarkers oben), und ein Notenbild spiegelt sich in einer
+	 * RTL-Oberflaeche nicht mit. `margin-inline-start` wuerde den Punkt dort
+	 * gegen sein eigenes `left` verschieben, statt ihn auf der Koordinate zu
+	 * zentrieren. Die Bedienflaeche drumherum nutzt sehr wohl logische
+	 * Eigenschaften (siehe ScoreViewer.vue).
+	 */
+	/* stylelint-disable-next-line csstools/use-logical */
 	margin-left: -7px;
 	margin-top: -7px;
 	background: var(--color-warning, orange);

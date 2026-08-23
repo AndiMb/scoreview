@@ -11,7 +11,12 @@
 		<NcNoteCard v-if="error" type="error" class="scoreview-annotations-error">
 			{{ error }}
 		</NcNoteCard>
-		<NcButton v-if="hasShared" class="scoreview-annotations-filter" :pressed="onlyMine" :aria-label="t('Only mine')" @click="onlyMine = !onlyMine">
+		<NcButton
+			v-if="hasShared"
+			class="scoreview-annotations-filter"
+			:pressed="onlyMine"
+			:aria-label="t('Only mine')"
+			@click="onlyMine = !onlyMine">
 			{{ t('Only mine') }}
 		</NcButton>
 		<p v-if="visibleAnnotations.length === 0 && !draft" class="scoreview-annotations-empty">
@@ -60,7 +65,7 @@
 				:key="a.id"
 				class="scoreview-annotation"
 				:class="{ orphaned: a.orphaned, shared: a.visibility === 'shared' }">
-				<span class="scoreview-annotation-anchor" @click="$emit('jump-to', a)">
+				<span class="scoreview-annotation-anchor" @click="$emit('jumpTo', a)">
 					{{ t('Measure {n}', { n: a.measureNumber }) }}
 					<em v-if="a.orphaned">{{ t('(orphaned)') }}</em>
 					<span v-if="a.visibility === 'shared'" class="scoreview-annotation-badge" :title="t('Shared with everyone who has access to this file')">
@@ -113,13 +118,13 @@
 import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import PlusCircleOutline from 'vue-material-design-icons/PlusCircleOutline.vue'
+import AccountGroup from 'vue-material-design-icons/AccountGroup.vue'
 import Check from 'vue-material-design-icons/Check.vue'
 import Close from 'vue-material-design-icons/Close.vue'
-import Pencil from 'vue-material-design-icons/Pencil.vue'
 import Delete from 'vue-material-design-icons/Delete.vue'
-import AccountGroup from 'vue-material-design-icons/AccountGroup.vue'
 import LockOutline from 'vue-material-design-icons/LockOutline.vue'
+import Pencil from 'vue-material-design-icons/Pencil.vue'
+import PlusCircleOutline from 'vue-material-design-icons/PlusCircleOutline.vue'
 
 /**
  * Liste + Editor für Notizen: privat (Phase 11) und geteilt (Phase 18).
@@ -145,12 +150,14 @@ export default {
 			type: Array,
 			required: true,
 		},
+
 		// {measureNumber, fraction, elid, anchorEtag} der aktuellen
 		// Wiedergabeposition, von ScoreViewer.vue aus scoreLayout.js berechnet.
 		currentAnchor: {
 			type: Object,
 			default: null,
 		},
+
 		// Serverfehler vom letzten create/update/delete (z.B. 403 beim Anlegen
 		// einer geteilten Notiz ohne Schreibrecht) - roh durchgereicht, siehe
 		// ScoreViewer.vue.
@@ -160,7 +167,7 @@ export default {
 		},
 	},
 
-	emits: ['create', 'update', 'delete', 'jump-to'],
+	emits: ['create', 'update', 'delete', 'jumpTo'],
 
 	data() {
 		return {
@@ -262,7 +269,7 @@ export default {
    statt der vollen Rahmenfarbe, damit sich das nicht mit "orphaned" beißt,
    falls beides gleichzeitig zutrifft. */
 .scoreview-annotation.shared {
-	border-left: 3px solid var(--color-primary-element, #0082c9);
+	border-inline-start: 3px solid var(--color-primary-element, #0082c9);
 }
 
 .scoreview-annotation-anchor {

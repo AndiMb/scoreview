@@ -13,7 +13,7 @@
  *
  * @param {number[]} times aufsteigend sortiert
  * @param {number} timeMs
- * @returns {number}
+ * @return {number}
  */
 export function findStepIndex(times, timeMs) {
 	let lo = 0

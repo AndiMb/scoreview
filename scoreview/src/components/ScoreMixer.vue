@@ -41,11 +41,11 @@
 			<NcSelect
 				v-if="presetList && presetList.length > 0 && group.channels.length === 1"
 				class="scoreview-mixer-program"
-				:model-value="selectedPreset(group.channels[0])"
+				:modelValue="selectedPreset(group.channels[0])"
 				:options="presetList"
 				label="name"
 				:clearable="false"
-				@update:model-value="(preset) => onProgramChange(group.channels[0], preset.program)" />
+				@update:modelValue="(preset) => onProgramChange(group.channels[0], preset.program)" />
 		</div>
 	</div>
 </template>
@@ -54,9 +54,9 @@
 import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
-import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
-import Headphones from 'vue-material-design-icons/Headphones.vue'
 import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
+import Headphones from 'vue-material-design-icons/Headphones.vue'
+import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import { computeEffectiveVolumes, computeVoiceFocusVolumes, resolveMixerGroups } from '../lib/mixerLayout.js'
 
 /**
@@ -85,6 +85,7 @@ export default {
 			type: Array,
 			required: true,
 		},
+
 		// player.getPresetList() - undefined/leer, solange der Player noch
 		// nicht bereit ist.
 		presetList: {
@@ -93,18 +94,21 @@ export default {
 		},
 	},
 
-	emits: ['volumes-changed', 'program-changed'],
+	emits: ['volumesChanged', 'programChanged'],
 
 	data() {
 		return {
 			// channel -> { volume, muted, solo, program }
-			states: Object.fromEntries(
-				// program aus dem Kanal, nicht pauschal 0: MuseScore hat fuer
-				// jede Stimme bereits ein Instrument gewaehlt (bei SATB 52 =
-				// Choir Aahs). Mit festem 0 zeigte das Auswahlfeld immer
-				// "Acoustic Grand Piano" an, obwohl etwas anderes klang.
-				this.channels.map((ch) => [ch.channel, { volume: 127, muted: false, solo: false, program: ch.program ?? 0 }]),
-			),
+			//
+			// program aus dem Kanal, nicht pauschal 0: MuseScore hat fuer jede
+			// Stimme bereits ein Instrument gewaehlt (bei SATB 52 = Choir
+			// Aahs). Mit festem 0 zeigte das Auswahlfeld immer "Acoustic Grand
+			// Piano" an, obwohl etwas anderes klang.
+			states: Object.fromEntries(this.channels.map((ch) => [
+				ch.channel,
+				{ volume: 127, muted: false, solo: false, program: ch.program ?? 0 },
+			])),
+
 			// key der Gruppe mit aktivem "meine Stimme"-Preset, oder null.
 			focusedGroupKey: null,
 		}
@@ -123,7 +127,7 @@ export default {
 
 		emitVolumes() {
 			const channelStates = this.channels.map((ch) => ({ channel: ch.channel, ...this.states[ch.channel] }))
-			this.$emit('volumes-changed', computeEffectiveVolumes(channelStates))
+			this.$emit('volumesChanged', computeEffectiveVolumes(channelStates))
 		},
 
 		groupVolume(group) {
@@ -185,7 +189,7 @@ export default {
 
 		onProgramChange(channel, program) {
 			this.states[channel].program = program
-			this.$emit('program-changed', { channel, program })
+			this.$emit('programChanged', { channel, program })
 		},
 
 		// NcSelect (vue-select) bekommt hier bewusst das volle Preset-Objekt aus

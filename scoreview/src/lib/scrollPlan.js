@@ -49,7 +49,7 @@ const DEFAULT_MARGIN_PX = 24
  * @param {number} [params.margin] Sicherheitsabstand zum Rand in px
  * @param {number} [params.lead] Anteil des freien Platzes, der ÜBER dem
  *   System liegen soll (0-1; kleiner = mehr Vorausschau nach unten)
- * @returns {number|null} neues scrollTop, oder null wenn keine Änderung nötig
+ * @return {number|null} neues scrollTop, oder null wenn keine Änderung nötig
  */
 export function planAutoScroll({
 	cursorTop,
@@ -99,7 +99,7 @@ export function planAutoScroll({
  * @param {number} params.scrollLeft aktuelles scrollLeft des Containers
  * @param {number} params.viewportWidth sichtbare Breite des Containers (px)
  * @param {number} [params.margin] Sicherheitsabstand zum Rand in px
- * @returns {number|null} neues scrollLeft, oder null wenn keine Änderung nötig
+ * @return {number|null} neues scrollLeft, oder null wenn keine Änderung nötig
  */
 export function planHorizontalScroll({
 	cursorLeft,
@@ -135,7 +135,7 @@ export function planHorizontalScroll({
  *   erkannten manuellen Scrollens, oder null wenn noch keins registriert wurde
  * @param {number} now aktueller Zeitstempel (ms)
  * @param {number} [resumeDelayMs] Pausendauer nach einem manuellen Scroll
- * @returns {boolean}
+ * @return {boolean}
  */
 export function shouldSuppressAutoScroll(lastManualScrollAt, now, resumeDelayMs = 2500) {
 	return lastManualScrollAt !== null && (now - lastManualScrollAt) < resumeDelayMs

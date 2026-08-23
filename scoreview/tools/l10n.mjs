@@ -69,7 +69,11 @@ export async function collectRequiredKeys(root = ROOT) {
 	return { jsKeys, phpKeys }
 }
 
-/** Reine, klammernbasierte Extraktion von "key" : "value"-Paaren - bewusst kein eval() auf einer JS-Datei. */
+/**
+ * Reine, klammernbasierte Extraktion von "key" : "value"-Paaren - bewusst kein eval() auf einer JS-Datei.
+ *
+ * @param objectBody
+ */
 function parseKeyValuePairs(objectBody) {
 	const pairPattern = /"((?:\\.|[^"\\])*)"\s*:\s*"((?:\\.|[^"\\])*)"/g
 	const translations = {}
@@ -102,7 +106,10 @@ function diff(requiredKeys, translations) {
 	return { missing, orphaned }
 }
 
-/** @returns {Promise<{js: {missing: string[], orphaned: string[]}, php: {missing: string[], orphaned: string[]}}>} */
+/**
+ * @param root
+ * @return {Promise<{js: {missing: string[], orphaned: string[]}, php: {missing: string[], orphaned: string[]}}>}
+ */
 export async function checkTranslations(root = ROOT) {
 	const [{ jsKeys, phpKeys }, jsTranslations, phpTranslations] = await Promise.all([
 		collectRequiredKeys(root),

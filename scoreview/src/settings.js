@@ -11,11 +11,11 @@ function t(text, vars) {
 // Content-Security-Policy blockt Inline-Scripts ohne Nonce, ein per
 // Util::addScript geladenes Bundle bekommt die Nonce automatisch.
 (function() {
-	var form = document.getElementById('scoreview-settings-form')
+	const form = document.getElementById('scoreview-settings-form')
 	if (!form) {
 		return
 	}
-	var status = document.getElementById('scoreview-settings-status')
+	const status = document.getElementById('scoreview-settings-status')
 	form.addEventListener('submit', function(event) {
 		event.preventDefault()
 		status.textContent = '…'
@@ -32,7 +32,9 @@ function t(text, vars) {
 				soundFontUrl: document.getElementById('scoreview-soundfont-url').value,
 			}),
 		}).then(function(res) {
-			if (!res.ok) { throw new Error('HTTP ' + res.status) }
+			if (!res.ok) {
+				throw new Error('HTTP ' + res.status)
+			}
 			status.textContent = '✓ ' + t('Saved')
 			document.getElementById('scoreview-sidecar-secret').value = ''
 		}).catch(function(err) {
@@ -41,13 +43,13 @@ function t(text, vars) {
 	})
 
 	// --- Betriebsdiagnose (Phase 21) ---
-	var healthBox = document.getElementById('scoreview-health')
+	const healthBox = document.getElementById('scoreview-health')
 	if (!healthBox) {
 		return
 	}
 
 	function line(ok, label, detail) {
-		var el = document.createElement('div')
+		const el = document.createElement('div')
 		// Symbol statt Farbe allein: die Aussage muss auch ohne
 		// Farbwahrnehmung ankommen.
 		el.textContent = (ok ? '✓ ' : '✗ ') + label + (detail ? ' – ' + detail : '')
@@ -84,8 +86,8 @@ function t(text, vars) {
 		// unerreichbarem Sidecar ein ✓ NEBEN der rohen cURL-Fehlermeldung -
 		// eine Zeile, die sich selbst widerspricht. Der Sidecar-Fehler ist
 		// nur dann die richtige Auskunft, wenn wirklich nichts verfuegbar ist.
-		var soundOk = !!(h.soundFont.cached || h.soundFont.availableInSidecar || h.soundFont.overrideUrl)
-		var soundDetail
+		const soundOk = !!(h.soundFont.cached || h.soundFont.availableInSidecar || h.soundFont.overrideUrl)
+		let soundDetail
 		if (h.soundFont.overrideUrl) {
 			soundDetail = t('custom URL configured')
 		} else if (h.soundFont.availableInSidecar) {
@@ -105,8 +107,8 @@ function t(text, vars) {
 				: t('no run in the last 15 minutes ({age}) – conversions will stay pending', { age: humanAge(h.cron.ageSeconds) }),
 		))
 
-		var c = h.conversions
-		var stuck = (c.pending || 0) + (c.processing || 0)
+		const c = h.conversions
+		const stuck = (c.pending || 0) + (c.processing || 0)
 		healthBox.appendChild(line(
 			!(stuck > 0 && !h.cron.healthy),
 			t('Conversions'),
@@ -123,7 +125,9 @@ function t(text, vars) {
 		fetch(OC.generateUrl('/apps/scoreview/api/health'), {
 			headers: { requesttoken: OC.requestToken },
 		}).then(function(res) {
-			if (!res.ok) { throw new Error('HTTP ' + res.status) }
+			if (!res.ok) {
+				throw new Error('HTTP ' + res.status)
+			}
 			return res.json()
 		}).then(renderHealth).catch(function(err) {
 			healthBox.textContent = t('Error: {message}', { message: err.message })
@@ -132,7 +136,7 @@ function t(text, vars) {
 
 	document.getElementById('scoreview-health-refresh').addEventListener('click', loadHealth)
 
-	var selfTestStatus = document.getElementById('scoreview-selftest-status')
+	const selfTestStatus = document.getElementById('scoreview-selftest-status')
 	document.getElementById('scoreview-selftest-run').addEventListener('click', function() {
 		// Dauert eine echte Konvertierung lang (~8s gemessen) - deshalb ein
 		// sichtbarer Zwischenstand statt eines scheinbar toten Knopfes.
@@ -144,7 +148,7 @@ function t(text, vars) {
 			return res.json()
 		}).then(function(r) {
 			if (r.ok) {
-				var d = r.details || {}
+				const d = r.details || {}
 				selfTestStatus.textContent = '✓ ' + t('MuseScore {version} works as expected ({pages} page(s), {events} events, {seconds} s)', {
 					version: d.musescoreVersion || '?',
 					pages: d.pages,

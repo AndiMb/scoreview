@@ -43,29 +43,29 @@
  *   (tracks[].name ist bei MuseScore 4 nur die Klangbibliothek, "MS Basic")
  * @param {number[][]} [trackChannels] echte MIDI-Kanäle je Spur, in
  *   Dokumentreihenfolge der NICHT-Metronom-Spuren (siehe oben)
- * @returns {MixerChannel[]}
+ * @return {MixerChannel[]}
  */
 export function resolveMixerChannels(tracks, parts, trackChannels) {
 	const partsById = new Map((parts ?? []).map((part) => [String(part.id), part]))
 
 	const entries = (tracks && tracks.length > 0)
 		? tracks
-			.filter((track) => track.instrumentId !== 'metronome')
-			.map((track) => {
-				const part = partsById.get(String(track.partId))
-				return {
-					instrumentId: track.instrumentId,
-					name: part?.name || track.instrumentId || track.name || '',
-					partId: track.partId ?? null,
-					program: part?.program ?? 0,
-				}
-			})
+				.filter((track) => track.instrumentId !== 'metronome')
+				.map((track) => {
+					const part = partsById.get(String(track.partId))
+					return {
+						instrumentId: track.instrumentId,
+						name: part?.name || track.instrumentId || track.name || '',
+						partId: track.partId ?? null,
+						program: part?.program ?? 0,
+					}
+				})
 		: (parts ?? []).map((part) => ({
-			instrumentId: part.instrumentId,
-			name: part.name || part.instrumentId || '',
-			partId: part.id ?? null,
-			program: part.program ?? 0,
-		}))
+				instrumentId: part.instrumentId,
+				name: part.name || part.instrumentId || '',
+				partId: part.id ?? null,
+				program: part.program ?? 0,
+			}))
 
 	// Nur anwenden, wenn die Länge zur Anzahl der Einträge passt - bei einer
 	// Abweichung (z.B. eine Partitur, deren MIDI-Export doch eine Metronomspur
@@ -90,7 +90,7 @@ export function resolveMixerChannels(tracks, parts, trackChannels) {
  * Reihenfolge = erstes Auftreten, wie in `channels`.
  *
  * @param {MixerChannel[]} channels
- * @returns {MixerGroup[]}
+ * @return {MixerGroup[]}
  */
 export function resolveMixerGroups(channels) {
 	const groups = new Map()
@@ -114,7 +114,7 @@ export function resolveMixerGroups(channels) {
  * hörbar; ohne Solo gilt nur die eigene Mute-Einstellung jedes Kanals.
  *
  * @param {ChannelState[]} channelStates
- * @returns {Map<number, number>} channel -> effektive MIDI-CC7-Lautstärke (0-127)
+ * @return {Map<number, number>} channel -> effektive MIDI-CC7-Lautstärke (0-127)
  */
 export function computeEffectiveVolumes(channelStates) {
 	const anySolo = channelStates.some((c) => c.solo)
@@ -139,7 +139,7 @@ export function computeEffectiveVolumes(channelStates) {
  *   beliebig, nur die Menge zählt)
  * @param {number[]} focusChannels Kanäle der ausgewählten Gruppe
  * @param {{loud?:number, quiet?:number}} [opts]
- * @returns {Map<number, number>} channel -> volume (0-127)
+ * @return {Map<number, number>} channel -> volume (0-127)
  */
 export function computeVoiceFocusVolumes(allChannels, focusChannels, { loud = 127, quiet = 40 } = {}) {
 	const focusSet = new Set(focusChannels)

@@ -13,7 +13,7 @@ import { findStepIndex } from './timingSync.js'
 /**
  * @param {TimingJson} timingJson vom Sidecar bereits sortiert und mit
  *   Koordinaten in SVG-Einheiten geliefert (siehe sidecar/README.md)
- * @returns {Timeline}
+ * @return {Timeline}
  */
 export function buildTimeline(timingJson) {
 	const events = timingJson.events ?? []
@@ -34,7 +34,7 @@ export function buildTimeline(timingJson) {
  *
  * @param {Timeline} timeline
  * @param {number} timeMs
- * @returns {{page:number,x:number,y:number,w:number,h:number}|null}
+ * @return {{page:number,x:number,y:number,w:number,h:number}|null}
  */
 export function resolveCursorRect(timeline, timeMs) {
 	if (timeline.events.length === 0) {
@@ -53,7 +53,7 @@ export function resolveCursorRect(timeline, timeMs) {
  * die Sidecar-Timingkoordinaten bereits umgerechnet sind).
  *
  * @param {string} svgText
- * @returns {{minX:number,minY:number,width:number,height:number}|null}
+ * @return {{minX:number,minY:number,width:number,height:number}|null}
  */
 export function parseViewBox(svgText) {
 	const match = svgText.match(/viewBox="([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)"/)
@@ -76,7 +76,7 @@ export function parseViewBox(svgText) {
  *
  * @param {Timeline} measuresTimeline aus measures.json (buildTimeline)
  * @param {number} measureNumber 1-indiziert
- * @returns {number|null}
+ * @return {number|null}
  */
 export function findMeasureStartTime(measuresTimeline, measureNumber) {
 	const targetElid = measureNumber - 1
@@ -94,7 +94,7 @@ export function findMeasureStartTime(measuresTimeline, measureNumber) {
  * @param {number} page
  * @param {number} x SVG-Einheiten der Seite
  * @param {number} y SVG-Einheiten der Seite
- * @returns {number|null} elid
+ * @return {number|null} elid
  */
 export function findElementAtPoint(elements, page, x, y) {
 	let best = null
@@ -127,7 +127,7 @@ export function findElementAtPoint(elements, page, x, y) {
  * @param {Array<{elid:number,timeMs:number}>} events
  * @param {number} elid
  * @param {number} referenceTimeMs
- * @returns {number|null}
+ * @return {number|null}
  */
 export function findNearestOccurrenceTimeMs(events, elid, referenceTimeMs) {
 	const matches = events.filter((e) => e.elid === elid)
@@ -150,7 +150,7 @@ export function findNearestOccurrenceTimeMs(events, elid, referenceTimeMs) {
  * @param {number} timeMs
  * @param {number} totalDurationMs Fallback-Taktende für den letzten Takt
  *   (measures.json liefert keinen Endzeitpunkt für den allerletzten Takt)
- * @returns {{measureNumber:number, fraction:number}|null}
+ * @return {{measureNumber:number, fraction:number}|null}
  */
 export function resolveMeasurePosition(measuresTimeline, timeMs, totalDurationMs) {
 	if (measuresTimeline.events.length === 0) {
@@ -178,7 +178,7 @@ export function resolveMeasurePosition(measuresTimeline, timeMs, totalDurationMs
  * @param {number} measureNumber
  * @param {number} fraction
  * @param {number} totalDurationMs
- * @returns {number|null}
+ * @return {number|null}
  */
 export function measurePositionToTimeMs(measuresTimeline, measureNumber, fraction, totalDurationMs) {
 	const targetElid = measureNumber - 1
@@ -219,7 +219,7 @@ const CSS_PX_PER_MM = 96 / 25.4
  * für Koordinaten, diese hier nur für die echte Größe).
  *
  * @param {string} svgText
- * @returns {{widthMm:number,heightMm:number}|null}
+ * @return {{widthMm:number,heightMm:number}|null}
  */
 export function parseSvgSizeMm(svgText) {
 	const match = svgText.match(/width="([\d.]+)mm"\s+height="([\d.]+)mm"/)
@@ -237,7 +237,7 @@ export function parseSvgSizeMm(svgText) {
  *
  * @param {number} containerWidthPx verfügbare Breite (z.B. Breite von
  *   `.scoreview-pages`)
- * @returns {number} zoom
+ * @return {number} zoom
  */
 export function computeFitWidthZoom(containerWidthPx) {
 	return containerWidthPx / BASE_PAGE_WIDTH_PX
@@ -255,7 +255,7 @@ export function computeFitWidthZoom(containerWidthPx) {
  * @param {{width:number,height:number}} viewBox aus parseViewBox()
  * @param {number} containerWidthPx
  * @param {number} containerHeightPx
- * @returns {number} zoom
+ * @return {number} zoom
  */
 export function computeFitPageZoom(viewBox, containerWidthPx, containerHeightPx) {
 	const widthForFullHeight = containerHeightPx * (viewBox.width / viewBox.height)
@@ -269,7 +269,7 @@ export function computeFitPageZoom(viewBox, containerWidthPx, containerHeightPx)
  * gewählten BASE_PAGE_WIDTH_PX-Basiswert.
  *
  * @param {{widthMm:number,heightMm:number}|null} sizeMm aus parseSvgSizeMm()
- * @returns {number} zoom, 1 falls sizeMm unbekannt (z.B. Seite noch nicht geladen)
+ * @return {number} zoom, 1 falls sizeMm unbekannt (z.B. Seite noch nicht geladen)
  */
 export function computeActualSizeZoom(sizeMm) {
 	if (!sizeMm) {
@@ -288,7 +288,7 @@ export function computeActualSizeZoom(sizeMm) {
  * @param {number} currentDistance Fingerabstand (px) aktuell
  * @param {number} startZoom Zoom-Wert bei Gestenbeginn
  * @param {{min?:number,max?:number}} [bounds] wie beim stufenlosen Zoom-Regler
- * @returns {number}
+ * @return {number}
  */
 export function computePinchZoom(startDistance, currentDistance, startZoom, { min = MIN_ZOOM, max = MAX_ZOOM } = {}) {
 	if (startDistance <= 0) {

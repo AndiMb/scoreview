@@ -1,0 +1,4 @@
+{
+	"extends": "@nextcloud/stylelint-config",
+	"ignoreFiles": ["js/**", "node_modules/**"]
+}

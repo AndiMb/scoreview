@@ -8,8 +8,8 @@
 // sondern in lib/mixerLayout.js (rein, ohne Synth-Abhängigkeit) - diese
 // Datei wendet nur an, was von dort berechnet wird.
 
-import { Sequencer, WorkletSynthesizer } from 'spessasynth_lib'
 import { generateFilePath } from '@nextcloud/router'
+import { Sequencer, WorkletSynthesizer } from 'spessasynth_lib'
 
 // spessasynth_lib's AudioWorklet-Prozessor läuft in einem eigenen
 // AudioWorkletGlobalScope und wird per addModule(url) als eigenständige
@@ -125,7 +125,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	 * leer (siehe spessasynth_lib-Typdefinition), `.channels` bleibt aber
 	 * gefüllt.
 	 *
-	 * @returns {number[][]} pro Spur die Menge ihrer MIDI-Kanäle (meist genau einer)
+	 * @return {number[][]} pro Spur die Menge ihrer MIDI-Kanäle (meist genau einer)
 	 */
 	function getTrackChannels() {
 		return (sequencer.midiData?.tracks ?? []).map((track) => [...(track.channels ?? [])])

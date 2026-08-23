@@ -28,6 +28,14 @@ import DOMPurify from 'dompurify'
 // path/polyline/rect/text/g/image samt Gruppierung), plus die üblichen
 // Struktur-/Defs-Elemente, damit ein anderes MuseScore-Layout nicht
 // versehentlich zerlegt wird.
+//
+// Die Zeilenumbrueche in beiden Listen sind bewusst gruppiert (Struktur /
+// Formen / Text / Verlaeufe bzw. Geometrie / Fuellung / Strich / Schrift) und
+// deshalb hier von `exp-list-style` ausgenommen: bei einer Allowlist IST die
+// Liste der sicherheitsrelevante Inhalt, und die Gruppierung sagt, warum ein
+// Eintrag drinsteht. Ein Eintrag pro Zeile macht daraus 74 Zeilen ohne diese
+// Aussage - siehe PLAN.md Phase 23/Schritt 2.
+/* eslint-disable @stylistic/exp-list-style */
 const ALLOWED_TAGS = [
 	'svg', 'g', 'defs', 'symbol', 'title', 'desc', 'metadata',
 	'path', 'polyline', 'polygon', 'line', 'rect', 'circle', 'ellipse',
@@ -46,6 +54,7 @@ const ALLOWED_ATTR = [
 	'clip-path', 'clip-rule', 'mask', 'patternUnits', 'preserveAspectRatio',
 	'version', 'xmlns', 'xmlns:xlink',
 ]
+/* eslint-enable @stylistic/exp-list-style */
 
 /**
  * Bereinigt SVG-Text für das direkte Einbetten ins DOM.
@@ -59,7 +68,7 @@ const ALLOWED_ATTR = [
  * davon - alle Grafik steckt in `path`/`polyline`/`text`.
  *
  * @param {string} svgText
- * @returns {string}
+ * @return {string}
  */
 export function sanitizeSvg(svgText) {
 	return DOMPurify.sanitize(svgText, {

@@ -20,9 +20,9 @@ import { resolveCursorRect } from '../lib/scoreLayout.js'
  * berechnet wird (siehe PLAN.md Abschnitt 2/4).
  *
  * @param {import('../lib/scoreLayout.js').Timeline} timeline
- * @param {{getCurrentTimeMs():number, isPlaying():boolean, addEventListener:Function, removeEventListener:Function}} clock
+ * @param {{getCurrentTimeMs():number, isPlaying():boolean, addEventListener:(type: string, cb: () => void) => void, removeEventListener:(type: string, cb: () => void) => void}} clock
  * @param {(rect: {page:number,x:number,y:number,w:number,h:number}|null) => void} onCursorChange
- * @returns {{ stop: () => void }}
+ * @return {{ stop: () => void }}
  */
 export function useScoreSync(timeline, clock, onCursorChange) {
 	let rafHandle = null
