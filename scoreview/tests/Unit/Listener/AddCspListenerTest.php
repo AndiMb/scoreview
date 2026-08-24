@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Tests\Unit\Listener;
 use OCA\ScoreView\Listener\AddCspListener;
 use OCP\AppFramework\Http\EmptyContentSecurityPolicy;
 use OCP\IAppConfig;
+use OCP\IRequest;
 use OCP\Security\CSP\AddContentSecurityPolicyEvent;
 use PHPUnit\Framework\TestCase;
 
@@ -21,11 +22,31 @@ use PHPUnit\Framework\TestCase;
  * das ist das, was am Ende tatsaechlich als Header rausgeht.
  */
 class AddCspListenerTest extends TestCase {
+	/** Gebaute Policy fuer einen Files-Seiten-Request (der Normalfall). */
 	private function policyFor(string $soundFontUrl): string {
+		$captured = $this->runListener($soundFontUrl, '/apps/files/files/42');
+		$this->assertInstanceOf(EmptyContentSecurityPolicy::class, $captured);
+		return $captured->buildPolicy();
+	}
+
+	/**
+	 * @param string|\Throwable $pathInfo Pfad des laufenden Requests, oder eine
+	 *                                    Ausnahme, die getPathInfo() werfen soll
+	 * @return ?EmptyContentSecurityPolicy null, wenn der Listener gar keine
+	 *                                     Policy hinzugefuegt hat
+	 */
+	private function runListener(string $soundFontUrl, string|\Throwable $pathInfo): ?EmptyContentSecurityPolicy {
 		$appConfig = $this->createMock(IAppConfig::class);
 		$appConfig->method('getValueString')
 			->with('scoreview', 'soundfont_url')
 			->willReturn($soundFontUrl);
+
+		$request = $this->createMock(IRequest::class);
+		if ($pathInfo instanceof \Throwable) {
+			$request->method('getPathInfo')->willThrowException($pathInfo);
+		} else {
+			$request->method('getPathInfo')->willReturn($pathInfo);
+		}
 
 		$captured = null;
 		$event = $this->createMock(AddContentSecurityPolicyEvent::class);
@@ -35,10 +56,9 @@ class AddCspListenerTest extends TestCase {
 			},
 		);
 
-		(new AddCspListener($appConfig))->handle($event);
+		(new AddCspListener($appConfig, $request))->handle($event);
 
-		$this->assertInstanceOf(EmptyContentSecurityPolicy::class, $captured);
-		return $captured->buildPolicy();
+		return $captured;
 	}
 
 	public function testErlaubtWasmAuchOhneKonfiguriertesSoundFont(): void {
@@ -89,8 +109,68 @@ class AddCspListenerTest extends TestCase {
 		$appConfig = $this->createMock(IAppConfig::class);
 		$appConfig->expects($this->never())->method('getValueString');
 
-		(new AddCspListener($appConfig))->handle(new \OCP\EventDispatcher\Event());
+		(new AddCspListener($appConfig, $this->createMock(IRequest::class)))
+			->handle(new \OCP\EventDispatcher\Event());
 
 		$this->addToAssertionCount(1);
+	}
+
+	// --- Reichweite (Befund A1) ----------------------------------------------
+
+	/**
+	 * Der Kern der Eingrenzung: ausserhalb der Files-App darf GAR KEINE Policy
+	 * dazukommen. Wuerde hier eine gesetzt, traege sie instanzweit - das war
+	 * genau der Befund.
+	 *
+	 * @dataProvider fremdePfade
+	 */
+	public function testLockertNichtsAusserhalbDerFilesApp(string $pfad): void {
+		$this->assertNull(
+			$this->runListener('https://cdn.example.org/gm.sf3', $pfad),
+			"Pfad '{$pfad}' haette keine CSP-Lockerung bekommen duerfen",
+		);
+	}
+
+	/** @return array<string, array{string}> */
+	public static function fremdePfade(): array {
+		return [
+			'Login' => ['/login'],
+			'Dashboard' => ['/apps/dashboard/'],
+			'Einstellungen' => ['/settings/admin/scoreview'],
+			'Talk' => ['/apps/spreed/'],
+			// Praefix-Falle: diese Apps beginnen mit "/apps/files", laden den
+			// Viewer aber nicht.
+			'files_sharing' => ['/apps/files_sharing/publicpreview/abc'],
+			'files_external' => ['/apps/files_external/globalstorages'],
+			'oeffentlicher Share' => ['/s/aBcDeF'],
+			'Wurzel' => ['/'],
+			'leer' => [''],
+		];
+	}
+
+	/**
+	 * @dataProvider filesPfade
+	 */
+	public function testLockertAufFilesSeiten(string $pfad): void {
+		$policy = $this->runListener('', $pfad);
+
+		$this->assertNotNull($policy, "Pfad '{$pfad}' braucht die Lockerung");
+		$this->assertStringContainsString("'wasm-unsafe-eval'", $policy->buildPolicy());
+	}
+
+	/** @return array<string, array{string}> */
+	public static function filesPfade(): array {
+		return [
+			'Uebersicht' => ['/apps/files'],
+			'mit Schraegstrich' => ['/apps/files/'],
+			'Ansicht mit Datei' => ['/apps/files/files/42'],
+			'andere Ansicht' => ['/apps/files/favorites'],
+		];
+	}
+
+	public function testLockertNichtsWennDerPfadNichtLesbarIst(): void {
+		// getPathInfo() wirft bei einer nicht dekodierbaren URL - im Zweifel
+		// nicht lockern.
+		$this->assertNull($this->runListener('', new \Exception('kaputte URL')));
 	}
 }

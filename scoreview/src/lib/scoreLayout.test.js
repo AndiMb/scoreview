@@ -159,6 +159,40 @@ describe('findElementAtPoint', () => {
 	it('liefert null ohne Elemente auf der Seite', () => {
 		expect(findElementAtPoint(elements, 5, 0, 0)).toBeNull()
 	})
+
+	// --- Trefferradius (Befund A3) -----------------------------------------
+
+	it('liefert null, wenn nichts innerhalb des Trefferradius liegt', () => {
+		// Weit weg vom naechsten Rechteck (Rand der Seite, leerer Raum unter
+		// dem letzten System): frueher sprang die Wiedergabe trotzdem.
+		expect(findElementAtPoint(elements, 0, 10000, 10000)).toBeNull()
+	})
+
+	it('nimmt einen knappen Fehlgriff noch an', () => {
+		// Direkt neben dem Rechteck von Element 0 - das ist "gezielt und knapp
+		// daneben", nicht "irgendwo hin geklickt".
+		expect(findElementAtPoint(elements, 0, 9, 12)).toBe(0)
+		expect(findElementAtPoint(elements, 0, 12, 8)).toBe(0)
+	})
+
+	it('nimmt den Radius als Parameter entgegen', () => {
+		// Abstand zum Rechteck von Element 0 ist genau 5 (x=20 gegen
+		// rechte Kante bei 15).
+		expect(findElementAtPoint(elements, 0, 20, 12, 5)).toBe(0)
+		expect(findElementAtPoint(elements, 0, 20, 12, 4)).toBeNull()
+	})
+
+	it('misst den Abstand zum Rechteck, nicht zum Mittelpunkt', () => {
+		// Der Fall aus mehrsystemigen Partituren: ein sehr hohes Element
+		// (Systemhoehe, gemessen bis 4531 Einheiten) neben einem kleinen.
+		// Der Punkt liegt IM hohen Rechteck - der Mittelpunktabstand haette
+		// das kleine Element bevorzugt und damit eine Zeile zu hoch gesprungen.
+		const hoch = {
+			0: { page: 0, x: 0, y: 0, w: 10, h: 1000 },
+			1: { page: 0, x: 40, y: 480, w: 10, h: 10 },
+		}
+		expect(findElementAtPoint(hoch, 0, 5, 900)).toBe(0)
+	})
 })
 
 describe('findNearestOccurrenceTimeMs', () => {

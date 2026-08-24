@@ -39,11 +39,19 @@ class SidecarClient {
 	}
 
 	/**
-	 * Lädt die .mscz-Bytes hoch und startet die Konvertierung.
+	 * Lädt die .mscz hoch und startet die Konvertierung.
 	 *
+	 * `$mscz` ist ein **Stream**, kein String (Codereview-Befund A7): Guzzle
+	 * schiebt ihn direkt in den Multipart-Body, statt dass die ganze Datei
+	 * erst als PHP-String im Speicher landet und für den Body ein zweites Mal
+	 * kopiert wird. Bei der Größenordnung, die der Sidecar erlaubt, kippte ein
+	 * Worker mit üblichem `memory_limit` vorher - und zwar als unspezifischer
+	 * Fatal Error, nicht als Konvertierungsfehler mit Code.
+	 *
+	 * @param resource $mscz Lesender Stream auf die .mscz (z.B. Node::fopen('rb'))
 	 * @throws SidecarException
 	 */
-	public function submitConversion(string $msczContent, string $filename): string {
+	public function submitConversion($mscz, string $filename): string {
 		if (!$this->isConfigured()) {
 			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).', errorCode: ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
@@ -54,7 +62,7 @@ class SidecarClient {
 				'multipart' => [
 					[
 						'name' => 'file',
-						'contents' => $msczContent,
+						'contents' => $mscz,
 						'filename' => $filename,
 					],
 				],

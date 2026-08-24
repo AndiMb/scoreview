@@ -46,7 +46,12 @@ jobs:
       # ueberschatten.
       - name: Autoloader ohne dev-Abhaengigkeiten
         working-directory: scoreview
-        run: composer install --no-dev --no-interaction --no-progress --optimize-autoloader
+        # --classmap-authoritative bewusst hier statt in composer.json:
+        # dauerhaft gesetzt muesste man nach jeder neuen Klasse
+        # `composer dump-autoload` laufen lassen, sonst finden die Tests sie
+        # nicht - eine Falle, die in Schritt 4 genau einmal zugeschnappt ist.
+        # Fuer das Release ist der authoritative Classmap dagegen richtig.
+        run: composer install --no-dev --no-interaction --no-progress --optimize-autoloader --classmap-authoritative
 
       - name: Gegenprobe - keine OCP-Stubs im Autoloader
         working-directory: scoreview

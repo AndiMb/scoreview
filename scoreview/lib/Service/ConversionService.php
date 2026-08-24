@@ -165,6 +165,26 @@ class ConversionService {
 	}
 
 	/**
+	 * Löscht ALLES zu einer fileId - Cache-Ordner und Statuszeilen aller
+	 * etag-Versionen (Codereview-Befund A4).
+	 *
+	 * Bis Phase 23 gab es das nicht: eine gelöschte Partitur hinterließ ihren
+	 * IAppData-Ordner (bei fünf Seiten über 1 MB) und ihre DB-Zeilen für
+	 * immer. Aufgerufen aus Listener\NodeDeletedListener und, als Netz für
+	 * verpasste Ereignisse, aus BackgroundJob\CleanupOrphansJob.
+	 */
+	public function deleteAllForFile(int $fileId): void {
+		try {
+			$this->appData->getFolder('scoreview')->getFolder((string)$fileId)->delete();
+		} catch (NotFoundException) {
+			// Nie konvertiert worden - nichts aufzuraeumen.
+		}
+		foreach ($this->mapper->findAllByFileId($fileId) as $conversion) {
+			$this->mapper->delete($conversion);
+		}
+	}
+
+	/**
 	 * Löscht Cache-Ordner und DB-Zeile jeder anderen (aelteren) etag-Version
 	 * derselben fileId. ISimpleFolder::getDirectoryListing() listet nur
 	 * Dateien, keine Unterordner (Kern-Implementierung filtert Folder-Nodes

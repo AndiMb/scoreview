@@ -97,6 +97,9 @@ OC.L10N.register(
     "Refresh" : "Aktualisieren",
     "Run sidecar self-test" : "Sidecar-Selbsttest ausführen",
     "The self-test converts a small bundled score and checks that MuseScore still returns what the app expects. Run it after changing the MuseScore version in the sidecar image." : "Der Selbsttest konvertiert eine kleine mitgelieferte Partitur und prüft, ob MuseScore weiterhin das liefert, was die App erwartet. Nach einem Wechsel der MuseScore-Version im Sidecar-Image ausführen.",
-    "Self-test failed." : "Selbsttest fehlgeschlagen."
+    "Self-test failed." : "Selbsttest fehlgeschlagen.",
+    "This page could not be loaded ({error})." : "Diese Seite konnte nicht geladen werden ({error}).",
+    "Try again" : "Erneut versuchen",
+    "The score is too large to be converted." : "Die Partitur ist zu groß für die Konvertierung."
 },
 "nplurals=2; plural=(n != 1);");

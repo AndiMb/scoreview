@@ -47,6 +47,7 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	public const ERROR_CONVERSION_FAILED = 'conversion_failed';
 	public const ERROR_TIMEOUT = 'timeout';
 	public const ERROR_NO_PAGES = 'no_pages';
+	public const ERROR_TOO_LARGE = 'too_large';
 	public const ERROR_UNKNOWN = 'unknown';
 
 	protected $fileId;

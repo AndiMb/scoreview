@@ -85,36 +85,75 @@ export function findMeasureStartTime(measuresTimeline, measureNumber) {
 }
 
 /**
+ * Groesster Abstand (in SVG-Einheiten), bei dem ein Klick noch als "gilt
+ * dieser Note" zaehlt (Codereview-Befund A3).
+ *
+ * Bis Phase 23 gab es keine Grenze: `findElementAtPoint()` lieferte IMMER
+ * das naechstgelegene Element, egal wie weit weg. Ein Klick auf den
+ * Seitenrand, in den leeren Raum unter dem letzten System oder ein Tippen,
+ * das auf dem Tablet nur ein Panel schliessen sollte, verschob damit die
+ * Wiedergabe an eine beliebige Stelle.
+ *
+ * Der Wert ist an den gecachten `timing.json` der Testinstanz gemessen, nicht
+ * geschaetzt: Notenbreiten liegen bei 107-257 Einheiten, Systemhoehen je nach
+ * Partitur bei 331 (einstimmig) bis 4531 (SATB) - bei einer A4-viewBox von
+ * 10200 x 13200. 600 Einheiten sind damit rund 6 % der Seitenbreite: genug,
+ * um "auf die Note gezielt und knapp daneben" grosszuegig aufzufangen, und
+ * deutlich weniger als der Abstand zum naechsten System oder zum Rand.
+ */
+export const MAX_CLICK_DISTANCE = 600
+
+/**
+ * Abstand eines Punktes zum Rechteck (0, wenn er darin liegt).
+ *
+ * Bewusst Rechteck- statt Mittelpunktabstand - das ist nicht nur genauer,
+ * sondern behebt einen echten Fehler: bei mehrsystemigen Partituren ist ein
+ * Element so hoch wie das ganze System (gemessen bis 4531 Einheiten). Ein
+ * Klick dicht unter dem oberen Systemrand konnte deshalb naeher am
+ * MITTELPUNKT einer Note im System darueber liegen als an der Note direkt
+ * daneben - und sprang dann eine Zeile zu hoch.
+ *
+ * @param {{x:number,y:number,w:number,h:number}} rect
+ * @param {number} x
+ * @param {number} y
+ * @return {number}
+ */
+function distanceToRect(rect, x, y) {
+	const dx = Math.max(rect.x - x, 0, x - (rect.x + rect.w))
+	const dy = Math.max(rect.y - y, 0, y - (rect.y + rect.h))
+	return Math.sqrt((dx * dx) + (dy * dy))
+}
+
+/**
  * Findet das Element auf einer Seite, dessen Rechteck den Klickpunkt
- * enthält, sonst das nächstgelegene (Mittelpunktabstand) - Umkehrung von
- * M4 (Koordinate -> elid) für "Klick auf eine Note springt dorthin"
+ * enthält, sonst das nächstgelegene innerhalb von `maxDistance` - Umkehrung
+ * von M4 (Koordinate -> elid) für "Klick auf eine Note springt dorthin"
  * (Phase 10).
  *
  * @param {Timeline['elements']} elements
  * @param {number} page
  * @param {number} x SVG-Einheiten der Seite
  * @param {number} y SVG-Einheiten der Seite
- * @return {number|null} elid
+ * @param {number} [maxDistance] siehe MAX_CLICK_DISTANCE
+ * @return {number|null} elid, oder null wenn nichts nah genug liegt
  */
-export function findElementAtPoint(elements, page, x, y) {
+export function findElementAtPoint(elements, page, x, y, maxDistance = MAX_CLICK_DISTANCE) {
 	let best = null
-	let bestDistSq = Infinity
+	let bestDist = Infinity
 	for (const [elidStr, rect] of Object.entries(elements)) {
 		if (rect.page !== page) {
 			continue
 		}
-		if (x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h) {
+		const dist = distanceToRect(rect, x, y)
+		if (dist === 0) {
 			return Number(elidStr)
 		}
-		const cx = rect.x + rect.w / 2
-		const cy = rect.y + rect.h / 2
-		const distSq = (cx - x) ** 2 + (cy - y) ** 2
-		if (distSq < bestDistSq) {
-			bestDistSq = distSq
+		if (dist < bestDist) {
+			bestDist = dist
 			best = Number(elidStr)
 		}
 	}
-	return best
+	return bestDist <= maxDistance ? best : null
 }
 
 /**

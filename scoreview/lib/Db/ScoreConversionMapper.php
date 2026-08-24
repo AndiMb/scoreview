@@ -31,6 +31,21 @@ class ScoreConversionMapper extends QBMapper {
 	}
 
 	/**
+	 * Alle fileIds mit einem Cache-Eintrag - fuer den Aufraeum-Job
+	 * (Codereview-Befund A4).
+	 *
+	 * @return int[]
+	 */
+	public function findAllFileIds(): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->selectDistinct('file_id')->from($this->getTableName());
+		$result = $qb->executeQuery();
+		$ids = array_map(static fn (array $row) => (int)$row['file_id'], $result->fetchAll());
+		$result->closeCursor();
+		return $ids;
+	}
+
+	/**
 	 * Fuer die Cache-GC alter etag-Versionen einer Datei (siehe
 	 * ConversionService::gcOldVersions) - Verzeichnisauflistung ueber
 	 * ISimpleFolder liefert keine Unterordner, daher hier ueber die DB.

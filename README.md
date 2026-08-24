@@ -50,9 +50,17 @@ ebenfalls: das seit Nextcloud 29 veraltete `IConfig` ist durch `IAppConfig`
 ersetzt (und damit typsicher), das Sidecar-Secret wird als sensibel geführt
 und in `occ config:list` ausgeblendet, und die Administrationsseite ist eine
 Vue-Komponente auf `@nextcloud/vue` statt 163 Zeilen handgeschriebenem DOM.
-Die Schritte 4–7 (CSP-Reichweite, Aufräumen bei Lösch-Events,
-Sidecar-Härtung, Zerlegung von `ScoreViewer.vue`) stehen mit Reihenfolge und
-Begründung in `PLAN.md`.
+**Schritt 4** ebenfalls, die fünf Befunde mit Außenwirkung: die CSP-Lockerung
+für die Audio-Dekodierung galt instanzweit und gilt jetzt nur noch auf
+Files-Seiten; eine fehlgeschlagene Seitenladung ist sichtbar und
+wiederholbar statt endgültig; ein Klick abseits der Noten springt nicht mehr
+(und ein Wischen auf dem Tablet erst recht nicht); Cache und Notizen
+gelöschter Dateien und Konten werden aufgeräumt – die Notizen bewusst erst,
+wenn die Datei auch aus dem Papierkorb verschwunden ist; und zu große
+Partituren werden mit eigenem Fehlercode abgelehnt statt in einen Speicher-
+oder Timeout-Fehler zu laufen. Die Schritte 5–7 (Sidecar-Härtung, Zerlegung
+von `ScoreViewer.vue`, Feinschliff) stehen mit Reihenfolge und Begründung in
+`PLAN.md`.
 Siehe `PLAN.md` für den vollständigen Stand inklusive offener Punkte.
 
 **Vorausgesetzt:** ein erreichbarer MuseScore-Sidecar (siehe `sidecar/`) -

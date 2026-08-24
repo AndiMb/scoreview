@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\BackgroundJob;
 
+use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\SidecarClient;
@@ -13,6 +14,7 @@ use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\QueuedJob;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
+use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -34,12 +36,28 @@ class ConvertScoreJob extends QueuedJob {
 	// trotzdem irgendwann in status=error münden statt endlos zu pollen.
 	private const MAX_TOTAL_SECONDS = 300;
 
+	/**
+	 * Obergrenze fuer die Dateigroesse (Codereview-Befund A7), ueberschreibbar
+	 * ueber die App-Einstellung `max_score_bytes`.
+	 *
+	 * Bis Phase 23 gab es gar keine: die App reichte jede Datei weiter, egal
+	 * wie gross. Seit dem Umstieg auf einen Stream (SidecarClient) ist das
+	 * kein Speicherproblem mehr - aber eine absurd grosse Datei belegt
+	 * weiterhin einen MuseScore-Prozess, bis der Timeout greift. 100 MB liegen
+	 * weit ueber jeder echten Partitur (die groesste gemessene .mscz im
+	 * Testbestand ist unter 1 MB) und unter dem Upload-Limit des Sidecars
+	 * (200 MB), damit die Ablehnung hier passiert - mit eigenem Fehlercode
+	 * statt als undurchsichtiges 413 von dort.
+	 */
+	private const DEFAULT_MAX_BYTES = 100 * 1024 * 1024;
+
 	public function __construct(
 		ITimeFactory $time,
 		private IRootFolder $rootFolder,
 		private ConversionService $conversionService,
 		private SidecarClient $sidecarClient,
 		private IJobList $jobList,
+		private IAppConfig $appConfig,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -82,10 +100,26 @@ class ConvertScoreJob extends QueuedJob {
 			$conversion = $this->conversionService->createPending($fileId, $etag);
 		}
 
+		$maxBytes = $this->appConfig->getValueInt(Application::APP_ID, 'max_score_bytes', self::DEFAULT_MAX_BYTES);
+		if ($maxBytes > 0 && $node->getSize() > $maxBytes) {
+			$this->conversionService->markError(
+				$conversion,
+				sprintf('Datei ist mit %d Byte groesser als das Limit von %d Byte.', $node->getSize(), $maxBytes),
+				ScoreConversion::ERROR_TOO_LARGE,
+			);
+			return;
+		}
+
 		$this->conversionService->markProcessing($conversion);
 
 		try {
-			$jobId = $this->sidecarClient->submitConversion($node->getContent(), $node->getName());
+			// fopen() statt getContent(): der Inhalt geht als Stream an Guzzle,
+			// nicht als PHP-String (siehe SidecarClient::submitConversion()).
+			$stream = $node->fopen('rb');
+			if ($stream === false) {
+				throw new SidecarException('Partitur konnte nicht zum Lesen geoeffnet werden.');
+			}
+			$jobId = $this->sidecarClient->submitConversion($stream, $node->getName());
 		} catch (\Throwable $e) {
 			$this->logger->error('ScoreView: Einreichen beim Sidecar fehlgeschlagen für fileId={fileId}: {message}', [
 				'fileId' => $fileId,

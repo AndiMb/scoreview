@@ -2212,7 +2212,7 @@ den man sonst in Schritt 6 mit umbaut.
 | 1 | Aufräumen: Phase-2-Gerüst, überholte Kommentare | D1, F | **umgesetzt** |
 | 2 | Netz spannen: ESLint/Stylelint, PHP-Tests, Sidecar-Tests, CI | C4, C5, C6, B4, B5 | **umgesetzt** |
 | 3 | Mechanische Modernisierung: `IAppConfig`, Secret als sensibel, Einstellungsseite auf `@nextcloud/vue` | C1, C2, C3 | **umgesetzt** |
-| 4 | Echte Fehler: CSP-Reichweite, Seitenladefehler, Klick-Trefferradius, Aufräumen bei Lösch-Events | A1, A2, A3, A4, A7 | offen |
+| 4 | Echte Fehler: CSP-Reichweite, Seitenladefehler, Klick-Trefferradius, Aufräumen bei Lösch-Events | A1, A2, A3, A4, A7 | **umgesetzt** |
 | 5 | Sidecar produktionsfähig: Nebenläufigkeitsgrenze, WSGI-Server, Modulaufteilung | A5, A6, B3 | offen |
 | 6 | Der große Umbau: `ScoreViewer.vue` in Composables, Auslieferungsrouten zusammenführen | B1, B2 | offen |
 | 7 | Feinschliff: rAF-Schleifen, SVG-Entladen, Store-Metadaten | E1, E2, E3, C7 | offen |
@@ -2463,6 +2463,107 @@ Container mit `node_modules` in einem Docker-Volume statt auf dem
 Windows-Dateisystem – dort scannt Defender nicht. Der Befehl steht in
 `CLAUDE.md`; damit ist der Build auf dieser Maschine reproduzierbar, ohne an
 Sicherheitseinstellungen zu rühren.
+
+**Umsetzungsstand Schritt 4 (2026-08-24).** Die fünf Befunde mit
+Außenwirkung. Jeder einzeln am laufenden System nachgemessen, weil keiner von
+ihnen sich an einem Unit-Test allein zeigt.
+
+*A1 – CSP-Reichweite.* `AddCspListener` prüft jetzt am laufenden Request, ob
+es überhaupt eine Files-Seite ist. Grundlage war ein Blick in den Server, kein
+Schluss: `LoadAdditionalScriptsEvent` – der einzige Weg, auf dem der Viewer
+geladen wird – dispatcht in der Testinstanz einzig
+`OCA\Files\Controller\ViewController`, also auf `/apps/files/…`.
+
+Am Antwort-Header gemessen, vorher/nachher unterscheidbar:
+
+| Seite | `wasm-unsafe-eval` |
+|---|---|
+| `/login` | nein |
+| `/apps/dashboard/` | nein |
+| `/settings/admin/scoreview` | nein |
+| `/apps/files/` | **ja** |
+| `/apps/files/files` | **ja** |
+
+Und die Wiedergabe funktioniert dort weiterhin – der Player initialisiert
+sich, was ohne WebAssembly gar nicht ginge. **Ehrlich bleibt:** das lockert
+weiter die ganze Files-Seite, nicht nur den Viewer darin. Feiner geht es mit
+diesem Ereignis nicht; der Schritt von „die gesamte Instanz" auf „eine App"
+ist trotzdem der weitaus größere Teil. Die Tests aus Schritt 2 haben dabei
+genau ihren Zweck erfüllt: sie halten fest, dass auf der Files-Seite nichts
+verlorengegangen ist.
+
+*A2 – Seitenladefehler.* `ScorePage.load()` meldet den Observer erst nach
+Erfolg ab und fängt Fehler. Verifiziert, indem der erste Abruf von Seite 1
+per Route-Abfangen auf 404 gesetzt wurde: die Seite zeigt „This page could
+not be loaded (HTTP 404)." samt Knopf, die Leiste bleibt mit allen sieben
+Knöpfen bedienbar, und nach Freigabe lädt „Erneut versuchen" die Seite mit
+351 `<path>`-Knoten nach. Vorher wäre sie für den Rest der Sitzung weiß
+geblieben.
+
+*A3 – Klick-Trefferradius.* Zwei Änderungen, beide an gemessenen Daten
+begründet. Erstens rechnet `findElementAtPoint()` jetzt den Abstand zum
+**Rechteck** statt zum Mittelpunkt – das ist nicht Kosmetik, sondern behebt
+einen zweiten, bis dahin unbemerkten Fehler: bei mehrsystemigen Partituren
+ist ein Element so hoch wie das ganze System (an den gecachten `timing.json`
+gemessen: 331 Einheiten einstimmig, bis 4531 bei SATB), ein Klick nahe dem
+oberen Systemrand konnte deshalb näher am Mittelpunkt einer Note eine Zeile
+höher liegen. Zweitens gilt ein Treffer nur noch innerhalb von 600 Einheiten
+(≈ 6 % der A4-Breite). Dazu verwirft `ScorePage` Klicks, zwischen deren
+`pointerdown` und `click` der Zeiger mehr als 8 px gewandert ist – auf dem
+Tablet endete sonst jedes Wischen und jeder Pinch mit einem Sprung.
+
+Am laufenden Viewer in beide Richtungen belegt: Klick auf eine Note springt
+(37 s), Klick auf den Seitenrand oben links und in den leeren Raum unter dem
+letzten System ändern nichts mehr, ein erneuter Klick auf Notenmaterial wirkt
+weiterhin (7 s).
+
+*A4 – Aufräumen.* Hier lag die eigentliche Entscheidung nicht im Code,
+sondern in einer Messung: **`NodeDeletedEvent` feuert schon beim Verschieben
+in den Papierkorb**, und die Datei behält dort ihre fileId
+(`IRootFolder::getById()` findet sie weiterhin, unter
+`…/files_trashbin/files/…`). Die Notizen an diesem Ereignis mitzulöschen –
+die naheliegende Umsetzung – hätte für eine **umkehrbare** Handlung einen
+**unumkehrbaren** Verlust erzeugt.
+
+Deshalb drei getrennte Wege:
+
+- `NodeDeletedListener` räumt nur den **Cache** weg. Der ist regenerierbar;
+  geht er beim Papierkorb-Verschieben verloren, baut ihn das nächste Öffnen
+  neu auf.
+- `UserDeletedListener` löscht die Notizen eines gelöschten **Kontos** – dort
+  ist der Fall eindeutig, es gibt keinen Papierkorb für Konten. Betrifft
+  ausdrücklich auch die geteilten Notizen dieser Person.
+- `CleanupOrphansJob` (täglich) räumt Cache **und** Notizen von fileIds weg,
+  die nirgends mehr auflösbar sind – und ist zugleich das Netz für verpasste
+  Ereignisse.
+
+End-to-end nachgemessen: nach dem Verschieben in den Papierkorb ist der
+Cache-Ordner weg und die Konvertierungszeile gelöscht, **die Notiz aber
+erhalten**; nach dem Leeren des Papierkorbs findet `getById()` nichts mehr,
+und erst der Aufräum-Job entfernt die Notiz. Dass der Job eine noch
+existierende Datei verschont, deckt der Unit-Test ab (der Papierkorb-Schritt
+oben belegt es nicht, dort war der Job noch nicht gelaufen).
+
+*A7 – Größenprüfung und Streaming.* `ConvertScoreJob` prüft
+`$node->getSize()` gegen `max_score_bytes` (Standard 100 MB) und lehnt mit
+eigenem Code `too_large` ab, statt in einen OOM oder ein undurchsichtiges
+413 vom Sidecar zu laufen. Der Upload selbst geht jetzt als **Stream**
+(`Node::fopen('rb')`) an Guzzle statt als PHP-String, der für den
+Multipart-Body ein zweites Mal kopiert wird.
+
+Beides gemessen: mit `max_score_bytes = 100` endet die 98.339 Byte große
+Testpartitur auf `status=error`, `error_code=too_large` mit einer Meldung,
+die beide Zahlen nennt; mit dem Standardlimit läuft dieselbe Datei über den
+neuen Streamweg vollständig bis `status=ready` durch.
+
+**Nebenbefund, der dabei zuschnappte.** `classmap-authoritative` stand in
+`composer.json` und ist dort eine Falle: jede neue Klasse ist für die Tests
+unsichtbar, bis jemand `composer dump-autoload` ausführt. Das gehört an den
+Release-Befehl, nicht in die Konfiguration – dort steht es jetzt. Für die
+Tests kam außerdem ein Stub für `OC\Hooks\Emitter` dazu: `IRootFolder`
+erweitert diese Schnittstelle, sie liegt aber in Nextclouds privatem
+Namensraum und fehlt in `nextcloud/ocp` – ohne sie lässt sich der Dateibaum
+gar nicht mocken.
 
 ## 4. Was ersatzlos entfällt
 

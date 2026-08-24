@@ -3,6 +3,7 @@
 		ref="root"
 		class="score-page"
 		:style="pageStyle"
+		@pointerdown="onPointerDown"
 		@click="onClick">
 		<!--
 			Overlay HINTER dem Notenbild (siehe PLAN.md M9): das SVG hat keine
@@ -32,6 +33,17 @@
 		-->
 		<!-- eslint-disable-next-line vue/no-v-html -->
 		<div v-if="svgMarkup" class="score-page-svg" v-html="svgMarkup" />
+		<!--
+			Sichtbarer Fehlerzustand statt weisser Flaeche (Befund A2). Die
+			Seite behaelt ihre reservierte Hoehe, das Notenbild rutscht also
+			nicht - nur diese eine Seite fehlt, und man sieht, dass sie fehlt.
+		-->
+		<div v-else-if="loadError" class="score-page-error">
+			<p>{{ t('This page could not be loaded ({error}).', { error: loadError }) }}</p>
+			<NcButton :disabled="loading" @click.stop="retry">
+				{{ t('Try again') }}
+			</NcButton>
+		</div>
 		<div
 			v-for="marker in pageMarkers"
 			:key="marker.id"
@@ -58,8 +70,15 @@
 <script>
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
 import { sanitizeSvg } from '../lib/svgSanitizer.js'
+
+// Wie weit der Zeiger zwischen pointerdown und click wandern darf, damit es
+// noch als Klick gilt (Befund A3). Grosszuegig genug fuer das Zittern eines
+// Fingers auf Glas, klein genug, dass ein bewusstes Wischen nicht mehr
+// hineinfaellt.
+const CLICK_MOVE_TOLERANCE_PX = 8
 
 /**
  * Eine Seite als eingebettetes SVG (E2: MuseScore-eigenes Rendering statt
@@ -73,6 +92,8 @@ import { sanitizeSvg } from '../lib/svgSanitizer.js'
  */
 export default {
 	name: 'ScorePage',
+
+	components: { NcButton },
 
 	props: {
 		svgUrl: {
@@ -120,6 +141,14 @@ export default {
 			svgMarkup: null,
 			viewBox: null,
 			sizeMm: null,
+			// Ladefehler dieser einen Seite (Befund A2). Bis Phase 23 gab es
+			// den Zustand nicht: ein 404 oder ein Verbindungsabriss liess die
+			// Seite dauerhaft leer, ohne Hinweis und ohne zweiten Versuch.
+			loadError: '',
+			loading: false,
+			// Position des letzten pointerdown - siehe onClick() zum Grund
+			// (Befund A3).
+			pointerDownAt: null,
 		}
 	},
 
@@ -213,19 +242,49 @@ export default {
 			return translate('scoreview', text, vars)
 		},
 
+		/**
+		 * Laedt das Seiten-SVG nach (lazy, siehe IntersectionObserver in
+		 * mounted()).
+		 *
+		 * Der Observer wird erst NACH Erfolg abgemeldet (Befund A2). Vorher
+		 * geschah es davor, und zusammen mit dem fehlenden catch war ein
+		 * einzelner Fehlschlag endgueltig: die Seite blieb fuer den Rest der
+		 * Sitzung weiss, ohne Hinweis, und weil der Observer schon weg war,
+		 * loeste auch erneutes Hinscrollen keinen zweiten Versuch mehr aus.
+		 * Das ist kein theoretischer Fall - `gcOldVersions()` raeumt den
+		 * etag-Ordner einer aelteren Fassung weg, waehrend jemand sie noch
+		 * offen hat (ConversionService), und dann antwortet genau diese Route
+		 * mit 404.
+		 */
 		async load() {
-			if (this.svgMarkup) {
+			if (this.svgMarkup || this.loading) {
 				return
 			}
-			this.observer?.disconnect()
-			const res = await axios.get(this.svgUrl, { responseType: 'text' })
-			this.viewBox = parseViewBox(res.data)
-			this.sizeMm = parseSvgSizeMm(res.data)
-			this.svgMarkup = sanitizeSvg(res.data)
-			// Für die Zoom-Presets (Phase 16, "Seitenbreite/ganze Seite/100%") -
-			// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
-			// jeweils geladene ScorePage.
-			this.$emit('loaded', { index: this.pageIndex, viewBox: this.viewBox, sizeMm: this.sizeMm })
+			this.loading = true
+			this.loadError = ''
+			try {
+				const res = await axios.get(this.svgUrl, { responseType: 'text' })
+				this.viewBox = parseViewBox(res.data)
+				this.sizeMm = parseSvgSizeMm(res.data)
+				this.svgMarkup = sanitizeSvg(res.data)
+				// Erst jetzt: ab hier gibt es nichts mehr nachzuladen.
+				this.observer?.disconnect()
+				// Für die Zoom-Presets (Phase 16, "Seitenbreite/ganze Seite/100%") -
+				// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
+				// jeweils geladene ScorePage.
+				this.$emit('loaded', { index: this.pageIndex, viewBox: this.viewBox, sizeMm: this.sizeMm })
+			} catch (err) {
+				this.loadError = err.response?.status
+					? `HTTP ${err.response.status}`
+					: err.message
+			} finally {
+				this.loading = false
+			}
+		},
+
+		/** Erneuter Versuch nach einem Ladefehler (Knopf auf der leeren Seite). */
+		retry() {
+			this.load()
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid, Phase 10 "Klick auf eine Note
@@ -234,9 +293,28 @@ export default {
 		// findElementAtPoint()/findNearestOccurrenceTimeMs() (scoreLayout.js)
 		// aufgelöst wird - diese Komponente kennt die Notenkoordinaten selbst
 		// nicht (nur ihre eigene viewBox).
+		onPointerDown(event) {
+			this.pointerDownAt = { x: event.clientX, y: event.clientY }
+		},
+
 		onClick(event) {
 			if (!this.viewBox) {
 				return
+			}
+			// Ein Klick, zwischen dessen Nieder- und Loslassen der Zeiger
+			// gewandert ist, war kein Klick, sondern das Ende eines Ziehens
+			// oder einer Zweifinger-Geste (Befund A3). Auf dem Tablet ist das
+			// der haeufigste Fall ueberhaupt: jedes Wischen und jedes
+			// Pinch-Zoom endet sonst mit einem Sprung an eine andere Stelle.
+			// Kein pointerdown gesehen (synthetischer Klick, Tastatur) zaehlt
+			// bewusst als echter Klick.
+			if (this.pointerDownAt) {
+				const dx = event.clientX - this.pointerDownAt.x
+				const dy = event.clientY - this.pointerDownAt.y
+				this.pointerDownAt = null
+				if (Math.sqrt((dx * dx) + (dy * dy)) > CLICK_MOVE_TOLERANCE_PX) {
+					return
+				}
 			}
 			const rect = this.$refs.root.getBoundingClientRect()
 			const fracX = (event.clientX - rect.left) / rect.width
@@ -270,6 +348,25 @@ export default {
 	background: #fff;
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 	cursor: pointer;
+}
+
+/*
+ * Fehlerzustand einer einzelnen Seite (Befund A2) - mittig auf der ohnehin
+ * reservierten Seitenflaeche, damit die uebrigen Seiten an ihrem Platz
+ * bleiben.
+ */
+.score-page-error {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	padding: 16px;
+	text-align: center;
+	color: var(--color-text-maxcontrast);
+	z-index: 3;
 }
 
 .score-page-svg {

@@ -471,7 +471,7 @@ export default {
 			state: 'loading',
 			errorMessage: '',
 			// sidecar_unreachable | sidecar_rejected | conversion_failed |
-			// timeout | no_pages | unknown | '' (kein Fehler bzw. Fehler kam
+			// timeout | no_pages | too_large | unknown | '' (kein Fehler bzw. Fehler kam
 			// nicht vom Server, siehe pollStatus()) - Phase 14: gespeicherte
 			// Fehlertexte werden von beliebigen Nutzerinnen in beliebigen
 			// Sprachen gelesen, IL10N kann serverseitig also nicht greifen
@@ -795,6 +795,7 @@ export default {
 				conversion_failed: this.t('The score could not be converted.'),
 				timeout: this.t('The conversion did not finish in time.'),
 				no_pages: this.t('The score contains no pages that could be converted.'),
+				too_large: this.t('The score is too large to be converted.'),
 				unknown: this.t('An unknown error occurred during conversion.'),
 			}
 			return messages[code] ?? messages.unknown

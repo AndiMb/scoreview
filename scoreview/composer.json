@@ -20,7 +20,10 @@
 		"psr-4": {
 			"OCA\\ScoreView\\Tests\\": "tests/",
 			"OCP\\": "vendor/nextcloud/ocp/OCP/"
-		}
+		},
+		"files": [
+			"tests/stubs/OCHooksEmitter.php"
+		]
 	},
 	"scripts": {
 		"test:unit": "phpunit --config tests/phpunit.xml",
@@ -29,7 +32,6 @@
 	},
 	"config": {
 		"optimize-autoloader": true,
-		"classmap-authoritative": true,
 		"allow-plugins": {
 			"php-http/discovery": false
 		},

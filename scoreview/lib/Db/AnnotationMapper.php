@@ -40,6 +40,56 @@ class AnnotationMapper extends QBMapper {
 	}
 
 	/**
+	 * Alle Notizen zu einer Datei loeschen (Codereview-Befund A4).
+	 *
+	 * Bewusst NICHT an NodeDeletedEvent gehaengt: dieses Ereignis feuert schon
+	 * beim Verschieben in den Papierkorb (an der Testinstanz nachgemessen -
+	 * die Datei behaelt dort ihre fileId und laesst sich wiederherstellen).
+	 * Notizen dort zu loeschen waere ein unumkehrbarer Verlust fuer eine
+	 * umkehrbare Handlung. Aufgerufen wird das hier deshalb nur aus
+	 * BackgroundJob\CleanupOrphansJob, wenn die fileId nirgends mehr existiert
+	 * - auch nicht im Papierkorb.
+	 *
+	 * @return int Zahl der geloeschten Zeilen
+	 */
+	public function deleteByFileId(int $fileId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->delete($this->getTableName())
+			->where($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)));
+		return $qb->executeStatement();
+	}
+
+	/**
+	 * Alle Notizen einer Nutzerin loeschen - fuer UserDeletedEvent
+	 * (Codereview-Befund A4). Anders als beim Papierkorb-Fall oben ist das
+	 * eindeutig: das Konto ist weg, seine Inhalte haben in der Datenbank
+	 * nichts mehr verloren.
+	 *
+	 * @return int Zahl der geloeschten Zeilen
+	 */
+	public function deleteByUserId(string $userId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->delete($this->getTableName())
+			->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)));
+		return $qb->executeStatement();
+	}
+
+	/**
+	 * Alle fileIds, zu denen es ueberhaupt Notizen gibt - fuer den
+	 * Aufraeum-Job, damit er nicht die ganze Tabelle laden muss.
+	 *
+	 * @return int[]
+	 */
+	public function findAllFileIds(): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->selectDistinct('file_id')->from($this->getTableName());
+		$result = $qb->executeQuery();
+		$ids = array_map(static fn (array $row) => (int)$row['file_id'], $result->fetchAll());
+		$result->closeCursor();
+		return $ids;
+	}
+
+	/**
 	 * Nur ueber Datei-ID gefiltert, bewusst OHNE Owner-Einschraenkung (anders
 	 * als der bisherige Name suggerieren wuerde) - seit Phase 18 duerfen
 	 * geteilte Notizen von JEDER Nutzerin mit Schreibrecht auf die Datei

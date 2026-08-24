@@ -43,7 +43,7 @@ Feature set: measure navigation, loop, zoom, click-to-note jump, mixer
 (per-voice volume/mute/solo, tempo), private annotations anchored to
 musical position (survives a re-upload).
 	]]></description>
-	<version>0.0.21</version>
+	<version>0.0.22</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>
@@ -55,6 +55,12 @@ musical position (survives a re-upload).
 		<database>pgsql</database>
 		<nextcloud min-version="31" max-version="35"/>
 	</dependencies>
+	<background-jobs>
+		<!-- Periodisch und ohne Argument - anders als ConvertScoreJob, der
+		     gezielt pro Datei ueber IJobList::add() eingereiht wird (siehe
+		     AppInfo\Application). -->
+		<job>OCA\ScoreView\BackgroundJob\CleanupOrphansJob</job>
+	</background-jobs>
 	<settings>
 		<admin>OCA\ScoreView\Settings\AdminSettings</admin>
 		<admin-section>OCA\ScoreView\Settings\Section</admin-section>
