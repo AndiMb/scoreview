@@ -344,7 +344,7 @@
 <script>
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
-import { generateUrl } from '@nextcloud/router'
+import { shallowRef } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
@@ -369,6 +369,8 @@ import Tune from 'vue-material-design-icons/Tune.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
 import ScoreMixer from './ScoreMixer.vue'
 import ScorePage from './ScorePage.vue'
+import { useAnnotations } from '../composables/useAnnotations.js'
+import { useConversionStatus } from '../composables/useConversionStatus.js'
 import { useScoreSync } from '../composables/useScoreSync.js'
 import { computeCountInDelaysMs, estimateBeatsInMeasure, resolveBeatInMeasure } from '../lib/metronome.js'
 import { createMetronomeClick } from '../lib/metronomeClick.js'
@@ -384,7 +386,6 @@ import {
 	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
 	MAX_ZOOM,
-	measurePositionToTimeMs,
 	MIN_ZOOM,
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
@@ -402,7 +403,6 @@ const MANUAL_SCROLL_RESUME_MS = 2500
 // Nachzittern fälschlich als Nutzereingriff gilt.
 const PROGRAMMATIC_SCROLL_WINDOW_MS = 700
 
-const POLL_INTERVAL_MS = 2000
 // Näherung für die Transport-Gesamtdauer im stummen Platzhalter-Modus
 // (kein konfiguriertes SoundFont, siehe unten) - letztes Timing-Event plus
 // Puffer für den Ausklang der letzten Note. Mit echtem Player kommt die
@@ -465,24 +465,92 @@ export default {
 		},
 	},
 
+	/**
+	 * Zerlegung von ScoreViewer.vue in Composables (Codereview-Befund B1,
+	 * Phase 23/Schritt 6) - schrittweise, ein Bereich nach dem anderen.
+	 *
+	 * Der Zustand, den mehrere Bereiche teilen (Zeitachsen, etag, Dauer,
+	 * Zeitquelle), zieht dafuer aus `data()` hierher. Das ist die Bruecke,
+	 * die den Umbau ueberhaupt schrittweise moeglich macht: Vue 3 legt
+	 * setup()-Rueckgaben auf der Instanz aus und entpackt Refs dabei, der
+	 * bestehende Options-API-Code kann also unveraendert `this.timeline`
+	 * lesen und `this.durationMs = x` schreiben, waehrend die Composables
+	 * dieselben Refs direkt benutzen.
+	 *
+	 * `clock` bewusst als shallowRef: dahinter haengt ein AudioContext samt
+	 * Synthesizer (lib/player.js). Tiefe Reaktivitaet darauf waere sinnlos
+	 * teuer, und niemand verlaesst sich auf Reaktivitaet INNERHALB des
+	 * Objekts - nur darauf, dass der Austausch der Zeitquelle auffaellt.
+	 *
+	 * @param props
+	 */
+	setup(props) {
+		const timeline = shallowRef(null)
+		const measuresTimeline = shallowRef(null)
+		const currentEtag = shallowRef(null)
+		const durationMs = shallowRef(0)
+		const clock = shallowRef(null)
+
+		const annotations = useAnnotations({
+			fileId: () => props.fileid,
+			timeline: () => timeline.value,
+			measuresTimeline: () => measuresTimeline.value,
+			currentEtag: () => currentEtag.value,
+			durationMs: () => durationMs.value,
+			seek: (timeMs) => clock.value?.seek(timeMs),
+		})
+
+		// Einzeln und unter den bisherigen Namen zurueckgegeben, nicht als
+		// verschachteltes Objekt: Vue entpackt Refs nur auf der OBERSTEN Ebene
+		// der setup()-Rueckgabe. `annotationsApi.visible` waere im Template ein
+		// Ref-Objekt statt eines Wertes - und so bleiben Template und
+		// Aufrufstellen unveraendert, der Umbau ist also wirklich nur ein
+		// Umzug.
+		// `onReady` behaelt bewusst das $nextTick aus dem frueheren
+		// pollStatus(): loadScore() misst am Ende die Seitenbreite fuer das
+		// Zoom-Preset, die Seiten muessen dafuer schon gerendert sein.
+		let onScoreReady = async () => {}
+		const conversion = useConversionStatus({
+			fileId: () => props.fileid,
+			onReady: (body) => onScoreReady(body),
+		})
+		const setOnScoreReady = (fn) => {
+			onScoreReady = fn
+		}
+
+		return {
+			setOnScoreReady,
+			state: conversion.state,
+			errorMessage: conversion.errorMessage,
+			errorCode: conversion.errorCode,
+			errorText: conversion.errorText,
+			pollStatus: conversion.poll,
+			stopPolling: conversion.stop,
+			resetConversion: conversion.reset,
+			timeline,
+			measuresTimeline,
+			currentEtag,
+			durationMs,
+			clock,
+			annotations: annotations.annotations,
+			annotationError: annotations.error,
+			showAnnotations: annotations.visible,
+			annotationMarkers: annotations.markers,
+			loadAnnotations: annotations.load,
+			onAnnotationCreate: annotations.create,
+			onAnnotationUpdate: annotations.update,
+			onAnnotationDelete: annotations.remove,
+			onAnnotationJumpTo: annotations.jumpTo,
+			onAnnotationJumpToById: annotations.jumpToById,
+			resetAnnotations: annotations.reset,
+		}
+	},
+
 	data() {
 		return {
-			// loading | converting | ready | error
-			state: 'loading',
-			errorMessage: '',
-			// sidecar_unreachable | sidecar_rejected | conversion_failed |
-			// timeout | no_pages | too_large | unknown | '' (kein Fehler bzw. Fehler kam
-			// nicht vom Server, siehe pollStatus()) - Phase 14: gespeicherte
-			// Fehlertexte werden von beliebigen Nutzerinnen in beliebigen
-			// Sprachen gelesen, IL10N kann serverseitig also nicht greifen
-			// (siehe ConversionController). Uebersetzt wird erst hier, beim
-			// Anzeigen, anhand des Codes - errorMessage bleibt das
-			// unveraenderte technische Detail dazu.
-			errorCode: '',
 			pageUrls: [],
 			cursorRect: null,
 			currentTimeMs: 0,
-			durationMs: 0,
 			isPlaying: false,
 			tempo: 1,
 			// Zeitquelle: entweder lib/player.js (echte Wiedergabe, sobald ein
@@ -490,7 +558,6 @@ export default {
 			// siehe PLAN.md Phase 8/9) - beide erfüllen dieselbe Schnittstelle,
 			// diese Komponente muss den Unterschied nur für die
 			// Tempo-/Mixer-Zusatzfunktionen kennen (hasRealPlayer).
-			clock: null,
 			hasRealPlayer: false,
 			// Warum es keinen Ton gibt, im Klartext für die Nutzerin - vorher
 			// stand hier pauschal "nicht konfiguriert", auch wenn in Wahrheit
@@ -506,8 +573,6 @@ export default {
 			presetList: [],
 			showMixer: false,
 			sync: null,
-			pollTimer: null,
-			autoRetried: false,
 			pageRefs: [],
 			timeDisplayHandle: null,
 			// Phase 16: Autoscroll (siehe scrollPlan.js) und Kopfangaben. Der
@@ -529,8 +594,6 @@ export default {
 			// onFullscreenChange) - Vollbild erzwingt "ganze Seite".
 			zoomFollowedWidthBeforeFullscreen: false,
 			// Phase 10: Probenarbeit.
-			timeline: null, // timing.json (Note-Ebene) - für Klick-auf-Note.
-			measuresTimeline: null, // measures.json (Takt-Ebene) - für Taktnavigation/Loop.
 			// Zeigt die laufende Taktnummer UND nimmt das Sprungziel entgegen
 			// (Phase 22, ein Feld statt Anzeige + Eingabe) - siehe
 			// measureFieldFocused.
@@ -559,10 +622,6 @@ export default {
 			zoomFollowsWidth: true,
 			viewportObserver: null,
 			// Phase 11: private Notizen, Phase 18: zusaetzlich geteilte.
-			annotations: [],
-			showAnnotations: false,
-			annotationError: '',
-			currentEtag: null,
 			currentElid: null,
 			// Phase 17: Tempo in BPM statt Prozent. baseTempoBpm ist
 			// metadata.tempo (Viertel-BPM, M8) bzw. DEFAULT_TEMPO_BPM, wenn die
@@ -609,15 +668,6 @@ export default {
 	},
 
 	computed: {
-		// Uebersetzter Satz fuer den Fehlerzustand: bei einem serverseitig
-		// gespeicherten errorCode dessen feste Uebersetzung, sonst (Netzwerkfehler
-		// beim Abruf des status()-Endpunkts selbst, siehe pollStatus()) die rohe
-		// JS-Fehlermeldung - die ist ohnehin umgebungsspezifisch und nicht sinnvoll
-		// uebersetzbar.
-		errorText() {
-			return this.errorCode ? this.errorCodeText(this.errorCode) : (this.errorMessage || this.t('Unknown error.'))
-		},
-
 		// Musikalischer Anker der aktuellen Wiedergabeposition (Phase 11,
 		// "+ An aktueller Stelle") - null solange measuresTimeline/durationMs
 		// noch nicht geladen sind.
@@ -656,26 +706,6 @@ export default {
 		// beides bliebe eine leere Karte über dem Notenbild stehen.
 		showMixerPanel() {
 			return this.hasRealPlayer && this.showMixer && this.mixerChannels.length > 0
-		},
-
-		// Koordinaten je Notiz für die Seiten-Overlays: bevorzugt die exakte
-		// Note (elid, falls noch im aktuellen etag auffindbar), sonst die
-		// Takt-Koordinate als Näherung (measuresTimeline.elements) - eine
-		// Notiz bleibt so auch nach einem Re-Upload sichtbar positionierbar,
-		// nur etwas gröber (siehe PLAN.md Phase 11 zum Anker-Design).
-		annotationMarkers() {
-			if (!this.timeline || !this.measuresTimeline) {
-				return []
-			}
-			return this.annotations
-				.map((a) => {
-					const rect = (a.elid !== null && a.anchorEtag === this.currentEtag ? this.timeline.elements[String(a.elid)] : null)
-						?? this.measuresTimeline.elements[String(a.measureNumber - 1)]
-					// mine/visibility fuers Marker-Styling in ScorePage.vue (Phase
-					// 18: eigene und geteilte Notizen sollen unterscheidbar sein).
-					return rect ? { id: a.id, mine: a.mine, visibility: a.visibility, ...rect } : null
-				})
-				.filter(Boolean)
 		},
 
 		// BPM-Anzeige/-Eingabe (Phase 17, auf Basis von M8: metadata.tempo ist
@@ -721,6 +751,14 @@ export default {
 		fileid: {
 			immediate: true,
 			handler() {
+				// Rueckruf VOR dem ersten poll() setzen, nicht in created():
+				// dieser Watcher ist `immediate` und laeuft damit noch vor
+				// created(). Ein sehr schnelles "ready" liefe sonst in den
+				// leeren Vorgabe-Rueckruf aus setup().
+				this.setOnScoreReady(async (body) => {
+					await this.$nextTick()
+					await this.loadScore(body)
+				})
 				this.reset()
 				this.pollStatus()
 			},
@@ -784,23 +822,6 @@ export default {
 			return translate('scoreview', text, vars)
 		},
 
-		// Uebersetzung je error_code (siehe ConversionController::status()) -
-		// unknown ist sowohl der explizite Code als auch der Fallback fuer einen
-		// unbekannten/fehlenden Code (z.B. aeltere, vor Phase 14 gespeicherte
-		// Fehlerdatensaetze ohne error_code).
-		errorCodeText(code) {
-			const messages = {
-				sidecar_unreachable: this.t('The conversion service could not be reached.'),
-				sidecar_rejected: this.t('The conversion service rejected the file.'),
-				conversion_failed: this.t('The score could not be converted.'),
-				timeout: this.t('The conversion did not finish in time.'),
-				no_pages: this.t('The score contains no pages that could be converted.'),
-				too_large: this.t('The score is too large to be converted.'),
-				unknown: this.t('An unknown error occurred during conversion.'),
-			}
-			return messages[code] ?? messages.unknown
-		},
-
 		setPageRef(el, index) {
 			if (el) {
 				this.pageRefs[index] = el
@@ -811,10 +832,7 @@ export default {
 
 		reset() {
 			this.cleanup()
-			this.state = 'loading'
-			this.errorMessage = ''
-			this.errorCode = ''
-			this.autoRetried = false
+			this.resetConversion()
 			this.pageUrls = []
 			this.cursorRect = null
 			this.currentTimeMs = 0
@@ -841,9 +859,7 @@ export default {
 			this.zoom = 1
 			this.zoomFollowsWidth = true
 			this.measureFieldFocused = false
-			this.annotations = []
-			this.showAnnotations = false
-			this.annotationError = ''
+			this.resetAnnotations()
 			this.currentEtag = null
 			this.currentElid = null
 			this.metaTracks = null
@@ -861,10 +877,7 @@ export default {
 		},
 
 		cleanup() {
-			if (this.pollTimer) {
-				clearTimeout(this.pollTimer)
-				this.pollTimer = null
-			}
+			this.stopPolling()
 			if (this.sync) {
 				this.sync.stop()
 				this.sync = null
@@ -885,42 +898,6 @@ export default {
 			this.viewportObserver?.disconnect()
 			this.viewportObserver = null
 			this.releaseWakeLock()
-		},
-
-		async pollStatus() {
-			let body
-			try {
-				const res = await axios.get(generateUrl('/apps/scoreview/api/scores/{fileId}/status', { fileId: this.fileid }))
-				body = res.data
-			} catch (err) {
-				this.state = 'error'
-				this.errorMessage = err.message
-				this.errorCode = ''
-				return
-			}
-
-			if (body.status === 'ready') {
-				this.state = 'ready'
-				await this.$nextTick()
-				await this.loadScore(body)
-			} else if (body.status === 'error') {
-				this.state = 'error'
-				this.errorMessage = body.error || ''
-				this.errorCode = body.errorCode || 'unknown'
-				// Der Status-Endpunkt stößt bei einem gespeicherten Fehler selbst
-				// schon einen erneuten Versuch an (z.B. nach einem Sidecar-
-				// Konfigurationsfix). Einmalig automatisch nachschauen, ob der
-				// gerade lief und erfolgreich war, statt dass der Nutzer die
-				// Datei manuell neu öffnen muss. Begrenzt auf einen Versuch,
-				// damit ein dauerhaft kaputtes Setup nicht endlos weiterpollt.
-				if (!this.autoRetried) {
-					this.autoRetried = true
-					this.pollTimer = setTimeout(() => this.pollStatus(), POLL_INTERVAL_MS)
-				}
-			} else {
-				this.state = 'converting'
-				this.pollTimer = setTimeout(() => this.pollStatus(), POLL_INTERVAL_MS)
-			}
 		},
 
 		async loadScore({ files, soundFontUrl }) {
@@ -1384,78 +1361,6 @@ export default {
 			const timeMs = findNearestOccurrenceTimeMs(this.timeline.events, elid, this.currentTimeMs)
 			if (timeMs !== null) {
 				this.clock.seek(timeMs)
-			}
-		},
-
-		async loadAnnotations() {
-			try {
-				const res = await axios.get(generateUrl('/apps/scoreview/api/scores/{fileId}/annotations', { fileId: this.fileid }))
-				this.annotations = res.data
-			} catch (err) {
-				// Notizen sind eine Zusatzfunktion - ein Fehler hier soll die
-				// eigentliche Notenansicht nicht mit in den Fehlerzustand reißen.
-				// eslint-disable-next-line no-console
-				console.error('ScoreView: Notizen konnten nicht geladen werden.', err)
-			}
-		},
-
-		async onAnnotationCreate(draft) {
-			this.annotationError = ''
-			try {
-				const res = await axios.post(generateUrl('/apps/scoreview/api/scores/{fileId}/annotations', { fileId: this.fileid }), {
-					measureNumber: draft.measureNumber,
-					fraction: draft.fraction,
-					elid: draft.elid,
-					anchorEtag: draft.anchorEtag,
-					content: draft.content,
-					visibility: draft.visibility,
-				})
-				this.annotations = [...this.annotations, { ...res.data, orphaned: false }]
-			} catch (err) {
-				// eslint-disable-next-line no-console
-				console.error('ScoreView: Notiz konnte nicht gespeichert werden.', err)
-				this.annotationError = err.response?.data?.error || err.message
-			}
-		},
-
-		async onAnnotationUpdate({ id, content }) {
-			this.annotationError = ''
-			try {
-				const res = await axios.put(generateUrl('/apps/scoreview/api/scores/{fileId}/annotations/{id}', { fileId: this.fileid, id }), { content })
-				this.annotations = this.annotations.map((a) => (a.id === id ? { ...a, ...res.data } : a))
-			} catch (err) {
-				// eslint-disable-next-line no-console
-				console.error('ScoreView: Notiz konnte nicht aktualisiert werden.', err)
-				this.annotationError = err.response?.data?.error || err.message
-			}
-		},
-
-		async onAnnotationDelete(annotation) {
-			this.annotationError = ''
-			try {
-				await axios.delete(generateUrl('/apps/scoreview/api/scores/{fileId}/annotations/{id}', { fileId: this.fileid, id: annotation.id }))
-				this.annotations = this.annotations.filter((a) => a.id !== annotation.id)
-			} catch (err) {
-				// eslint-disable-next-line no-console
-				console.error('ScoreView: Notiz konnte nicht gelöscht werden.', err)
-				this.annotationError = err.response?.data?.error || err.message
-			}
-		},
-
-		onAnnotationJumpTo(annotation) {
-			if (!this.measuresTimeline || !this.clock) {
-				return
-			}
-			const timeMs = measurePositionToTimeMs(this.measuresTimeline, annotation.measureNumber, annotation.fraction, this.durationMs)
-			if (timeMs !== null) {
-				this.clock.seek(timeMs)
-			}
-		},
-
-		onAnnotationJumpToById(id) {
-			const annotation = this.annotations.find((a) => a.id === id)
-			if (annotation) {
-				this.onAnnotationJumpTo(annotation)
 			}
 		},
 
