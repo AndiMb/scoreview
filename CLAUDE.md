@@ -139,9 +139,26 @@ Alle ausführlich in `scoreview/README.md#troubleshooting`:
 - **Viewer meldet 500 nach einem Pipeline-Umbau.** Für Cache-Formatwechsel
   existiert kein Migrationspfad; betroffene `scoreview_conversions`-Zeilen
   löschen.
-- **Antivirus unter Windows** kann Dateien in `scoreview/node_modules`
-  (`stb-vorbis`) quarantänieren und damit die Audiobibliothek im Build
-  unbrauchbar machen, ohne dass der Build fehlschlägt.
+- **Antivirus unter Windows** quarantäniert `scoreview/node_modules/stb-vorbis/dist/index.js`
+  (bestätigt: Windows Defender, ThreatID 2147842389, zuletzt am 2026-08-24).
+  Mal schlägt der Build damit hart fehl, mal liefert er nur eine kaputte
+  Audiobibliothek aus. Die Datei kommt bei jedem `npm install` zurück und ist
+  Sekunden später wieder weg – eine Neuinstallation hilft also nicht.
+  **Ausweg ohne Antivirus-Einstellungen zu ändern** (die sind eine
+  Nutzerentscheidung, keine, die eine Sitzung treffen sollte): im Container
+  bauen, mit `node_modules` in einem Docker-Volume statt auf dem
+  Windows-Dateisystem – dort scannt Defender nicht.
+
+  ```sh
+  MSYS_NO_PATHCONV=1 docker run --rm \
+    -v /c/Temp2/Claude/ScoreView/scoreview:/app \
+    -v scoreview-nodemodules:/app/node_modules \
+    -w /app node:22-bookworm sh -c "npm ci && npm run build"
+  ```
+
+  Achtung: Ein fehlgeschlagener Webpack-Lauf räumt `js/` vorher leer – nach
+  einem Abbruch fehlt also auch das Viewer-Bundle in der Testinstanz, bis
+  einmal vollständig gebaut wurde.
 
 ## Nie committen
 

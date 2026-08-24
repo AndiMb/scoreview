@@ -6,31 +6,45 @@ namespace OCA\ScoreView\Settings;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCP\AppFramework\Http\TemplateResponse;
+use OCP\AppFramework\Services\IInitialState;
 use OCP\IAppConfig;
 use OCP\Settings\ISettings;
 use OCP\Util;
 
 /**
- * Erscheint unter Einstellungen → Verwaltung. Schlichtes Server-Formular
- * (kein Vue) mit einem eigenen kleinen JS-Bundle fürs Speichern per fetch()
- * - ein Inline-<script> im Template würde an Nextclouds
- * Content-Security-Policy scheitern (kein Nonce für handgeschriebene
- * Inline-Scripts), siehe src/settings.js.
+ * Erscheint unter Einstellungen → Verwaltung. Die Seite selbst ist eine
+ * Vue-Komponente auf `@nextcloud/vue` (src/components/AdminSettings.vue,
+ * Phase 23/Schritt 3); dieses Template liefert nur noch den Mountpunkt und
+ * den Startzustand.
+ *
+ * Startzustand über `IInitialState` statt über Template-Variablen oder eine
+ * eigene GET-Route: Nextcloud rendert ihn als `<input type="hidden">` in die
+ * Seite, `@nextcloud/initial-state` liest ihn dort ab. Für vier Felder wäre
+ * eine zusätzliche HTTP-Runde verschenkt.
+ *
+ * **Das Secret ist bewusst nicht Teil davon** - ausgeliefert wird nur, OB
+ * eines gesetzt ist. Ein Wert, der als sensibel geführt wird (siehe
+ * SettingsController und Migration\Version000100Date20260824100000), hat im
+ * ausgelieferten HTML nichts verloren.
  */
 class AdminSettings implements ISettings {
 	public function __construct(
 		private IAppConfig $appConfig,
+		private IInitialState $initialState,
 	) {
 	}
 
 	public function getForm(): TemplateResponse {
-		Util::addScript(Application::APP_ID, Application::APP_ID . '-settings');
-		return new TemplateResponse(Application::APP_ID, 'settings/admin', [
+		$this->initialState->provideInitialState('admin-settings', [
 			'sidecarUrl' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'),
 			'sidecarSecretSet' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_secret') !== '',
 			'eagerConversion' => $this->appConfig->getValueBool(Application::APP_ID, 'eager_conversion'),
 			'soundFontUrl' => $this->appConfig->getValueString(Application::APP_ID, 'soundfont_url'),
-		], TemplateResponse::RENDER_AS_BLANK);
+		]);
+
+		Util::addScript(Application::APP_ID, Application::APP_ID . '-settings');
+
+		return new TemplateResponse(Application::APP_ID, 'settings/admin', [], TemplateResponse::RENDER_AS_BLANK);
 	}
 
 	public function getSection(): string {

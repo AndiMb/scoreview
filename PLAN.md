@@ -2211,7 +2211,7 @@ den man sonst in Schritt 6 mit umbaut.
 |---|---|---|---|
 | 1 | Aufräumen: Phase-2-Gerüst, überholte Kommentare | D1, F | **umgesetzt** |
 | 2 | Netz spannen: ESLint/Stylelint, PHP-Tests, Sidecar-Tests, CI | C4, C5, C6, B4, B5 | **umgesetzt** |
-| 3 | Mechanische Modernisierung: `IAppConfig`, Secret als sensibel, Einstellungsseite auf `@nextcloud/vue` | C1, C2, C3 | offen |
+| 3 | Mechanische Modernisierung: `IAppConfig`, Secret als sensibel, Einstellungsseite auf `@nextcloud/vue` | C1, C2, C3 | **umgesetzt** |
 | 4 | Echte Fehler: CSP-Reichweite, Seitenladefehler, Klick-Trefferradius, Aufräumen bei Lösch-Events | A1, A2, A3, A4, A7 | offen |
 | 5 | Sidecar produktionsfähig: Nebenläufigkeitsgrenze, WSGI-Server, Modulaufteilung | A5, A6, B3 | offen |
 | 6 | Der große Umbau: `ScoreViewer.vue` in Composables, Auslieferungsrouten zusammenführen | B1, B2 | offen |
@@ -2378,6 +2378,91 @@ Klassen (nur `lib/`), und `class_exists('OCP\AppFramework\Db\Entity')` ist
 Entwicklungs-Checkout wäre: das jetzt vorhandene `scoreview/vendor/`
 verdeckt die echten OCP-Klassen **nicht** – in der Testinstanz kommt
 `OCP\AppFramework\Db\Entity` weiterhin aus `/var/www/html/lib/public/`.
+
+**Umsetzungsstand Schritt 3 (2026-08-24).**
+
+*C1 – `IAppConfig` statt `IConfig`.* Acht Klassen umgestellt; danach kommt
+`IConfig` in `lib/` nicht mehr vor. Der Gewinn ist nicht nur Aktualität,
+sondern Typsicherheit: aus `getAppValue(…, '0') !== '1'` wird
+`getValueBool()`, aus `(int)getAppValue()` wird `getValueInt()`. Bei den
+core-Werten in `HealthService` war dafür nachzusehen statt zu raten – in der
+Instanz ist `lastcron` als `integer` typisiert, `backgroundjobs_mode` als
+`string`; mit dem falschen Getter hätte `IAppConfig` einen Typkonflikt
+geworfen. Nebenbei fiel `SidecarClient::APP_ID` weg, eine zweite Wahrheit
+neben `Application::APP_ID`.
+
+*C2 – Secret als sensibel.* `occ config:list scoreview` zeigt für
+`sidecar_secret` jetzt `***REMOVED SENSITIVE VALUE***`. Der Weg dorthin war
+nicht der offensichtliche: das `sensitive`-Flag von `setValueString()` greift
+nur bei einem noch nicht existierenden Schlüssel – `IAppConfig` ändert den
+Status eines vorhandenen Wertes ausdrücklich nicht über den Setter.
+Bestandsinstallationen hätten ihren Klartext-Eintrag also behalten, bis
+jemand zufällig ein neues Secret einträgt. `Version000100Date20260824100000`
+zieht es einmalig über `updateSensitive()` nach.
+
+Gegengeprüft wurde auch der Rundlauf über die bisher als `mixed`
+gespeicherten Werte: `getValueBool()` liest das alte `'0'` korrekt als
+`false`, `setValueBool()` schreibt getypt, und `getValueBool()` liest es
+wieder richtig.
+
+*C3 – Einstellungsseite auf `@nextcloud/vue`.* 163 Zeilen
+`getElementById`/`fetch`/`OC`-Global und ein Template mit
+`style="width: 320px"` an jedem Feld sind ersetzt durch
+`src/components/AdminSettings.vue`. Den Startzustand liefert jetzt
+`IInitialState` statt Template-Variablen – Nextcloud rendert ihn als
+`<input type="hidden">`, `@nextcloud/initial-state` liest ihn dort ab; eine
+zusätzliche GET-Runde für vier Felder wäre verschenkt. **Das Secret ist
+bewusst nicht Teil davon**, ausgeliefert wird nur, OB eines gesetzt ist
+(am gerenderten HTML nachgeprüft).
+
+Zwei Verbesserungen fielen dabei ab, die die handgeschriebene Fassung nicht
+hatte: `NcPasswordField` bringt einen Sichtbarkeits-Umschalter mit, und die
+vier Diagnosezeilen sind `NcNoteCard`s statt eingefärbter `<div>`s – sie
+tragen damit Symbol **und** Rolle, die Aussage kommt also auch ohne
+Farbwahrnehmung und im Screenreader an. Der Linter bestätigt den Umbau von
+selbst: die drei `OC.generateUrl`-Deprecation-Warnungen aus Schritt 2 sind
+weg.
+
+**Der Preis, offen benannt:** `scoreview-settings.js` wächst von 34 KB auf
+325 KB, weil die `@nextcloud/vue`-Komponenten mit ins Bundle gehen. Für eine
+Administrationsseite, die selten und einzeln geladen wird, ist das
+vertretbar; auf dem Viewer-Bundle (910 KB) ändert sich nichts, die Entries
+sind getrennt.
+
+Die Übersetzungen sind entsprechend gewandert: `l10n/de.json` (PHP) schrumpft
+von 23 auf 8 Einträge, `l10n/de.js` bekommt die Einstellungs-Strings. Genau
+dafür ist der Vollständigkeitstest aus Phase 14 da – er hat die 14 fehlenden
+und 15 verwaisten Einträge einzeln aufgelistet, statt sie still
+durchzulassen.
+
+**Verifiziert am laufenden System:** Seite rendert mit beiden Sektionen,
+Startzustand vorbefüllt, Secret nicht im HTML, vier Diagnosezeilen, Speichern
+persistiert über ein Neuladen hinweg (und lässt sich wieder leeren), der
+Selbsttest liefert „MuseScore 4.7.4 works as expected (1 page(s), 24 events,
+6.3 s)" und sperrt seinen Knopf währenddessen. Keine fehlgeschlagenen
+Requests, keine Konsolenfehler.
+
+Bei der Prüfung selbst sind mir drei Fehler unterlaufen, die alle im
+Testskript lagen und nicht im Code – festgehalten, weil sie die typischen
+Fallen dieser Art Verifikation sind: ein Regex, der schon „0 **failed**" in
+der Konvertierungszeile traf und den Selbsttest deshalb als bestanden meldete,
+ohne dass er gelaufen war; `waitForFunction(fn, options)` statt
+`waitForFunction(fn, arg, options)`, wodurch der Timeout stillschweigend bei
+30 s blieb; und `MuseScore \S+ works`, das an dem Leerzeichen in
+„4.7.4 (4.7.4.260706075)" scheiterte.
+
+**Umgebungsproblem, erneut aufgetreten und diesmal blockierend.** Windows
+Defender hat `node_modules/stb-vorbis/dist/index.js` wieder in Quarantäne
+genommen (ThreatID 2147842389, ausgelöst durch ein `npm install`); anders als
+in Phase 9 ist der Build dadurch hart gescheitert – und ein gescheiterter
+Webpack-Lauf räumt `js/` vorher leer, die Testinstanz stand also
+zwischenzeitlich ohne Viewer-Bundle da. Eine Neuinstallation hilft nicht, die
+Datei ist Sekunden später wieder weg. Gelöst **ohne** eine
+Antivirus-Ausnahme zu setzen (das bleibt eine Nutzerentscheidung): Build im
+Container mit `node_modules` in einem Docker-Volume statt auf dem
+Windows-Dateisystem – dort scannt Defender nicht. Der Befehl steht in
+`CLAUDE.md`; damit ist der Build auf dieser Maschine reproduzierbar, ohne an
+Sicherheitseinstellungen zu rühren.
 
 ## 4. Was ersatzlos entfällt
 
