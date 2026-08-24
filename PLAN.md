@@ -2215,7 +2215,7 @@ den man sonst in Schritt 6 mit umbaut.
 | 4 | Echte Fehler: CSP-Reichweite, Seitenladefehler, Klick-Trefferradius, Aufräumen bei Lösch-Events | A1, A2, A3, A4, A7 | **umgesetzt** |
 | 5 | Sidecar produktionsfähig: Nebenläufigkeitsgrenze, WSGI-Server, Modulaufteilung | A5, A6, B3 | **umgesetzt** |
 | 6 | Der große Umbau: `ScoreViewer.vue` in Composables, Auslieferungsrouten zusammenführen | B1, B2 | **umgesetzt** |
-| 7 | Feinschliff: rAF-Schleifen, SVG-Entladen, Store-Metadaten | E1, E2, E3, C7 | offen |
+| 7 | Feinschliff: rAF-Schleifen, SVG-Entladen, Store-Metadaten | E1, E2, E3, C7 | **umgesetzt** (bis auf `<screenshot>`, siehe unten) |
 
 **Aktualität – nichts zu tun.** `npm outdated` liefert nichts: Vue 3.5.41,
 `@nextcloud/vue` 9.9.0, spessasynth_lib 4.3.14, DOMPurify 3.4.14,
@@ -2724,6 +2724,64 @@ diese Schranke hat danach zwei weitere Fehlgriffe abgefangen, bevor etwas
 geschrieben wurde. Die Lehre gehört hierher, weil sie beim nächsten
 Massenumbau wieder gilt: ein Suchanker in einer Datei mit dichter
 Kommentierung ist selten so eindeutig, wie er aussieht.
+
+**Umsetzungsstand Schritt 7 (2026-08-24).** Der Feinschliff - und damit sind
+23 der 24 Befunde abgearbeitet.
+
+*E1 – eine Zeitschleife statt zwei.* `useScoreSync` lief mit einer eigenen
+rAF-Schleife neben der Transportanzeige, jede mit einer Binärsuche pro Frame,
+beide ununterbrochen, solange der Viewer offen war. Jetzt treibt die Schleife
+im Viewer die Cursor-Auflösung mit, und dieselbe Auflösung liefert zugleich
+das `elid` für den Notiz-Anker – vorher suchte der Viewer es ein zweites Mal.
+**Gemessen statt behauptet:** im Leerlauf laufen jetzt **60
+rAF-Rückrufe pro Sekunde** (genau eine Schleife bei 60 Hz) statt der beiden
+vorherigen. Der Grund, weshalb die Auflösung jeden Frame läuft und nicht nur
+während der Wiedergabe, bleibt unverändert gültig (Phase 22: der
+`sequencer.currentTime`-Setter wirkt nicht synchron).
+
+Die Datei ist bei der Gelegenheit nach `src/lib/scoreSync.js` gewandert: sie
+lag in `composables/`, war aber nie ein Composable – keine Reaktivität, kein
+Lifecycle, eine reine Fabrikfunktion.
+
+*E2 – Seiten werden wieder entladen.* Die Risikotabelle führt „SVG-Seiten
+großer Partituren zu schwer fürs DOM" mit der Gegenmaßnahme „nur sichtbare
+Seiten rendern"; umgesetzt war davon nur die Hälfte. Jetzt zwei
+IntersectionObserver mit unterschiedlichem Rand – laden bei 600 px, entladen
+erst bei 2400 px. Der Unterschied ist Absicht: bei gleichem Rand läge eine
+Seite genau an der Grenze im Wechsel zwischen geladen und entladen, und jedes
+Nachladen ist ein HTTP-Abruf samt Sanitizer-Durchlauf.
+
+Freigegeben wird **nur** das Markup; `viewBox` und `sizeMm` bleiben, damit die
+Seite ihre Höhe weiter reserviert. Am fünfseitigen SATB-Satz gemessen: nach
+einmaligem Durchscrollen sind **1–2 von 5 Seiten** im DOM statt aller fünf,
+beim Zurückscrollen lädt die Seite wieder nach, und ihre Höhe ist geladen wie
+entladen **exakt gleich** (1781 px) – kein Scroll-Sprung. Die Seite, auf der
+der Cursor gerade steht, wird nie freigegeben.
+
+*E3 – eine Node-Auflösung pro Anfrage.* `AnnotationController` löste die
+Datei pro Schreibanfrage zweimal auf (`requireOwnAccess()` und
+`canWriteShared()`), jedes Mal ein `getUserFolder()->getById()` samt
+Filesystem-Aufbau. `canWriteShared()` nimmt jetzt den bereits aufgelösten
+`Node` entgegen.
+
+*C7 – Store-Metadaten.* `<bugs>` und `<repository>` ergänzt, die Beschreibung
+an den Phase-9-Stand angeglichen (sie nannte noch „ein vom Administrator
+konfiguriertes SoundFont" als Voraussetzung – seitdem liefert die App es
+selbst aus). Die Versionsangabe in `package.json` ist entfallen statt
+angeglichen: zwei Wahrheiten über dieselbe Zahl waren der eigentliche Befund,
+und `info.xml` ist die maßgebliche.
+
+**Offen geblieben und ausdrücklich eine Entscheidung des Betreibers:
+`<screenshot>`.** Ein Bildschirmfoto braucht eine Partitur, und die einzige
+im Repo committbare (`repeat-test.mscz`, fünf Takte) zeigt praktisch nichts.
+Ein Foto der vorhandenen Testpartituren darf nicht in ein öffentliches Repo –
+sie sind nicht garantiert frei lizenziert (siehe „Nie committen" in
+`CLAUDE.md`). Das braucht also eine Partitur, an der die Rechte geklärt sind;
+bis dahin bleibt das Element weg, statt einen nichtssagenden Platzhalter in
+den App Store zu stellen.
+
+Verifiziert: die Prüfstrecke aus Schritt 6 läuft nach E1 und nach E2
+unverändert und byte-identisch zur Grundlinie.
 
 ## 4. Was ersatzlos entfällt
 

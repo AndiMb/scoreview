@@ -67,8 +67,13 @@ größte Posten: `ScoreViewer.vue` ist von 1977 auf 1216 Zeilen geschrumpft und
 in sieben Composables unter `src/composables/` zerlegt (Konvertierungsstatus,
 Notizen, Zoom, Autoscroll, Metronom, Loop, Wiedergabe); die fünf
 Auslieferungsrouten sind auch auf der PHP-Seite zu einer zusammengefallen.
-Nur noch **Schritt 7** (Feinschliff: rAF-Schleifen zusammenlegen, SVG-Seiten
-wieder entladen, Store-Metadaten) steht offen – siehe `PLAN.md`.
+**Schritt 7** schließt den Review ab: statt zweier dauerhafter
+rAF-Schleifen läuft eine (gemessen 60 statt 120 Rückrufe pro Sekunde im
+Leerlauf), SVG-Seiten werden beim Wegscrollen wieder freigegeben (1–2 von 5
+im DOM statt aller fünf), und die Store-Metadaten stimmen. **23 der 24
+Befunde sind damit abgearbeitet** – offen bleibt allein das
+`<screenshot>`-Element, weil dafür eine Partitur nötig ist, deren Rechte
+geklärt sind (siehe `PLAN.md`).
 Siehe `PLAN.md` für den vollständigen Stand inklusive offener Punkte.
 
 **Vorausgesetzt:** ein erreichbarer MuseScore-Sidecar (siehe `sidecar/`) -

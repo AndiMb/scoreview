@@ -375,7 +375,6 @@ import { useConversionStatus } from '../composables/useConversionStatus.js'
 import { useLoop } from '../composables/useLoop.js'
 import { useMetronome } from '../composables/useMetronome.js'
 import { usePlayback } from '../composables/usePlayback.js'
-import { useScoreSync } from '../composables/useScoreSync.js'
 import { useZoom } from '../composables/useZoom.js'
 import {
 	buildTimeline,
@@ -384,7 +383,7 @@ import {
 	findNearestOccurrenceTimeMs,
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
-import { findStepIndex } from '../lib/timingSync.js'
+import { createScoreSync } from '../lib/scoreSync.js'
 
 // MuseScores eigene Vorgabe für Partituren ohne Tempoangabe (M8: metadata.tempo
 // kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als Bezugswert für die
@@ -770,10 +769,7 @@ export default {
 
 		cleanup() {
 			this.stopPolling()
-			if (this.sync) {
-				this.sync.stop()
-				this.sync = null
-			}
+			this.sync = null
 			this.destroyMetronome()
 			if (this.timeDisplayHandle) {
 				cancelAnimationFrame(this.timeDisplayHandle)
@@ -815,7 +811,7 @@ export default {
 					this.setUpSilentClock(timeline)
 				}
 
-				this.sync = useScoreSync(timeline, this.clock, (rect) => {
+				this.sync = createScoreSync(timeline, (rect) => {
 					this.cursorRect = rect
 					// Nachführen statt nur beim Seitenwechsel zu springen (PLAN.md
 					// Phase 16) - ersetzt die frühere lastScrolledPage-Logik aus
@@ -830,22 +826,25 @@ export default {
 			}
 		},
 
-		// Eigene rAF-Schleife statt Vue-Reaktivität direkt aus useScoreSync,
-		// weil currentTimeMs/isPlaying jeden Frame ändern (Transport-Anzeige),
-		// der Cursor selbst aber nur bei Notenwechsel (siehe useScoreSync.js) -
-		// getrennte Zuständigkeiten, gleiche Zeitquelle.
+		/**
+		 * DIE Zeitschleife des Viewers - seit Phase 23/Schritt 7 die einzige
+		 * (Codereview-Befund E1). Vorher lief daneben eine zweite in
+		 * useScoreSync, jede mit eigener Binärsuche pro Frame, beide
+		 * ununterbrochen, solange der Viewer offen war. Sie brauchen dieselbe
+		 * Zeitquelle und denselben Takt.
+		 *
+		 * Reihenfolge ist nicht beliebig: erst die Zeit abgreifen, dann Cursor
+		 * und Notiz-Anker daraus ableiten, dann Loop und Metronom - die
+		 * späteren Schritte lesen `currentTimeMs`.
+		 */
 		pumpTimeDisplay() {
 			const step = () => {
 				if (this.clock) {
 					this.samplePlaybackTime()
-					// Für den Notiz-Anker (Phase 11, currentAnchor) - dieselbe
-					// Note-Auflösung wie der Cursor (useScoreSync.js), hier separat
-					// gehalten, weil eine Notiz das elid explizit braucht, der
-					// Cursor selbst aber nur das fertige Rechteck.
-					if (this.timeline && this.timeline.times.length > 0) {
-						const index = findStepIndex(this.timeline.times, this.currentTimeMs)
-						this.currentElid = this.timeline.events[index].elid
-					}
+					// Eine Auflösung für beides: der Cursor braucht das Rechteck,
+					// eine Notiz das elid (Phase 11, currentAnchor). Vorher suchte
+					// diese Schleife dasselbe elid ein zweites Mal.
+					this.currentElid = this.sync?.update(this.currentTimeMs) ?? null
 					// Loop (Phase 10, Kernfunktion für Probenarbeit): sobald das
 					// Ende erreicht/überschritten ist, zurück zum Anfang - hier statt
 					// in silentClock.js/player.js geprüft, weil beide Zeitquellen

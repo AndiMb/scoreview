@@ -14,6 +14,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Constants;
+use OCP\Files\Node;
 use OCP\IL10N;
 use OCP\IRequest;
 
@@ -62,8 +63,9 @@ class AnnotationController extends Controller {
 
 	#[NoAdminRequired]
 	public function create(int $fileId, int $measureNumber, float $fraction, string $content, ?int $elid = null, ?string $anchorEtag = null, string $visibility = Annotation::VISIBILITY_PRIVATE): JSONResponse {
-		$userId = $this->requireOwnAccess($fileId);
-		if ($userId === null) {
+		$node = $this->fileResolver->resolveOwnNode($fileId);
+		$userId = $this->fileResolver->currentUserId();
+		if ($node === null || $userId === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 		if (trim($content) === '') {
@@ -74,7 +76,7 @@ class AnnotationController extends Controller {
 		// Sichtbarkeit fuer ALLE mit Dateizugriff, ein Tippfehler im Client
 		// darf hier nicht versehentlich "geteilt" bedeuten.
 		$visibility = $visibility === Annotation::VISIBILITY_SHARED ? Annotation::VISIBILITY_SHARED : Annotation::VISIBILITY_PRIVATE;
-		if ($visibility === Annotation::VISIBILITY_SHARED && !$this->canWriteShared($fileId)) {
+		if ($visibility === Annotation::VISIBILITY_SHARED && !$this->canWriteShared($node)) {
 			return new JSONResponse(['error' => $this->l->t('You do not have permission to create shared notes for this file.')], Http::STATUS_FORBIDDEN);
 		}
 
@@ -84,8 +86,9 @@ class AnnotationController extends Controller {
 
 	#[NoAdminRequired]
 	public function update(int $fileId, int $id, string $content): JSONResponse {
-		$userId = $this->requireOwnAccess($fileId);
-		if ($userId === null) {
+		$node = $this->fileResolver->resolveOwnNode($fileId);
+		$userId = $this->fileResolver->currentUserId();
+		if ($node === null || $userId === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 		if (trim($content) === '') {
@@ -93,7 +96,7 @@ class AnnotationController extends Controller {
 		}
 
 		try {
-			$annotation = $this->annotationService->updateContent($id, $fileId, $userId, $this->canWriteShared($fileId), $content);
+			$annotation = $this->annotationService->updateContent($id, $fileId, $userId, $this->canWriteShared($node), $content);
 		} catch (\RuntimeException) {
 			return new JSONResponse(['error' => $this->l->t('You do not have permission to change this note.')], Http::STATUS_FORBIDDEN);
 		}
@@ -105,13 +108,14 @@ class AnnotationController extends Controller {
 
 	#[NoAdminRequired]
 	public function destroy(int $fileId, int $id): JSONResponse {
-		$userId = $this->requireOwnAccess($fileId);
-		if ($userId === null) {
+		$node = $this->fileResolver->resolveOwnNode($fileId);
+		$userId = $this->fileResolver->currentUserId();
+		if ($node === null || $userId === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 
 		try {
-			$deleted = $this->annotationService->delete($id, $fileId, $userId, $this->canWriteShared($fileId));
+			$deleted = $this->annotationService->delete($id, $fileId, $userId, $this->canWriteShared($node));
 		} catch (\RuntimeException) {
 			return new JSONResponse(['error' => $this->l->t('You do not have permission to change this note.')], Http::STATUS_FORBIDDEN);
 		}
@@ -119,13 +123,6 @@ class AnnotationController extends Controller {
 			return new JSONResponse(['error' => $this->l->t('Note not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 		return new JSONResponse(['status' => 'ok']);
-	}
-
-	private function requireOwnAccess(int $fileId): ?string {
-		if ($this->fileResolver->resolveOwnNode($fileId) === null) {
-			return null;
-		}
-		return $this->fileResolver->currentUserId();
 	}
 
 	/**
@@ -136,12 +133,13 @@ class AnnotationController extends Controller {
 	 * Nutzerin wider (UserFileResolver liest ueber deren eigenen
 	 * Dateibaum) - bei einer geteilten Datei ist das genau die vom Share
 	 * gewaehrte Berechtigung.
+	 *
+	 * Nimmt den bereits aufgeloesten Node entgegen statt einer fileId
+	 * (Codereview-Befund E3): jede Aufloesung ist ein
+	 * `getUserFolder()->getById()` samt Filesystem-Aufbau, und vorher lief das
+	 * pro Schreibanfrage zweimal - einmal in requireOwnAccess(), einmal hier.
 	 */
-	private function canWriteShared(int $fileId): bool {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
-		if ($node === null) {
-			return false;
-		}
+	private function canWriteShared(Node $node): bool {
 		return ($node->getPermissions() & Constants::PERMISSION_UPDATE) !== 0;
 	}
 

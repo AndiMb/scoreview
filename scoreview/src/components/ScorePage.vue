@@ -80,6 +80,15 @@ import { sanitizeSvg } from '../lib/svgSanitizer.js'
 // hineinfaellt.
 const CLICK_MOVE_TOLERANCE_PX = 8
 
+// Abstand zum Sichtbereich, ab dem eine Seite geladen (LOAD) bzw. wieder
+// freigegeben wird (UNLOAD, Codereview-Befund E2). Der Unterschied ist
+// Absicht: laden knapp vorher, entladen erst deutlich weiter weg. Waeren
+// beide gleich, laege die Seite genau an der Grenze im Wechsel zwischen
+// geladen und entladen - und jedes Nachladen ist ein HTTP-Abruf samt
+// Sanitizer-Durchlauf.
+const LOAD_MARGIN_PX = 600
+const UNLOAD_MARGIN_PX = 2400
+
 /**
  * Eine Seite als eingebettetes SVG (E2: MuseScore-eigenes Rendering statt
  * OSMD-Neusatz - siehe PLAN.md). Lädt lazy per IntersectionObserver
@@ -225,16 +234,28 @@ export default {
 	},
 
 	mounted() {
-		this.observer = new IntersectionObserver((entries) => {
+		// Zwei Beobachter mit unterschiedlichem Rand: laden knapp vor dem
+		// Sichtbarwerden, entladen erst deutlich weiter weg. Ein einzelner
+		// Beobachter kann nur EINEN rootMargin haben, und mit nur einem waere
+		// die Seite an der Grenze abwechselnd geladen und entladen worden.
+		this.loadObserver = new IntersectionObserver((entries) => {
 			if (entries.some((e) => e.isIntersecting)) {
 				this.load()
 			}
-		}, { rootMargin: '600px 0px' })
-		this.observer.observe(this.$refs.root)
+		}, { rootMargin: `${LOAD_MARGIN_PX}px 0px` })
+		this.loadObserver.observe(this.$refs.root)
+
+		this.unloadObserver = new IntersectionObserver((entries) => {
+			if (entries.every((e) => !e.isIntersecting)) {
+				this.unload()
+			}
+		}, { rootMargin: `${UNLOAD_MARGIN_PX}px 0px` })
+		this.unloadObserver.observe(this.$refs.root)
 	},
 
 	beforeUnmount() {
-		this.observer?.disconnect()
+		this.loadObserver?.disconnect()
+		this.unloadObserver?.disconnect()
 	},
 
 	methods: {
@@ -267,8 +288,6 @@ export default {
 				this.viewBox = parseViewBox(res.data)
 				this.sizeMm = parseSvgSizeMm(res.data)
 				this.svgMarkup = sanitizeSvg(res.data)
-				// Erst jetzt: ab hier gibt es nichts mehr nachzuladen.
-				this.observer?.disconnect()
 				// Für die Zoom-Presets (Phase 16, "Seitenbreite/ganze Seite/100%") -
 				// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
 				// jeweils geladene ScorePage.
@@ -285,6 +304,37 @@ export default {
 		/** Erneuter Versuch nach einem Ladefehler (Knopf auf der leeren Seite). */
 		retry() {
 			this.load()
+		},
+
+		/**
+		 * Gibt das Notenbild wieder frei, wenn die Seite weit aus dem Bild
+		 * gescrollt ist (Codereview-Befund E2).
+		 *
+		 * Die Risikotabelle in PLAN.md führt „SVG-Seiten großer Partituren zu
+		 * schwer fürs DOM" mit der Gegenmaßnahme „nur sichtbare Seiten
+		 * rendern" - umgesetzt war davon bis Phase 23 nur die Hälfte: es wurde
+		 * lazy geladen, aber nie freigegeben. Bei einer Orchesterpartitur hatte
+		 * man nach einmaligem Durchscrollen alle Seiten samt zehntausender
+		 * `<path>`-Knoten gleichzeitig im DOM.
+		 *
+		 * Freigegeben wird **nur** das Markup: `viewBox` und `sizeMm` bleiben,
+		 * damit die Seite ihre Höhe weiter über `aspectRatio` reserviert (kein
+		 * Scroll-Sprung) und die Zoom-Presets ihre Geometrie behalten. Die
+		 * Seite verhält sich danach exakt wie eine noch nie geladene, und der
+		 * Ladebeobachter greift beim Zurückscrollen unverändert.
+		 */
+		unload() {
+			if (!this.svgMarkup) {
+				return
+			}
+			// Die Seite, auf der der Cursor gerade steht, nie freigeben - sonst
+			// verschwände das Notenbild unter der laufenden Wiedergabe, falls
+			// der Beobachter bei einem weiten Sprung kurz „nicht sichtbar"
+			// meldet, bevor das Autoscroll nachgezogen hat.
+			if (this.cursorRect && this.cursorRect.page === this.pageIndex) {
+				return
+			}
+			this.svgMarkup = null
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid, Phase 10 "Klick auf eine Note

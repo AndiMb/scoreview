@@ -19,8 +19,10 @@ einmalig zu Notenseiten (SVG), MIDI und Timing-Daten konvertiert und danach
 gecacht: erneutes Öffnen derselben Datei rendert nicht neu, sondern bedient
 sich aus dem Cache. Erst ein Re-Upload/eine Änderung der Datei stößt eine
 erneute Konvertierung an. Voraussetzung ist ein erreichbarer
-MuseScore-Sidecar (separat betrieben, nicht Teil dieses App-Pakets) sowie
-ein vom Administrator konfiguriertes SoundFont für die Wiedergabe.
+MuseScore-Sidecar (separat betrieben, nicht Teil dieses App-Pakets). Ein
+SoundFont für die Wiedergabe muss nicht konfiguriert werden - die App liefert
+das aus, das der Sidecar mitbringt; eine eigene Adresse lässt sich in den
+Einstellungen hinterlegen.
 
 Funktionsumfang: Taktnavigation, Loop, Zoom, Klick-auf-Note-Sprung, Mixer
 (Lautstärke/Mute/Solo pro Stimme, Tempo), private Notizen an musikalischen
@@ -37,17 +39,21 @@ to notation pages (SVG), MIDI and timing data, then cached: opening the
 same file again does not re-render, it is served from the cache. Only a
 re-upload/change of the file triggers a new conversion. Requires a
 reachable MuseScore sidecar (operated separately, not part of this app
-package) and an administrator-configured SoundFont for playback.
+package). No SoundFont needs to be configured for playback - the app serves
+the one the sidecar brings along; a custom address can be set in the
+admin settings.
 
 Feature set: measure navigation, loop, zoom, click-to-note jump, mixer
 (per-voice volume/mute/solo, tempo), private annotations anchored to
 musical position (survives a re-upload).
 	]]></description>
-	<version>0.0.23</version>
+	<version>0.0.24</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>
 	<category>multimedia</category>
+	<bugs>https://github.com/AndiMb/scoreview/issues</bugs>
+	<repository type="git">https://github.com/AndiMb/scoreview.git</repository>
 	<dependencies>
 		<php min-version="8.1" max-version="8.5"/>
 		<database>sqlite</database>
