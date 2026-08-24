@@ -93,7 +93,7 @@
 									min="1"
 									:label="t('To measure')" />
 							</div>
-							<NcButton wide :aria-label="t('Loop from current measure')" @click="loopFromCurrentMeasure">
+							<NcButton wide :aria-label="t('Loop from current measure')" @click="setLoopFromMeasure(currentAnchor?.measureNumber)">
 								<template #icon>
 									<CrosshairsGps :size="20" />
 								</template>
@@ -372,12 +372,11 @@ import ScorePage from './ScorePage.vue'
 import { useAnnotations } from '../composables/useAnnotations.js'
 import { useAutoScroll } from '../composables/useAutoScroll.js'
 import { useConversionStatus } from '../composables/useConversionStatus.js'
+import { useLoop } from '../composables/useLoop.js'
+import { useMetronome } from '../composables/useMetronome.js'
+import { usePlayback } from '../composables/usePlayback.js'
 import { useScoreSync } from '../composables/useScoreSync.js'
 import { useZoom } from '../composables/useZoom.js'
-import { computeCountInDelaysMs, estimateBeatsInMeasure, resolveBeatInMeasure } from '../lib/metronome.js'
-import { createMetronomeClick } from '../lib/metronomeClick.js'
-import { resolveMixerChannels } from '../lib/mixerLayout.js'
-import { createPlayer } from '../lib/player.js'
 import {
 	buildTimeline,
 	findElementAtPoint,
@@ -385,29 +384,12 @@ import {
 	findNearestOccurrenceTimeMs,
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
-import { createSilentClock } from '../lib/silentClock.js'
 import { findStepIndex } from '../lib/timingSync.js'
 
-// Näherung für die Transport-Gesamtdauer im stummen Platzhalter-Modus
-// (kein konfiguriertes SoundFont, siehe unten) - letztes Timing-Event plus
-// Puffer für den Ausklang der letzten Note. Mit echtem Player kommt die
-// Dauer stattdessen von player.durationMs (tatsächliche MIDI-Länge).
-const DURATION_PADDING_MS = 2000
 // MuseScores eigene Vorgabe für Partituren ohne Tempoangabe (M8: metadata.tempo
 // kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als Bezugswert für die
 // BPM-Anzeige/-Eingabe, gekennzeichnet über tempoGuessed (Phase 17).
 const DEFAULT_TEMPO_BPM = 120
-// Grenzen des Tempofaktors auf playbackRate, wie schon vor der BPM-Anzeige
-// (Phase 9 hat nur in diesem Bereich gemessen, dass die Zeitachse
-// tempounabhängig bleibt) - die BPM-Eingabe rechnet innerhalb dieser Grenzen.
-const MIN_TEMPO_FACTOR = 0.5
-const MAX_TEMPO_FACTOR = 1.5
-// Vorlauf, mit dem der naechste Metronomschlag gesucht und im AudioContext
-// terminiert wird (Phase 22, Zeitachsen-ms). Muss ueber einem
-// Bildwiederholtakt liegen (~16ms bei 60Hz), damit kein Schlag verpasst wird,
-// und klein genug bleiben, dass ein Sprung/Tempowechsel nicht mehrere schon
-// terminierte Klicks hinterherzieht.
-const METRONOME_LOOKAHEAD_MS = 60
 
 export default {
 	name: 'ScoreViewer',
@@ -510,6 +492,26 @@ export default {
 			scrollEl: scrollElement,
 		})
 		const autoScroll = useAutoScroll({ scrollEl: scrollElement })
+		const playback = usePlayback({ clock, durationMs, defaultTempoBpm: DEFAULT_TEMPO_BPM })
+
+		const metronome = useMetronome({
+			measuresTimeline: () => measuresTimeline.value,
+			durationMs: () => durationMs.value,
+			baseTempoBpm: () => playback.baseTempoBpm.value,
+			effectiveTempoBpm: () => playback.effectiveTempoBpm.value,
+			tempoFactor: () => playback.tempo.value,
+			isPlaying: () => playback.isPlaying.value,
+			play: () => clock.value?.play(),
+		})
+
+		const loop = useLoop({
+			measuresTimeline: () => measuresTimeline.value,
+			durationMs: () => durationMs.value,
+			isPlaying: () => clock.value?.isPlaying() ?? false,
+			seek: (timeMs) => clock.value?.seek(timeMs),
+			startCountIn: (targetMs) => metronome.startCountIn(targetMs, DEFAULT_TEMPO_BPM),
+			clearCountIn: metronome.clearCountIn,
+		})
 
 		return {
 			setOnScoreReady,
@@ -538,6 +540,50 @@ export default {
 			updateAutoScroll: autoScroll.update,
 			onViewerScroll: autoScroll.onUserScroll,
 			resetAutoScroll: autoScroll.reset,
+			metronomeEnabled: metronome.enabled,
+			metronomeBeats: metronome.beats,
+			updateMetronome: metronome.tick,
+			startCountIn: metronome.startCountIn,
+			clearCountIn: metronome.clearCountIn,
+			destroyMetronome: metronome.destroy,
+			resetMetronome: metronome.reset,
+			loopFromMeasure: loop.fromMeasure,
+			loopToMeasure: loop.toMeasure,
+			loopActive: loop.active,
+			loopMarkers: loop.markers,
+			toggleLoop: loop.toggle,
+			loopRestartTarget: loop.restartTarget,
+			setLoopFromMeasure: loop.setFromCurrentMeasure,
+			resetLoop: loop.reset,
+			currentTimeMs: playback.currentTimeMs,
+			isPlaying: playback.isPlaying,
+			hasRealPlayer: playback.hasRealPlayer,
+			playbackError: playback.playbackError,
+			tempo: playback.tempo,
+			baseTempoBpm: playback.baseTempoBpm,
+			tempoGuessed: playback.tempoGuessed,
+			effectiveTempoBpm: playback.effectiveTempoBpm,
+			minTempoBpm: playback.minTempoBpm,
+			maxTempoBpm: playback.maxTempoBpm,
+			mixerChannels: playback.mixerChannels,
+			presetList: playback.presetList,
+			soundFontLoading: playback.soundFontLoading,
+			soundFontLoadPercent: playback.soundFontLoadPercent,
+			applyScoreMetadata: playback.applyMetadata,
+			setUpSilentClock: playback.useSilentClock,
+			setUpRealPlayer: playback.useRealPlayer,
+			skipSoundFontLoad: playback.skipSoundFontLoad,
+			setNoSoundFontConfigured: playback.setNoSoundFontConfigured,
+			togglePlay: playback.toggle,
+			onSeekInput: playback.onSeekInput,
+			onTempoBpmInput: playback.onTempoBpmInput,
+			onVolumesChanged: playback.applyChannelVolumes,
+			onProgramChanged: playback.setProgram,
+			samplePlaybackTime: playback.sampleTime,
+			requestWakeLock: playback.requestWakeLock,
+			releaseWakeLock: playback.releaseWakeLock,
+			destroyPlayback: playback.destroy,
+			resetPlayback: playback.reset,
 			state: conversion.state,
 			errorMessage: conversion.errorMessage,
 			errorCode: conversion.errorCode,
@@ -568,27 +614,11 @@ export default {
 		return {
 			pageUrls: [],
 			cursorRect: null,
-			currentTimeMs: 0,
-			isPlaying: false,
-			tempo: 1,
 			// Zeitquelle: entweder lib/player.js (echte Wiedergabe, sobald ein
 			// SoundFont konfiguriert ist) oder lib/silentClock.js (Platzhalter,
 			// siehe PLAN.md Phase 8/9) - beide erfüllen dieselbe Schnittstelle,
 			// diese Komponente muss den Unterschied nur für die
 			// Tempo-/Mixer-Zusatzfunktionen kennen (hasRealPlayer).
-			hasRealPlayer: false,
-			// Warum es keinen Ton gibt, im Klartext für die Nutzerin - vorher
-			// stand hier pauschal "nicht konfiguriert", auch wenn in Wahrheit
-			// der SoundFont-Abruf oder der Synthesizer gescheitert war. Genau
-			// das machte "die App gibt keinen Ton aus" von außen undiagnostizierbar.
-			playbackError: '',
-			// metadata.tracks/parts (Phase 17) - für den zweiten resolveMixerChannels()-
-			// Aufruf in setUpRealPlayer() aufgehoben, sobald die echten MIDI-Kanäle
-			// bekannt sind (siehe dort).
-			metaTracks: null,
-			metaParts: null,
-			mixerChannels: [],
-			presetList: [],
 			showMixer: false,
 			sync: null,
 			timeDisplayHandle: null,
@@ -606,55 +636,8 @@ export default {
 			// von der Wiedergabe nachgeführt: sonst überschriebe der nächste
 			// Takt die gerade getippte Zahl.
 			measureFieldFocused: false,
-			// '', nicht null: NcTextField (anders als ein natives <input>) nimmt
-			// als modelValue nur string|number entgegen und wirft bei null einen
-			// Laufzeitfehler ("Cannot read properties of null"). '' bleibt wie
-			// null falsy für die toggleLoop()-Leerprüfung, verhält sich also
-			// gleich.
-			loopFromMeasure: '',
-			loopToMeasure: '',
-			loopActive: false,
-			loopStartMs: null,
-			loopEndMs: null,
 			// Phase 11: private Notizen, Phase 18: zusaetzlich geteilte.
 			currentElid: null,
-			// Phase 17: Tempo in BPM statt Prozent. baseTempoBpm ist
-			// metadata.tempo (Viertel-BPM, M8) bzw. DEFAULT_TEMPO_BPM, wenn die
-			// Partitur keine Tempoangabe trägt (tempoGuessed dann true) - `tempo`
-			// bleibt intern weiterhin der Faktor auf playbackRate (Phase 9: die
-			// Zeitachse bleibt davon unberührt), nur die Anzeige/Eingabe ist jetzt BPM.
-			baseTempoBpm: DEFAULT_TEMPO_BPM,
-			tempoGuessed: false,
-			// Phase 17: Metronom/Einzähler - Klick unabhängig vom Haupt-Synth
-			// (score.mid trägt nachweislich keine Metronomnoten, siehe
-			// lib/metronome.js), deshalb ein eigener AudioContext-Klick statt
-			// eines MIDI-Kanals.
-			metronomeEnabled: false,
-			// 'all' = jeder Schlag (Voreinstellung seit Phase 22), 'downbeat' =
-			// nur der Taktanfang (das Verhalten bis Phase 21).
-			metronomeBeats: 'all',
-			metronomeClick: null,
-			// "<Taktindex>:<Schlagindex>" des zuletzt terminierten Klicks, oder
-			// null - verhindert Doppelklicks, weil die rAF-Schleife denselben
-			// Schlag mehrere Frames lang als fällig sieht.
-			lastBeatKey: null,
-			// Wiedergabezeit beim letzten Metronom-Tick: ein Rückwärtssprung
-			// (Seek, Loop-Neustart) setzt lastBeatKey zurück, damit die Eins
-			// danach wieder klickt, auch wenn es derselbe Schlag ist.
-			lastMetronomeTimeMs: 0,
-			countInTimers: [],
-			isCountingIn: false,
-			// Phase 19: Bildschirm waehrend der Wiedergabe wachhalten
-			// (navigator.wakeLock) - das Sentinel-Objekt selbst wird nie im
-			// Template gebraucht, nur zum spaeteren release() aufgehoben.
-			wakeLockSentinel: null,
-			// Phase 19: SoundFont-Ladefortschritt (~40MB, "das wird auf dem
-			// Tablet zuerst wehtun", siehe PLAN.md) statt stummem Warten -
-			// getrennt vom permanenten playbackError (der bedeutet "geht nicht",
-			// hier heisst es nur "noch nicht fertig").
-			soundFontLoading: false,
-			soundFontLoadPercent: 0,
-			soundFontAbortController: null,
 		}
 	},
 
@@ -686,43 +669,6 @@ export default {
 			return this.hasRealPlayer && this.showMixer && this.mixerChannels.length > 0
 		},
 
-		// BPM-Anzeige/-Eingabe (Phase 17, auf Basis von M8: metadata.tempo ist
-		// Viertel-BPM) - gerundet, weil der interne Faktor (this.tempo) in
-		// Schritten von 0.05 läuft und eine Nachkommastelle hier keine
-		// zusätzliche Genauigkeit ausdrücken würde.
-		effectiveTempoBpm() {
-			return Math.round(this.baseTempoBpm * this.tempo)
-		},
-
-		minTempoBpm() {
-			return Math.round(this.baseTempoBpm * MIN_TEMPO_FACTOR)
-		},
-
-		maxTempoBpm() {
-			return Math.round(this.baseTempoBpm * MAX_TEMPO_FACTOR)
-		},
-
-		// Sichtbare Markierung des Loop-Bereichs im Notenbild (Phase 17) - zwei
-		// Flaggen an Start-/Ende-Takt, an dieselben Elementkoordinaten wie die
-		// Notiz-Marker angelehnt (measuresTimeline.elements), aber eigene
-		// Farbe/Form (siehe ScorePage.vue). Markiert bewusst nur den JEWEILIGEN
-		// TAKTANFANG, nicht die volle Taktbreite - measures.json liefert nur
-		// Punktkoordinaten (M4), keine Taktausdehnung.
-		loopMarkers() {
-			if (!this.loopActive || !this.measuresTimeline) {
-				return []
-			}
-			const fromRect = this.measuresTimeline.elements[String(Number(this.loopFromMeasure) - 1)]
-			const toRect = this.measuresTimeline.elements[String(Number(this.loopToMeasure) - 1)]
-			const markers = []
-			if (fromRect) {
-				markers.push({ id: 'loop-start', kind: 'start', ...fromRect })
-			}
-			if (toRect) {
-				markers.push({ id: 'loop-end', kind: 'end', ...toRect })
-			}
-			return markers
-		},
 	},
 
 	watch: {
@@ -805,14 +751,7 @@ export default {
 			this.resetConversion()
 			this.pageUrls = []
 			this.cursorRect = null
-			this.currentTimeMs = 0
-			this.durationMs = 0
-			this.isPlaying = false
-			this.tempo = 1
-			this.hasRealPlayer = false
-			this.playbackError = ''
-			this.mixerChannels = []
-			this.presetList = []
+			this.resetPlayback()
 			this.showMixer = false
 			this.resetAutoScroll()
 			this.totalMeasures = 0
@@ -820,27 +759,13 @@ export default {
 			this.timeline = null
 			this.measuresTimeline = null
 			this.measureInput = 1
-			this.loopFromMeasure = ''
-			this.loopToMeasure = ''
-			this.loopActive = false
-			this.loopStartMs = null
-			this.loopEndMs = null
+			this.resetLoop()
 			this.resetZoom()
 			this.measureFieldFocused = false
 			this.resetAnnotations()
 			this.currentEtag = null
 			this.currentElid = null
-			this.metaTracks = null
-			this.metaParts = null
-			this.baseTempoBpm = DEFAULT_TEMPO_BPM
-			this.tempoGuessed = false
-			this.metronomeEnabled = false
-			this.lastBeatKey = null
-			this.lastMetronomeTimeMs = 0
-			this.isCountingIn = false
-			this.soundFontLoading = false
-			this.soundFontLoadPercent = 0
-			this.soundFontAbortController = null
+			this.resetMetronome()
 		},
 
 		cleanup() {
@@ -849,21 +774,13 @@ export default {
 				this.sync.stop()
 				this.sync = null
 			}
-			this.clearCountIn()
-			this.metronomeClick?.destroy?.()
-			this.metronomeClick = null
+			this.destroyMetronome()
 			if (this.timeDisplayHandle) {
 				cancelAnimationFrame(this.timeDisplayHandle)
 				this.timeDisplayHandle = null
 			}
-			// Gibt den AudioContext frei (siehe lib/player.js) - der
-			// silentClock hat kein destroy(), daher der Guard.
-			this.clock?.destroy?.()
-			this.clock = null
-			this.soundFontAbortController?.abort()
-			this.soundFontAbortController = null
+			this.destroyPlayback()
 			this.stopZoomObserver()
-			this.releaseWakeLock()
 		},
 
 		async loadScore({ files, soundFontUrl }) {
@@ -878,16 +795,7 @@ export default {
 				this.measuresTimeline = buildTimeline(measuresRes.data)
 				this.pageUrls = files.pages
 				this.currentEtag = files.etag
-				this.metaTracks = metaRes.data.tracks
-				this.metaParts = metaRes.data.parts
-				// Vorlaeufig ohne echte Kanaldaten (der Player ist noch nicht
-				// geladen) - resolveMixerChannels() faellt dann auf den
-				// Spurindex zurueck. setUpRealPlayer() ersetzt das unten durch
-				// die tatsaechlichen, aus dem MIDI gelesenen Kanaele (Phase 17,
-				// siehe mixerLayout.js zur Index!=Kanal-Falle).
-				this.mixerChannels = resolveMixerChannels(this.metaTracks, this.metaParts)
-				this.baseTempoBpm = metaRes.data.tempo || DEFAULT_TEMPO_BPM
-				this.tempoGuessed = !metaRes.data.tempo
+				this.applyScoreMetadata(metaRes.data)
 				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
 				this.loadAnnotations()
 				// Startzoom "Seitenbreite" statt fester Faktor 1 (Phase 22):
@@ -901,9 +809,9 @@ export default {
 				this.setUpViewportObserver()
 
 				if (soundFontUrl) {
-					await this.setUpRealPlayer(files.midi, soundFontUrl)
+					await this.setUpRealPlayer(files.midi, soundFontUrl, timeline)
 				} else {
-					this.playbackError = this.t('No SoundFont is available (see Settings → ScoreView).')
+					this.setNoSoundFontConfigured()
 					this.setUpSilentClock(timeline)
 				}
 
@@ -922,106 +830,6 @@ export default {
 			}
 		},
 
-		setUpSilentClock(timeline) {
-			const lastEventMs = timeline.events.length > 0 ? timeline.events[timeline.events.length - 1].timeMs : 0
-			this.durationMs = lastEventMs + DURATION_PADDING_MS
-			this.clock = createSilentClock(this.durationMs)
-			this.hasRealPlayer = false
-		},
-
-		async setUpRealPlayer(midiUrl, soundFontUrl) {
-			// Ladefortschritt statt stummem Warten (Phase 19: "die
-			// SoundFont-Groesse (~40MB) wird hier zuerst weh tun") - eigener
-			// AbortController fuers "Noten ohne Ton"-Weg (skipSoundFontLoad()).
-			this.soundFontAbortController = new AbortController()
-			this.soundFontLoading = true
-			this.soundFontLoadPercent = 0
-			try {
-				const [midiRes, soundFontBuffer] = await Promise.all([
-					axios.get(midiUrl, { responseType: 'arraybuffer' }),
-					this.fetchSoundFontWithProgress(soundFontUrl, this.soundFontAbortController.signal),
-				])
-				const player = await createPlayer(midiRes.data, soundFontBuffer)
-				this.clock = player
-				this.hasRealPlayer = true
-				this.durationMs = player.durationMs
-				this.presetList = player.getPresetList() ?? []
-				// Jetzt mit den echten, aus dem geladenen MIDI gelesenen Kanaelen
-				// neu aufloesen (siehe mixerLayout.js) - vorher (s.o.) stand hier
-				// nur die Index-Naeherung, weil player.getTrackChannels() ein
-				// geladenes MIDI braucht.
-				this.mixerChannels = resolveMixerChannels(this.metaTracks, this.metaParts, player.getTrackChannels())
-			} catch (err) {
-				if (err.name === 'AbortError') {
-					// "Noten ohne Ton"-Weg (Phase 19) - bewusster Nutzerwunsch,
-					// kein Fehler, deshalb ohne console.error.
-					this.playbackError = this.t('Sound loading skipped.')
-				} else {
-					// SoundFont evtl. nicht erreichbar (falsche URL, CORS, Netzwerk) -
-					// Notenansicht bleibt trotzdem nutzbar, nur ohne Ton (siehe
-					// PLAN.md Risiko "SoundFont-Auslieferung").
-					// eslint-disable-next-line no-console
-					console.error('ScoreView: echte Wiedergabe konnte nicht initialisiert werden, falle auf stummen Modus zurück.', err)
-					this.playbackError = err.message
-				}
-				// buildTimeline({events: []}) wäre eine leere Zeitachse: der
-				// Transport hätte danach Dauer 0 und die Partitur ließe sich
-				// nicht mehr durchfahren. Die echte Timeline steht hier bereits
-				// zur Verfügung - sie ist auch im stummen Modus die richtige.
-				this.setUpSilentClock(this.timeline)
-			} finally {
-				this.soundFontLoading = false
-				this.soundFontAbortController = null
-			}
-		},
-
-		// Liest den SoundFont-Abruf gestreamt statt in einem Rutsch, um den
-		// Ladefortschritt zu kennen (Phase 19) - Content-Length ist bei einer
-		// gleichbleibenden, cachebaren Datei (siehe Phase 9 Cache-Header)
-		// zuverlaessig gesetzt; ohne sie (z.B. bei komprimiertem Transfer ohne
-		// bekannte Endlaenge) bleibt der Fortschritt bei 0%, der Abruf
-		// funktioniert trotzdem unveraendert.
-		//
-		// Bewusst fetch() statt @nextcloud/axios: die SoundFont-URL ist eine
-		// vom Admin frei konfigurierbare, potenziell fremde Adresse (siehe
-		// PLAN.md E1/Phase 9) - @nextcloud/axios haengt an jede Anfrage
-		// automatisch den CSRF-requesttoken-Header an, der dort weder
-		// gebraucht wird noch hin sollte, und erzwingt dadurch unnoetig einen
-		// CORS-Preflight.
-		async fetchSoundFontWithProgress(url, signal) {
-			const res = await fetch(url, { signal })
-			if (!res.ok) {
-				// Die app-eigene Route antwortet im Fehlerfall mit {"error": "…"}
-				// (SoundFontController) - die Meldung ist fuer die Nutzerin
-				// brauchbarer als "HTTP 503".
-				const detail = await res.json().then((b) => b?.error).catch(() => null)
-				throw new Error(detail || `SoundFont-Abruf fehlgeschlagen: HTTP ${res.status}`)
-			}
-			const total = Number(res.headers.get('Content-Length')) || 0
-			if (!total || !res.body?.getReader) {
-				return res.arrayBuffer()
-			}
-			const reader = res.body.getReader()
-			const chunks = []
-			let received = 0
-			for (;;) {
-				const { done, value } = await reader.read()
-				if (done) {
-					break
-				}
-				chunks.push(value)
-				received += value.length
-				this.soundFontLoadPercent = Math.round((received / total) * 100)
-			}
-			const buffer = new Uint8Array(received)
-			let offset = 0
-			for (const chunk of chunks) {
-				buffer.set(chunk, offset)
-				offset += chunk.length
-			}
-			return buffer.buffer
-		},
-
 		// Eigene rAF-Schleife statt Vue-Reaktivität direkt aus useScoreSync,
 		// weil currentTimeMs/isPlaying jeden Frame ändern (Transport-Anzeige),
 		// der Cursor selbst aber nur bei Notenwechsel (siehe useScoreSync.js) -
@@ -1029,8 +837,7 @@ export default {
 		pumpTimeDisplay() {
 			const step = () => {
 				if (this.clock) {
-					this.currentTimeMs = this.clock.getCurrentTimeMs()
-					this.isPlaying = this.clock.isPlaying()
+					this.samplePlaybackTime()
 					// Für den Notiz-Anker (Phase 11, currentAnchor) - dieselbe
 					// Note-Auflösung wie der Cursor (useScoreSync.js), hier separat
 					// gehalten, weil eine Notiz das elid explizit braucht, der
@@ -1044,141 +851,15 @@ export default {
 					// in silentClock.js/player.js geprüft, weil beide Zeitquellen
 					// dieselbe kleine seek()-Schnittstelle erfüllen und Looping keine
 					// Eigenschaft der Zeitquelle selbst ist.
-					if (this.loopActive && this.loopEndMs !== null && this.currentTimeMs >= this.loopEndMs) {
-						this.clock.seek(this.loopStartMs)
+					const loopTarget = this.loopRestartTarget(this.currentTimeMs)
+					if (loopTarget !== null) {
+						this.clock.seek(loopTarget)
 					}
-					this.updateMetronome()
+					this.updateMetronome(this.currentTimeMs)
 				}
 				this.timeDisplayHandle = requestAnimationFrame(step)
 			}
 			step()
-		},
-
-		async togglePlay() {
-			if (!this.clock) {
-				return
-			}
-			if (this.clock.isPlaying()) {
-				this.clock.pause()
-			} else {
-				await this.clock.play()
-			}
-		},
-
-		onSeekInput(event) {
-			this.clock?.seek(Number(event.target.value))
-		},
-
-		// BPM statt Prozent (Phase 17, M8) - rechnet die eingegebene Ziel-BPM in
-		// den internen playbackRate-Faktor um (Phase 9: die Zeitachse bleibt
-		// davon unberührt), begrenzt auf denselben Faktorbereich wie zuvor der
-		// Prozent-Regler (0,5-1,5, siehe MIN_/MAX_TEMPO_FACTOR).
-		onTempoBpmInput(event) {
-			const bpm = Number(event.target.value)
-			const factor = this.baseTempoBpm > 0 ? bpm / this.baseTempoBpm : 1
-			this.tempo = Math.min(MAX_TEMPO_FACTOR, Math.max(MIN_TEMPO_FACTOR, factor))
-			this.clock?.setTempo?.(this.tempo)
-		},
-
-		ensureMetronomeClick() {
-			if (!this.metronomeClick) {
-				this.metronomeClick = createMetronomeClick()
-			}
-			return this.metronomeClick
-		},
-
-		clearCountIn() {
-			this.countInTimers.forEach((id) => clearTimeout(id))
-			this.countInTimers = []
-			this.isCountingIn = false
-		},
-
-		// Laufender Metronomklick (Phase 17 auf Taktebene, seit Phase 22 auf
-		// Schlagebene - Nutzer-Rückmeldung: "nicht nur der erste Schlag im
-		// Takt"). Läuft in der rAF-Schleife mit, terminiert den Klick aber
-		// nicht dort: gesucht wird der Schlag, der in METRONOME_LOOKAHEAD_MS
-		// fällig ist, und die Restzeit geht an den AudioContext (siehe
-		// metronomeClick.js). Auf Taktebene fiel das rAF-Raster nicht auf, auf
-		// Schlagebene hörte man es.
-		//
-		// Der Vorlauf ist in Zeitachsen-ms gemessen; die Umrechnung in echte
-		// Sekunden teilt durch den Tempofaktor, weil die Zeitachse mit
-		// playbackRate läuft (Phase 9: die Zeitachse selbst bleibt unberührt).
-		updateMetronome() {
-			const now = this.currentTimeMs
-			// Rückwärtssprung (Seek, Loop-Neustart, Klick auf eine frühere
-			// Note): dasselbe Schlagraster gilt wieder von vorn.
-			if (now < this.lastMetronomeTimeMs) {
-				this.lastBeatKey = null
-			}
-			this.lastMetronomeTimeMs = now
-			if (!this.metronomeEnabled || !this.isPlaying || this.isCountingIn) {
-				return
-			}
-			const measures = this.measuresTimeline
-			if (!measures || measures.events.length === 0) {
-				return
-			}
-			const lookaheadMs = now + METRONOME_LOOKAHEAD_MS
-			const index = findStepIndex(measures.times, lookaheadMs)
-			const measureStartMs = measures.events[index].timeMs
-			const measureEndMs = index + 1 < measures.events.length
-				? measures.events[index + 1].timeMs
-				: this.durationMs
-			const beat = resolveBeatInMeasure(measureStartMs, measureEndMs, lookaheadMs, this.baseTempoBpm, this.metronomeBeats === 'all')
-			if (!beat) {
-				return
-			}
-			const key = `${index}:${beat.index}`
-			if (key === this.lastBeatKey) {
-				return
-			}
-			this.lastBeatKey = key
-			const delaySeconds = Math.max(0, (beat.timeMs - now) / (this.tempo || 1) / 1000)
-			this.ensureMetronomeClick().click(beat.index === 0, delaySeconds)
-		},
-
-		// Einzähler vor dem Loop-Start (Phase 17: "mehr wert als die meiste
-		// übrige Mixer-Funktionalität"). Schätzt die Schlagzahl des Zieltaktes
-		// aus seiner Dauer und der aktuellen BPM (lib/metronome.js - measures.json
-		// trägt keine eigene Taktart), zählt in Echtzeit herunter und startet
-		// danach die Wiedergabe selbst.
-		startCountIn(targetMs) {
-			this.clearCountIn()
-			if (!this.measuresTimeline || this.measuresTimeline.events.length === 0) {
-				this.clock?.play()
-				return
-			}
-			const index = findStepIndex(this.measuresTimeline.times, targetMs)
-			const measureStartMs = this.measuresTimeline.events[index].timeMs
-			const nextMs = index + 1 < this.measuresTimeline.events.length
-				? this.measuresTimeline.events[index + 1].timeMs
-				: this.durationMs
-			const beatsInMeasure = estimateBeatsInMeasure(nextMs - measureStartMs, this.baseTempoBpm)
-			const bpm = this.effectiveTempoBpm > 0 ? this.effectiveTempoBpm : DEFAULT_TEMPO_BPM
-			const beatIntervalMs = 60000 / bpm
-			const delays = computeCountInDelaysMs(beatsInMeasure, beatIntervalMs)
-			this.isCountingIn = true
-			const click = this.ensureMetronomeClick()
-			this.countInTimers = delays.map((delay, i) => setTimeout(() => click.click(i === 0), delay))
-			// Die Wiedergabe startet einen Schlag NACH dem letzten Einzähler-
-			// Klick (Phase 22). Bis Phase 21 startete sie auf dem letzten Klick
-			// - bei vier Schlägen zählte der Einzähler damit nur drei, und der
-			// vierte fiel mit der Eins zusammen. Am Dirigat ist das der
-			// Unterschied zwischen "und eins" und einem verschluckten Schlag.
-			this.countInTimers.push(setTimeout(() => {
-				this.isCountingIn = false
-				this.countInTimers = []
-				this.clock?.play()
-			}, delays[delays.length - 1] + beatIntervalMs))
-		},
-
-		onVolumesChanged(effectiveVolumes) {
-			this.clock?.applyChannelVolumes?.(effectiveVolumes)
-		},
-
-		onProgramChanged({ channel, program }) {
-			this.clock?.setProgram?.(channel, program)
 		},
 
 		jumpToMeasure(measureNumber) {
@@ -1191,49 +872,6 @@ export default {
 			}
 		},
 
-		toggleLoop() {
-			if (this.loopActive) {
-				this.loopActive = false
-				this.loopStartMs = null
-				this.loopEndMs = null
-				this.clearCountIn()
-				return
-			}
-			if (!this.measuresTimeline || !this.loopFromMeasure || !this.loopToMeasure) {
-				return
-			}
-			const startMs = findMeasureStartTime(this.measuresTimeline, Number(this.loopFromMeasure))
-			// Loop-Ende = Beginn des Taktes NACH dem angegebenen "bis"-Takt, damit
-			// dieser Takt noch vollständig durchgespielt wird, bevor
-			// zurückgesprungen wird; am Stückende gilt stattdessen durationMs.
-			const endMs = findMeasureStartTime(this.measuresTimeline, Number(this.loopToMeasure) + 1) ?? this.durationMs
-			if (startMs === null) {
-				return
-			}
-			this.loopStartMs = startMs
-			this.loopEndMs = endMs
-			this.loopActive = true
-			this.clock?.seek(startMs)
-			// Nur einzählen, wenn noch nicht gespielt wird - sonst würde eine
-			// laufende Probe unterbrochen statt unterstützt.
-			if (this.clock && !this.clock.isPlaying()) {
-				this.startCountIn(startMs)
-			}
-		},
-
-		// "Loop ab aktuellem Takt" (Phase 17: "der häufigste Fall in der Probe:
-		// man ist schon an der Stelle") - füllt nur das Feld, aktiviert den Loop
-		// nicht automatisch (der "bis"-Takt bleibt eine bewusste Entscheidung).
-		loopFromCurrentMeasure() {
-			const current = this.currentAnchor?.measureNumber
-			if (current) {
-				this.loopFromMeasure = current
-			}
-		},
-
-		// Beim Verlassen des Taktfeldes ohne Enter wieder der Wiedergabe
-		// folgen - eine halb getippte Zahl darf nicht als Anzeige stehen
-		// bleiben.
 		onMeasureFieldBlur() {
 			this.measureFieldFocused = false
 			if (this.currentMeasureNumber !== null) {
@@ -1309,48 +947,6 @@ export default {
 			return `${minutes}:${String(seconds).padStart(2, '0')}`
 		},
 
-		// Bildschirm waehrend der Wiedergabe wachhalten (Phase 19: "ein
-		// Display, das mitten im Satz ausgeht, macht die ganze uebrige Arbeit
-		// wertlos") - die Wake Lock API ist nicht ueberall verfuegbar
-		// (z.B. Firefox ohne Flag, manche iOS-Versionen), deshalb defensiv:
-		// ohne sie bleibt die App exakt so nutzbar wie vorher, nur eben ohne
-		// Wachhalte-Effekt.
-		async requestWakeLock() {
-			if (!navigator.wakeLock || this.wakeLockSentinel) {
-				return
-			}
-			try {
-				this.wakeLockSentinel = await navigator.wakeLock.request('screen')
-				// Das Sentinel wird vom Browser selbst geloest, wenn der Tab in
-				// den Hintergrund wechselt (z.B. Tab-Wechsel) - beim
-				// Zurueckkehren waehrend laufender Wiedergabe erneut anfordern,
-				// sonst bliebe der Bildschirm nach einem Tab-Wechsel wieder
-				// ungeschuetzt, obwohl isPlaying weiterhin true ist.
-				this.wakeLockSentinel.addEventListener('release', () => {
-					this.wakeLockSentinel = null
-					if (this.isPlaying && document.visibilityState === 'visible') {
-						this.requestWakeLock()
-					}
-				})
-			} catch (err) {
-				// z.B. Permissions-Policy verbietet Wake Lock im umgebenden iframe
-				// - Wiedergabe bleibt trotzdem nutzbar, nur ohne Wachhalte-Effekt.
-				// eslint-disable-next-line no-console
-				console.error('ScoreView: Bildschirm konnte nicht wachgehalten werden.', err)
-			}
-		},
-
-		releaseWakeLock() {
-			this.wakeLockSentinel?.release?.()
-			this.wakeLockSentinel = null
-		},
-
-		// "Noten ohne Ton"-Weg (Phase 19): bricht den laufenden SoundFont-Abruf
-		// ab und faellt sofort auf den stummen Platzhalter zurueck, statt die
-		// verbleibenden ~40MB abzuwarten.
-		skipSoundFontLoad() {
-			this.soundFontAbortController?.abort()
-		},
 	},
 }
 </script>
