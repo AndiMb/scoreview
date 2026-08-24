@@ -344,7 +344,7 @@
 <script>
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
-import { shallowRef } from 'vue'
+import { getCurrentInstance, shallowRef } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
@@ -370,38 +370,23 @@ import ScoreAnnotations from './ScoreAnnotations.vue'
 import ScoreMixer from './ScoreMixer.vue'
 import ScorePage from './ScorePage.vue'
 import { useAnnotations } from '../composables/useAnnotations.js'
+import { useAutoScroll } from '../composables/useAutoScroll.js'
 import { useConversionStatus } from '../composables/useConversionStatus.js'
 import { useScoreSync } from '../composables/useScoreSync.js'
+import { useZoom } from '../composables/useZoom.js'
 import { computeCountInDelaysMs, estimateBeatsInMeasure, resolveBeatInMeasure } from '../lib/metronome.js'
 import { createMetronomeClick } from '../lib/metronomeClick.js'
 import { resolveMixerChannels } from '../lib/mixerLayout.js'
 import { createPlayer } from '../lib/player.js'
 import {
 	buildTimeline,
-	computeActualSizeZoom,
-	computeFitPageZoom,
-	computeFitWidthZoom,
-	computePinchZoom,
 	findElementAtPoint,
 	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
-	MAX_ZOOM,
-	MIN_ZOOM,
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
-import { planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
 import { createSilentClock } from '../lib/silentClock.js'
 import { findStepIndex } from '../lib/timingSync.js'
-
-// Pausendauer für das Autoscroll-Nachführen nach manuellem Scrollen (Phase
-// 16, siehe scrollPlan.js) - lang genug, um in Ruhe zu lesen, kurz genug, um
-// nicht wie ein Hänger zu wirken.
-const MANUAL_SCROLL_RESUME_MS = 2500
-// Wie lange nach einem selbst ausgelösten scrollTo() eingehende scroll-Events
-// als "programmatisch" gelten, nicht als manuelles Scrollen (siehe
-// onViewerScroll) - großzügig über der CSS-smooth-scroll-Dauer, damit kein
-// Nachzittern fälschlich als Nutzereingriff gilt.
-const PROGRAMMATIC_SCROLL_WINDOW_MS = 700
 
 // Näherung für die Transport-Gesamtdauer im stummen Platzhalter-Modus
 // (kein konfiguriertes SoundFont, siehe unten) - letztes Timing-Event plus
@@ -423,9 +408,6 @@ const MAX_TEMPO_FACTOR = 1.5
 // und klein genug bleiben, dass ein Sprung/Tempowechsel nicht mehrere schon
 // terminierte Klicks hinterherzieht.
 const METRONOME_LOOKAHEAD_MS = 60
-// Zoomschritt fuer Tastatur (+/-) und Strg+Mausrad - multiplikativ, damit sich
-// die gefuehlte Schrittweite ueber den ganzen Bereich (0,25-4) gleich anfuehlt.
-const ZOOM_STEP = 1.2
 
 export default {
 	name: 'ScoreViewer',
@@ -518,8 +500,44 @@ export default {
 			onScoreReady = fn
 		}
 
+		// rootEl/scrollEl als Funktionen statt als Refs: die Elemente existieren
+		// erst im Zustand "ready" (v-if im Template), ein Ref waere beim
+		// Anlegen des Composables noch leer.
+		const vm = getCurrentInstance()
+		const scrollElement = () => vm?.proxy?.$refs?.scroll ?? null
+		const zoomApi = useZoom({
+			rootEl: () => vm?.proxy?.$el ?? null,
+			scrollEl: scrollElement,
+		})
+		const autoScroll = useAutoScroll({ scrollEl: scrollElement })
+
 		return {
 			setOnScoreReady,
+			zoom: zoomApi.zoom,
+			zoomFollowsWidth: zoomApi.followsWidth,
+			isFullscreen: zoomApi.isFullscreen,
+			zoomPercent: zoomApi.percent,
+			minZoom: zoomApi.min,
+			maxZoom: zoomApi.max,
+			zoomStep: zoomApi.step,
+			setZoom: zoomApi.set,
+			zoomBy: zoomApi.by,
+			onZoomInput: zoomApi.onInput,
+			onWheel: zoomApi.onWheel,
+			onPageLoaded: zoomApi.onPageLoaded,
+			applyZoomPreset: zoomApi.applyPreset,
+			setUpViewportObserver: zoomApi.observeViewport,
+			toggleFullscreen: zoomApi.toggleFullscreen,
+			onFullscreenChange: zoomApi.onFullscreenChange,
+			onTouchStart: zoomApi.onTouchStart,
+			onTouchMove: zoomApi.onTouchMove,
+			onTouchEnd: zoomApi.onTouchEnd,
+			stopZoomObserver: zoomApi.stop,
+			resetZoom: zoomApi.reset,
+			setPageRef: autoScroll.setPageRef,
+			updateAutoScroll: autoScroll.update,
+			onViewerScroll: autoScroll.onUserScroll,
+			resetAutoScroll: autoScroll.reset,
 			state: conversion.state,
 			errorMessage: conversion.errorMessage,
 			errorCode: conversion.errorCode,
@@ -573,26 +591,12 @@ export default {
 			presetList: [],
 			showMixer: false,
 			sync: null,
-			pageRefs: [],
 			timeDisplayHandle: null,
 			// Phase 16: Autoscroll (siehe scrollPlan.js) und Kopfangaben. Der
 			// Partiturtitel steht seit Phase 22 nicht mehr in der Leiste -
 			// Nextclouds Viewer zeigt den Dateinamen ohnehin in seiner eigenen
 			// Kopfzeile, und die Leiste braucht den Platz fuer Bedienelemente.
 			totalMeasures: 0,
-			// Geometrie der jeweils zuletzt geladenen Seite je Index (Phase 16,
-			// Zoom-Presets) - {viewBox, sizeMm}, gefüllt über ScorePage.vue "loaded".
-			pageDimensions: {},
-			// Zeitstempel (Date.now()) des letzten erkannten MANUELLEN Scrollens,
-			// oder null - siehe shouldSuppressAutoScroll()/onViewerScroll().
-			lastManualScrollAt: null,
-			// Bis zu diesem Zeitpunkt gelten scroll-Events als von uns selbst
-			// ausgelöst (performAutoScroll), nicht als manueller Nutzereingriff.
-			ignoreScrollUntil: 0,
-			isFullscreen: false,
-			// Ob der Zoom vor dem Vollbild der Fensterbreite folgte (siehe
-			// onFullscreenChange) - Vollbild erzwingt "ganze Seite".
-			zoomFollowedWidthBeforeFullscreen: false,
 			// Phase 10: Probenarbeit.
 			// Zeigt die laufende Taktnummer UND nimmt das Sprungziel entgegen
 			// (Phase 22, ein Feld statt Anzeige + Eingabe) - siehe
@@ -612,15 +616,6 @@ export default {
 			loopActive: false,
 			loopStartMs: null,
 			loopEndMs: null,
-			zoom: 1,
-			// Solange niemand selbst gezoomt hat, folgt der Zoom der
-			// Fenstergröße ("Seitenbreite", siehe setUpViewportObserver) - das
-			// ist das Verhalten, das die Seite bis Phase 21 zwangsläufig hatte
-			// (`width: 100%`). Ab dem ersten eigenen Zoom gilt der gewählte
-			// Faktor absolut, sonst würde die App die Entscheidung der Nutzerin
-			// bei jedem Drehen des Tablets wieder verwerfen.
-			zoomFollowsWidth: true,
-			viewportObserver: null,
 			// Phase 11: private Notizen, Phase 18: zusaetzlich geteilte.
 			currentElid: null,
 			// Phase 17: Tempo in BPM statt Prozent. baseTempoBpm ist
@@ -649,10 +644,6 @@ export default {
 			lastMetronomeTimeMs: 0,
 			countInTimers: [],
 			isCountingIn: false,
-			// Phase 19: Pinch-Zoom-Gestenzustand (siehe onTouchStart/-Move/-End).
-			isPinching: false,
-			pinchStartDistance: 0,
-			pinchStartZoom: 1,
 			// Phase 19: Bildschirm waehrend der Wiedergabe wachhalten
 			// (navigator.wakeLock) - das Sentinel-Objekt selbst wird nie im
 			// Template gebraucht, nur zum spaeteren release() aufgehoben.
@@ -687,19 +678,6 @@ export default {
 		// braucht measuresTimeline).
 		currentMeasureNumber() {
 			return this.currentAnchor ? this.currentAnchor.measureNumber : null
-		},
-
-		// Nur zur Anzeige im Zoom-Popover.
-		zoomPercent() {
-			return Math.round(this.zoom * 100)
-		},
-
-		minZoom() {
-			return MIN_ZOOM
-		},
-
-		maxZoom() {
-			return MAX_ZOOM
 		},
 
 		// Der Mixer braucht echte Wiedergabe UND aufgelöste Kanäle - ohne
@@ -822,14 +800,6 @@ export default {
 			return translate('scoreview', text, vars)
 		},
 
-		setPageRef(el, index) {
-			if (el) {
-				this.pageRefs[index] = el
-			} else {
-				delete this.pageRefs[index]
-			}
-		},
-
 		reset() {
 			this.cleanup()
 			this.resetConversion()
@@ -844,10 +814,9 @@ export default {
 			this.mixerChannels = []
 			this.presetList = []
 			this.showMixer = false
-			this.pageRefs = []
+			this.resetAutoScroll()
 			this.totalMeasures = 0
 			this.pageDimensions = {}
-			this.lastManualScrollAt = null
 			this.timeline = null
 			this.measuresTimeline = null
 			this.measureInput = 1
@@ -856,8 +825,7 @@ export default {
 			this.loopActive = false
 			this.loopStartMs = null
 			this.loopEndMs = null
-			this.zoom = 1
-			this.zoomFollowsWidth = true
+			this.resetZoom()
 			this.measureFieldFocused = false
 			this.resetAnnotations()
 			this.currentEtag = null
@@ -870,7 +838,6 @@ export default {
 			this.lastBeatKey = null
 			this.lastMetronomeTimeMs = 0
 			this.isCountingIn = false
-			this.isPinching = false
 			this.soundFontLoading = false
 			this.soundFontLoadPercent = 0
 			this.soundFontAbortController = null
@@ -895,8 +862,7 @@ export default {
 			this.clock = null
 			this.soundFontAbortController?.abort()
 			this.soundFontAbortController = null
-			this.viewportObserver?.disconnect()
-			this.viewportObserver = null
+			this.stopZoomObserver()
 			this.releaseWakeLock()
 		},
 
@@ -1265,34 +1231,6 @@ export default {
 			}
 		},
 
-		onZoomInput(event) {
-			this.setZoom(Number(event.target.value))
-		},
-
-		// Einziger Weg, `zoom` zu setzen, außer der Fensterbreiten-Automatik
-		// (applyZoomPreset('width')/setUpViewportObserver): jeder selbst
-		// gewählte Zoom schaltet zoomFollowsWidth ab, sonst würde die
-		// Automatik ihn beim nächsten Resize wieder überschreiben.
-		setZoom(value) {
-			this.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value))
-			this.zoomFollowsWidth = false
-		},
-
-		zoomBy(factor) {
-			this.setZoom(this.zoom * factor)
-		},
-
-		// Strg+Mausrad zoomt die Partitur, nicht die Nextcloud-Oberfläche
-		// (dasselbe Motiv wie beim Pinch-Zoom aus Phase 19, siehe
-		// Template-Kommentar). Ohne Strg bleibt das Rad gewöhnliches Scrollen.
-		onWheel(event) {
-			if (!event.ctrlKey) {
-				return
-			}
-			event.preventDefault()
-			this.zoomBy(event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP)
-		},
-
 		// Beim Verlassen des Taktfeldes ohne Enter wieder der Wiedergabe
 		// folgen - eine halb getippte Zahl darf nicht als Anzeige stehen
 		// bleiben.
@@ -1326,10 +1264,10 @@ export default {
 				this.toggleLoop()
 			} else if (event.key === '+') {
 				event.preventDefault()
-				this.zoomBy(ZOOM_STEP)
+				this.zoomBy(this.zoomStep)
 			} else if (event.key === '-') {
 				event.preventDefault()
-				this.zoomBy(1 / ZOOM_STEP)
+				this.zoomBy(1 / this.zoomStep)
 			} else if (event.key === '0') {
 				// Zurück zur Seitenbreite - und wieder der Fenstergröße
 				// folgend, wie beim Öffnen.
@@ -1361,188 +1299,6 @@ export default {
 			const timeMs = findNearestOccurrenceTimeMs(this.timeline.events, elid, this.currentTimeMs)
 			if (timeMs !== null) {
 				this.clock.seek(timeMs)
-			}
-		},
-
-		// Reine Rechnung in scrollPlan.js, hier nur die DOM-Messung dazu
-		// (Phase 16, ersetzt die frühere reine Seitenwechsel-Erkennung).
-		// Läuft bei jedem Notenwechsel (siehe useScoreSync.js), nicht jeden
-		// rAF-Frame - dieselbe Drosselung wie beim bisherigen Cursor-Update -
-		// plus einmal nach jedem Zoomwechsel (Watcher, mit force).
-		updateAutoScroll(rect, force = false) {
-			const scrollEl = this.$refs.scroll
-			if (!rect || !scrollEl) {
-				return
-			}
-			if (!force && shouldSuppressAutoScroll(this.lastManualScrollAt, Date.now(), MANUAL_SCROLL_RESUME_MS)) {
-				return
-			}
-			const pageEl = this.pageRefs[rect.page]
-			const containerRect = scrollEl.getBoundingClientRect()
-			const cursorClientRect = pageEl?.getCursorClientRect?.()
-			if (!cursorClientRect) {
-				// Die Zielseite ist noch nicht geladen (IntersectionObserver hat sie
-				// noch nicht ausgelöst, siehe ScorePage.vue) - kommt bei einem weiten
-				// Sprung vor (z.B. "springe zu Takt 60"), bei dem noch nie in die Nähe
-				// dieser Seite gescrollt wurde. Grob zur Seite selbst scrollen (die
-				// reserviert ihre Höhe schon vor dem Laden, siehe dortiger Kommentar
-				// zu aspectRatio, ist also schon jetzt messbar) - das bringt sie ins
-				// Ladefenster, der nächste Notenwechsel-Tick übernimmt dann über den
-				// dann verfügbaren Cursor die genaue Position. performAutoScroll()
-				// (nicht scrollIntoView) hier bewusst, damit dieser Scroll ebenfalls
-				// als "programmatisch" markiert wird (siehe onViewerScroll) - sonst
-				// würde er sich selbst als manuelles Scrollen auslegen und den
-				// nachfolgenden genauen Scroll sofort wieder unterdrücken.
-				const pageClientRect = pageEl?.$el?.getBoundingClientRect?.()
-				if (pageClientRect) {
-					const pageTop = scrollEl.scrollTop + (pageClientRect.top - containerRect.top)
-					this.performAutoScroll(pageTop)
-				}
-				return
-			}
-			const cursorTop = scrollEl.scrollTop + (cursorClientRect.top - containerRect.top)
-			const target = planAutoScroll({
-				cursorTop,
-				cursorHeight: cursorClientRect.height,
-				scrollTop: scrollEl.scrollTop,
-				viewportHeight: scrollEl.clientHeight,
-			})
-			// Waagerecht nur, wenn die Seite überhaupt breiter als das Bild ist
-			// (Phase 22: das kann sie jetzt, siehe ScorePage.vue) - sonst wäre
-			// jeder Aufruf eine überflüssige DOM-Schreiboperation.
-			let targetLeft = null
-			if (scrollEl.scrollWidth > scrollEl.clientWidth) {
-				targetLeft = planHorizontalScroll({
-					cursorLeft: scrollEl.scrollLeft + (cursorClientRect.left - containerRect.left),
-					cursorWidth: cursorClientRect.width,
-					scrollLeft: scrollEl.scrollLeft,
-					viewportWidth: scrollEl.clientWidth,
-				})
-			}
-			if (target !== null || targetLeft !== null) {
-				this.performAutoScroll(target, targetLeft)
-			}
-		},
-
-		performAutoScroll(targetScrollTop, targetScrollLeft = null) {
-			const scrollEl = this.$refs.scroll
-			if (!scrollEl) {
-				return
-			}
-			const clamp = (value, max) => Math.min(Math.max(0, value), Math.max(0, max))
-			const options = { behavior: 'smooth' }
-			if (targetScrollTop !== null) {
-				options.top = clamp(targetScrollTop, scrollEl.scrollHeight - scrollEl.clientHeight)
-			}
-			if (targetScrollLeft !== null) {
-				options.left = clamp(targetScrollLeft, scrollEl.scrollWidth - scrollEl.clientWidth)
-			}
-			// Markiert die eigenen, dadurch ausgelösten scroll-Events als
-			// "programmatisch" (siehe onViewerScroll) - sonst würde unser
-			// eigenes Nachführen sich selbst als manuellen Scroll auslegen und
-			// sofort wieder pausieren.
-			this.ignoreScrollUntil = Date.now() + PROGRAMMATIC_SCROLL_WINDOW_MS
-			scrollEl.scrollTo(options)
-		},
-
-		// Erkennt manuelles Scrollen (PLAN.md: "bei manuellem Scrollen
-		// aussetzen und nach kurzer Zeit wieder übernehmen") - jedes scroll-
-		// Event, das nicht innerhalb des Ignorierfensters eines eigenen
-		// performAutoScroll() liegt, gilt als Nutzereingriff.
-		onViewerScroll() {
-			if (Date.now() < this.ignoreScrollUntil) {
-				return
-			}
-			this.lastManualScrollAt = Date.now()
-		},
-
-		// Seitengeometrie für die Zoom-Presets (Phase 16) - ScorePage.vue kennt
-		// nur die eigene Seite, hier wird sie gesammelt.
-		onPageLoaded({ index, viewBox, sizeMm }) {
-			this.pageDimensions[index] = { viewBox, sizeMm }
-		},
-
-		applyZoomPreset(preset) {
-			const scrollEl = this.$refs.scroll
-			const pagesEl = scrollEl?.querySelector('.scoreview-pages')
-			if (!pagesEl) {
-				return
-			}
-			// Seite 0 ist praktisch immer zuerst geladen (Phase 8: sichtbare
-			// Seiten zuerst) - als Fallback irgendeine geladene Seite, falls die
-			// Partitur mit Seite 0 aus dem Bild gescrollt sein sollte.
-			const dims = this.pageDimensions[0] ?? Object.values(this.pageDimensions)[0]
-			if (preset === 'width') {
-				// Als einziger Zoomweg OHNE zoomFollowsWidth = false: "an die
-				// Breite anpassen" ist genau die Ansage, dass es das auch nach
-				// dem nächsten Drehen/Vergrößern noch tun soll.
-				this.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, computeFitWidthZoom(pagesEl.clientWidth)))
-				this.zoomFollowsWidth = true
-				return
-			}
-			if (preset === 'page') {
-				if (!dims?.viewBox) {
-					return
-				}
-				// Die Leiste liegt seit Phase 22 außerhalb des Scroll-Elements -
-				// dessen clientHeight IST die verfügbare Höhe, es ist nichts mehr
-				// abzuziehen (vorher: Höhe der beiden sticky Leisten).
-				this.setZoom(computeFitPageZoom(dims.viewBox, pagesEl.clientWidth, scrollEl.clientHeight))
-			} else if (preset === 'actual') {
-				this.setZoom(computeActualSizeZoom(dims?.sizeMm ?? null))
-			}
-		},
-
-		// Hält den Zoom an der Fensterbreite, solange niemand selbst gezoomt
-		// hat (siehe zoomFollowsWidth). Beobachtet wird .scoreview-body, nicht
-		// das Scroll-Element: dessen Innenbreite hängt am Scrollbalken, und ein
-		// Zoom, der den Scrollbalken erscheinen/verschwinden lässt, würde sich
-		// über den Beobachter selbst wieder anstoßen.
-		setUpViewportObserver() {
-			this.viewportObserver?.disconnect()
-			const bodyEl = this.$el.querySelector('.scoreview-body')
-			if (!bodyEl || typeof ResizeObserver === 'undefined') {
-				return
-			}
-			this.viewportObserver = new ResizeObserver(() => {
-				if (this.zoomFollowsWidth) {
-					this.applyZoomPreset('width')
-				}
-			})
-			this.viewportObserver.observe(bodyEl)
-		},
-
-		// Vollbild einer A4-Seite (Phase 16) - fullscreent den ganzen Viewer
-		// (nicht nur eine einzelne Seite), damit die Transportleiste bedienbar
-		// bleibt; "ganze Seite"-Zoom übernimmt das Ausfüllen der Höhe.
-		async toggleFullscreen() {
-			try {
-				if (document.fullscreenElement) {
-					await document.exitFullscreen()
-				} else {
-					await this.$el.requestFullscreen()
-				}
-			} catch (err) {
-				// z.B. Fullscreen per Permissions-Policy im umgebenden iframe
-				// gesperrt - Notenansicht bleibt trotzdem nutzbar, nur ohne Vollbild.
-				// eslint-disable-next-line no-console
-				console.error('ScoreView: Vollbild konnte nicht umgeschaltet werden.', err)
-			}
-		},
-
-		onFullscreenChange() {
-			const wasFollowingWidth = this.zoomFollowsWidth
-			this.isFullscreen = document.fullscreenElement === this.$el
-			if (this.isFullscreen) {
-				// Merken, ob der Zoom vorher der Fensterbreite folgte -
-				// applyZoomPreset('page') schaltet das ab.
-				this.zoomFollowedWidthBeforeFullscreen = wasFollowingWidth
-				this.applyZoomPreset('page')
-			} else if (this.zoomFollowedWidthBeforeFullscreen) {
-				// Beim Verlassen nicht mit dem Vollbild-Zoom im kleinen Fenster
-				// zurückbleiben (Phase 22) - dort passte "ganze Seite" zu einer
-				// Fläche, die es nicht mehr gibt.
-				this.applyZoomPreset('width')
 			}
 		},
 
@@ -1587,41 +1343,6 @@ export default {
 		releaseWakeLock() {
 			this.wakeLockSentinel?.release?.()
 			this.wakeLockSentinel = null
-		},
-
-		// Pinch-Zoom (Phase 19, siehe scoreLayout.js computePinchZoom) - reagiert
-		// nur auf echte Zweifinger-Gesten, ein einzelner Finger scrollt normal
-		// weiter (kein preventDefault dafuer, siehe Template-Kommentar).
-		touchDistance(touches) {
-			const dx = touches[0].clientX - touches[1].clientX
-			const dy = touches[0].clientY - touches[1].clientY
-			return Math.sqrt((dx * dx) + (dy * dy))
-		},
-
-		onTouchStart(event) {
-			if (event.touches.length === 2) {
-				this.isPinching = true
-				this.pinchStartDistance = this.touchDistance(event.touches)
-				this.pinchStartZoom = this.zoom
-			}
-		},
-
-		onTouchMove(event) {
-			if (this.isPinching && event.touches.length === 2) {
-				// Unterdrueckt den nativen Browser-Seiten-Zoom waehrend der Geste
-				// (der wuerde sonst die GESAMTE Nextcloud-Oberflaeche vergroessern,
-				// nicht nur die Partitur) - siehe Template-Kommentar zu
-				// .scoreview-pages.
-				event.preventDefault()
-				const distance = this.touchDistance(event.touches)
-				this.setZoom(computePinchZoom(this.pinchStartDistance, distance, this.pinchStartZoom))
-			}
-		},
-
-		onTouchEnd(event) {
-			if (event.touches.length < 2) {
-				this.isPinching = false
-			}
 		},
 
 		// "Noten ohne Ton"-Weg (Phase 19): bricht den laufenden SoundFont-Abruf
