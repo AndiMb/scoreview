@@ -11,7 +11,7 @@ use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\SimpleFS\ISimpleFolder;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\ITempManager;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -26,18 +26,18 @@ use PHPUnit\Framework\TestCase;
 class SoundFontServiceTest extends TestCase {
 	private IAppData&MockObject $appData;
 	private SidecarClient&MockObject $sidecar;
-	private IConfig&MockObject $config;
+	private IAppConfig&MockObject $appConfig;
 	private ITempManager&MockObject $tempManager;
 
 	protected function setUp(): void {
 		$this->appData = $this->createMock(IAppData::class);
 		$this->sidecar = $this->createMock(SidecarClient::class);
-		$this->config = $this->createMock(IConfig::class);
+		$this->appConfig = $this->createMock(IAppConfig::class);
 		$this->tempManager = $this->createMock(ITempManager::class);
 	}
 
 	private function service(): SoundFontService {
-		return new SoundFontService($this->appData, $this->sidecar, $this->config, $this->tempManager);
+		return new SoundFontService($this->appData, $this->sidecar, $this->appConfig, $this->tempManager);
 	}
 
 	/** Legt einen IAppData-Ordner an, der die Cache-Datei mit der gegebenen Groesse enthaelt. */
@@ -97,8 +97,8 @@ class SoundFontServiceTest extends TestCase {
 		$cached = $this->withCachedFile(40_000_000);
 		$this->sidecar->method('fetchSoundFontInfo')
 			->willReturn(['available' => true, 'version' => 'abc123']);
-		$this->config->method('getAppValue')
-			->with('scoreview', 'soundfont_cache_version', '')
+		$this->appConfig->method('getValueString')
+			->with('scoreview', 'soundfont_cache_version')
 			->willReturn('abc123');
 		$this->sidecar->expects($this->never())->method('downloadSoundFontTo');
 
@@ -111,7 +111,7 @@ class SoundFontServiceTest extends TestCase {
 		$this->withCachedFile(40_000_000);
 		$this->sidecar->method('fetchSoundFontInfo')
 			->willReturn(['available' => true, 'version' => 'neu456']);
-		$this->config->method('getAppValue')->willReturn('alt123');
+		$this->appConfig->method('getValueString')->willReturn('alt123');
 		$this->tempManager->method('getTemporaryFile')->willReturn('');
 		$this->sidecar->expects($this->once())->method('downloadSoundFontTo');
 
@@ -141,7 +141,7 @@ class SoundFontServiceTest extends TestCase {
 		$this->sidecar->method('fetchSoundFontInfo')
 			->willReturn(['available' => true, 'version' => 'neu456']);
 		$this->tempManager->method('getTemporaryFile')->willReturn('');
-		$this->config->expects($this->never())->method('setAppValue');
+		$this->appConfig->expects($this->never())->method('setValueString');
 
 		$this->expectException(SidecarException::class);
 		$this->service()->getOrFetch();

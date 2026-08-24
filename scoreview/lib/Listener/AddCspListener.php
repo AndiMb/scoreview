@@ -8,7 +8,7 @@ use OCA\ScoreView\AppInfo\Application;
 use OCP\AppFramework\Http\EmptyContentSecurityPolicy;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\Security\CSP\AddContentSecurityPolicyEvent;
 
 /**
@@ -38,7 +38,7 @@ use OCP\Security\CSP\AddContentSecurityPolicyEvent;
  */
 class AddCspListener implements IEventListener {
 	public function __construct(
-		private IConfig $config,
+		private IAppConfig $appConfig,
 	) {
 	}
 
@@ -50,7 +50,7 @@ class AddCspListener implements IEventListener {
 		$policy = new EmptyContentSecurityPolicy();
 		$policy->allowEvalWasm(true);
 
-		$soundFontUrl = $this->config->getAppValue(Application::APP_ID, 'soundfont_url', '');
+		$soundFontUrl = $this->appConfig->getValueString(Application::APP_ID, 'soundfont_url');
 		$origin = $this->originOf($soundFontUrl);
 		if ($origin !== null) {
 			$policy->addAllowedConnectDomain($origin);

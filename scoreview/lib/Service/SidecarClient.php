@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Service;
 
 use GuzzleHttp\Exception\ClientException;
+use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCP\Http\Client\IClientService;
-use OCP\IConfig;
+use OCP\IAppConfig;
 
 /**
  * Dünner Wrapper um die Sidecar-HTTP-API (sidecar/server.py). Kein Parsen
@@ -15,11 +16,9 @@ use OCP\IConfig;
  * geparst, diese Klasse cached/proxy't nur Bytes (siehe Plan Phase 3).
  */
 class SidecarClient {
-	public const APP_ID = 'scoreview';
-
 	public function __construct(
 		private IClientService $clientService,
-		private IConfig $config,
+		private IAppConfig $appConfig,
 	) {
 	}
 
@@ -28,11 +27,11 @@ class SidecarClient {
 	}
 
 	private function getBaseUrl(): string {
-		return rtrim($this->config->getAppValue(self::APP_ID, 'sidecar_url', ''), '/');
+		return rtrim($this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'), '/');
 	}
 
 	private function getSecret(): string {
-		return $this->config->getAppValue(self::APP_ID, 'sidecar_secret', '');
+		return $this->appConfig->getValueString(Application::APP_ID, 'sidecar_secret');
 	}
 
 	private function headers(): array {

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Service;
 
 use OCA\ScoreView\AppInfo\Application;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\IDBConnection;
 
 /**
@@ -24,7 +24,7 @@ class HealthService {
 	public function __construct(
 		private SidecarClient $sidecarClient,
 		private SoundFontService $soundFontService,
-		private IConfig $config,
+		private IAppConfig $appConfig,
 		private IDBConnection $db,
 	) {
 	}
@@ -48,7 +48,7 @@ class HealthService {
 			'configured' => $configured,
 			'reachable' => $health['reachable'],
 			'error' => $health['error'] ?? null,
-			'url' => $this->config->getAppValue(Application::APP_ID, 'sidecar_url', ''),
+			'url' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'),
 		];
 	}
 
@@ -57,8 +57,8 @@ class HealthService {
 		// (dann funktioniert Wiedergabe auch bei gerade nicht erreichbarem
 		// Sidecar), und was meldet der Sidecar? Ein Override per
 		// `soundfont_url` sticht beides.
-		$override = $this->config->getAppValue(Application::APP_ID, 'soundfont_url', '');
-		$cachedVersion = $this->config->getAppValue(Application::APP_ID, 'soundfont_cache_version', '');
+		$override = $this->appConfig->getValueString(Application::APP_ID, 'soundfont_url');
+		$cachedVersion = $this->appConfig->getValueString(Application::APP_ID, 'soundfont_cache_version');
 		$sidecarInfo = null;
 		$error = null;
 		try {
@@ -85,8 +85,8 @@ class HealthService {
 	 * keinen Fehlalarm auslösen.
 	 */
 	private function cronStatus(): array {
-		$last = (int)$this->config->getAppValue('core', 'lastcron', '0');
-		$mode = $this->config->getAppValue('core', 'backgroundjobs_mode', 'ajax');
+		$last = $this->appConfig->getValueInt('core', 'lastcron');
+		$mode = $this->appConfig->getValueString('core', 'backgroundjobs_mode', 'ajax');
 		$ageSeconds = $last > 0 ? (time() - $last) : null;
 		return [
 			'mode' => $mode,

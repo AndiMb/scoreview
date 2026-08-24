@@ -10,14 +10,14 @@ use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Settings\AdminSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\IRequest;
 use OCP\Settings\Attribute\AuthorizedAdminSetting;
 
 class SettingsController extends Controller {
 	public function __construct(
 		IRequest $request,
-		private IConfig $config,
+		private IAppConfig $appConfig,
 		private HealthService $healthService,
 		private SidecarClient $sidecarClient,
 	) {
@@ -49,17 +49,24 @@ class SettingsController extends Controller {
 
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function update(string $sidecarUrl, string $sidecarSecret, bool $eagerConversion = false, string $soundFontUrl = ''): JSONResponse {
-		$this->config->setAppValue(Application::APP_ID, 'sidecar_url', trim($sidecarUrl));
+		$this->appConfig->setValueString(Application::APP_ID, 'sidecar_url', trim($sidecarUrl));
 		// Leeres Feld = "unveraendert lassen", nicht "Secret loeschen" - ein
 		// bereits gesetztes Secret wird im Formular nie im Klartext angezeigt
-		// (siehe templates/settings/admin.php), ein leeres Absenden waere also
-		// sonst ein versehentliches Loeschen bei jedem Speichern der URL.
+		// (siehe src/components/AdminSettings.vue), ein leeres Absenden waere
+		// also sonst ein versehentliches Loeschen bei jedem Speichern der URL.
 		if (trim($sidecarSecret) !== '') {
-			$this->config->setAppValue(Application::APP_ID, 'sidecar_secret', trim($sidecarSecret));
+			// `sensitive: true` blendet den Wert in `occ config:app:list`, im
+			// Support-Bericht und in Systemreports aus - also genau in den
+			// Ausgaben, die man beim Fehlersuchen weitergibt. Fuer bereits
+			// gesetzte Secrets wirkt das Flag beim Schreiben allein nicht mehr
+			// (siehe IAppConfig::setValueString), deshalb zieht die Migration
+			// Version000100Date20260824100000 es fuer Bestandsinstallationen
+			// einmalig nach.
+			$this->appConfig->setValueString(Application::APP_ID, 'sidecar_secret', trim($sidecarSecret), sensitive: true);
 		}
 		// Default 'aus' (siehe Listener\ScoreFileListener - Phase 7): jeder
 		// Upload sofort konvertieren ist die Ausnahme, kein Standardverhalten.
-		$this->config->setAppValue(Application::APP_ID, 'eager_conversion', $eagerConversion ? '1' : '0');
+		$this->appConfig->setValueBool(Application::APP_ID, 'eager_conversion', $eagerConversion);
 		// Uebersteuerung, nicht Voraussetzung: leer heisst NICHT "kein Ton",
 		// sondern "die App liefert das SoundFont selbst aus, das der ohnehin
 		// vorausgesetzte Sidecar mitbringt" (Service\SoundFontService,
@@ -69,7 +76,7 @@ class SettingsController extends Controller {
 		// wird das Feld nur, wer ein anderes/besseres SoundFont selbst hostet;
 		// dessen Host muss dann per HTTP(S) erreichbar sein und CORS erlauben
 		// (und wird von Listener\AddCspListener in connect-src freigegeben).
-		$this->config->setAppValue(Application::APP_ID, 'soundfont_url', trim($soundFontUrl));
+		$this->appConfig->setValueString(Application::APP_ID, 'soundfont_url', trim($soundFontUrl));
 		return new JSONResponse(['status' => 'ok']);
 	}
 }

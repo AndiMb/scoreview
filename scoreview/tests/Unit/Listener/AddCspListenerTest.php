@@ -6,7 +6,7 @@ namespace OCA\ScoreView\Tests\Unit\Listener;
 
 use OCA\ScoreView\Listener\AddCspListener;
 use OCP\AppFramework\Http\EmptyContentSecurityPolicy;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\Security\CSP\AddContentSecurityPolicyEvent;
 use PHPUnit\Framework\TestCase;
 
@@ -22,9 +22,9 @@ use PHPUnit\Framework\TestCase;
  */
 class AddCspListenerTest extends TestCase {
 	private function policyFor(string $soundFontUrl): string {
-		$config = $this->createMock(IConfig::class);
-		$config->method('getAppValue')
-			->with('scoreview', 'soundfont_url', '')
+		$appConfig = $this->createMock(IAppConfig::class);
+		$appConfig->method('getValueString')
+			->with('scoreview', 'soundfont_url')
 			->willReturn($soundFontUrl);
 
 		$captured = null;
@@ -35,7 +35,7 @@ class AddCspListenerTest extends TestCase {
 			},
 		);
 
-		(new AddCspListener($config))->handle($event);
+		(new AddCspListener($appConfig))->handle($event);
 
 		$this->assertInstanceOf(EmptyContentSecurityPolicy::class, $captured);
 		return $captured->buildPolicy();
@@ -86,10 +86,10 @@ class AddCspListenerTest extends TestCase {
 	}
 
 	public function testIgnoriertAndereEreignisse(): void {
-		$config = $this->createMock(IConfig::class);
-		$config->expects($this->never())->method('getAppValue');
+		$appConfig = $this->createMock(IAppConfig::class);
+		$appConfig->expects($this->never())->method('getValueString');
 
-		(new AddCspListener($config))->handle(new \OCP\EventDispatcher\Event());
+		(new AddCspListener($appConfig))->handle(new \OCP\EventDispatcher\Event());
 
 		$this->addToAssertionCount(1);
 	}

@@ -6,7 +6,7 @@ namespace OCA\ScoreView\Settings;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCP\AppFramework\Http\TemplateResponse;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\Settings\ISettings;
 use OCP\Util;
 
@@ -19,17 +19,17 @@ use OCP\Util;
  */
 class AdminSettings implements ISettings {
 	public function __construct(
-		private IConfig $config,
+		private IAppConfig $appConfig,
 	) {
 	}
 
 	public function getForm(): TemplateResponse {
 		Util::addScript(Application::APP_ID, Application::APP_ID . '-settings');
 		return new TemplateResponse(Application::APP_ID, 'settings/admin', [
-			'sidecarUrl' => $this->config->getAppValue(Application::APP_ID, 'sidecar_url', ''),
-			'sidecarSecretSet' => $this->config->getAppValue(Application::APP_ID, 'sidecar_secret', '') !== '',
-			'eagerConversion' => $this->config->getAppValue(Application::APP_ID, 'eager_conversion', '0') === '1',
-			'soundFontUrl' => $this->config->getAppValue(Application::APP_ID, 'soundfont_url', ''),
+			'sidecarUrl' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'),
+			'sidecarSecretSet' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_secret') !== '',
+			'eagerConversion' => $this->appConfig->getValueBool(Application::APP_ID, 'eager_conversion'),
+			'soundFontUrl' => $this->appConfig->getValueString(Application::APP_ID, 'soundfont_url'),
 		], TemplateResponse::RENDER_AS_BLANK);
 	}
 

@@ -11,7 +11,7 @@ use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeCreatedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -42,7 +42,7 @@ use Psr\Log\LoggerInterface;
 class ScoreFileListener implements IEventListener {
 	public function __construct(
 		private IJobList $jobList,
-		private IConfig $config,
+		private IAppConfig $appConfig,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -51,7 +51,7 @@ class ScoreFileListener implements IEventListener {
 		if (!$event instanceof NodeCreatedEvent && !$event instanceof NodeWrittenEvent) {
 			return;
 		}
-		if ($this->config->getAppValue(Application::APP_ID, 'eager_conversion', '0') !== '1') {
+		if (!$this->appConfig->getValueBool(Application::APP_ID, 'eager_conversion')) {
 			return;
 		}
 

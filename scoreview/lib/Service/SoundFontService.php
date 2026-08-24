@@ -9,7 +9,7 @@ use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\SimpleFS\ISimpleFolder;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\ITempManager;
 
 /**
@@ -48,7 +48,7 @@ class SoundFontService {
 	public function __construct(
 		private IAppData $appData,
 		private SidecarClient $sidecarClient,
-		private IConfig $config,
+		private IAppConfig $appConfig,
 		private ITempManager $tempManager,
 	) {
 	}
@@ -94,7 +94,7 @@ class SoundFontService {
 
 	/** Content-Hash des zwischengespeicherten SoundFonts, als HTTP-ETag verwendbar. */
 	public function getVersion(): string {
-		return $this->config->getAppValue(Application::APP_ID, self::VERSION_KEY, '');
+		return $this->appConfig->getValueString(Application::APP_ID, self::VERSION_KEY);
 	}
 
 	private function findCached(): ?ISimpleFile {
@@ -139,7 +139,7 @@ class SoundFontService {
 		// Erst nach dem erfolgreichen Schreiben setzen: bricht der Download
 		// ab, bleibt die alte Version stehen und der naechste Aufruf
 		// versucht es erneut, statt eine halbe Datei als "aktuell" zu fuehren.
-		$this->config->setAppValue(Application::APP_ID, self::VERSION_KEY, $version);
+		$this->appConfig->setValueString(Application::APP_ID, self::VERSION_KEY, $version);
 
 		return $folder->getFile(self::FILE);
 	}

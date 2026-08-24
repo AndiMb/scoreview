@@ -17,7 +17,7 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\StreamResponse;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\NotFoundException;
-use OCP\IConfig;
+use OCP\IAppConfig;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
@@ -46,7 +46,7 @@ class ConversionController extends Controller {
 		private ConversionService $conversionService,
 		private IJobList $jobList,
 		private IURLGenerator $urlGenerator,
-		private IConfig $config,
+		private IAppConfig $appConfig,
 		private IL10N $l,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -212,7 +212,7 @@ class ConversionController extends Controller {
 	 * nicht selbst ein 40-MB-SF3 CORS-faehig gehostet hat.
 	 */
 	private function soundFontUrl(): string {
-		$configured = trim($this->config->getAppValue(Application::APP_ID, 'soundfont_url', ''));
+		$configured = trim($this->appConfig->getValueString(Application::APP_ID, 'soundfont_url'));
 		if ($configured !== '') {
 			return $configured;
 		}
