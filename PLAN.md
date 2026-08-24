@@ -2214,7 +2214,7 @@ den man sonst in Schritt 6 mit umbaut.
 | 3 | Mechanische Modernisierung: `IAppConfig`, Secret als sensibel, Einstellungsseite auf `@nextcloud/vue` | C1, C2, C3 | **umgesetzt** |
 | 4 | Echte Fehler: CSP-Reichweite, Seitenladefehler, Klick-Trefferradius, Aufräumen bei Lösch-Events | A1, A2, A3, A4, A7 | **umgesetzt** |
 | 5 | Sidecar produktionsfähig: Nebenläufigkeitsgrenze, WSGI-Server, Modulaufteilung | A5, A6, B3 | **umgesetzt** |
-| 6 | Der große Umbau: `ScoreViewer.vue` in Composables, Auslieferungsrouten zusammenführen | B1, B2 | offen |
+| 6 | Der große Umbau: `ScoreViewer.vue` in Composables, Auslieferungsrouten zusammenführen | B1, B2 | **umgesetzt** |
 | 7 | Feinschliff: rAF-Schleifen, SVG-Entladen, Store-Metadaten | E1, E2, E3, C7 | offen |
 
 **Aktualität – nichts zu tun.** `npm outdated` liefert nichts: Vue 3.5.41,
@@ -2641,6 +2641,89 @@ Verifiziert nach dem Umbau: `/selftest` liefert weiterhin „MuseScore 4.7.4
 eine vollständige Konvertierung über den neuen Aufbau – Streaming-Upload aus
 Schritt 4, Semaphor, neue Artefakt-URLs – endet auf `status=ready`. 39
 pytest-Tests (von 13).
+
+**Umsetzungsstand Schritt 6 (2026-08-24).** Der größte Posten des Reviews.
+
+*B1 – `ScoreViewer.vue` zerlegt.* **1977 → 1216 Zeilen**, verteilt auf sieben
+Composables unter `src/composables/`:
+
+| Composable | Zeilen | Inhalt |
+|---|---|---|
+| `useConversionStatus` | 120 | Polling, Fehlercode-Übersetzung, Auto-Retry |
+| `useAnnotations` | 145 | Notizen-CRUD, Marker-Koordinaten |
+| `useZoom` | 262 | Zoom, Presets, Breitenkopplung, Vollbild, Pinch |
+| `useAutoScroll` | 150 | DOM-Messung fürs Nachführen |
+| `useMetronome` | 175 | laufender Klick und Einzähler |
+| `useLoop` | 126 | Loop-Bereich und Bereichsmarkierung |
+| `usePlayback` | 346 | Zeitquelle, SoundFont, Transport, Tempo, Mixer, Wake Lock |
+
+Die eigentliche Entlastung ist nicht die Zeilenzahl: `reset()` setzte
+fünfunddreißig Felder von Hand zurück und `cleanup()` gab acht Ressourcen
+einzeln frei – jedes neue Feld war eine Stelle zum Vergessen. Beides ruft
+jetzt die Resets der Composables.
+
+**Die Brücke, die den schrittweisen Umbau erlaubt hat:** der geteilte Zustand
+(`timeline`, `measuresTimeline`, `currentEtag`, `durationMs`, `clock`) zog aus
+`data()` nach `setup()`. Vue 3 legt setup()-Rückgaben auf der Instanz aus und
+entpackt Refs dabei – der bestehende Options-API-Code liest also weiterhin
+`this.timeline` und schreibt `this.durationMs = x`, während die Composables
+dieselben Refs direkt benutzen. Die Rückgaben werden **einzeln und unter den
+bisherigen Namen** durchgereicht statt als verschachteltes Objekt: Vue
+entpackt Refs nur auf der obersten Ebene, `annotationsApi.visible` wäre im
+Template ein Ref-Objekt statt eines Wertes. So blieben Template und
+Aufrufstellen unverändert, und jede Etappe war wirklich nur ein Umzug.
+
+Zwei Schnittentscheidungen, die von außen falsch aussehen könnten:
+
+- `useZoom` hält Zoom, Presets, Breitenkopplung, Vollbild **und** Pinch
+  zusammen, weil sie einander bedingen: Vollbild erzwingt „ganze Seite", das
+  schaltet die Breitenkopplung ab, und die muss beim Verlassen
+  wiederhergestellt werden. Auf drei Composables verteilt wäre genau diese
+  Verschränkung unsichtbar geworden.
+- `useLoop` entscheidet **nicht** selbst über das Zurückspringen. Es
+  beantwortet `restartTarget(t)`, und die Zeitschleife fragt danach: Looping
+  ist keine Eigenschaft der Zeitquelle – stummer Platzhalter und echter Player
+  sollen beide loopen können, ohne es zu wissen.
+
+*B2 – Auslieferungsrouten.* Aus fünf fast identischen Controller-Methoden,
+fünf Service-Gettern und fünf Flask-Handlern (der Sidecar-Teil schon in
+Schritt 5) ist je **eine** Route geworden:
+`GET …/api/scores/{fileId}/artifact/{name}`. Welche Namen gültig sind, steht
+als Allowlist in `ConversionService::ARTIFACTS` – bewusst eine Tabelle und
+kein Dateipfad, der Name kommt aus der URL. Seitennummern werden streng auf
+Ziffern geprüft, damit `page-01`, `page-1.5` oder `page-../x` nicht über eine
+`(int)`-Kastung durchrutschen. Ein weiteres Artefakt wäre jetzt ein
+Tabelleneintrag statt sechs neuer Methoden.
+
+**Verifikation.** Die `.vue`-Komponenten sind nicht unit-getestet; der einzige
+Beleg ist der laufende Viewer. Dafür entstand eine Prüfstrecke, die nach
+**jeder** Extraktion unverändert lief: Seite laden, Player bereit,
+Zoom-Presets, Taktsprung, Klick-auf-Note samt ignoriertem Seitenrand,
+Wiedergabe, Metronomklicks, Mixer-Kanalnamen, Loop-Marker, Notiz anlegen /
+anspringen / löschen, Tastaturkürzel. **Alle acht Läufe – sieben Composables
+plus die Routenumstellung – sind byte-identisch zur vorher aufgenommenen
+Grundlinie**, einschließlich der zeitkritischen Metronomklicks (6) und der
+Kanalnamen (Soprano/Alto/Tenor/Bass).
+
+Bevor die Grundlinie brauchbar war, steckten allerdings **zwei Fehler in der
+Prüfstrecke selbst**: sie ließ den Loop aktiv, der die Position in den
+folgenden Abschnitten zurückzog, und sie klickte für den Tastatur-Test auf ein
+`<div>`, das keinen Fokus annimmt – der keydown-Listener sitzt auf dem
+Wurzelelement und lebt davon, dass das Ereignis von einem fokussierten Kind
+dorthin bubbelt. Beide sahen zunächst wie Produktfehler aus.
+
+**Und ein echter Fehlgriff beim Umbau.** Beim Herauslösen von `usePlayback`
+habe ich `ScoreViewer.vue` beschädigt: der Suchanker „Bildschirm waehrend der
+Wiedergabe wachhalten (Phase 19" kommt **zweimal** vor – im
+`isPlaying`-Watcher und über `requestWakeLock()` – der Schnitt löschte deshalb
+alles ab dem Watcher bis zum Dateiende. Aufgefallen ist es sofort (die Datei
+hatte danach drei Methoden statt dreißig), zurückgesetzt und neu aufgebaut,
+diesmal mit einer Hilfsfunktion, die für **jeden** Anker Eindeutigkeit
+erzwingt und die Zeilenzahl jedes Schnitts gegen eine Obergrenze prüft. Genau
+diese Schranke hat danach zwei weitere Fehlgriffe abgefangen, bevor etwas
+geschrieben wurde. Die Lehre gehört hierher, weil sie beim nächsten
+Massenumbau wieder gilt: ein Suchanker in einer Datei mit dichter
+Kommentierung ist selten so eindeutig, wie er aussieht.
 
 ## 4. Was ersatzlos entfällt
 

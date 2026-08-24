@@ -43,7 +43,7 @@ Feature set: measure navigation, loop, zoom, click-to-note jump, mixer
 (per-voice volume/mute/solo, tempo), private annotations anchored to
 musical position (survives a re-upload).
 	]]></description>
-	<version>0.0.22</version>
+	<version>0.0.23</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>

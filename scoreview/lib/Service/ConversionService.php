@@ -103,22 +103,56 @@ class ConversionService {
 		return (int)($meta['pages'] ?? 0);
 	}
 
-	public function getPage(int $fileId, string $etag, int $pageNumber): ISimpleFile {
-		return $this->getFolder($fileId, $etag)->getFile($this->pageFileName($pageNumber));
+	/**
+	 * Die auslieferbaren Artefakte als Allowlist: Name aus der URL ->
+	 * [Dateiname im Cache, MIME-Typ] (Codereview-Befund B2).
+	 *
+	 * Bis Phase 23 gab es dafuer fuenf fast identische Getter hier, fuenf
+	 * fast identische Controller-Methoden und fuenf fast identische
+	 * Flask-Handler im Sidecar - zusammen rund 120 Zeilen, die sich nur in
+	 * Dateiname und MIME-Typ unterschieden. Ein weiteres Artefakt (etwa ein
+	 * zweites serverseitiges Layout, PLAN.md Phase 16) ist jetzt ein Eintrag
+	 * in dieser Tabelle statt sechs neuer Methoden.
+	 *
+	 * Bewusst eine Allowlist und kein Dateipfad: der Name kommt aus der URL.
+	 * Seiten werden getrennt behandelt, weil sie eine Nummer tragen (siehe
+	 * getArtifact()).
+	 */
+	public const ARTIFACTS = [
+		'midi' => [self::MIDI_FILE, 'audio/midi'],
+		'timing' => [self::TIMING_FILE, 'application/json'],
+		'measures' => [self::MEASURES_FILE, 'application/json'],
+		'meta' => [self::META_FILE, 'application/json'],
+	];
+
+	/**
+	 * Ein Artefakt aus dem Cache, adressiert ueber seinen Namen aus der URL:
+	 * `page-3` oder einer der Schluessel aus ARTIFACTS.
+	 *
+	 * @return array{0: ISimpleFile, 1: string} Datei und MIME-Typ
+	 * @throws NotFoundException wenn der Name unbekannt ist oder die Datei fehlt
+	 */
+	public function getArtifact(int $fileId, string $etag, string $name): array {
+		if (str_starts_with($name, 'page-')) {
+			$number = substr($name, strlen('page-'));
+			// Streng auf Ziffern pruefen: `page-01`, `page-1.5` oder
+			// `page-../x` duerfen nicht ueber eine (int)-Kastung durchrutschen.
+			if ($number === '' || !ctype_digit($number) || (int)$number < 1) {
+				throw new NotFoundException("Unbekanntes Artefakt: {$name}");
+			}
+			return [
+				$this->getFolder($fileId, $etag)->getFile($this->pageFileName((int)$number)),
+				'image/svg+xml',
+			];
+		}
+		if (!isset(self::ARTIFACTS[$name])) {
+			throw new NotFoundException("Unbekanntes Artefakt: {$name}");
+		}
+		[$fileName, $mimeType] = self::ARTIFACTS[$name];
+		return [$this->getFolder($fileId, $etag)->getFile($fileName), $mimeType];
 	}
 
-	public function getMidi(int $fileId, string $etag): ISimpleFile {
-		return $this->getFolder($fileId, $etag)->getFile(self::MIDI_FILE);
-	}
-
-	public function getTimingJson(int $fileId, string $etag): ISimpleFile {
-		return $this->getFolder($fileId, $etag)->getFile(self::TIMING_FILE);
-	}
-
-	public function getMeasuresJson(int $fileId, string $etag): ISimpleFile {
-		return $this->getFolder($fileId, $etag)->getFile(self::MEASURES_FILE);
-	}
-
+	/** Eigener Zugriff, weil auch getPageCount() und der AnnotationController ihn brauchen. */
 	public function getMetaJsonFile(int $fileId, string $etag): ISimpleFile {
 		return $this->getFolder($fileId, $etag)->getFile(self::META_FILE);
 	}

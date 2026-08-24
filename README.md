@@ -62,9 +62,13 @@ oder Timeout-Fehler zu laufen. **Schritt 5** ebenfalls: der Sidecar ist aus
 einer 515-Zeilen-Datei ein Paket geworden (`scoreview_sidecar`), läuft hinter
 gunicorn statt Flasks Entwicklungsserver, begrenzt gleichzeitige
 Konvertierungen (Standard 2 – vorher unbegrenzt) und liefert alle Artefakte
-über eine Route statt über fünf fast gleiche. Die Schritte 6–7 (Zerlegung von
-`ScoreViewer.vue`, Feinschliff) stehen mit Reihenfolge und Begründung in
-`PLAN.md`.
+über eine Route statt über fünf fast gleiche. **Schritt 6** ebenfalls, der
+größte Posten: `ScoreViewer.vue` ist von 1977 auf 1216 Zeilen geschrumpft und
+in sieben Composables unter `src/composables/` zerlegt (Konvertierungsstatus,
+Notizen, Zoom, Autoscroll, Metronom, Loop, Wiedergabe); die fünf
+Auslieferungsrouten sind auch auf der PHP-Seite zu einer zusammengefallen.
+Nur noch **Schritt 7** (Feinschliff: rAF-Schleifen zusammenlegen, SVG-Seiten
+wieder entladen, Store-Metadaten) steht offen – siehe `PLAN.md`.
 Siehe `PLAN.md` für den vollständigen Stand inklusive offener Punkte.
 
 **Vorausgesetzt:** ein erreichbarer MuseScore-Sidecar (siehe `sidecar/`) -

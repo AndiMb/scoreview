@@ -14,11 +14,13 @@ return [
 		// Konvertierungs-Pipeline (Phase 7: page-N/midi/timing/measures/meta
 		// statt musicxml/audio - siehe PLAN.md E1/E2)
 		['name' => 'conversion#status', 'url' => '/api/scores/{fileId}/status', 'verb' => 'GET'],
-		['name' => 'conversion#page', 'url' => '/api/scores/{fileId}/page/{page}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+', 'page' => '\d+']],
-		['name' => 'conversion#midi', 'url' => '/api/scores/{fileId}/midi', 'verb' => 'GET'],
-		['name' => 'conversion#timing', 'url' => '/api/scores/{fileId}/timing', 'verb' => 'GET'],
-		['name' => 'conversion#measures', 'url' => '/api/scores/{fileId}/measures', 'verb' => 'GET'],
-		['name' => 'conversion#meta', 'url' => '/api/scores/{fileId}/meta', 'verb' => 'GET'],
+		// EINE Auslieferungsroute statt fuenf fast identischer
+		// (Codereview-Befund B2, Phase 23/Schritt 6). Welche Namen gueltig
+		// sind, steht als Allowlist in ConversionService::ARTIFACTS bzw.
+		// getArtifact() - hier bewusst nur die Zeichenklasse, damit ein
+		// unbekannter Name als 404 aus dem Controller kommt und nicht als
+		// Routing-Fehler.
+		['name' => 'conversion#artifact', 'url' => '/api/scores/{fileId}/artifact/{name}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+', 'name' => '[a-z0-9\-]+']],
 
 		// SoundFont fuer die Browser-Wiedergabe (Phase 9/E1). Nicht an eine
 		// fileId gebunden - eine Datei fuer die gesamte Instanz, siehe

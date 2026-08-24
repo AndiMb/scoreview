@@ -134,40 +134,20 @@ class ConversionController extends Controller {
 		]);
 	}
 
-	#[NoAdminRequired]
-	#[NoCSRFRequired]
-	public function page(int $fileId, int $page): Http\Response {
-		return $this->serveCachedFile($fileId, 'image/svg+xml', fn (int $id, string $etag) => $this->conversionService->getPage($id, $etag, $page));
-	}
-
-	#[NoAdminRequired]
-	#[NoCSRFRequired]
-	public function midi(int $fileId): Http\Response {
-		return $this->serveCachedFile($fileId, 'audio/midi', fn (int $id, string $etag) => $this->conversionService->getMidi($id, $etag));
-	}
-
-	#[NoAdminRequired]
-	#[NoCSRFRequired]
-	public function timing(int $fileId): Http\Response {
-		return $this->serveCachedFile($fileId, 'application/json', fn (int $id, string $etag) => $this->conversionService->getTimingJson($id, $etag));
-	}
-
-	#[NoAdminRequired]
-	#[NoCSRFRequired]
-	public function measures(int $fileId): Http\Response {
-		return $this->serveCachedFile($fileId, 'application/json', fn (int $id, string $etag) => $this->conversionService->getMeasuresJson($id, $etag));
-	}
-
-	#[NoAdminRequired]
-	#[NoCSRFRequired]
-	public function meta(int $fileId): Http\Response {
-		return $this->serveCachedFile($fileId, 'application/json', fn (int $id, string $etag) => $this->conversionService->getMetaJsonFile($id, $etag));
-	}
-
 	/**
-	 * @param callable(int, string): \OCP\Files\SimpleFS\ISimpleFile $fileGetter
+	 * Alle Cache-Artefakte ueber EINE Route (Codereview-Befund B2, Phase
+	 * 23/Schritt 6) - vorher fuenf Methoden, die sich nur in Dateiname und
+	 * MIME-Typ unterschieden. Welche Namen gueltig sind und welchen Typ sie
+	 * tragen, weiss ConversionService::getArtifact(); dieser Controller
+	 * kuemmert sich nur um Zugriffsrecht, Cache-Status und HTTP-Header.
 	 */
-	private function serveCachedFile(int $fileId, string $mimeType, callable $fileGetter): Http\Response {
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	public function artifact(int $fileId, string $name): Http\Response {
+		return $this->serveCachedFile($fileId, $name);
+	}
+
+	private function serveCachedFile(int $fileId, string $name): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
@@ -180,7 +160,7 @@ class ConversionController extends Controller {
 		}
 
 		try {
-			$file = $fileGetter($fileId, $etag);
+			[$file, $mimeType] = $this->conversionService->getArtifact($fileId, $etag, $name);
 		} catch (NotFoundException) {
 			return new JSONResponse(['error' => $this->l->t('Requested file does not exist.')], Http::STATUS_NOT_FOUND);
 		}
@@ -221,17 +201,19 @@ class ConversionController extends Controller {
 
 	private function buildFileUrls(int $fileId, string $etag): array {
 		$pageCount = $this->conversionService->getPageCount($fileId, $etag);
+		$artifact = fn (string $name) => $this->urlGenerator->linkToRoute(
+			Application::APP_ID . '.conversion.artifact', ['fileId' => $fileId, 'name' => $name]);
 		$pages = [];
 		for ($n = 1; $n <= $pageCount; $n++) {
-			$pages[] = $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.page', ['fileId' => $fileId, 'page' => $n]);
+			$pages[] = $artifact("page-{$n}");
 		}
 		return [
 			'pageCount' => $pageCount,
 			'pages' => $pages,
-			'midi' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.midi', ['fileId' => $fileId]),
-			'timingJson' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.timing', ['fileId' => $fileId]),
-			'measuresJson' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.measures', ['fileId' => $fileId]),
-			'metaJson' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.conversion.meta', ['fileId' => $fileId]),
+			'midi' => $artifact('midi'),
+			'timingJson' => $artifact('timing'),
+			'measuresJson' => $artifact('measures'),
+			'metaJson' => $artifact('meta'),
 			// Anker-Etag für Notizen (Phase 11) - der aktuelle etag dieser
 			// Konvertierung, damit der Client neue Notizen mit einem gültigen
 			// Sekundäranker (elid + anchorEtag) anlegen kann.
