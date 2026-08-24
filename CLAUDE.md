@@ -154,8 +154,9 @@ Alle ausführlich in `scoreview/README.md#troubleshooting`:
   Windows-Dateisystem – dort scannt Defender nicht.
 
   ```sh
+  # aus dem Wurzelverzeichnis des Repos
   MSYS_NO_PATHCONV=1 docker run --rm \
-    -v /c/Temp2/Claude/ScoreView/scoreview:/app \
+    -v "$(pwd)/scoreview:/app" \
     -v scoreview-nodemodules:/app/node_modules \
     -w /app node:22-bookworm sh -c "npm ci && npm run build"
   ```
