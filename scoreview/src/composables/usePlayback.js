@@ -12,9 +12,9 @@ const t = (text, vars) => translate('scoreview', text, vars)
 // echtem Player kommt die Dauer stattdessen von player.durationMs.
 const DURATION_PADDING_MS = 2000
 
-// Grenzen des Tempofaktors auf playbackRate (Phase 9 hat nur in diesem
-// Bereich gemessen, dass die Zeitachse tempounabhängig bleibt) - die
-// BPM-Eingabe rechnet innerhalb dieser Grenzen.
+// Grenzen des Tempofaktors auf playbackRate (nur in diesem Bereich
+// gemessen, dass die Zeitachse tempounabhängig bleibt) - die BPM-Eingabe
+// rechnet innerhalb dieser Grenzen.
 const MIN_TEMPO_FACTOR = 0.5
 const MAX_TEMPO_FACTOR = 1.5
 
@@ -23,8 +23,8 @@ const MAX_TEMPO_FACTOR = 1.5
  * Player oder stummen Platzhalter aufsetzen, Transport, Tempo, Mixerkanäle
  * und das Wachhalten des Bildschirms.
  *
- * Siebtes und letztes Composable aus der Zerlegung von `ScoreViewer.vue`
- * (Codereview-Befund B1, Phase 23/Schritt 6) - und das größte, weil diese
+ * Siebtes und letztes Composable aus der Zerlegung von `ScoreViewer.vue` -
+ * und das größte, weil diese
  * Dinge tatsächlich eine Einheit sind: `hasRealPlayer` entscheidet über den
  * Mixer, der Tempofaktor über die Metronom-Terminierung, und der Wechsel
  * zwischen echtem Player und Platzhalter muss all das gleichzeitig umstellen.
@@ -49,8 +49,8 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	// SoundFont-Abruf oder der Synthesizer gescheitert war. Genau das machte
 	// "die App gibt keinen Ton aus" von außen undiagnostizierbar.
 	const playbackError = ref('')
-	// Faktor auf playbackRate (Phase 9: die Zeitachse bleibt davon unberührt),
-	// nur Anzeige und Eingabe sind BPM.
+	// Faktor auf playbackRate (die Zeitachse bleibt davon unberührt), nur
+	// Anzeige und Eingabe sind BPM.
 	const tempo = ref(1)
 	const baseTempoBpm = ref(defaultTempoBpm)
 	const tempoGuessed = ref(false)
@@ -220,7 +220,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	}
 
 	/**
-	 * BPM statt Prozent (Phase 17, M8) - rechnet die eingegebene Ziel-BPM in
+	 * BPM statt Prozent (M8) - rechnet die eingegebene Ziel-BPM in
 	 * den internen playbackRate-Faktor um, begrenzt auf denselben
 	 * Faktorbereich wie zuvor der Prozent-Regler.
 	 *
@@ -250,7 +250,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		isPlaying.value = clock.value.isPlaying()
 	}
 
-	// --- Wake Lock (Phase 19) ------------------------------------------------
+	// --- Wake Lock --------------------------------------------------------
 	// "Ein Display, das mitten im Satz ausgeht, macht die ganze uebrige Arbeit
 	// wertlos." Die API ist nicht ueberall verfuegbar (Firefox ohne Flag,
 	// manche iOS-Versionen), deshalb durchweg defensiv: ohne sie bleibt die

@@ -64,7 +64,7 @@ class AddCspListenerTest extends TestCase {
 	public function testErlaubtWasmAuchOhneKonfiguriertesSoundFont(): void {
 		// spessasynth_lib dekodiert Vorbis-Samples per WebAssembly; ohne
 		// wasm-unsafe-eval scheitert jede Wiedergabe an Nextclouds
-		// Default-CSP (Phase 9, empirisch gefunden).
+		// Default-CSP (empirisch gefunden).
 		$this->assertStringContainsString("'wasm-unsafe-eval'", $this->policyFor(''));
 	}
 

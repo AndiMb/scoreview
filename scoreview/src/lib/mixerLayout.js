@@ -1,4 +1,4 @@
-// Reine, player-freie Mixer-Logik (Phase 9, erweitert Phase 17) - testbar
+// Reine, player-freie Mixer-Logik - testbar
 // ohne echten AudioContext/Synth. lib/player.js bleibt dadurch ein dünner
 // spessasynth_lib-Wrapper ohne eigene Mute/Solo-Semantik.
 
@@ -10,25 +10,25 @@
  */
 
 /**
- * Ordnet metadata.tracks[]/parts[] (aus meta.json, siehe PLAN.md M6/M8)
+ * Ordnet metadata.tracks[]/parts[] (aus meta.json, siehe docs/architecture.md M6/M8)
  * MIDI-Kanälen zu, EIN Eintrag pro tatsächlich klingender Spur.
  *
  * Zwei an echtem Material (nicht nur `wwimf`) gefundene Korrekturen
- * gegenüber der ursprünglichen Phase-9-Annahme "Kanal i = tracks[i]":
+ * gegenüber der ursprünglichen Annahme "Kanal i = tracks[i]":
  *
  * 1. **Die Metronomspur trägt in der exportierten MIDI keine einzige Note**
  *    (gemessen an `wwimf` UND `duckwerk`: `metadata.tracks` führt sie, die
  *    MIDI-Datei hat für sie weder Track noch Kanal). Ein Mixerregler dafür
  *    wäre ein Blindregler. Sie wird hier deshalb bewusst ausgeschlossen -
- *    das eigenständige Metronom/Einzähler (Phase 17) erzeugt seinen Klick
+ *    das eigenständige Metronom/Einzähler erzeugt seinen Klick
  *    clientseitig aus measures.json, nicht über diesen Kanal.
  * 2. **"MIDI-Kanal = Track-Index" stimmt NICHT allgemein.** An `duckwerk`
  *    gemessen (5 Instrumentalspuren Sopran/Alt/Tenor/Bariton/Bass in
  *    Dokumentreihenfolge): die tatsächlich im MIDI verwendeten Kanäle sind
  *    0/2/3/1/6, nicht 0/1/2/3/4 - MuseScores Kanalvergabe folgt nicht der
  *    Track-Reihenfolge. Bei `wwimf` traf die alte Annahme nur zufällig zu
- *    (Kanäle 0-3 in Dokumentreihenfolge), das hatte den Fehler in Phase 9
- *    verdeckt. Deshalb bevorzugt diese Funktion `trackChannels` - die
+ *    (Kanäle 0-3 in Dokumentreihenfolge), das hatte den Fehler verdeckt.
+ *    Deshalb bevorzugt diese Funktion `trackChannels` - die
  *    echten, aus dem geladenen MIDI selbst gelesenen Kanäle je Spur (siehe
  *    `player.js::getTrackChannels()`), in derselben Dokumentreihenfolge wie
  *    die (nicht-Metronom-)Einträge hier. Ohne `trackChannels` (z.B. bevor
@@ -83,7 +83,7 @@ export function resolveMixerChannels(tracks, parts, trackChannels) {
 
 /**
  * Fasst Mixerkanäle mit derselben `partId` zu einer Bedienzeile zusammen
- * (Phase 17: "mehrere Tracks eines Parts lassen sich damit zu einem Regler
+ * ("mehrere Tracks eines Parts lassen sich damit zu einem Regler
  * zusammenfassen", z.B. bei Divisi). Kanäle ohne `partId` (sollte nach dem
  * Metronom-Ausschluss in `resolveMixerChannels` nicht mehr vorkommen, bleibt
  * hier trotzdem als Fallback erhalten) bekommen je eine eigene Gruppe.
@@ -127,7 +127,7 @@ export function computeEffectiveVolumes(channelStates) {
 }
 
 /**
- * "Meine Stimme"-Preset (Phase 17): hebt die Kanäle einer Gruppe an, dämpft
+ * "Meine Stimme"-Preset: hebt die Kanäle einer Gruppe an, dämpft
  * alle übrigen (statt sie wie Solo ganz zu verstummen) - der Probenfall ist
  * "ich will meine Stimme klar heraushören, die anderen aber noch mithören",
  * nicht "die anderen komplett ausblenden". Bewusst als eigener, von Mute/Solo

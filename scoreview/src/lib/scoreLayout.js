@@ -1,7 +1,7 @@
 // Reine, DOM-freie Zuordnungslogik zwischen Wiedergabezeit und
-// Seiten-Koordinate, für den Overlay-Cursor aus Phase 8 (siehe PLAN.md
-// Abschnitt 2 - der Cursor ist ein Overlay über bekannten SVG-Koordinaten,
-// kein Renderer-interner Zustand wie beim vorherigen OSMD-Cursor).
+// Seiten-Koordinate für den Overlay-Cursor (der Cursor ist ein Overlay
+// über bekannten SVG-Koordinaten, kein Renderer-interner Zustand wie
+// beim vorherigen OSMD-Cursor).
 
 import { findStepIndex } from './timingSync.js'
 
@@ -28,9 +28,9 @@ export function buildTimeline(timingJson) {
  * Liefert das Rechteck (in SVG-Einheiten der jeweiligen Seite) des Elements,
  * das zur gegebenen Wiedergabezeit aktuell ist, oder null, wenn die Timeline
  * leer ist. Ein `elid` kann mehrfach in `events` auftreten (Wiederholungen/
- * Volta, siehe PLAN.md M7) - das ist hier kein Sonderfall: es wird einfach
- * jedes Mal dieselbe Koordinate nachgeschlagen, wenn die Zeit erneut über
- * dieses `elid` läuft.
+ * Volta, siehe docs/architecture.md M7) - das ist hier kein Sonderfall: es
+ * wird einfach jedes Mal dieselbe Koordinate nachgeschlagen, wenn die Zeit
+ * erneut über dieses `elid` läuft.
  *
  * @param {Timeline} timeline
  * @param {number} timeMs
@@ -49,8 +49,9 @@ export function resolveCursorRect(timeline, timeMs) {
  * Parst `viewBox="minX minY width height"` aus einem SVG-Wurzelelement.
  * Eigener schlanker Parser statt DOMParser, weil das nur auf den Anfang des
  * Textes zugreifen muss (kein voller SVG-Parse-Overhead pro Seite) - siehe
- * PLAN.md M4 für die Bedeutung dieser Werte (SVG-Koordinatenraum, in den
- * die Sidecar-Timingkoordinaten bereits umgerechnet sind).
+ * docs/architecture.md M4 für die Bedeutung dieser Werte
+ * (SVG-Koordinatenraum, in den die Sidecar-Timingkoordinaten bereits
+ * umgerechnet sind).
  *
  * @param {string} svgText
  * @return {{minX:number,minY:number,width:number,height:number}|null}
@@ -66,7 +67,7 @@ export function parseViewBox(svgText) {
 
 /**
  * Zeitpunkt, an dem Takt `measureNumber` (1-indiziert, wie im gedruckten
- * Notenbild) zum ERSTEN Mal erklingt - für "springe zu Takt N" (Phase 10).
+ * Notenbild) zum ERSTEN Mal erklingt - für "springe zu Takt N".
  * `measures.json`s `elid` ist die Dokumentreihenfolge der Takte (0-indiziert,
  * siehe sidecar/README.md) - Takt N entspricht also elid N-1. Bei
  * Wiederholungen kann derselbe Takt mehrfach in `events` auftauchen (M7);
@@ -88,10 +89,10 @@ export function findMeasureStartTime(measuresTimeline, measureNumber) {
  * Groesster Abstand (in SVG-Einheiten), bei dem ein Klick noch als "gilt
  * dieser Note" zaehlt (Codereview-Befund A3).
  *
- * Bis Phase 23 gab es keine Grenze: `findElementAtPoint()` lieferte IMMER
- * das naechstgelegene Element, egal wie weit weg. Ein Klick auf den
- * Seitenrand, in den leeren Raum unter dem letzten System oder ein Tippen,
- * das auf dem Tablet nur ein Panel schliessen sollte, verschob damit die
+ * Ohne diese Grenze würde `findElementAtPoint()` IMMER das naechstgelegene
+ * Element liefern, egal wie weit weg. Ein Klick auf den Seitenrand, in
+ * den leeren Raum unter dem letzten System oder ein Tippen, das auf dem
+ * Tablet nur ein Panel schliessen sollte, verschöbe damit die
  * Wiedergabe an eine beliebige Stelle.
  *
  * Der Wert ist an den gecachten `timing.json` der Testinstanz gemessen, nicht
@@ -127,8 +128,7 @@ function distanceToRect(rect, x, y) {
 /**
  * Findet das Element auf einer Seite, dessen Rechteck den Klickpunkt
  * enthält, sonst das nächstgelegene innerhalb von `maxDistance` - Umkehrung
- * von M4 (Koordinate -> elid) für "Klick auf eine Note springt dorthin"
- * (Phase 10).
+ * von M4 (Koordinate -> elid) für "Klick auf eine Note springt dorthin".
  *
  * @param {Timeline['elements']} elements
  * @param {number} page
@@ -180,8 +180,8 @@ export function findNearestOccurrenceTimeMs(events, elid, referenceTimeMs) {
 
 /**
  * Zerlegt eine Wiedergabezeit in einen musikalischen Anker (Taktnummer +
- * Bruchteil innerhalb des Taktes) - der Anker für private Notizen (Phase
- * 11, siehe Migration `Version000100Date20260823130000`). Bewusst
+ * Bruchteil innerhalb des Taktes) - der Anker für private Notizen (siehe
+ * Migration `Version000100Date20260823130000`). Bewusst
  * musikalisch statt Pixel-/Renderer-Index, weil nur das ein Neurendern und
  * die meisten Quelldatei-Bearbeitungen übersteht.
  *
@@ -208,7 +208,7 @@ export function resolveMeasurePosition(measuresTimeline, timeMs, totalDurationMs
 
 /**
  * Umkehrung von `resolveMeasurePosition` - löst einen gespeicherten Anker
- * wieder in eine Wiedergabezeit auf (Phase 11, "zu einer Notiz springen").
+ * wieder in eine Wiedergabezeit auf ("zu einer Notiz springen").
  * Verwendet wie `findMeasureStartTime` bewusst das ERSTE Vorkommen des
  * Taktes (siehe dort) - eine Notiz zeigt auf "diesen Takt", nicht auf einen
  * bestimmten Wiederholungsdurchgang.
@@ -238,12 +238,10 @@ export function measurePositionToTimeMs(measuresTimeline, measureNumber, fractio
 // scoreLayout.js nie auseinanderlaufen können.
 export const BASE_PAGE_WIDTH_PX = 900
 
-// Zoomgrenzen (Phase 22). Bis Phase 21 lagen sie bei 0,5-2, was zu einer
-// Seite passte, die ohnehin nie breiter als ihr Container werden konnte
-// (`width: 100%` mit `max-width`). Seit die Seite eine echte Breite hat und
-// waagerecht geschoben werden kann, müssen beide Enden weiter reichen: auf
-// einem Telefon liegt "Seitenbreite" bereits bei etwa 0,43, und ein
-// Notenkopf auf Armlänge braucht am anderen Ende deutlich mehr als 2.
+// Zoomgrenzen: die Seite hat eine echte Breite und kann waagerecht
+// geschoben werden, beide Enden müssen deshalb weit reichen - auf einem
+// Telefon liegt "Seitenbreite" bereits bei etwa 0,43, und ein Notenkopf
+// auf Armlänge braucht am anderen Ende deutlich mehr als 2.
 export const MIN_ZOOM = 0.25
 export const MAX_ZOOM = 4
 
@@ -253,7 +251,7 @@ const CSS_PX_PER_MM = 96 / 25.4
 
 /**
  * Parst die physische Seitengröße `width="…mm" height="…mm"` aus dem
- * SVG-Wurzelelement (Phase 16, Zoom-Preset "100%") - getrennt von
+ * SVG-Wurzelelement (Zoom-Preset "100%") - getrennt von
  * `parseViewBox`, weil beide Angaben unabhängig gebraucht werden (viewBox
  * für Koordinaten, diese hier nur für die echte Größe).
  *
@@ -270,7 +268,7 @@ export function parseSvgSizeMm(svgText) {
 }
 
 /**
- * Zoom-Preset "Seitenbreite" (Phase 16): die Seite füllt die verfügbare
+ * Zoom-Preset "Seitenbreite": die Seite füllt die verfügbare
  * Breite. Reine Dreisatzrechnung gegen BASE_PAGE_WIDTH_PX, weil
  * ScorePage.vue seine `max-width` genauso ausdrückt.
  *
@@ -283,7 +281,7 @@ export function computeFitWidthZoom(containerWidthPx) {
 }
 
 /**
- * Zoom-Preset "ganze Seite" (Phase 16): die komplette A4-Seite (Breite UND
+ * Zoom-Preset "ganze Seite": die komplette A4-Seite (Breite UND
  * Höhe) muss in den verfügbaren Bereich passen. Weil ScorePage.vue Höhe nur
  * indirekt über `aspect-ratio` aus der Breite ableitet (siehe dortiger
  * Kommentar zur "höhenbezogenen Skalierung"), rechnet diese Funktion die
@@ -303,7 +301,7 @@ export function computeFitPageZoom(viewBox, containerWidthPx, containerHeightPx)
 }
 
 /**
- * Zoom-Preset "100%" (Phase 16): die Seite in ihrer echten physischen Größe
+ * Zoom-Preset "100%": die Seite in ihrer echten physischen Größe
  * (A4 = 210mm Breite), umgerechnet auf CSS-Pixel bei 96 DPI - unabhängig vom
  * gewählten BASE_PAGE_WIDTH_PX-Basiswert.
  *
@@ -318,7 +316,7 @@ export function computeActualSizeZoom(sizeMm) {
 }
 
 /**
- * Pinch-Zoom (Phase 19): reine Verhältnisrechnung aus zwei Fingerabständen,
+ * Pinch-Zoom: reine Verhältnisrechnung aus zwei Fingerabständen,
  * relativ zum Zoom bei Gestenbeginn - die eigentliche Touch-Ereignisverarbeitung
  * (Geste erkennen, Abstand messen, Browser-eigenen Seiten-Zoom währenddessen
  * unterdrücken) lebt in ScoreViewer.vue, hier nur die Zahl.
@@ -337,9 +335,8 @@ export function computePinchZoom(startDistance, currentDistance, startZoom, { mi
 	return Math.min(max, Math.max(min, zoom))
 }
 
-// `sanitizeSvg()` lebte bis Phase 20 hier als regexbasierte Fassung und ist
-// nach `svgSanitizer.js` gewandert (DOMPurify, echtes Parsen statt
-// Textersetzung). Grund war eine Messung, keine Stilfrage: die alte Fassung
-// liess 9 von 15 geprueften Umgehungsmustern durch - siehe PLAN.md Phase 20
-// und den Kommentar in svgSanitizer.js. Diese Datei bleibt bewusst DOM-frei
-// (CLAUDE.md), der Sanitizer braucht dagegen ein DOM.
+// `sanitizeSvg()` ist nicht hier, sondern in `svgSanitizer.js` (DOMPurify,
+// echtes Parsen statt Textersetzung) - eine frühere regexbasierte Fassung
+// liess 9 von 15 geprueften Umgehungsmustern durch, siehe den Kommentar
+// dort. Diese Datei bleibt bewusst DOM-frei (CLAUDE.md), der Sanitizer
+// braucht dagegen ein DOM.

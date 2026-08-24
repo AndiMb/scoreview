@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Extraktions-/Vollstaendigkeitswerkzeug fuer E4 (PLAN.md Phase 14):
+// Extraktions-/Vollstaendigkeitswerkzeug fuer E4 (docs/architecture.md):
 // englische Quellstrings, deutsche Uebersetzung in l10n/de.json (PHP) und
 // l10n/de.js (JS/Vue) gepflegt. Nextclouds JSResourceLocator ignoriert eine
 // fehlende/unvollstaendige l10n-Datei stillschweigend ("missing

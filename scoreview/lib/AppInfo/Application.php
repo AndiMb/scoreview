@@ -35,18 +35,18 @@ class Application extends App implements IBootstrap {
 		$context->registerEventListener(NodeCreatedEvent::class, ScoreFileListener::class);
 		$context->registerEventListener(NodeWrittenEvent::class, ScoreFileListener::class);
 
-		// Aufraeumen (Codereview-Befund A4). Bewusst getrennt: der Cache
-		// verschwindet schon beim Loeschen der Datei (regenerierbar), die
-		// Notizen erst, wenn die fileId endgueltig weg ist - siehe
-		// NodeDeletedListener und BackgroundJob\CleanupOrphansJob.
+		// Aufraeumen. Bewusst getrennt: der Cache verschwindet schon beim
+		// Loeschen der Datei (regenerierbar), die Notizen erst, wenn die
+		// fileId endgueltig weg ist - siehe NodeDeletedListener und
+		// BackgroundJob\CleanupOrphansJob.
 		$context->registerEventListener(NodeDeletedEvent::class, NodeDeletedListener::class);
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
 
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, FilesLoadAdditionalScriptsListener::class);
 
 		// Lockert die CSP fuer WASM-Audiodekodierung und den konfigurierten
-		// SoundFont-Host (Phase 9) - siehe Listener\AddCspListener fuer den
-		// vollen Grund (beides empirisch als CSP-Blocker gefunden).
+		// SoundFont-Host - siehe Listener\AddCspListener fuer den vollen
+		// Grund (beides empirisch als CSP-Blocker gefunden).
 		$context->registerEventListener(AddContentSecurityPolicyEvent::class, AddCspListener::class);
 	}
 

@@ -1,12 +1,12 @@
-// Platzhalter-Zeitquelle für Phase 8 (SVG-Viewer/Cursor), solange es noch
-// keine echte Wiedergabe gibt - die kommt erst in Phase 9 mit lib/player.js
-// (spessasynth_lib, siehe PLAN.md E1: Synthese im Browser statt
-// vorgerendertem MP3). Erfüllt bewusst dieselbe kleine Schnittstelle wie
-// der spätere Player (play/pause/seek/getCurrentTimeMs/isPlaying/
+// Platzhalter-Zeitquelle für den SVG-Viewer/Cursor, solange es keine echte
+// Wiedergabe gibt (kein SoundFont konfiguriert) - siehe lib/player.js
+// (spessasynth_lib, E1: Synthese im Browser statt vorgerendertem MP3, siehe
+// docs/architecture.md). Erfüllt bewusst dieselbe kleine Schnittstelle wie
+// der Player (play/pause/seek/getCurrentTimeMs/isPlaying/
 // addEventListener('seeked')), damit useScoreSync.js und ScoreViewer.vue
-// beim Umstieg in Phase 9 nicht angefasst werden müssen - nur die Quelle
-// wird getauscht. Treibt Zeit rein über performance.now(), erzeugt keinen
-// Ton.
+// beim Wechsel zwischen beiden nicht angefasst werden müssen - nur die
+// Quelle wird getauscht. Treibt Zeit rein über performance.now(), erzeugt
+// keinen Ton.
 
 /**
  * @param {number} durationMs

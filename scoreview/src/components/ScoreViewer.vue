@@ -16,14 +16,10 @@
 		</div>
 		<template v-else>
 			<!--
-				EINE Leiste, und zwar ausserhalb des Scroll-Bereichs (Phase 22).
-				Bis Phase 21 waren es zwei sticky Leisten IM Scroll-Container -
-				davon blieb nur die erste sichtbar, die zweite (Takt, Loop, Zoom,
-				Vollbild) und die Panels waren nur ganz oben erreichbar, wohin man
-				beim Lesen nie zurueckkommt (das Autoscroll scrollt schon beim
-				Oeffnen darueber hinweg). Als Geschwister eines eigenen
-				Scroll-Elements ist "wegscrollen" strukturell unmoeglich - und der
-				z-index-Wettlauf gegen die SVG-Seiten aus Phase 17 entfaellt.
+				EINE Leiste, und zwar ausserhalb des Scroll-Bereichs. Als
+				Geschwister eines eigenen Scroll-Elements ist "wegscrollen"
+				strukturell unmoeglich - und der z-index-Wettlauf gegen die
+				SVG-Seiten entfaellt.
 			-->
 			<div class="scoreview-bar">
 				<NcButton
@@ -47,12 +43,11 @@
 					@input="onSeekInput">
 				<span class="scoreview-time">{{ formatTime(currentTimeMs) }} / {{ formatTime(durationMs) }}</span>
 				<!--
-					Taktanzeige und Sprungfeld sind DASSELBE Feld (Phase 22): die
-					dauerhaft sichtbare Angabe aus Phase 16 und das Eingabefeld aus
-					Phase 10 zeigten dieselbe Zahl an zwei Stellen und kosteten
-					zusammen fast eine halbe Leiste. Solange das Feld den Fokus hat,
-					laeuft die Anzeige nicht mit - sonst wuerde die Wiedergabe die
-					gerade getippte Zahl ueberschreiben.
+					Taktanzeige und Sprungfeld sind DASSELBE Feld: getrennt zeigten
+					sie dieselbe Zahl an zwei Stellen und kosteten zusammen fast eine
+					halbe Leiste. Solange das Feld den Fokus hat, laeuft die Anzeige
+					nicht mit - sonst wuerde die Wiedergabe die gerade getippte Zahl
+					ueberschreiben.
 				-->
 				<span class="scoreview-measure">
 					<!-- Die feste Breite sitzt am Wrapper, nicht an NcTextField
@@ -113,13 +108,13 @@
 					</template>
 				</NcPopover>
 				<!--
-					BPM statt Prozent (Phase 17, auf Basis von M8: metadata.tempo ist
-					Viertel-BPM) - der Notensymbol-Text "♩ 80" statt "100%" ist die
-					Einheit, die eine Chorleitung tatsaechlich ansagt. tempoGuessed
-					markiert Partituren ohne eigene Tempoangabe (M8: tempo kann 0
-					sein) sichtbar als geschaetzt, statt eine Genauigkeit
-					vorzutaeuschen, die nicht da ist. Der Regler dazu liegt seit
-					Phase 22 im Popover - er wird einmal eingestellt, nicht dauernd.
+					BPM statt Prozent (auf Basis von docs/architecture.md M8:
+					metadata.tempo ist Viertel-BPM) - der Notensymbol-Text "♩ 80"
+					statt "100%" ist die Einheit, die eine Chorleitung tatsaechlich
+					ansagt. tempoGuessed markiert Partituren ohne eigene Tempoangabe
+					(M8: tempo kann 0 sein) sichtbar als geschaetzt, statt eine
+					Genauigkeit vorzutaeuschen, die nicht da ist. Der Regler dazu
+					liegt im Popover - er wird einmal eingestellt, nicht dauernd.
 				-->
 				<NcPopover>
 					<template #trigger>
@@ -261,8 +256,8 @@
 						{{ t('The score cursor keeps running independently of this.') }}
 					</NcNoteCard>
 					<!--
-						Pinch-Zoom (Phase 19): eigene, zweifingrige Geste statt der
-						nativen Browser-Seiten-Zoom (die waere fuer die ganze
+						Pinch-Zoom: eigene, zweifingrige Geste statt der nativen
+						Browser-Seiten-Zoom (die waere fuer die ganze
 						Nextcloud-Oberflaeche, nicht nur die Partitur) - siehe
 						onTouchMove(), das den Browser-Zoom waehrend der Geste bewusst
 						unterdrueckt (preventDefault). Einfingriges Scrollen bleibt
@@ -272,7 +267,7 @@
 						Blaettern in diesem fortlaufenden Einspaltenlayout bereits ab,
 						eine eigene Wischgeste haette zudem mit Nextcloud Viewers
 						eigener Wisch-zum-naechsten-Datei-Geste auf Mobilgeraeten
-						kollidieren koennen (siehe PLAN.md Phase 19).
+						kollidieren koennen.
 					-->
 					<div
 						class="scoreview-pages"
@@ -296,10 +291,10 @@
 				</div>
 				<!--
 					Mixer und Notizen liegen als Karten UEBER dem Notenbild statt
-					davor im Fluss (Phase 22): im Fluss kosteten sie Hoehe, sobald
-					sie offen waren, und waren - wie die zweite Leiste - nur ganz
-					oben zu sehen. Als Overlay kosten sie nichts, wenn sie zu sind,
-					und bleiben erreichbar, wo immer man gerade liest.
+					davor im Fluss: im Fluss kosteten sie Hoehe, sobald sie offen
+					waren, und waren nur ganz oben zu sehen. Als Overlay kosten sie
+					nichts, wenn sie zu sind, und bleiben erreichbar, wo immer man
+					gerade liest.
 				-->
 				<div v-if="showMixerPanel || showAnnotations" class="scoreview-panels">
 					<section v-if="showMixerPanel" class="scoreview-panel">
@@ -385,9 +380,9 @@ import {
 } from '../lib/scoreLayout.js'
 import { createScoreSync } from '../lib/scoreSync.js'
 
-// MuseScores eigene Vorgabe für Partituren ohne Tempoangabe (M8: metadata.tempo
-// kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als Bezugswert für die
-// BPM-Anzeige/-Eingabe, gekennzeichnet über tempoGuessed (Phase 17).
+// MuseScores eigene Vorgabe für Partituren ohne Tempoangabe (docs/architecture.md
+// M8: metadata.tempo kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als
+// Bezugswert für die BPM-Anzeige/-Eingabe, gekennzeichnet über tempoGuessed.
 const DEFAULT_TEMPO_BPM = 120
 
 export default {
@@ -429,8 +424,8 @@ export default {
 	},
 
 	/**
-	 * Zerlegung von ScoreViewer.vue in Composables (Codereview-Befund B1,
-	 * Phase 23/Schritt 6) - schrittweise, ein Bereich nach dem anderen.
+	 * Zerlegung von ScoreViewer.vue in Composables - schrittweise, ein
+	 * Bereich nach dem anderen.
 	 *
 	 * Der Zustand, den mehrere Bereiche teilen (Zeitachsen, etag, Dauer,
 	 * Zeitquelle), zieht dafuer aus `data()` hierher. Das ist die Bruecke,
@@ -614,36 +609,35 @@ export default {
 			pageUrls: [],
 			cursorRect: null,
 			// Zeitquelle: entweder lib/player.js (echte Wiedergabe, sobald ein
-			// SoundFont konfiguriert ist) oder lib/silentClock.js (Platzhalter,
-			// siehe PLAN.md Phase 8/9) - beide erfüllen dieselbe Schnittstelle,
-			// diese Komponente muss den Unterschied nur für die
-			// Tempo-/Mixer-Zusatzfunktionen kennen (hasRealPlayer).
+			// SoundFont konfiguriert ist) oder lib/silentClock.js (Platzhalter) -
+			// beide erfüllen dieselbe Schnittstelle, diese Komponente muss den
+			// Unterschied nur für die Tempo-/Mixer-Zusatzfunktionen kennen
+			// (hasRealPlayer).
 			showMixer: false,
 			sync: null,
 			timeDisplayHandle: null,
-			// Phase 16: Autoscroll (siehe scrollPlan.js) und Kopfangaben. Der
-			// Partiturtitel steht seit Phase 22 nicht mehr in der Leiste -
-			// Nextclouds Viewer zeigt den Dateinamen ohnehin in seiner eigenen
-			// Kopfzeile, und die Leiste braucht den Platz fuer Bedienelemente.
+			// Autoscroll (siehe scrollPlan.js) und Kopfangaben. Der Partiturtitel
+			// steht nicht in der Leiste - Nextclouds Viewer zeigt den Dateinamen
+			// ohnehin in seiner eigenen Kopfzeile, und die Leiste braucht den
+			// Platz fuer Bedienelemente.
 			totalMeasures: 0,
-			// Phase 10: Probenarbeit.
-			// Zeigt die laufende Taktnummer UND nimmt das Sprungziel entgegen
-			// (Phase 22, ein Feld statt Anzeige + Eingabe) - siehe
+			// Für die Probenarbeit: zeigt die laufende Taktnummer und nimmt das
+			// Sprungziel entgegen (ein Feld statt Anzeige + Eingabe) - siehe
 			// measureFieldFocused.
 			measureInput: 1,
 			// Solange das Taktfeld den Fokus hat, wird measureInput nicht mehr
 			// von der Wiedergabe nachgeführt: sonst überschriebe der nächste
 			// Takt die gerade getippte Zahl.
 			measureFieldFocused: false,
-			// Phase 11: private Notizen, Phase 18: zusaetzlich geteilte.
+			// Für Notizen: private und geteilte.
 			currentElid: null,
 		}
 	},
 
 	computed: {
-		// Musikalischer Anker der aktuellen Wiedergabeposition (Phase 11,
-		// "+ An aktueller Stelle") - null solange measuresTimeline/durationMs
-		// noch nicht geladen sind.
+		// Musikalischer Anker der aktuellen Wiedergabeposition ("+ An aktueller
+		// Stelle") - null solange measuresTimeline/durationMs noch nicht
+		// geladen sind.
 		currentAnchor() {
 			if (!this.measuresTimeline) {
 				return null
@@ -655,9 +649,8 @@ export default {
 			return { ...position, elid: this.currentElid, anchorEtag: this.currentEtag }
 		},
 
-		// Für das Taktfeld in der Leiste (Phase 16, seit Phase 22 zugleich das
-		// Sprungfeld) - null vor dem ersten berechneten Anker (currentAnchor
-		// braucht measuresTimeline).
+		// Für das Taktfeld in der Leiste (zugleich das Sprungfeld) - null vor
+		// dem ersten berechneten Anker (currentAnchor braucht measuresTimeline).
 		currentMeasureNumber() {
 			return this.currentAnchor ? this.currentAnchor.measureNumber : null
 		},
@@ -687,10 +680,10 @@ export default {
 			},
 		},
 
-		// Bildschirm waehrend der Wiedergabe wachhalten (Phase 19) - als
-		// Watcher statt in togglePlay() verdrahtet, damit JEDER Weg, der die
-		// Wiedergabe startet (Tastaturkuerzel, Einzaehler-Ende, Loop-Neustart),
-		// automatisch erfasst ist, ohne an jeder Stelle einzeln daran zu denken.
+		// Bildschirm waehrend der Wiedergabe wachhalten - als Watcher statt in
+		// togglePlay() verdrahtet, damit JEDER Weg, der die Wiedergabe startet
+		// (Tastaturkuerzel, Einzaehler-Ende, Loop-Neustart), automatisch erfasst
+		// ist, ohne an jeder Stelle einzeln daran zu denken.
 		isPlaying(playing) {
 			if (playing) {
 				this.requestWakeLock()
@@ -700,7 +693,7 @@ export default {
 		},
 
 		// Taktfeld der Wiedergabe nachführen, solange niemand darin tippt
-		// (Phase 22: Anzeige und Eingabe sind dasselbe Feld).
+		// (Anzeige und Eingabe sind dasselbe Feld).
 		currentMeasureNumber(measureNumber) {
 			if (measureNumber !== null && !this.measureFieldFocused) {
 				this.measureInput = measureNumber
@@ -718,15 +711,14 @@ export default {
 	},
 
 	mounted() {
-		// Der Scroll-Listener sitzt seit Phase 22 im Template
-		// (@scroll.passive an .scoreview-scroll): das scrollende Element ist
-		// jetzt ein Kind, das erst im Zustand "ready" existiert, this.$el
-		// scrollt selbst nicht mehr.
+		// Der Scroll-Listener sitzt im Template (@scroll.passive an
+		// .scoreview-scroll): das scrollende Element ist ein Kind, das erst im
+		// Zustand "ready" existiert, this.$el scrollt selbst nicht.
 		document.addEventListener('fullscreenchange', this.onFullscreenChange)
-		// Tastaturkürzel (Phase 17) NICHT passiv: Leertaste/Pfeiltasten sollen
-		// die Seite nicht zusätzlich scrollen (siehe onKeydown - preventDefault
-		// nur für die tatsächlich behandelten Tasten, alles andere bleibt
-		// unangetastet, insbesondere Nextclouds eigene Kürzel).
+		// Tastaturkürzel NICHT passiv: Leertaste/Pfeiltasten sollen die Seite
+		// nicht zusätzlich scrollen (siehe onKeydown - preventDefault nur für
+		// die tatsächlich behandelten Tasten, alles andere bleibt unangetastet,
+		// insbesondere Nextclouds eigene Kürzel).
 		this.$el.addEventListener('keydown', this.onKeydown)
 	},
 
@@ -739,8 +731,8 @@ export default {
 	methods: {
 		// Einzelargument-Wrapper um @nextcloud/l10n translate() (siehe
 		// tools/l10n.mjs zur Extraktion) - hier statt auf Modulebene definiert,
-		// damit t() dort ausgewertet wird, wo der Text gebraucht wird (Template/
-		// computed), nicht einmalig beim Modulimport (PLAN.md Phase 14).
+		// damit t() dort ausgewertet wird, wo der Text gebraucht wird
+		// (Template/computed), nicht einmalig beim Modulimport.
 		t(text, vars) {
 			return translate('scoreview', text, vars)
 		},
@@ -794,12 +786,11 @@ export default {
 				this.applyScoreMetadata(metaRes.data)
 				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
 				this.loadAnnotations()
-				// Startzoom "Seitenbreite" statt fester Faktor 1 (Phase 22):
-				// die Seite hat jetzt eine echte Breite (ScorePage.vue), ein
-				// fester Faktor 1 hieße auf einem Telefon 900px Seitenbreite
-				// neben 390px Bildschirm. Erst nach $nextTick, damit
-				// .scoreview-pages die Seiten schon enthält und seine endgültige
-				// Breite (inkl. Scrollbalken) steht.
+				// Startzoom "Seitenbreite" statt fester Faktor 1: die Seite hat
+				// eine echte Breite (ScorePage.vue), ein fester Faktor 1 hieße auf
+				// einem Telefon 900px Seitenbreite neben 390px Bildschirm. Erst
+				// nach $nextTick, damit .scoreview-pages die Seiten schon enthält
+				// und seine endgültige Breite (inkl. Scrollbalken) steht.
 				await this.$nextTick()
 				this.applyZoomPreset('width')
 				this.setUpViewportObserver()
@@ -813,9 +804,7 @@ export default {
 
 				this.sync = createScoreSync(timeline, (rect) => {
 					this.cursorRect = rect
-					// Nachführen statt nur beim Seitenwechsel zu springen (PLAN.md
-					// Phase 16) - ersetzt die frühere lastScrolledPage-Logik aus
-					// Phase 8, die nur beim Wechsel der Seite überhaupt scrollte.
+					// Nachführen statt nur beim Seitenwechsel zu springen.
 					this.updateAutoScroll(rect)
 				})
 
@@ -827,11 +816,9 @@ export default {
 		},
 
 		/**
-		 * DIE Zeitschleife des Viewers - seit Phase 23/Schritt 7 die einzige
-		 * (Codereview-Befund E1). Vorher lief daneben eine zweite in
-		 * useScoreSync, jede mit eigener Binärsuche pro Frame, beide
-		 * ununterbrochen, solange der Viewer offen war. Sie brauchen dieselbe
-		 * Zeitquelle und denselben Takt.
+		 * DIE Zeitschleife des Viewers - die einzige: Cursor, Notiz-Anker,
+		 * Loop und Metronom brauchen alle dieselbe Zeitquelle und denselben
+		 * Takt.
 		 *
 		 * Reihenfolge ist nicht beliebig: erst die Zeit abgreifen, dann Cursor
 		 * und Notiz-Anker daraus ableiten, dann Loop und Metronom - die
@@ -842,12 +829,12 @@ export default {
 				if (this.clock) {
 					this.samplePlaybackTime()
 					// Eine Auflösung für beides: der Cursor braucht das Rechteck,
-					// eine Notiz das elid (Phase 11, currentAnchor). Vorher suchte
-					// diese Schleife dasselbe elid ein zweites Mal.
+					// eine Notiz das elid (currentAnchor) - so wird nicht zweimal
+					// nach demselben elid gesucht.
 					this.currentElid = this.sync?.update(this.currentTimeMs) ?? null
-					// Loop (Phase 10, Kernfunktion für Probenarbeit): sobald das
-					// Ende erreicht/überschritten ist, zurück zum Anfang - hier statt
-					// in silentClock.js/player.js geprüft, weil beide Zeitquellen
+					// Loop (Kernfunktion für Probenarbeit): sobald das Ende
+					// erreicht/überschritten ist, zurück zum Anfang - hier statt in
+					// silentClock.js/player.js geprüft, weil beide Zeitquellen
 					// dieselbe kleine seek()-Schnittstelle erfüllen und Looping keine
 					// Eigenschaft der Zeitquelle selbst ist.
 					const loopTarget = this.loopRestartTarget(this.currentTimeMs)
@@ -878,10 +865,11 @@ export default {
 			}
 		},
 
-		// Tastaturkürzel für die Probe (Phase 17) - greifen nur, wenn der Viewer
-		// den Fokus hat (Listener sitzt auf this.$el, keydown bubbelt dorthin,
-		// siehe mounted()) und der Fokus nicht in einem Eingabefeld liegt (sonst
-		// würde z.B. das Pfeiltasten-Navigieren im Takt-Eingabefeld gestohlen).
+		// Tastaturkürzel für die Probe - greifen nur, wenn der Viewer den
+		// Fokus hat (Listener sitzt auf this.$el, keydown bubbelt dorthin,
+		// siehe mounted()) und der Fokus nicht in einem Eingabefeld liegt
+		// (sonst würde z.B. das Pfeiltasten-Navigieren im Takt-Eingabefeld
+		// gestohlen).
 		onKeydown(event) {
 			const tag = event.target?.tagName
 			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable) {
@@ -921,7 +909,7 @@ export default {
 			this.jumpToMeasure(Math.max(1, current + delta))
 		},
 
-		// Umkehrung von M4 (Phase 10, "Klick auf eine Note springt dorthin") -
+		// Umkehrung von M4: Klick auf eine Note springt dorthin -
 		// ScorePage.vue liefert nur die Klickposition in SVG-Einheiten, die
 		// eigentliche Element-/Zeit-Auflösung passiert hier mit der vollen
 		// timeline (scoreLayout.js).
@@ -952,9 +940,9 @@ export default {
 
 <style scoped>
 /*
- * Flex-Spalte statt eines einzigen scrollenden Kastens (Phase 22): die Leiste
- * ist ein Geschwister des Scroll-Elements, kein sticky Kind darin. Damit kann
- * sie nicht wegscrollen, und die Panels lassen sich über dem Notenbild
+ * Flex-Spalte statt eines einzigen scrollenden Kastens: die Leiste ist ein
+ * Geschwister des Scroll-Elements, kein sticky Kind darin. Damit kann sie
+ * nicht wegscrollen, und die Panels lassen sich über dem Notenbild
  * platzieren, statt es nach unten zu schieben.
  */
 .scoreview-viewer {
@@ -968,15 +956,15 @@ export default {
 }
 
 /*
- * Touch-Zielgroessen (Phase 19: ">= 44px") - gemessen statt angenommen:
+ * Touch-Zielgroessen (">= 44px") - gemessen statt angenommen:
  * Nextclouds eigenes --default-clickable-area liegt in dieser Instanz bei
- * 34px, NICHT bei 44px (siehe PLAN.md Umsetzungsstand). NcButton liest diese
- * Variable zur Laufzeit (--button-size: var(--default-clickable-area)) - ein
- * Override hier auf dem gemeinsamen Wurzelelement wirkt dadurch auf alle
- * NcButtons in dieser Komponente UND in ScoreMixer.vue/ScoreAnnotations.vue
+ * 34px, NICHT bei 44px. NcButton liest diese Variable zur Laufzeit
+ * (--button-size: var(--default-clickable-area)) - ein Override hier auf
+ * dem gemeinsamen Wurzelelement wirkt dadurch auf alle NcButtons in
+ * dieser Komponente UND in ScoreMixer.vue/ScoreAnnotations.vue
  * (CSS-Variablen vererben sich durchs echte DOM, unabhaengig von Vues
- * Style-Scoping-Grenzen). Nur unter (pointer: coarse) (Touch-Geraete), damit
- * die Maus-Bedienung auf dem Desktop kompakt bleibt.
+ * Style-Scoping-Grenzen). Nur unter (pointer: coarse) (Touch-Geraete),
+ * damit die Maus-Bedienung auf dem Desktop kompakt bleibt.
  */
 @media (pointer: coarse) {
 	.scoreview-viewer {
@@ -1069,14 +1057,14 @@ export default {
 }
 
 /*
- * Feste Breite MUSS an einen Wrapper, nicht an NcTextField selbst (Phase 22,
- * Nutzer-Rückmeldung "das Taktfeld ist über die ganze Breite"): NcInputField
- * bringt `.input-field[data-v-…] { width: 100% }` mit - dieselbe Spezifität
- * wie eine scoped Klassenregel hier, und die Bibliotheks-CSS wird später
- * eingebunden, gewinnt bei Gleichstand also. Die alte Regel
- * `.scoreview-measure-input { width: 70px }` hatte deshalb nie gewirkt
- * (gemessen: 1376px). Innerhalb eines schmalen Wrappers ist `width: 100%`
- * genau das Gewünschte.
+ * Feste Breite MUSS an einen Wrapper, nicht an NcTextField selbst
+ * (Nutzer-Rückmeldung "das Taktfeld ist über die ganze Breite"):
+ * NcInputField bringt `.input-field[data-v-…] { width: 100% }` mit -
+ * dieselbe Spezifität wie eine scoped Klassenregel hier, und die
+ * Bibliotheks-CSS wird später eingebunden, gewinnt bei Gleichstand also.
+ * Eine Regel wie `.scoreview-measure-input { width: 70px }` wirkt deshalb
+ * nicht (gemessen: 1376px). Innerhalb eines schmalen Wrappers ist
+ * `width: 100%` genau das Gewünschte.
  */
 .scoreview-measure-field {
 	display: block;
@@ -1152,11 +1140,11 @@ export default {
 }
 
 /*
- * Block statt Flex-Spalte (Phase 22): eine Seite kann jetzt breiter als der
- * Container sein (Zoom, siehe ScorePage.vue). In einer zentrierenden
- * Flex-Spalte wäre der überstehende linke Teil nicht mehr erreichbar - bei
- * einem Blockelement mit `margin: 0 auto` fällt die Zentrierung im Überlauf
- * einfach weg, und der Scrollbereich deckt die ganze Seite ab.
+ * Block statt Flex-Spalte: eine Seite kann breiter als der Container sein
+ * (Zoom, siehe ScorePage.vue). In einer zentrierenden Flex-Spalte wäre der
+ * überstehende linke Teil nicht mehr erreichbar - bei einem Blockelement
+ * mit `margin: 0 auto` fällt die Zentrierung im Überlauf einfach weg, und
+ * der Scrollbereich deckt die ganze Seite ab.
  */
 .scoreview-pages {
 	display: block;
@@ -1173,8 +1161,7 @@ export default {
 	 * .scoreview-pages noch .score-page einen eigenen Stacking-Context
 	 * eröffnen, konkurrieren die direkt mit diesem Element. Ohne einen klar
 	 * höheren Wert malt das SVG durch die Panels hindurch (beim ersten
-	 * Nachmessen genau so beobachtet: der Mixer wirkte durchsichtig) - es ist
-	 * derselbe Fallstrick, den bis Phase 21 die sticky Transportleiste hatte.
+	 * Nachmessen genau so beobachtet: der Mixer wirkte durchsichtig).
 	 */
 	z-index: 20;
 	width: min(420px, 100%);

@@ -11,11 +11,10 @@ const t = (text, vars) => translate('scoreview', text, vars)
  * Wartet darauf, dass der Server die Partitur konvertiert hat, und übersetzt
  * einen gespeicherten Fehlercode in einen Satz.
  *
- * Zweites Composable aus der Zerlegung von `ScoreViewer.vue`
- * (Codereview-Befund B1, Phase 23/Schritt 6).
+ * Zweites Composable aus der Zerlegung von `ScoreViewer.vue`.
  *
  * Der Fehlercode kommt bewusst als **Code** vom Server und wird erst hier
- * übersetzt (E4/Phase 14): der Text wird einmal beim Konvertieren geschrieben,
+ * übersetzt (E4): der Text wird einmal beim Konvertieren geschrieben,
  * aber von beliebigen Nutzerinnen in beliebigen Sprachen gelesen - `IL10N`
  * ist serverseitig an die Sprache der gerade anfragenden Person gebunden und
  * wäre dafür die falsche Stelle. `errorMessage` steht daneben als
@@ -41,7 +40,7 @@ export function useConversionStatus({ fileId, onReady }) {
 
 	/**
 	 * `unknown` ist sowohl expliziter Code als auch Rückfall für einen
-	 * unbekannten/fehlenden Code (z.B. Fehlerdatensätze von vor Phase 14).
+	 * unbekannten/fehlenden Code (z.B. ältere Fehlerdatensätze ohne Code).
 	 *
 	 * @param {string} code
 	 * @return {string}

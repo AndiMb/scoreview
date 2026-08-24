@@ -4,31 +4,27 @@ import { findStepIndex } from './timingSync.js'
  * Ordnet eine Wiedergabezeit dem aktuellen Notenkopf zu und meldet einen
  * Wechsel nach außen.
  *
- * Lag bis Phase 23 als `composables/useScoreSync.js` daneben, war aber nie
- * ein Composable: keine Reaktivität, kein Lifecycle - eine reine
- * Fabrikfunktion (Codereview-Befund B1). Hier in `lib/` steht sie bei den
- * anderen DOM-freien Modulen.
+ * Reine Fabrikfunktion, keine Reaktivität, kein Lifecycle - deshalb hier in
+ * `lib/`, bei den anderen DOM-freien Modulen.
  *
- * **Keine eigene rAF-Schleife mehr** (Codereview-Befund E1). Vorher liefen
- * zwei Dauerschleifen nebeneinander - diese hier und die Transportanzeige in
- * `ScoreViewer.vue` -, jede mit einer eigenen Binärsuche pro Frame, und beide
- * ununterbrochen, solange der Viewer offen war. Sie brauchen dieselbe
- * Zeitquelle und denselben Takt; jetzt treibt die Schleife im Viewer diese
- * Funktion mit. Das ist kein Performance-Notfall gewesen, zählt aber gegen
- * genau das Ziel, für das Phase 19 den Wake Lock eingebaut hat: ein Tablet am
- * Notenständer, über eine ganze Probe.
+ * **Keine eigene rAF-Schleife**: die Schleife der Transportanzeige in
+ * `ScoreViewer.vue` treibt diese Funktion mit, statt eine zweite
+ * Dauerschleife mit eigener Binärsuche pro Frame nebenherlaufen zu lassen.
+ * Beide brauchen dieselbe Zeitquelle und denselben Takt, ununterbrochen,
+ * solange der Viewer offen ist - das zählt gegen genau das Ziel, für das der
+ * Wake Lock eingebaut ist: ein Tablet am Notenständer, über eine ganze Probe.
  *
- * Der Grund, weshalb die Auflösung JEDEN Frame läuft und nicht nur während
- * der Wiedergabe, bleibt gültig (Phase 22): der Setter
- * `sequencer.currentTime` in `player.js` wirkt NICHT synchron - der
- * unmittelbar danach im `seeked`-Ereignis gelesene Zeitwert war noch der
- * alte. Der Cursor blieb deshalb bei einem Sprung mit angehaltener Wiedergabe
- * stehen, während die Transportanzeige längst die neue Zeit zeigte (gemessen
- * an einem Sprung zu Takt 30: Zeit 1:29, Cursor in Takt 1).
+ * Die Auflösung läuft JEDEN Frame, nicht nur während der Wiedergabe: der
+ * Setter `sequencer.currentTime` in `player.js` wirkt NICHT synchron - der
+ * unmittelbar danach im `seeked`-Ereignis gelesene Zeitwert wäre noch der
+ * alte. Ohne Auflösung pro Frame bliebe der Cursor bei einem Sprung mit
+ * angehaltener Wiedergabe stehen, während die Transportanzeige längst die
+ * neue Zeit zeigte (gemessen an einem Sprung zu Takt 30: Zeit 1:29, Cursor
+ * in Takt 1).
  *
  * Tempo-unabhängig: die Zeitquelle liefert bereits Original-Partiturzeit,
  * kein Umrechnen hier - eine Tempoänderung skaliert `getCurrentTimeMs()` an
- * der Quelle, nicht die Timingdaten selbst (PLAN.md Phase 8).
+ * der Quelle, nicht die Timingdaten selbst.
  *
  * @param {import('./scoreLayout.js').Timeline} timeline
  * @param {(rect: {page:number,x:number,y:number,w:number,h:number}|null) => void} onCursorChange

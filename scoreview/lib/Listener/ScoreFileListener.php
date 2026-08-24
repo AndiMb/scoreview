@@ -27,10 +27,10 @@ use Psr\Log\LoggerInterface;
  * einer Serverkonfiguration abhängig machen; ohne sie erkennt Nextcloud eine
  * .mscz generisch als application/zip und der Trigger liefe ins Leere.
  *
- * Löst seit Phase 7 standardmäßig KEINE Konvertierung mehr aus (vorher:
- * jeder Upload/jede Bearbeitung stieß sofort eine Konvertierung an - bei
- * z.B. 300 hochgeladenen Partituren 300 Konvertierungen für Dateien, die
- * vielleicht nie jemand öffnet, siehe PLAN.md Phase 7). Ein neuer Upload
+ * Löst standardmäßig KEINE Konvertierung mehr aus (vorher: jeder
+ * Upload/jede Bearbeitung stieß sofort eine Konvertierung an - bei z.B.
+ * 300 hochgeladenen Partituren 300 Konvertierungen für Dateien, die
+ * vielleicht nie jemand öffnet). Ein neuer Upload
  * bzw. eine Bearbeitung ändert den etag; ConversionService::find() findet
  * dafür naturgemäß keinen Cache-Eintrag, ein „Invalidieren" ist also
  * implizit bereits durch den Schlüssel (fileId, etag) erledigt - der

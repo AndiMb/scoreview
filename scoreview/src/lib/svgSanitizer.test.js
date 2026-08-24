@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 //
-// Sicherheitsrelevanter Test (Phase 20): genau die Umgehungsmuster, an denen
-// die frueher regexbasierte Fassung nachweislich gescheitert ist (9 von 15,
-// siehe PLAN.md Phase 20) - damit ein kuenftiger Umbau nicht unbemerkt
-// dorthin zurueckfaellt. Braucht ein DOM, deshalb die jsdom-Umgebung oben.
+// Sicherheitsrelevanter Test: genau die Umgehungsmuster, an denen die
+// frueher regexbasierte Fassung nachweislich gescheitert ist (9 von 15) -
+// damit ein kuenftiger Umbau nicht unbemerkt dorthin zurueckfaellt. Braucht
+// ein DOM, deshalb die jsdom-Umgebung oben.
 import { describe, expect, it } from 'vitest'
 import { sanitizeSvg } from './svgSanitizer.js'
 
@@ -64,7 +64,7 @@ describe('sanitizeSvg - das echte Notenbild darf nicht kaputtgehen', () => {
 		expect(out).toMatch(/points="1,2 3,4"/)
 	})
 
-	it('behaelt das leere class-Attribut des weissen Hintergrundpfads (M9/Phase 16)', () => {
+	it('behaelt das leere class-Attribut des weissen Hintergrundpfads (M9)', () => {
 		// ScorePage.vue schaltet genau dieses Element ueber path[class=""] auf
 		// fill:none, damit der dahinterliegende Cursor sichtbar bleibt - geht
 		// das Attribut verloren, ist der Cursor unsichtbar.

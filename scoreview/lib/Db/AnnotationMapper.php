@@ -18,10 +18,10 @@ class AnnotationMapper extends QBMapper {
 	}
 
 	/**
-	 * Alles, was eine Nutzerin zu dieser Datei sehen darf (Phase 18): die
-	 * eigenen privaten Notizen PLUS alle geteilten Notizen dieser Datei
+	 * Alles, was eine Nutzerin zu dieser Datei sehen darf: die eigenen
+	 * privaten Notizen PLUS alle geteilten Notizen dieser Datei
 	 * (unabhängig davon, wer sie angelegt hat - "geteilt" heißt für jeden
-	 * mit Dateizugriff sichtbar, siehe PLAN.md Phase 18).
+	 * mit Dateizugriff sichtbar).
 	 *
 	 * @return Annotation[]
 	 */
@@ -40,7 +40,7 @@ class AnnotationMapper extends QBMapper {
 	}
 
 	/**
-	 * Alle Notizen zu einer Datei loeschen (Codereview-Befund A4).
+	 * Alle Notizen zu einer Datei loeschen.
 	 *
 	 * Bewusst NICHT an NodeDeletedEvent gehaengt: dieses Ereignis feuert schon
 	 * beim Verschieben in den Papierkorb (an der Testinstanz nachgemessen -
@@ -60,10 +60,9 @@ class AnnotationMapper extends QBMapper {
 	}
 
 	/**
-	 * Alle Notizen einer Nutzerin loeschen - fuer UserDeletedEvent
-	 * (Codereview-Befund A4). Anders als beim Papierkorb-Fall oben ist das
-	 * eindeutig: das Konto ist weg, seine Inhalte haben in der Datenbank
-	 * nichts mehr verloren.
+	 * Alle Notizen einer Nutzerin loeschen - fuer UserDeletedEvent. Anders
+	 * als beim Papierkorb-Fall oben ist das eindeutig: das Konto ist weg,
+	 * seine Inhalte haben in der Datenbank nichts mehr verloren.
 	 *
 	 * @return int Zahl der geloeschten Zeilen
 	 */
@@ -91,9 +90,9 @@ class AnnotationMapper extends QBMapper {
 
 	/**
 	 * Nur ueber Datei-ID gefiltert, bewusst OHNE Owner-Einschraenkung (anders
-	 * als der bisherige Name suggerieren wuerde) - seit Phase 18 duerfen
-	 * geteilte Notizen von JEDER Nutzerin mit Schreibrecht auf die Datei
-	 * geaendert werden, nicht nur von der Autorin. Die eigentliche
+	 * als der bisherige Name suggerieren wuerde) - geteilte Notizen duerfen
+	 * von JEDER Nutzerin mit Schreibrecht auf die Datei geaendert werden,
+	 * nicht nur von der Autorin. Die eigentliche
 	 * Zugriffsentscheidung (Owner bei privat, Schreibrecht bei geteilt) treffen
 	 * AnnotationService::updateContent()/delete() anhand des von
 	 * AnnotationController::canWriteShared() durchgereichten Rechts, nicht

@@ -1,4 +1,17 @@
-# ScoreView – Umsetzungsplan
+# ScoreView – Umsetzungsplan (Archiv)
+
+> **Historisches Dokument, nicht gepflegt.** Dies ist der Umsetzungsplan, nach
+> dem ScoreView gebaut wurde: Phasen, Zwischenstände, Messreihen und
+> Entscheidungen im Moment ihres Entstehens. Er wird nicht mehr fortgeschrieben
+> und kann vom Stand der App abweichen.
+>
+> Der aktuelle Stand steht in [`../architecture.md`](../architecture.md)
+> (Aufbau, Entscheidungen E1–E5, Formatgrundlagen M1–M9),
+> [`../limits.md`](../limits.md) (gemessene Werte, offene Punkte) und
+> [`../installation.md`](../installation.md). Aufgehoben ist dieser Plan, weil
+> er das *Warum* vieler Entscheidungen ausführlicher begründet, als eine
+> Referenzdokumentation es tun sollte – nachschlagen ja, sich darauf berufen
+> nein.
 
 Stand: 2026-08-23. Ersetzt den bisherigen Implementierungsplan ab Phase 5.
 Phasen 1–4 (Spike, App-Gerüst, Sidecar-HTTP-API, Frontend-Integration) sind

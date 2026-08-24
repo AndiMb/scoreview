@@ -4,17 +4,15 @@ import { createMetronomeClick } from '../lib/metronomeClick.js'
 import { findStepIndex } from '../lib/timingSync.js'
 
 // Vorlauf, mit dem der naechste Schlag gesucht und im AudioContext terminiert
-// wird (Phase 22, Zeitachsen-ms). Muss ueber einem Bildwiederholtakt liegen
-// (~16ms bei 60Hz), damit kein Schlag verpasst wird, und klein genug bleiben,
-// dass ein Sprung/Tempowechsel nicht mehrere schon terminierte Klicks
-// hinterherzieht.
+// wird (Zeitachsen-ms). Muss ueber einem Bildwiederholtakt liegen (~16ms bei
+// 60Hz), damit kein Schlag verpasst wird, und klein genug bleiben, dass ein
+// Sprung/Tempowechsel nicht mehrere schon terminierte Klicks hinterherzieht.
 const LOOKAHEAD_MS = 60
 
 /**
  * Metronom und Einzähler.
  *
- * Fünftes Composable aus der Zerlegung von `ScoreViewer.vue`
- * (Codereview-Befund B1, Phase 23/Schritt 6).
+ * Fünftes Composable aus der Zerlegung von `ScoreViewer.vue`.
  *
  * Beides gehört zusammen, weil es sich denselben Klickerzeuger teilt und
  * einander ausschließt: während der Einzähler läuft, schweigt das laufende
@@ -44,8 +42,8 @@ export function useMetronome({
 	play,
 }) {
 	const enabled = ref(false)
-	// 'all' = jeder Schlag (Voreinstellung seit Phase 22), 'downbeat' = nur
-	// der Taktanfang (das Verhalten bis Phase 21).
+	// 'all' = jeder Schlag (Voreinstellung), 'downbeat' = nur der
+	// Taktanfang.
 	const beats = ref('all')
 
 	let click = null
@@ -81,7 +79,7 @@ export function useMetronome({
 	 *
 	 * Der Vorlauf ist in Zeitachsen-ms gemessen; die Umrechnung in echte
 	 * Sekunden teilt durch den Tempofaktor, weil die Zeitachse mit
-	 * playbackRate läuft (Phase 9: die Zeitachse selbst bleibt unberührt).
+	 * playbackRate läuft (die Zeitachse selbst bleibt unberührt).
 	 *
 	 * @param {number} currentTimeMs
 	 */
@@ -118,7 +116,7 @@ export function useMetronome({
 	}
 
 	/**
-	 * Einzähler vor dem Loop-Start (Phase 17: „mehr wert als die meiste übrige
+	 * Einzähler vor dem Loop-Start („mehr wert als die meiste übrige
 	 * Mixer-Funktionalität"). Schätzt die Schlagzahl des Zieltaktes aus seiner
 	 * Dauer und der aktuellen BPM (`measures.json` trägt keine eigene
 	 * Taktart), zählt in Echtzeit herunter und startet danach die Wiedergabe
@@ -146,11 +144,11 @@ export function useMetronome({
 		isCountingIn = true
 		const clicker = ensureClick()
 		countInTimers = delays.map((delay, i) => setTimeout(() => clicker.click(i === 0), delay))
-		// Die Wiedergabe startet einen Schlag NACH dem letzten Einzähler-Klick
-		// (Phase 22). Bis Phase 21 startete sie auf dem letzten Klick - bei
-		// vier Schlägen zählte der Einzähler damit nur drei, und der vierte
-		// fiel mit der Eins zusammen. Am Dirigat ist das der Unterschied
-		// zwischen „und eins" und einem verschluckten Schlag.
+		// Die Wiedergabe startet einen Schlag NACH dem letzten Einzähler-Klick:
+		// würde sie auf dem letzten Klick starten, zählte der Einzähler bei
+		// vier Schlägen nur drei, und der vierte fiele mit der Eins zusammen.
+		// Am Dirigat ist das der Unterschied zwischen „und eins" und einem
+		// verschluckten Schlag.
 		countInTimers.push(setTimeout(() => {
 			isCountingIn = false
 			countInTimers = []

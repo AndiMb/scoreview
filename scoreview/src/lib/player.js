@@ -1,10 +1,10 @@
-// Echte Wiedergabe im Browser (Phase 9, E1: Synthese statt vorgerendertem
-// MP3 - siehe PLAN.md). Dünner spessasynth_lib-Wrapper, der dieselbe kleine
+// Echte Wiedergabe im Browser (E1: Synthese statt vorgerendertem MP3 - siehe
+// docs/architecture.md). Dünner spessasynth_lib-Wrapper, der dieselbe kleine
 // Zeitquellen-Schnittstelle wie lib/silentClock.js erfüllt
 // (getCurrentTimeMs/play/pause/seek/isPlaying/addEventListener('seeked')),
 // damit useScoreSync.js und ScoreViewer.vue nicht wissen müssen, ob gerade
 // echte Wiedergabe oder (mangels konfiguriertem SoundFont) der stumme
-// Phase-8-Platzhalter läuft. Mute/Solo-Semantik selbst steckt NICHT hier,
+// Platzhalter läuft. Mute/Solo-Semantik selbst steckt NICHT hier,
 // sondern in lib/mixerLayout.js (rein, ohne Synth-Abhängigkeit) - diese
 // Datei wendet nur an, was von dort berechnet wird.
 
@@ -83,11 +83,11 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		}
 	}
 
-	// Tempo (Phase 9): ein globaler Faktor auf playbackRate. sequencer.currentTime
-	// bleibt dabei auf der Original-Zeitachse der Partitur (kein manuelles
-	// Umrechnen in useScoreSync.js nötig, siehe PLAN.md Phase 8
-	// "Tempo-unabhängig rechnen") - das ist Sequencer-Verhalten, kein von uns
-	// nachgebautes; siehe player.live-test.md für den Verifikationsweg.
+	// Tempo: ein globaler Faktor auf playbackRate. sequencer.currentTime bleibt
+	// dabei auf der Original-Zeitachse der Partitur (kein manuelles Umrechnen
+	// in useScoreSync.js nötig, "Tempo-unabhängig rechnen") - das ist
+	// Sequencer-Verhalten, kein von uns nachgebautes; siehe player.live-test.md
+	// für den Verifikationsweg.
 	function setTempo(factor) {
 		sequencer.playbackRate = factor
 	}
@@ -109,14 +109,14 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		synth.programChange(channel, programNumber)
 	}
 
-	/** Vom geladenen SoundFont tatsächlich angebotene Instrumente (Phase 9: "Auswahl aus dem SoundFont"). */
+	/** Vom geladenen SoundFont tatsächlich angebotene Instrumente ("Auswahl aus dem SoundFont"). */
 	function getPresetList() {
 		return synth.presetList
 	}
 
 	/**
-	 * Die tatsächlich verwendeten MIDI-Kanäle je Spur, in Dokumentreihenfolge
-	 * (Phase 17) - aus dem geladenen MIDI selbst gelesen
+	 * Die tatsächlich verwendeten MIDI-Kanäle je Spur, in Dokumentreihenfolge -
+	 * aus dem geladenen MIDI selbst gelesen
 	 * (`sequencer.midiData.tracks[].channels`, spessasynth_core), NICHT aus
 	 * einer Index-Annahme. Grund: an duckwerk.mscz gemessen vergibt MuseScores
 	 * MIDI-Export Kanäle nicht in Track-Reihenfolge (Sopran/Alt/Tenor/Bariton/

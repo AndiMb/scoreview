@@ -18,7 +18,7 @@ describe('resolveMixerChannels', () => {
 		{ id: '4', name: 'Bass', instrumentId: 'bass', program: 52 },
 	]
 
-	it('schliesst die Metronomspur aus (traegt nachweislich keine MIDI-Noten, siehe PLAN.md Phase 17) und benennt die uebrigen nach dem Part', () => {
+	it('schliesst die Metronomspur aus (traegt nachweislich keine MIDI-Noten) und benennt die uebrigen nach dem Part', () => {
 		expect(resolveMixerChannels(tracks, parts)).toEqual([
 			{ channel: 0, instrumentId: 'soprano', name: 'Soprano', partId: '1', program: 52 },
 			{ channel: 1, instrumentId: 'alto', name: 'Alto', partId: '2', program: 52 },

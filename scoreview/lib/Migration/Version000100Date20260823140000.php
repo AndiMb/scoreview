@@ -12,9 +12,8 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Phase 14: zwei Spalten auf `scoreview_conversions`, aus zwei getrennten
- * Anlaessen, aber in einer Migration (siehe PLAN.md Phase 14 "reist in
- * derselben Migration mit").
+ * Zwei Spalten auf `scoreview_conversions`, aus zwei getrennten Anlaessen,
+ * aber in einer Migration ("reist in derselben Migration mit").
  *
  * - `error_code`: `error_message` wird einmal beim Konvertieren geschrieben,
  *   aber von beliebigen Nutzerinnen in beliebigen Sprachen gelesen - IL10N
@@ -22,18 +21,17 @@ use OCP\Migration\SimpleMigrationStep;
  *   falsche Stelle. Der Code wird stattdessen erst beim Anzeigen uebersetzt
  *   (siehe ScoreViewer.vue errorCodeText()); `error_message` bleibt
  *   unveraendert als technisches Detail bestehen. Nullable und ohne
- *   Backfill: bestehende Fehlerdatensaetze vor Phase 14 haben keinen Code,
- *   der Client behandelt einen fehlenden Code als 'unknown'.
- * - `format_version`: schliesst die in Phase 12 gefundene Luecke ("Neu
- *   gefundene Luecke: Cache-Format-Upgrade nicht migriert" - ein
- *   Formatwechsel liess `status()`/`serveCachedFile()` beim Lesen einer
- *   inzwischen nicht mehr passenden Cache-Datei mit 500 statt einer
- *   Neukonvertierung enden). Default = ConversionService::CURRENT_FORMAT_VERSION:
+ *   Backfill: bestehende Fehlerdatensaetze vor dieser Migration haben
+ *   keinen Code, der Client behandelt einen fehlenden Code als 'unknown'.
+ * - `format_version`: schliesst die Luecke "Cache-Format-Upgrade nicht
+ *   migriert" - ein Formatwechsel liess `status()`/`serveCachedFile()` beim
+ *   Lesen einer inzwischen nicht mehr passenden Cache-Datei mit 500 statt
+ *   einer Neukonvertierung enden. Default = ConversionService::CURRENT_FORMAT_VERSION:
  *   das baut die Spalte rueckwirkend fuer alle schon vorhandenen Zeilen ein,
- *   die bereits im AKTUELLEN (Phase-6/7-)Format vorliegen - kein
- *   ungewollter Massen-Reconvert direkt nach dem Upgrade. Erst ein
- *   KUENFTIGER Formatwechsel erhoeht die Konstante und macht aeltere Zeilen
- *   dadurch erkennbar veraltet.
+ *   die bereits im aktuellen Format vorliegen - kein ungewollter
+ *   Massen-Reconvert direkt nach dem Upgrade. Erst ein KUENFTIGER
+ *   Formatwechsel erhoeht die Konstante und macht aeltere Zeilen dadurch
+ *   erkennbar veraltet.
  */
 class Version000100Date20260823140000 extends SimpleMigrationStep {
 

@@ -13,7 +13,7 @@ use OCP\IAppConfig;
 /**
  * Dünner Wrapper um die Sidecar-HTTP-API (sidecar/server.py). Kein Parsen
  * von Timing-Daten hier - der Sidecar liefert timing.json bereits fertig
- * geparst, diese Klasse cached/proxy't nur Bytes (siehe Plan Phase 3).
+ * geparst, diese Klasse cached/proxy't nur Bytes.
  */
 class SidecarClient {
 	public function __construct(
@@ -109,7 +109,7 @@ class SidecarClient {
 	}
 
 	/**
-	 * Health-Abfrage fuer die Admin-Anzeige (Phase 21). Bewusst gegen
+	 * Health-Abfrage fuer die Admin-Anzeige. Bewusst gegen
 	 * `/health` statt gegen einen der Arbeits-Endpunkte: `/health` verlangt
 	 * als einziger Endpunkt KEIN Secret (siehe sidecar/README.md), damit
 	 * laesst sich "Sidecar laeuft ueberhaupt" von "Secret stimmt nicht"
@@ -131,7 +131,7 @@ class SidecarClient {
 	}
 
 	/**
-	 * Selbsttest des Sidecars (Phase 21): konvertiert die mitgelieferte
+	 * Selbsttest des Sidecars: konvertiert die mitgelieferte
 	 * Minipartitur und meldet, ob `--score-media` im aktuellen Image noch
 	 * das erwartete Ergebnis liefert. Antwort ist bewusst auch im
 	 * Negativfall HTTP 200 mit `ok: false` - ein 5xx waere von "Sidecar
@@ -146,7 +146,7 @@ class SidecarClient {
 		try {
 			// Grosszuegiger Timeout: der Selbsttest laesst eine echte
 			// MuseScore-Konvertierung laufen (gemessen ~6s fuer die
-			// einseitige Testpartitur, siehe PLAN.md Phase 20).
+			// einseitige Testpartitur).
 			$response = $this->clientService->newClient()->get($this->getBaseUrl() . '/selftest', [
 				'headers' => $this->headers(),
 				'timeout' => 120,
@@ -163,8 +163,8 @@ class SidecarClient {
 
 	/**
 	 * Verfuegbarkeit/Version des vom Sidecar mitgelieferten SoundFonts
-	 * (Phase 9 - siehe Service\SoundFontService fuer den Grund, warum der
-	 * Sidecar das ausliefert). Der Sidecar antwortet bewusst mit HTTP 200 +
+	 * (siehe Service\SoundFontService fuer den Grund, warum der Sidecar
+	 * das ausliefert). Der Sidecar antwortet bewusst mit HTTP 200 +
 	 * `available: false` statt 404, wenn das Image keins hat: ein 404 waere
 	 * fuer Guzzle ein Fehler und liesse sich hier nicht mehr von einem
 	 * echten Verbindungsproblem unterscheiden.

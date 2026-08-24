@@ -1,101 +1,98 @@
 # ScoreView
 
-Nextcloud-App, die `.mscz`-Partituren (MuseScore) einmalig serverseitig über
-einen MuseScore-Sidecar konvertiert (SVG-Seiten + MIDI + Timing-Daten,
-siehe `PLAN.md` E1/E2), das Ergebnis cached und beim Öffnen aus Files als
-Notation mit synchronisiertem Wiedergabe-Cursor anzeigt (ähnlich
-musescore.com), statt bei jedem Aufruf neu zu rendern. Die Audiowiedergabe
-passiert clientseitig im Browser (MIDI-Synthese über ein SoundFont, das die
-App aus dem Sidecar ausliefert - ohne Konfiguration), nicht als
-vorgerendertes MP3.
+Nextcloud-App, die MuseScore-Partituren direkt aus Files anzeigt und im Browser
+abspielt – als originalgetreue MuseScore-Notation mit einem Wiedergabe-Cursor,
+der synchron mitläuft, statt als starrer PDF-Export.
 
-**Status: Prototyp.** Phasen 1–11 des Implementierungsplans (`PLAN.md`) sind
-umgesetzt: Konvertierungs-Pipeline, Cache/Auslieferung, SVG-Viewer mit
-Overlay-Cursor, Wiedergabe/Tempo/Mixer, Taktnavigation/Loop/Zoom/Klick-auf-
-Note, private Notizen. Phase 12 (Betrieb/Härtung - AppAPI-Verpackung,
-Sandboxing, Admin-Health-UI) ist teilweise umgesetzt (non-root
-Sidecar-Prozess); Phase 13 (Korrektur-Layer) ist bewusst zurückgestellt.
-Aus der zweiten Planungsrunde (Phasen 14-21) sind Phase 14
-(Mehrsprachigkeit DE+EN, verständliche Konvertierungsfehler über
-`error_code`, `format_version` für einen künftigen Cache-Formatwechsel),
-Phase 15 (Bedienelemente auf `@nextcloud/vue`, E5), Phase 16
-(Probentauglichkeit I: Autoscroll im Sichtband, dauerhafte Taktangabe,
-Zoom-Presets, Vollbild) und Phase 17 (Probentauglichkeit II: Tempo in BPM,
-lesbare Loop-Felder samt Bereichsmarkierung, Stimmgruppen/„meine Stimme"-
-Preset, Metronom/Einzähler, Tastaturkürzel - dabei einen realen, seit Phase
-9 unentdeckten Mixer-Bug gefunden und behoben, siehe dort) und Phase 18
-(geteilte Notizen: an Dateirechten statt eigener Rechteverwaltung
-festgemacht, 403 statt nur ausgeblendet bei fehlendem Schreibrecht, an drei
-echten Konten mit unterschiedlichen Freigaben verifiziert) umgesetzt.
-Phase 19 (Touch-Bedienung, Pinch-Zoom, Bildschirm-Wachhalten,
-SoundFont-Ladefortschritt), Phase 20 (gemessene Grenzwerte, echter
-SVG-Sanitizer statt Regex, Timeout-Default korrigiert) und Phase 21
-(Sidecar-Selbsttest, Admin-Betriebsdiagnose inkl. Cron-Prüfung) sind
-**teilweise** umgesetzt: die Abnahmen von 19 (echtes Tablet), 20
-(Orchesterpartitur, D.C. aus der MuseScore-GUI, Klangurteil) und 21
-(AppAPI-Verpackung) sind mangels Material bzw. Umfang ausdrücklich **offen**.
-Phase 22 (Bedienfläche: eine Leiste außerhalb des Scrollbereichs statt zweier
-mitscrollender, Mixer/Notizen als Overlay, Takt-Anzeige und -Eingabe in einem
-schmalen Feld, zoomabhängiges Autoscroll, Zoom über die Seitenbreite hinaus,
-Metronom auf jedem Schlag) ist umgesetzt und nachgemessen.
-Aus dem Codereview vom 2026-08-23 (Phase 23, 24 Befunde) ist **Schritt 1**
-umgesetzt: das Phase-2-Gerüst ist entfernt (die App hat damit keine eigene
-Seite mehr – `/apps/scoreview/` antwortet 404, Einstieg ist ausschließlich
-der Viewer aus Files), fünf überholte Kommentare sind korrigiert. Die
-**Schritt 2** ebenfalls: ESLint und Stylelint nach Nextcloud-Standard, 32
-PHPUnit-Tests gegen OCP-Mocks, 13 pytest-Tests für den Sidecar-Parser und
-GitHub-Actions für CI und Release-Tarball – zusammen mit den 99 vitest-Tests
-prüft jetzt für alle drei Sprachen des Repos etwas automatisch. **Schritt 3**
-ebenfalls: das seit Nextcloud 29 veraltete `IConfig` ist durch `IAppConfig`
-ersetzt (und damit typsicher), das Sidecar-Secret wird als sensibel geführt
-und in `occ config:list` ausgeblendet, und die Administrationsseite ist eine
-Vue-Komponente auf `@nextcloud/vue` statt 163 Zeilen handgeschriebenem DOM.
-**Schritt 4** ebenfalls, die fünf Befunde mit Außenwirkung: die CSP-Lockerung
-für die Audio-Dekodierung galt instanzweit und gilt jetzt nur noch auf
-Files-Seiten; eine fehlgeschlagene Seitenladung ist sichtbar und
-wiederholbar statt endgültig; ein Klick abseits der Noten springt nicht mehr
-(und ein Wischen auf dem Tablet erst recht nicht); Cache und Notizen
-gelöschter Dateien und Konten werden aufgeräumt – die Notizen bewusst erst,
-wenn die Datei auch aus dem Papierkorb verschwunden ist; und zu große
-Partituren werden mit eigenem Fehlercode abgelehnt statt in einen Speicher-
-oder Timeout-Fehler zu laufen. **Schritt 5** ebenfalls: der Sidecar ist aus
-einer 515-Zeilen-Datei ein Paket geworden (`scoreview_sidecar`), läuft hinter
-gunicorn statt Flasks Entwicklungsserver, begrenzt gleichzeitige
-Konvertierungen (Standard 2 – vorher unbegrenzt) und liefert alle Artefakte
-über eine Route statt über fünf fast gleiche. **Schritt 6** ebenfalls, der
-größte Posten: `ScoreViewer.vue` ist von 1977 auf 1216 Zeilen geschrumpft und
-in sieben Composables unter `src/composables/` zerlegt (Konvertierungsstatus,
-Notizen, Zoom, Autoscroll, Metronom, Loop, Wiedergabe); die fünf
-Auslieferungsrouten sind auch auf der PHP-Seite zu einer zusammengefallen.
-**Schritt 7** schließt den Review ab: statt zweier dauerhafter
-rAF-Schleifen läuft eine (gemessen 60 statt 120 Rückrufe pro Sekunde im
-Leerlauf), SVG-Seiten werden beim Wegscrollen wieder freigegeben (1–2 von 5
-im DOM statt aller fünf), und die Store-Metadaten stimmen. **23 der 24
-Befunde sind damit abgearbeitet** – offen bleibt allein das
-`<screenshot>`-Element, weil dafür eine Partitur nötig ist, deren Rechte
-geklärt sind (siehe `PLAN.md`).
-Siehe `PLAN.md` für den vollständigen Stand inklusive offener Punkte.
+Gedacht für Chor- und Ensemblearbeit: Die Noten sehen aus wie die eigenen Noten,
+jede Stimme ist einzeln hörbar, und jeder Takt ist in einem Klick erreichbar.
 
-**Vorausgesetzt:** ein erreichbarer MuseScore-Sidecar (siehe `sidecar/`) -
-die App läuft nicht ohne ihn (E3 in `PLAN.md`).
+## Was die App kann
 
-## Repo-Layout
+**Noten lesen.** MuseScores eigenes Seitenbild als Vektorgrafik – Zoom ohne
+Qualitätsverlust, Zoom-Presets, Vollbild, und ein Autoscroll, das den laufenden
+Takt im Sichtband hält.
 
-- `spike/` – Wegwerfcode aus Phase 1 (isolierter Sync-Spike, historisch) plus
-  `spike/test-scores/` mit lokalen Testpartituren (nicht committet, bis auf
-  eine selbst komponierte Ausnahme - siehe dortige README).
-- `sidecar/` – MuseScore-CLI-Docker-Image + HTTP-API (Paket
-  `scoreview_sidecar`, hinter gunicorn). Läuft als
-  eigenständiger Container neben Nextcloud, ist nicht Teil des App-Pakets.
-  Siehe `sidecar/README.md` für Betrieb, API und Sicherheitshinweise.
-- `scoreview/` – die eigentliche Nextcloud-App, Layout analog zu bestehenden
-  Nextcloud-Apps (`appinfo/`, `lib/`, `src/`, `js/`, `templates/`, `tests/`,
-  `img/`, `l10n/`). Bei einer Veröffentlichung wird nur dieses Verzeichnis
-  als Release-Tarball gepackt.
-- `PLAN.md` – Umsetzungsplan mit Architekturentscheidungen (E1-E3),
-  verifizierter Faktenbasis (M1-M7) und Phasenstatus. Erste Anlaufstelle für
-  „warum ist das so gebaut" und „was ist noch offen".
+**Hören, was man üben will.** Die Wiedergabe wird im Browser synthetisiert, nicht
+als fertiges MP3 abgespielt. Deshalb lässt sich pro Stimme die Lautstärke regeln,
+stummschalten und solo hören, das Tempo in BPM ändern und ein Metronom
+zuschalten – auf jedem Schlag oder nur auf dem Taktanfang. „Meine Stimme" hebt
+eine Stimme hervor und lässt die übrigen leise mithörbar.
+
+**Gezielt proben.** Taktnavigation mit dauerhaft sichtbarer Taktangabe, ein Loop
+über einen frei gewählten Taktbereich mit Markierung im Notenbild, und ein Klick
+auf eine Note springt genau dorthin.
+
+**Notizen machen.** Privat oder mit allen geteilt, die die Datei sehen. Sie
+hängen an einer musikalischen Position statt an Pixeln und überstehen deshalb
+ein Neurendern und einen Re-Upload derselben Partitur.
+
+**Auf dem Tablet am Notenständer.** Touch-Bedienung, Pinch-Zoom und ein
+Bildschirm, der während der Wiedergabe nicht schlafen geht.
+
+Tastatur im Viewer: `Leertaste` Start/Stopp · `←` `→` Takt zurück/vor · `L` Loop
+· `+` `−` Zoom · `0` Seitenbreite.
+
+Oberfläche auf Deutsch und Englisch.
+
+## Wie es funktioniert
+
+Eine hochgeladene `.mscz`-Datei wird **einmalig** serverseitig konvertiert –
+über einen MuseScore-Sidecar zu Notenseiten (SVG), MIDI und Timing-Daten – und
+das Ergebnis gecacht. Erneutes Öffnen rendert nicht neu; erst eine Änderung an
+der Datei stößt eine neue Konvertierung an. Die Audiowiedergabe passiert
+clientseitig im Browser, mit einem SoundFont, das die App ohne Konfiguration
+selbst ausliefert.
+
+Ausführlich in [docs/architecture.md](docs/architecture.md).
+
+## Voraussetzungen
+
+- Nextcloud 31–35, PHP 8.1–8.5
+- Ein erreichbarer **MuseScore-Sidecar** (in `sidecar/` enthalten, läuft als
+  eigener Container). Die App läuft nicht ohne ihn – warum, steht unter
+  [E3](docs/architecture.md#e3-der-sidecar-ist-voraussetzung). Auf
+  SaaS-gehosteten Nextcloud-Instanzen ist ScoreView damit nicht installierbar.
+
+## Installation
+
+```sh
+# 1. Konvertierungsdienst bauen und starten
+docker build -t scoreview-musescore-cli sidecar/
+docker network create scoreview-net
+docker network connect scoreview-net <nextcloud-container>
+docker run -d --name scoreview-sidecar --network scoreview-net \
+  -e SCOREVIEW_SIDECAR_SECRET="$(openssl rand -hex 32)" \
+  --memory=2g --pids-limit=512 scoreview-musescore-cli
+
+# 2. App aktivieren
+occ app:enable scoreview
+```
+
+Danach unter **Einstellungen → Verwaltung → ScoreView** die Sidecar-Adresse und
+das Secret eintragen. Es fehlen noch zwei einmalige Schritte – die
+Mimetype-Registrierung für `.mscz` und Background-Jobs im Modus `cron`:
+**[vollständige Anleitung](docs/installation.md)**.
+
+## Dokumentation
+
+| Dokument | Inhalt |
+|---|---|
+| [Installation und Konfiguration](docs/installation.md) | Einrichtung Schritt für Schritt, Einstellungen, Aktualisieren |
+| [Architektur](docs/architecture.md) | Aufbau, Entwurfsentscheidungen, Datenfluss, Formatgrundlagen |
+| [Grenzwerte und Einschränkungen](docs/limits.md) | Gemessene Werte, bekannte Lücken, was die App bewusst nicht tut |
+| [Troubleshooting](docs/troubleshooting.md) | Fehlerbilder und was hilft |
+| [Entwicklung](docs/development.md) | Bauen, testen, Konventionen, Release |
+| [Sidecar](sidecar/README.md) | Betrieb und HTTP-API des Konvertierungsdienstes |
+
+## Mitarbeiten
+
+Siehe [CONTRIBUTING.md](CONTRIBUTING.md). Fehler und Wünsche gehören in die
+[Issues](https://github.com/AndiMb/scoreview/issues).
 
 ## Lizenz
 
 AGPL-3.0-or-later, siehe [LICENSE](LICENSE).
+
+Das mitgelieferte SoundFont stammt aus der MuseScore-Installation im
+Sidecar-Image (MuseScore General von S. Christian Collins, MIT).

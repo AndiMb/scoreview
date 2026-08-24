@@ -1,10 +1,9 @@
-"""WSGI-Einstiegspunkt fuer gunicorn (Phase 23/Schritt 5, Befund A6).
+"""WSGI-Einstiegspunkt fuer gunicorn.
 
-Bis hierher startete ``server.py`` Flasks eingebauten Entwicklungsserver
-(``app.run(...)``) - Werkzeug warnt beim Start selbst davor, und zu Recht:
-kein Worker-Management, kein definiertes Verhalten unter Last, kein Neustart
-nach dem Absturz eines Threads. Das war die letzte Stelle, an der der
-Prototypenstand noch im Betriebsmodell steckte.
+Flasks eingebauter Entwicklungsserver (``app.run(...)``) waere hier fehl am
+Platz - Werkzeug warnt beim Start selbst davor, und zu Recht: kein
+Worker-Management, kein definiertes Verhalten unter Last, kein Neustart
+nach dem Absturz eines Threads.
 
 **Genau ein Worker, mehrere Threads** (siehe Dockerfile). Die Job-Registry
 liegt im Speicher des Prozesses (``jobs.JOBS``); mit mehreren Workern

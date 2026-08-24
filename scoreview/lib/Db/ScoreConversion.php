@@ -36,7 +36,7 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	public const STATUS_ERROR = 'error';
 
 	/**
-	 * Feste Wertemenge (Phase 14) - erlaubt eine feste Uebersetzung je Code
+	 * Feste Wertemenge - erlaubt eine feste Uebersetzung je Code
 	 * beim Anzeigen (siehe ScoreViewer.vue errorCodeText()) statt eines
 	 * rohen, nur einmal in der Sprache des Konvertierenden geschriebenen
 	 * Fehlertexts. `ERROR_UNKNOWN` ist zugleich expliziter Code und Fallback

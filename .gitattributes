@@ -1,5 +1,5 @@
 # Textdateien werden im Repo als LF gespeichert UND als LF ausgecheckt -
-# auch auf Windows mit core.autocrlf=true (Codereview Phase 23/Schritt 2).
+# auch auf Windows mit core.autocrlf=true.
 #
 # Grund: die committeten Blobs waren ohnehin schon LF, aber der Windows-
 # Working-Tree bekam CRLF. Damit meldet ESLints `@stylistic/linebreak-style`

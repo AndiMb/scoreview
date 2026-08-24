@@ -1,5 +1,5 @@
-# Baut den App-Tarball zu einem Tag (Codereview Phase 23/Schritt 2, Befund
-# C6). Der Grund, warum das ueberhaupt eine eigene Automatik braucht:
+# Baut den App-Tarball zu einem Tag. Der Grund, warum das ueberhaupt eine
+# eigene Automatik braucht:
 # `scoreview/js/` ist gitignored, ein aus dem Repo gepacktes `scoreview/`
 # enthaelt also KEIN einziges Frontend-Bundle und waere unbrauchbar. Der
 # Tarball muss aus einem echten Build entstehen, nicht aus einem Checkout.
@@ -49,7 +49,7 @@ jobs:
         # --classmap-authoritative bewusst hier statt in composer.json:
         # dauerhaft gesetzt muesste man nach jeder neuen Klasse
         # `composer dump-autoload` laufen lassen, sonst finden die Tests sie
-        # nicht - eine Falle, die in Schritt 4 genau einmal zugeschnappt ist.
+        # nicht - eine Falle, die schon einmal zugeschnappt ist.
         # Fuer das Release ist der authoritative Classmap dagegen richtig.
         run: composer install --no-dev --no-interaction --no-progress --optimize-autoloader --classmap-authoritative
 

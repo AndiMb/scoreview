@@ -3,14 +3,13 @@
 MuseScore schreibt rund zwoelf Zeilen Qt-Logausgabe (Locale-Warnung,
 DBus-Fehler) VOR das JSON auf stdout; das JSON beginnt erst beim ersten
 ``\\n{\\n``. Das ist bekanntes Verhalten (MuseScore-Issue #13304) und darf
-laut PLAN.md "nicht per Zufall funktionieren". Bis zum Codereview war genau
-diese Stelle ungetestet - sie faellt erst auf, wenn eine neue
-MuseScore-Version das Ausgabeformat aendert, und dann als unspezifischer
-Konvertierungsfehler.
+laut docs/architecture.md M3 "nicht per Zufall funktionieren". Diese Stelle
+faellt sonst erst auf, wenn eine neue MuseScore-Version das Ausgabeformat
+aendert, und dann als unspezifischer Konvertierungsfehler.
 
 ``subprocess.run`` wird ersetzt, damit die Tests ohne MuseScore, ohne Xvfb
 und in Millisekunden laufen. Was der Prozess selbst liefert, prueft der
-Selbsttest gegen das echte Image (``GET /selftest``, Phase 21).
+Selbsttest gegen das echte Image (``GET /selftest``).
 """
 
 import json
@@ -93,8 +92,8 @@ def test_meldet_exitcode_mit_stderr_auszug(monkeypatch):
 def test_ruft_mscore_mit_timeout_und_xvfb_auf(monkeypatch):
     # xvfb-run ist Pflicht (mscore4portable braucht auch fuer reine
     # CLI-Konvertierung einen X-Server), timeout ist die harte Schranke
-    # gegen einen haengenden Prozess (Risiko 6 im Plan). Beides darf bei
-    # einem Umbau nicht stillschweigend wegfallen.
+    # gegen einen haengenden Prozess. Beides darf bei einem Umbau nicht
+    # stillschweigend wegfallen.
     nutzlast = {"svgs": ["abc"]}
     calls = fake_run(monkeypatch, b"\n" + json.dumps(nutzlast, indent=1).encode())
 

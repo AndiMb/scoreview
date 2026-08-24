@@ -16,12 +16,11 @@ const ZOOM_STEP = 1.2
  * Alles, was die Größe des Notenbilds bestimmt: Zoomfaktor, Presets, die
  * Kopplung an die Fensterbreite, Vollbild und die Pinch-Geste.
  *
- * Drittes Composable aus der Zerlegung von `ScoreViewer.vue`
- * (Codereview-Befund B1, Phase 23/Schritt 6). Die fünf Bereiche gehören
- * zusammen, weil sie sich gegenseitig bedingen: Vollbild erzwingt „ganze
- * Seite", das schaltet die Breitenkopplung ab, und die muss beim Verlassen
- * wiederhergestellt werden. Verteilt auf drei Composables wäre genau diese
- * Verschränkung unsichtbar geworden.
+ * Drittes Composable aus der Zerlegung von `ScoreViewer.vue`. Die fünf
+ * Bereiche gehören zusammen, weil sie sich gegenseitig bedingen: Vollbild
+ * erzwingt „ganze Seite", das schaltet die Breitenkopplung ab, und die
+ * muss beim Verlassen wiederhergestellt werden. Verteilt auf drei
+ * Composables wäre genau diese Verschränkung unsichtbar geworden.
  *
  * Die reine Rechnung bleibt in `scoreLayout.js` (dort ohne DOM testbar);
  * hier steht ausschließlich die DOM-Messung und der Zustand.
@@ -34,10 +33,9 @@ const ZOOM_STEP = 1.2
 export function useZoom({ rootEl, scrollEl }) {
 	const zoom = ref(1)
 	// Solange niemand selbst gezoomt hat, folgt der Zoom der Fenstergröße
-	// („Seitenbreite") - das ist das Verhalten, das die Seite bis Phase 21
-	// zwangsläufig hatte (`width: 100%`). Ab dem ersten eigenen Zoom gilt der
-	// gewählte Faktor absolut, sonst würde die App die Entscheidung der
-	// Nutzerin bei jedem Drehen des Tablets wieder verwerfen.
+	// („Seitenbreite"). Ab dem ersten eigenen Zoom gilt der gewählte Faktor
+	// absolut, sonst würde die App die Entscheidung der Nutzerin bei jedem
+	// Drehen des Tablets wieder verwerfen.
 	const followsWidth = ref(true)
 	const isFullscreen = ref(false)
 	// Geometrie der jeweils zuletzt geladenen Seite je Index (Zoom-Presets) -
@@ -77,8 +75,8 @@ export function useZoom({ rootEl, scrollEl }) {
 
 	/**
 	 * Strg+Mausrad zoomt die Partitur, nicht die Nextcloud-Oberfläche
-	 * (dasselbe Motiv wie beim Pinch-Zoom aus Phase 19). Ohne Strg bleibt das
-	 * Rad gewöhnliches Scrollen.
+	 * (dasselbe Motiv wie beim Pinch-Zoom). Ohne Strg bleibt das Rad
+	 * gewöhnliches Scrollen.
 	 *
 	 * @param {WheelEvent} event
 	 */
@@ -109,8 +107,8 @@ export function useZoom({ rootEl, scrollEl }) {
 		if (!pagesEl) {
 			return
 		}
-		// Seite 0 ist praktisch immer zuerst geladen (Phase 8: sichtbare
-		// Seiten zuerst) - als Fallback irgendeine geladene Seite, falls die
+		// Seite 0 ist praktisch immer zuerst geladen (sichtbare Seiten
+		// zuerst) - als Fallback irgendeine geladene Seite, falls die
 		// Partitur mit Seite 0 aus dem Bild gescrollt sein sollte.
 		const dims = pageDimensions.value[0] ?? Object.values(pageDimensions.value)[0]
 		if (preset === 'width') {
@@ -125,9 +123,9 @@ export function useZoom({ rootEl, scrollEl }) {
 			if (!dims?.viewBox) {
 				return
 			}
-			// Die Leiste liegt seit Phase 22 außerhalb des Scroll-Elements -
-			// dessen clientHeight IST die verfügbare Höhe, es ist nichts mehr
-			// abzuziehen (vorher: Höhe der beiden sticky Leisten).
+			// Die Leiste liegt außerhalb des Scroll-Elements - dessen
+			// clientHeight IST die verfügbare Höhe, es ist nichts mehr
+			// abzuziehen.
 			set(computeFitPageZoom(dims.viewBox, pagesEl.clientWidth, scroll.clientHeight))
 		} else if (preset === 'actual') {
 			set(computeActualSizeZoom(dims?.sizeMm ?? null))
@@ -183,13 +181,13 @@ export function useZoom({ rootEl, scrollEl }) {
 			applyPreset('page')
 		} else if (followedWidthBeforeFullscreen) {
 			// Beim Verlassen nicht mit dem Vollbild-Zoom im kleinen Fenster
-			// zurückbleiben (Phase 22) - dort passte „ganze Seite" zu einer
-			// Fläche, die es nicht mehr gibt.
+			// zurückbleiben - dort passte „ganze Seite" zu einer Fläche, die es
+			// nicht mehr gibt.
 			applyPreset('width')
 		}
 	}
 
-	// --- Pinch (Phase 19) ---------------------------------------------------
+	// --- Pinch ---------------------------------------------------------------
 	// Reagiert nur auf echte Zweifinger-Gesten; ein einzelner Finger scrollt
 	// normal weiter (kein preventDefault dafür).
 

@@ -18,8 +18,8 @@ use OCP\Files\SimpleFS\ISimpleFolder;
  * Bearbeitung ändert den etag und landet damit automatisch in einem neuen
  * Unterordner statt den Cache einer älteren Version zu überschreiben; der
  * alte Unterordner (und sein DB-Datensatz) wird beim nächsten erfolgreichen
- * markReady() derselben fileId aufgeräumt (gcOldVersions) - vorher (Phase 3)
- * wuchs das unbegrenzt, siehe PLAN.md Phase 7.
+ * markReady() derselben fileId aufgeräumt (gcOldVersions) - ohne das wüchse
+ * der Cache unbegrenzt.
  */
 class ConversionService {
 	private const MIDI_FILE = 'score.mid';
@@ -29,12 +29,11 @@ class ConversionService {
 
 	/**
 	 * Erhoehen bei jedem kuenftigen Cache-Formatwechsel (z.B. ein zweites
-	 * serverseitiges Layout, siehe PLAN.md Phase 16/20) - `status()`/
-	 * `serveCachedFile()` behandeln einen Datensatz mit kleinerer
-	 * `format_version` dann automatisch wie "nicht fertig" statt Cache-Dateien
-	 * eines nicht mehr passenden Formats auszuliefern oder mit 500 zu enden
-	 * (PLAN.md Phase 12 "Neu gefundene Luecke"/Phase 14). In DIESER Runde ist
-	 * kein Formatwechsel geplant - die Konstante existiert vorsorglich.
+	 * serverseitiges Layout) - `status()`/`serveCachedFile()` behandeln
+	 * einen Datensatz mit kleinerer `format_version` dann automatisch wie
+	 * "nicht fertig" statt Cache-Dateien eines nicht mehr passenden Formats
+	 * auszuliefern oder mit 500 zu enden. Aktuell ist kein Formatwechsel
+	 * geplant - die Konstante existiert vorsorglich.
 	 */
 	public const CURRENT_FORMAT_VERSION = 1;
 
@@ -86,7 +85,7 @@ class ConversionService {
 		$this->gcOldVersions($conversion->getFileId(), $conversion->getEtag());
 	}
 
-	/** Phase 14 - siehe CURRENT_FORMAT_VERSION. */
+	/** Siehe CURRENT_FORMAT_VERSION. */
 	public function isCurrentFormat(ScoreConversion $conversion): bool {
 		return $conversion->getFormatVersion() === self::CURRENT_FORMAT_VERSION;
 	}
@@ -97,7 +96,7 @@ class ConversionService {
 		$this->mapper->update($conversion);
 	}
 
-	/** Aus meta.json (`metadata.pages` von MuseScore) statt einer eigenen Spalte - siehe PLAN.md Phase 7. */
+	/** Aus meta.json (`metadata.pages` von MuseScore) statt einer eigenen Spalte. */
 	public function getPageCount(int $fileId, string $etag): int {
 		$meta = json_decode($this->getMetaJsonFile($fileId, $etag)->getContent(), true);
 		return (int)($meta['pages'] ?? 0);
@@ -105,14 +104,12 @@ class ConversionService {
 
 	/**
 	 * Die auslieferbaren Artefakte als Allowlist: Name aus der URL ->
-	 * [Dateiname im Cache, MIME-Typ] (Codereview-Befund B2).
-	 *
-	 * Bis Phase 23 gab es dafuer fuenf fast identische Getter hier, fuenf
-	 * fast identische Controller-Methoden und fuenf fast identische
-	 * Flask-Handler im Sidecar - zusammen rund 120 Zeilen, die sich nur in
-	 * Dateiname und MIME-Typ unterschieden. Ein weiteres Artefakt (etwa ein
-	 * zweites serverseitiges Layout, PLAN.md Phase 16) ist jetzt ein Eintrag
-	 * in dieser Tabelle statt sechs neuer Methoden.
+	 * [Dateiname im Cache, MIME-Typ]. Vermeidet fuenf fast identische Getter
+	 * hier, fuenf fast identische Controller-Methoden und fuenf fast
+	 * identische Flask-Handler im Sidecar - zusammen rund 120 Zeilen, die
+	 * sich nur in Dateiname und MIME-Typ unterschieden. Ein weiteres
+	 * Artefakt (etwa ein zweites serverseitiges Layout) ist damit nur ein
+	 * Eintrag in dieser Tabelle statt sechs neuer Methoden.
 	 *
 	 * Bewusst eine Allowlist und kein Dateipfad: der Name kommt aus der URL.
 	 * Seiten werden getrennt behandelt, weil sie eine Nummer tragen (siehe
@@ -200,12 +197,10 @@ class ConversionService {
 
 	/**
 	 * Löscht ALLES zu einer fileId - Cache-Ordner und Statuszeilen aller
-	 * etag-Versionen (Codereview-Befund A4).
-	 *
-	 * Bis Phase 23 gab es das nicht: eine gelöschte Partitur hinterließ ihren
-	 * IAppData-Ordner (bei fünf Seiten über 1 MB) und ihre DB-Zeilen für
-	 * immer. Aufgerufen aus Listener\NodeDeletedListener und, als Netz für
-	 * verpasste Ereignisse, aus BackgroundJob\CleanupOrphansJob.
+	 * etag-Versionen. Ohne dieses Aufräumen hinterließe eine gelöschte
+	 * Partitur ihren IAppData-Ordner (bei fünf Seiten über 1 MB) und ihre
+	 * DB-Zeilen für immer. Aufgerufen aus Listener\NodeDeletedListener und,
+	 * als Netz für verpasste Ereignisse, aus BackgroundJob\CleanupOrphansJob.
 	 */
 	public function deleteAllForFile(int $fileId): void {
 		try {

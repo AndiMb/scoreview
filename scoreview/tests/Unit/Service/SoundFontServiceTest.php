@@ -17,11 +17,11 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 /**
- * getOrFetch() traegt die Zusage aus Phase 9, dass Wiedergabe den Sidecar
- * NICHT braucht - nur die Konvertierung. Das haengt allein an den
+ * getOrFetch() traegt die Zusage, dass Wiedergabe den Sidecar NICHT
+ * braucht - nur die Konvertierung. Das haengt allein an den
  * Rueckfallpfaden hier, und die sind von aussen nur als "es kommt Ton" bzw.
  * "es kommt keiner" sichtbar. Genau die Sorte Logik, die ein Refactoring
- * still umdreht (Codereview-Befund B5).
+ * still umdreht.
  */
 class SoundFontServiceTest extends TestCase {
 	private IAppData&MockObject $appData;
@@ -107,7 +107,7 @@ class SoundFontServiceTest extends TestCase {
 
 	public function testLaedtNeuWennDasImageEinAnderesSoundFontMitbringt(): void {
 		// Content-Hash als Cache-Schluessel: ein SoundFont-Wechsel im Image
-		// invalidiert Server- und Browser-Cache automatisch (Phase 9).
+		// invalidiert Server- und Browser-Cache automatisch.
 		$this->withCachedFile(40_000_000);
 		$this->sidecar->method('fetchSoundFontInfo')
 			->willReturn(['available' => true, 'version' => 'neu456']);

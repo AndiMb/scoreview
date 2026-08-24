@@ -8,7 +8,7 @@ use OCA\ScoreView\Db\ScoreConversion;
 
 /**
  * Traegt zusaetzlich zur Nachricht einen `error_code` aus
- * ScoreConversion::ERROR_* (Phase 14) - so muessen ConvertScoreJob/
+ * ScoreConversion::ERROR_* - so muessen ConvertScoreJob/
  * PollConversionJob beim Aufrufen von ConversionService::markError() nicht
  * selbst aus der (frei formulierten) Nachricht auf einen Code zurueckschliessen.
  * Default ERROR_UNKNOWN, weil die meisten bestehenden Wurfstellen keinen

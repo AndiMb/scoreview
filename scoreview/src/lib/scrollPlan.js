@@ -1,6 +1,5 @@
-// Reine Rechnung für das Autoscroll-Nachführen der Wiedergabe (Phase 16,
-// PLAN.md "Probentauglichkeit I: Mitlesen"; zoomabhängig neu gefasst in
-// Phase 22). Kennt keine DOM-Objekte, nur Zahlen (Dokument-/Viewport-
+// Reine Rechnung für das Autoscroll-Nachführen der Wiedergabe beim Mitlesen.
+// Kennt keine DOM-Objekte, nur Zahlen (Dokument-/Viewport-
 // Koordinaten in px) - genau wie scoreLayout.js ohne DOM testbar (siehe
 // CLAUDE.md). ScoreViewer.vue liefert die Zahlen aus getBoundingClientRect()/
 // scrollTop und wendet ein zurückgegebenes Ziel per scrollTo() an; diese
@@ -15,16 +14,17 @@ const DEFAULT_MARGIN_PX = 24
  * Hält das Cursor-Rechteck (bei mehrsystemigen Partituren: die ganze
  * Notenzeile, siehe unten) vollständig im Blick.
  *
- * Bis Phase 21 hielt diese Funktion den Cursor in einem festen Sichtband
- * (mittlere 30 % der Viewporthöhe) und meldete "nichts zu tun", sobald er
- * das Band irgendwo überlappte. Das war die Antwort auf ein reales Problem
- * (ein Cursor, der höher als das Band ist, kann nie mit beiden Kanten darin
- * liegen - das Band-Nachziehen führte zu endlosem Hoch-Runter-Springen bei
- * SATB-Partituren), taugt aber nicht über den Zoombereich hinweg: je stärker
- * der Zoom, desto höher das System, und "überlappt das Band" heißt dann
- * "die Hälfte der Zeile steht unter der Kante".
+ * Ein festes Sichtband (mittlere 30 % der Viewporthöhe, "nichts zu tun",
+ * sobald der Cursor es irgendwo überlappt) wäre keine Lösung: ein Cursor,
+ * der höher als das Band ist, kann nie mit beiden Kanten darin liegen - das
+ * Band-Nachziehen führte bei SATB-Partituren zu endlosem Hoch-Runter-
+ * Springen. Und selbst ohne dieses Problem taugte es nicht über den
+ * Zoombereich hinweg: je stärker der Zoom, desto höher das System, und
+ * "überlappt das Band" hieße dann "die Hälfte der Zeile steht unter der
+ * Kante".
  *
- * Deshalb jetzt am tatsächlich verfügbaren Platz entlang:
+ * Stattdessen richtet sich das Nachführen am tatsächlich verfügbaren Platz
+ * entlang:
  *
  * - Passt das System mit Rand in den Viewport, wird es VOLLSTÄNDIG sichtbar
  *   gehalten. Nachgeführt wird nur, wenn es das nicht ist - und dann so, dass
@@ -37,7 +37,7 @@ const DEFAULT_MARGIN_PX = 24
  * Beide Zweige sind stabil, und zwar nachrechenbar, nicht nur empirisch:
  * nach einem ausgeführten Nachführen erfüllt die neue Position die jeweilige
  * "ist in Ordnung"-Bedingung, der nächste Aufruf liefert also `null` statt
- * eines zweiten Sprungs. Genau daran war die Bandfassung gescheitert.
+ * eines zweiten Sprungs. Genau daran scheitert die Bandvariante von oben.
  *
  * @param {object} params
  * @param {number} params.cursorTop Position der Cursor-Oberkante in
@@ -87,7 +87,7 @@ export function planAutoScroll({
 }
 
 /**
- * Waagerechtes Gegenstück (Phase 22): seit die Seite über die Containerbreite
+ * Waagerechtes Gegenstück: seit die Seite über die Containerbreite
  * hinaus gezoomt werden kann (siehe ScorePage.vue), kann die aktuelle Stelle
  * auch seitlich aus dem Bild laufen. Zentriert sie dann - anders als senkrecht
  * gibt es hier keine sinnvolle "Vorausschau"-Richtung, weil das Notenbild in
@@ -126,8 +126,8 @@ export function planHorizontalScroll({
 
 /**
  * Ob das automatische Nachführen gerade pausieren soll, weil vor Kurzem
- * manuell gescrollt wurde (PLAN.md: "bei manuellem Scrollen aussetzen und
- * nach kurzer Zeit wieder übernehmen"). Reine Zeitvergleichs-Funktion, damit
+ * manuell gescrollt wurde ("bei manuellem Scrollen aussetzen und nach
+ * kurzer Zeit wieder übernehmen"). Reine Zeitvergleichs-Funktion, damit
  * die eigentliche Zeitmessung (Date.now(), Scroll-Events) beim Aufrufer
  * bleibt.
  *

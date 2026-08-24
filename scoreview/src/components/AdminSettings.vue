@@ -54,10 +54,10 @@
 		</NcSettingsSection>
 
 		<!--
-			Betriebsdiagnose (Phase 21): macht sichtbar, was sonst nur im Log
+			Betriebsdiagnose: macht sichtbar, was sonst nur im Log
 			oder gar nicht steht - insbesondere ob der Nextcloud-Cron laeuft.
 			Ohne ihn bleibt jede Konvertierung stumm auf "pending" stehen.
-			Seit Phase 23/Schritt 3 als NcNoteCard je Zeile statt als eingefaerbte
+			Als NcNoteCard je Zeile statt als eingefaerbte
 			<div>s: die Karten tragen Symbol UND Rolle, die Aussage kommt damit
 			auch ohne Farbwahrnehmung und im Screenreader an.
 		-->

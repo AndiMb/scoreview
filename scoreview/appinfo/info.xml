@@ -9,10 +9,10 @@
 	<summary lang="de">Notenblätter aus Files öffnen: einmal konvertiert, synchron abgespielt</summary>
 	<summary lang="en">Open sheet music from Files: converted once, played back in sync</summary>
 	<description lang="de"><![CDATA[
-**Prototyp.** ScoreView zeigt MuseScore-Partituren (.mscz) direkt aus Files an
-- als originalgetreue MuseScore-Notation (SVG) mit einem Wiedergabe-Cursor,
-der synchron zur clientseitig synthetisierten MIDI-Wiedergabe mitläuft,
-statt als starrer PDF-Export.
+ScoreView zeigt MuseScore-Partituren (.mscz) direkt aus Files an - als
+originalgetreue MuseScore-Notation (SVG) mit einem Wiedergabe-Cursor, der
+synchron zur clientseitig synthetisierten MIDI-Wiedergabe mitläuft, statt als
+starrer PDF-Export.
 
 Eine hochgeladene .mscz-Datei wird über einen separaten MuseScore-Sidecar
 einmalig zu Notenseiten (SVG), MIDI und Timing-Daten konvertiert und danach
@@ -24,15 +24,17 @@ SoundFont für die Wiedergabe muss nicht konfiguriert werden - die App liefert
 das aus, das der Sidecar mitbringt; eine eigene Adresse lässt sich in den
 Einstellungen hinterlegen.
 
-Funktionsumfang: Taktnavigation, Loop, Zoom, Klick-auf-Note-Sprung, Mixer
-(Lautstärke/Mute/Solo pro Stimme, Tempo), private Notizen an musikalischen
-Ankern (Takt-Position, übersteht einen Re-Upload).
+Funktionsumfang: Zoom-Presets, Vollbild und Autoscroll im Takt der Wiedergabe;
+Taktnavigation, Loop über einen Taktbereich, Klick-auf-Note-Sprung und
+Tastaturkürzel; Mixer mit Lautstärke/Mute/Solo pro Stimme, „meine Stimme"-Preset,
+Tempo in BPM und Metronom; Notizen an musikalischen Ankern (privat oder
+geteilt, überstehen einen Re-Upload); Touch-Bedienung mit Pinch-Zoom für das
+Tablet am Notenständer.
 	]]></description>
 	<description lang="en"><![CDATA[
-**Prototype.** ScoreView displays MuseScore scores (.mscz) directly from
-Files - as faithful MuseScore notation (SVG) with a playback cursor that
-follows client-side synthesized MIDI playback in sync, instead of a static
-PDF export.
+ScoreView displays MuseScore scores (.mscz) directly from Files - as faithful
+MuseScore notation (SVG) with a playback cursor that follows client-side
+synthesized MIDI playback in sync, instead of a static PDF export.
 
 An uploaded .mscz file is converted once, via a separate MuseScore sidecar,
 to notation pages (SVG), MIDI and timing data, then cached: opening the
@@ -43,9 +45,12 @@ package). No SoundFont needs to be configured for playback - the app serves
 the one the sidecar brings along; a custom address can be set in the
 admin settings.
 
-Feature set: measure navigation, loop, zoom, click-to-note jump, mixer
-(per-voice volume/mute/solo, tempo), private annotations anchored to
-musical position (survives a re-upload).
+Feature set: zoom presets, fullscreen and auto-scrolling in time with playback;
+measure navigation, looping over a measure range, click-to-note jump and
+keyboard shortcuts; a mixer with per-voice volume/mute/solo, a "my voice"
+preset, tempo in BPM and a metronome; annotations anchored to musical
+position (private or shared, surviving a re-upload); touch controls with
+pinch-zoom for a tablet on the music stand.
 	]]></description>
 	<version>0.0.24</version>
 	<licence>agpl</licence>

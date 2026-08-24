@@ -1,14 +1,14 @@
-"""Tests fuer die HTTP-Oberflaeche nach dem Umbau (Phase 23/Schritt 5).
+"""Tests fuer die HTTP-Oberflaeche.
 
-Zwei Dinge, die dabei neu sind und deshalb belegt gehoeren:
+Zwei Eigenschaften, die deshalb belegt gehoeren:
 
-* Die Secret-Pruefung liegt nicht mehr als ``require_secret()`` in zwoelf
+* Die Secret-Pruefung liegt nicht als ``require_secret()`` in zwoelf
   Handlern, sondern in EINEM ``before_request``-Hook mit Ausnahmeliste.
-  Vorher war eine neue Route ohne Pruefung ein reiner Vergessensfehler -
-  jetzt muesste jemand den Pfad ausdruecklich in ``PUBLIC_PATHS`` eintragen.
+  Eine neue Route ohne Pruefung waere sonst ein reiner Vergessensfehler -
+  so muss jemand den Pfad ausdruecklich in ``PUBLIC_PATHS`` eintragen.
   Diese Tests sind die Gegenprobe dazu.
 * Die fuenf fast identischen Auslieferungsrouten sind zu einer
-  ``/artifact/<name>``-Route zusammengefallen (Befund B2, Sidecar-Teil).
+  ``/artifact/<name>``-Route zusammengefallen.
 """
 
 import pytest

@@ -3,10 +3,9 @@
 declare(strict_types=1);
 
 /**
- * PHP-Codingstandard nach Nextcloud-Vorgabe (Codereview Phase 23/Schritt 2,
- * Befund C5). Bis hierher lief die Pruefung nur ueber `php -l` und einen
- * echten Durchlauf gegen die Testinstanz - Formatierung war reine Disziplin,
- * wie auf der JS-Seite vor ESLint.
+ * PHP-Codingstandard nach Nextcloud-Vorgabe. Ergaenzt `php -l` und den
+ * echten Durchlauf gegen die Testinstanz um automatisierte Formatpruefung -
+ * analog zu ESLint auf der JS-Seite.
  *
  * `src` ist ausgenommen: dort liegt ausschliesslich Frontend-Code, dafuer ist
  * ESLint zustaendig (siehe eslint.config.mjs).

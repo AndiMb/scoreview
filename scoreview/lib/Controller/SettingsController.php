@@ -25,7 +25,7 @@ class SettingsController extends Controller {
 	}
 
 	/**
-	 * Betriebsdiagnose fuer die Admin-Seite (Phase 21): Sidecar erreichbar,
+	 * Betriebsdiagnose fuer die Admin-Seite: Sidecar erreichbar,
 	 * SoundFont vorhanden, Cron am Laufen, Konvertierungsstand. Bewusst
 	 * lesend und ohne Seiteneffekt - der eigentliche Selbsttest (der eine
 	 * echte Konvertierung startet) sitzt getrennt in selfTest().
@@ -36,7 +36,7 @@ class SettingsController extends Controller {
 	}
 
 	/**
-	 * Startet den Sidecar-Selbsttest (Phase 21, MuseScore-Versionspflege):
+	 * Startet den Sidecar-Selbsttest (MuseScore-Versionspflege):
 	 * eine echte Konvertierung der mitgelieferten Minipartitur, geprueft auf
 	 * die Zusagen aus M2/M4/M7. Getrennt von health(), weil er ~8s dauert
 	 * und eine Konvertierung ausloest - das soll nur passieren, wenn jemand
@@ -64,15 +64,13 @@ class SettingsController extends Controller {
 			// einmalig nach.
 			$this->appConfig->setValueString(Application::APP_ID, 'sidecar_secret', trim($sidecarSecret), sensitive: true);
 		}
-		// Default 'aus' (siehe Listener\ScoreFileListener - Phase 7): jeder
+		// Default 'aus' (siehe Listener\ScoreFileListener): jeder
 		// Upload sofort konvertieren ist die Ausnahme, kein Standardverhalten.
 		$this->appConfig->setValueBool(Application::APP_ID, 'eager_conversion', $eagerConversion);
 		// Uebersteuerung, nicht Voraussetzung: leer heisst NICHT "kein Ton",
 		// sondern "die App liefert das SoundFont selbst aus, das der ohnehin
 		// vorausgesetzte Sidecar mitbringt" (Service\SoundFontService,
-		// Controller\ConversionController::soundFontUrl()). Genau umgekehrt war
-		// es bis zur Korrektur in Phase 9 - da war das leere Feld der
-		// Auslieferungszustand und die App damit standardmaessig stumm. Gefuellt
+		// Controller\ConversionController::soundFontUrl()). Gefuellt
 		// wird das Feld nur, wer ein anderes/besseres SoundFont selbst hostet;
 		// dessen Host muss dann per HTTP(S) erreichbar sein und CORS erlauben
 		// (und wird von Listener\AddCspListener in connect-src freigegeben).

@@ -15,7 +15,7 @@ use OCP\Security\CSP\AddContentSecurityPolicyEvent;
 /**
  * @template-implements IEventListener<AddContentSecurityPolicyEvent>
  *
- * Ohne diese beiden Lockerungen scheitert die Phase-9-Wiedergabe an
+ * Ohne diese beiden Lockerungen scheitert die Wiedergabe an
  * Nextclouds strikter Default-CSP (empirisch am 2026-08-23 gegen einen
  * echten Playwright-Lauf gefunden, nicht vermutet):
  *
@@ -25,8 +25,8 @@ use OCP\Security\CSP\AddContentSecurityPolicyEvent;
  *   wie bei `eval()` (Nextclouds nonce-basierte script-src erlaubt kein
  *   `unsafe-eval`; `wasm-unsafe-eval` ist die dafür vorgesehene, auf
  *   WebAssembly beschränkte Freigabe - kein generelles eval()).
- * - Der SoundFont-Host aus der Admin-Einstellung `soundfont_url` (Phase 9,
- *   siehe Settings\AdminSettings): Nextclouds Default-`connect-src 'self'`
+ * - Der SoundFont-Host aus der Admin-Einstellung `soundfont_url` (siehe
+ *   Settings\AdminSettings): Nextclouds Default-`connect-src 'self'`
  *   blockt sonst jeden fetch() zu einer extern konfigurierten URL. Ohne
  *   gesetzte Einstellung wird nichts gelockert - dann liefert die App das
  *   SoundFont selbst aus (Controller\SoundFontController), und `'self'`
@@ -37,8 +37,8 @@ use OCP\Security\CSP\AddContentSecurityPolicyEvent;
  * Controller-Response, an der er seine CSP direkt setzen könnte. Genau für
  * diesen Fall ist AddContentSecurityPolicyEvent gedacht.
  *
- * **Reichweite, und warum hier ein Pfadvergleich steht** (Codereview-Befund
- * A1). `AddContentSecurityPolicyEvent` ist kein Werkzeug für „diese eine
+ * **Reichweite, und warum hier ein Pfadvergleich steht.**
+ * `AddContentSecurityPolicyEvent` ist kein Werkzeug für „diese eine
  * Seite": `OC\Security\CSP\ContentSecurityPolicyManager::getDefaultPolicy()`
  * dispatcht das Ereignis und merged jede registrierte Policy in die
  * Default-Policy **jeder** Response der Instanz. Ohne Eingrenzung trüge also

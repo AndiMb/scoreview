@@ -1,10 +1,11 @@
-"""Tests fuer die Nebenlaeufigkeitsgrenze (Codereview-Befund A5).
+"""Tests fuer die Nebenlaeufigkeitsgrenze.
 
-Vorher startete jedes ``POST /convert`` sofort einen Thread mit einem eigenen
-MuseScore-Prozess samt Xvfb, und ``run_score_media`` puffert zusaetzlich die
-komplette Ausgabe im Speicher (gemessen 16 MB JSON schon bei fuenf Seiten).
-Zwanzig gleichzeitig geoeffnete Partituren reichten, um den Container unter
-Speicherdruck zu setzen - und die PHP-Seite drosselte nichts.
+Ohne sie wuerde jedes ``POST /convert`` sofort einen Thread mit einem eigenen
+MuseScore-Prozess samt Xvfb starten, und ``run_score_media`` puffert
+zusaetzlich die komplette Ausgabe im Speicher (gemessen 16 MB JSON schon bei
+fuenf Seiten). Zwanzig gleichzeitig geoeffnete Partituren waeren genug, um
+den Container unter Speicherdruck zu setzen - und die PHP-Seite drosselt
+nichts.
 
 Die Grenze ist von aussen nicht sichtbar (wartende Jobs stehen schlicht auf
 "pending"), also muss sie hier gemessen werden statt geglaubt.

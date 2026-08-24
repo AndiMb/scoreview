@@ -7,8 +7,8 @@ import { measurePositionToTimeMs } from '../lib/scoreLayout.js'
  * Notizen zu einer Partitur: Laden, Anlegen, Ändern, Löschen, Anspringen -
  * und die Koordinaten für die Marker im Notenbild.
  *
- * Erstes von mehreren Composables aus der Zerlegung von `ScoreViewer.vue`
- * (Codereview-Befund B1, Phase 23/Schritt 6). Die Komponente hatte rund 60
+ * Erstes von mehreren Composables aus der Zerlegung von `ScoreViewer.vue`.
+ * Die Komponente hatte rund 60
  * Datenfelder und 50 Methoden; `reset()` setzte fünfunddreißig davon von
  * Hand zurück - jedes neue Feld war eine Stelle zum Vergessen. Hier gehört
  * der Zustand jetzt zu der Funktion, die ihn braucht, und `reset()` ist Teil
@@ -42,8 +42,8 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 	 * Koordinaten je Notiz für die Seiten-Overlays: bevorzugt die exakte Note
 	 * (elid, falls noch im aktuellen etag auffindbar), sonst die
 	 * Takt-Koordinate als Näherung - eine Notiz bleibt so auch nach einem
-	 * Re-Upload sichtbar positionierbar, nur etwas gröber (siehe PLAN.md
-	 * Phase 11 zum Anker-Design).
+	 * Re-Upload sichtbar positionierbar, nur etwas gröber (siehe
+	 * docs/architecture.md zum Anker-Design).
 	 */
 	const markers = computed(() => {
 		const notes = timeline()

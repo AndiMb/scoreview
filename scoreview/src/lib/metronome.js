@@ -1,4 +1,4 @@
-// Reine Zeitrechnung fürs Metronom/Einzähler (Phase 17). Bewusst getrennt
+// Reine Zeitrechnung fürs Metronom/Einzähler. Bewusst getrennt
 // von der eigentlichen Klickerzeugung (metronomeClick.js, braucht
 // AudioContext, deshalb dort und ungetestet wie player.js/silentClock.js).
 //
@@ -8,10 +8,9 @@
 // Datei, siehe mixerLayout.js). Der Klick kommt deshalb ausschließlich aus
 // `measures.json` (Taktzeiten liegen ohnehin vor).
 //
-// Phase 17 hat daraus nur den Taktanfang abgeleitet, mit der Begründung, ohne
-// Taktart sei ein Klick pro Schlag nicht ableitbar. Das war zu vorsichtig
-// (Nutzer-Rückmeldung: "alle Schläge, nicht nur der erste"): dieselbe
-// Schätzung, die der Einzähler seit Phase 17 benutzt (Taktdauer /
+// Ohne Taktart liesse sich vermuten, ein Klick pro Schlag sei nicht ableitbar
+// - zu vorsichtig gedacht (Nutzer-Rückmeldung: "alle Schläge, nicht nur der
+// erste"): dieselbe Schätzung, die der Einzähler benutzt (Taktdauer /
 // Viertel-Schlaglänge, siehe estimateBeatsInMeasure), trägt den Takt genauso.
 // Sie ist eine Schätzung und bleibt es - deshalb wird der Takt gleichmäßig
 // geteilt statt mit fester Schlaglänge durchgezählt: die Klicks landen dann
@@ -21,7 +20,7 @@
 /**
  * Schätzt die Schlagzahl eines Taktes aus seiner Dauer und der
  * Viertel-BPM (metadata.tempo, M8) - measures.json trägt keine eigene
- * Taktart, nur Zeiten. Für den Einzähler (Phase 17, "ein Einzähler vor dem
+ * Taktart, nur Zeiten. Für den Einzähler ("ein Einzähler vor dem
  * Loop-Start"): ohne diese Schätzung gäbe es keine Grundlage, wie viele
  * Klicks vor dem Start passen.
  *
@@ -51,7 +50,7 @@ export function computeCountInDelaysMs(beatsInMeasure, beatIntervalMs) {
 }
 
 /**
- * Welcher Schlag zu einer Wiedergabezeit gerade dran ist (Phase 22) - Basis
+ * Welcher Schlag zu einer Wiedergabezeit gerade dran ist - Basis
  * für den laufenden Metronomklick. Rein, damit die eigentliche Terminierung
  * (AudioContext-Vorlauf, Erkennen von Sprüngen) in ScoreViewer.vue bleibt.
  *
@@ -64,8 +63,7 @@ export function computeCountInDelaysMs(beatsInMeasure, beatIntervalMs) {
  * @param {number} measureEndMs Beginn des FOLGENDEN Taktes bzw. Stückende
  * @param {number} timeMs Wiedergabeposition innerhalb des Taktes
  * @param {number} quarterBpm metadata.tempo (M8), 0 erlaubt
- * @param {boolean} [everyBeat] false = nur der Taktanfang (Verhalten bis
- *   Phase 21)
+ * @param {boolean} [everyBeat] false = nur der Taktanfang
  * @return {{index:number,timeMs:number}|null} null bei unbrauchbaren Zeiten
  */
 export function resolveBeatInMeasure(measureStartMs, measureEndMs, timeMs, quarterBpm, everyBeat = true) {

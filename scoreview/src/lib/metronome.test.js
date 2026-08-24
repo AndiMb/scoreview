@@ -52,7 +52,7 @@ describe('resolveBeatInMeasure', () => {
 		expect(resolveBeatInMeasure(...measure, 15200, 80)).toEqual({ index: 3, timeMs: 14250 })
 	})
 
-	it('klickt auf Wunsch nur den Taktanfang (Verhalten bis Phase 21)', () => {
+	it('klickt auf Wunsch nur den Taktanfang', () => {
 		expect(resolveBeatInMeasure(...measure, 13600, 80, false)).toEqual({ index: 0, timeMs: 12000 })
 	})
 

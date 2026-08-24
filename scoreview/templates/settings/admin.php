@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * Nur noch der Mountpunkt (Phase 23/Schritt 3, Codereview-Befund C3).
+ * Nur noch der Mountpunkt.
  *
  * Bis hierher stand hier das vollstaendige Formular als handgeschriebenes
  * HTML mit `style="width: 320px"` an jedem Feld, bedient von 163 Zeilen

@@ -1,7 +1,6 @@
-# Durchgehende Pruefung fuer alle drei Sprachen des Repos (Codereview
-# Phase 23/Schritt 2, Befund C6). Bis hierher gab es gar keine CI - gepruegt
-# wurde von Hand gegen die Testinstanz, und ob das auf einer anderen Maschine
-# ueberhaupt baut, war unbekannt.
+# Durchgehende Pruefung fuer alle drei Sprachen des Repos. Manuelle Pruefung
+# laeuft gegen die Testinstanz; ob das auch auf einer anderen Maschine
+# ueberhaupt baut, ist damit nicht abgedeckt.
 #
 # Bewusst drei getrennte Jobs statt eines grossen: sie laufen parallel, und
 # ein roter Job sagt sofort, WO es klemmt (Frontend, Backend, Sidecar).

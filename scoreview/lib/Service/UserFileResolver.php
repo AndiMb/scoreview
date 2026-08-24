@@ -12,8 +12,8 @@ use OCP\IUserSession;
  * Löst eine fileId ausschließlich über den Dateibaum der eingeloggten
  * Nutzerin auf - nie ungeprüft vertrauen, Nextclouds Node-API liefert nur,
  * worauf die Nutzerin tatsächlich Zugriff hat. Gemeinsam genutzt von
- * ConversionController und AnnotationController (Phase 11) statt dort
- * zweimal dieselbe Logik zu pflegen.
+ * ConversionController und AnnotationController statt dort zweimal
+ * dieselbe Logik zu pflegen.
  */
 class UserFileResolver {
 	public function __construct(

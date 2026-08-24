@@ -1,6 +1,6 @@
 <template>
 	<div class="scoreview-annotations">
-		<!-- Die Überschrift "Notes" liefert seit Phase 22 die Panel-Kopfzeile in
+		<!-- Die Überschrift "Notes" liefert die Panel-Kopfzeile in
 			ScoreViewer.vue (samt Schließen-Knopf) - hier stünde sie doppelt. -->
 		<NcButton wide :aria-label="t('+ At current position')" @click="startNewAtCurrentPosition">
 			<template #icon>
@@ -27,7 +27,7 @@
 				<span class="scoreview-annotation-anchor">{{ t('Measure {n}', { n: draft.measureNumber }) }}</span>
 				<textarea v-model="draft.content" rows="2" :placeholder="t('Note…')" />
 				<!--
-					Sichtbarkeit beim Anlegen (Phase 18) - bewusst nicht versteckt vor
+					Sichtbarkeit beim Anlegen - bewusst nicht versteckt vor
 					Nutzerinnen ohne Schreibrecht: der Server lehnt eine geteilte
 					Notiz ohne PERMISSION_UPDATE mit 403 ab (siehe
 					AnnotationController::canWriteShared()), das ist die eigentliche
@@ -127,7 +127,7 @@ import Pencil from 'vue-material-design-icons/Pencil.vue'
 import PlusCircleOutline from 'vue-material-design-icons/PlusCircleOutline.vue'
 
 /**
- * Liste + Editor für Notizen: privat (Phase 11) und geteilt (Phase 18).
+ * Liste + Editor für Notizen: privat und geteilt.
  * Hält nur UI-Zustand (Entwurf/Bearbeitung/„nur meine"-Filter) -
  * Laden/Speichern/Löschen passiert in ScoreViewer.vue (dort liegt auch der
  * HTTP-Zugriff über die annotation#-Routen), damit diese Komponente
@@ -227,7 +227,7 @@ export default {
 </script>
 
 <style scoped>
-/* Rahmen und Abstand nach oben kommen seit Phase 22 von der Panel-Karte in
+/* Rahmen und Abstand nach oben kommen von der Panel-Karte in
    ScoreViewer.vue - hier bleibt nur der Inhalt. */
 .scoreview-annotations {
 	padding-top: 8px;
@@ -264,7 +264,7 @@ export default {
 	border-color: var(--color-warning, orange);
 }
 
-/* Geteilte Notizen optisch unterscheidbar (Phase 18: "eigene und geteilte
+/* Geteilte Notizen optisch unterscheidbar ("eigene und geteilte
    Notizen unterscheidbar, Markerfarbe") - ein dezenter linker Akzentbalken
    statt der vollen Rahmenfarbe, damit sich das nicht mit "orphaned" beißt,
    falls beides gleichzeitig zutrifft. */

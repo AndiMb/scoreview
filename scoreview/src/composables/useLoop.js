@@ -2,11 +2,10 @@ import { computed, ref } from 'vue'
 import { findMeasureStartTime } from '../lib/scoreLayout.js'
 
 /**
- * Der Loop von Takt A bis Takt B - Kernfunktion für die Probenarbeit
- * (Phase 10) samt der Bereichsmarkierung im Notenbild (Phase 17).
+ * Der Loop von Takt A bis Takt B - Kernfunktion für die Probenarbeit, samt
+ * der Bereichsmarkierung im Notenbild.
  *
- * Sechstes Composable aus der Zerlegung von `ScoreViewer.vue`
- * (Codereview-Befund B1, Phase 23/Schritt 6).
+ * Sechstes Composable aus der Zerlegung von `ScoreViewer.vue`.
  *
  * Das eigentliche Zurückspringen passiert bewusst **nicht** hier, sondern in
  * der Zeitschleife des Players (`shouldRestart()` wird dort pro Frame
@@ -34,7 +33,7 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 	const endMs = ref(null)
 
 	/**
-	 * Sichtbare Markierung des Loop-Bereichs (Phase 17) - zwei Flaggen an
+	 * Sichtbare Markierung des Loop-Bereichs - zwei Flaggen an
 	 * Start-/Ende-Takt. Markiert bewusst nur den JEWEILIGEN TAKTANFANG, nicht
 	 * die volle Taktbreite: `measures.json` liefert nur Punktkoordinaten (M4),
 	 * keine Taktausdehnung.
@@ -88,8 +87,8 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 	}
 
 	/**
-	 * „Loop ab aktuellem Takt" (Phase 17: „der häufigste Fall in der Probe:
-	 * man ist schon an der Stelle") - füllt nur das Feld, aktiviert den Loop
+	 * „Loop ab aktuellem Takt" („der häufigste Fall in der Probe: man ist
+	 * schon an der Stelle") - füllt nur das Feld, aktiviert den Loop
 	 * nicht automatisch (der „bis"-Takt bleibt eine bewusste Entscheidung).
 	 *
 	 * @param {?number} measureNumber

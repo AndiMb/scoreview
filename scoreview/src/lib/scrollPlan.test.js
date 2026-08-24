@@ -27,7 +27,7 @@ describe('planAutoScroll', () => {
 		expect(planAutoScroll({ ...base, cursorTop: 2600, cursorHeight: 390 })).not.toBeNull()
 	})
 
-	// Regression aus Phase 16/17: bei SATB-/Mehrsystem-Partituren deckt das
+	// Regression: bei SATB-/Mehrsystem-Partituren deckt das
 	// Cursor-Rechteck die ganze Notenzeile ab und kann höher als der Viewport
 	// sein. Dann darf kein Ziel entstehen, das beim nächsten Aufruf sofort
 	// wieder korrigiert wird (real beobachtetes Hoch-Runter-Springen).

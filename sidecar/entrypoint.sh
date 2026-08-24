@@ -2,9 +2,9 @@
 # Wraps the extracted MuseScore 4 AppImage binary with:
 #  - xvfb-run, because mscore4portable needs an X server even for pure CLI
 #    conversion (headless-CLI-without-X was never fully supported upstream).
-#  - timeout, as a hard guard against MuseScore hanging on unusual input
-#    (Risiko 6 im Plan) - the caller must be able to observe a failed job
-#    instead of an indefinitely stuck container.
+#  - timeout, as a hard guard against MuseScore hanging on unusual input -
+#    the caller must be able to observe a failed job instead of an
+#    indefinitely stuck container.
 #
 # All arguments are passed straight through to `mscore4portable`, e.g.:
 #   docker run --rm -v <hostdir>:/data scoreview-musescore-cli \

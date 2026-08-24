@@ -1,9 +1,8 @@
 // Echte SVG-Bereinigung vor dem Einbetten ins DOM (v-html in ScorePage.vue).
 //
-// Ersetzt seit Phase 20 die frühere regexbasierte `sanitizeSvg()` aus
-// scoreLayout.js. Der Wechsel ist NICHT kosmetisch, sondern das Ergebnis
-// einer Messung: die alte Regex-Fassung liess 9 von 15 geprüften
-// Umgehungsmustern durch (siehe PLAN.md Phase 20 für die Tabelle), darunter
+// Ersetzt die frühere regexbasierte `sanitizeSvg()` aus scoreLayout.js. Der
+// Wechsel ist NICHT kosmetisch, sondern das Ergebnis einer Messung: die alte
+// Regex-Fassung liess 9 von 15 geprüften Umgehungsmustern durch, darunter
 // `onload=x()` OHNE Anführungszeichen, `javascript:`-URLs in `href`/
 // `xlink:href`, `<foreignObject>` mit eingebettetem `<iframe>`, ein
 // ungeschlossenes `<script>` sowie `<use href="http://…">` auf eine fremde
@@ -34,7 +33,7 @@ import DOMPurify from 'dompurify'
 // deshalb hier von `exp-list-style` ausgenommen: bei einer Allowlist IST die
 // Liste der sicherheitsrelevante Inhalt, und die Gruppierung sagt, warum ein
 // Eintrag drinsteht. Ein Eintrag pro Zeile macht daraus 74 Zeilen ohne diese
-// Aussage - siehe PLAN.md Phase 23/Schritt 2.
+// Aussage.
 /* eslint-disable @stylistic/exp-list-style */
 const ALLOWED_TAGS = [
 	'svg', 'g', 'defs', 'symbol', 'title', 'desc', 'metadata',

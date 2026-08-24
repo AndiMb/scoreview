@@ -15,12 +15,11 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Pollt GENAU EINMAL den Sidecar-Job-Status und reiht sich bei Bedarf selbst
- * per IJobList::scheduleAfter() neu ein, statt (wie vorher in
- * ConvertScoreJob::pollUntilDone, Phase 3/6) innerhalb eines einzigen
- * Laufs bis zu 300s mit sleep() zu blockieren - das blockierte die gesamte
- * Job-Queue der Instanz (siehe PLAN.md Phase 7). ConvertScoreJob reicht den
- * Sidecar-Job ein und legt diesen Job mit Deadline an; alles Weitere
- * passiert hier, ein Zyklus pro Aufruf.
+ * per IJobList::scheduleAfter() neu ein, statt innerhalb eines einzigen
+ * Laufs bis zu 300s mit sleep() zu blockieren - das wuerde die gesamte
+ * Job-Queue der Instanz blockieren. ConvertScoreJob reicht den Sidecar-Job
+ * ein und legt diesen Job mit Deadline an; alles Weitere passiert hier, ein
+ * Zyklus pro Aufruf.
  */
 class PollConversionJob extends QueuedJob {
 	private const POLL_INTERVAL_SECONDS = 3;

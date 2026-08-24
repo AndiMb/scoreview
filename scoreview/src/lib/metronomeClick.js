@@ -1,4 +1,4 @@
-// Klangerzeugung fürs Metronom (Phase 17) - ein eigener, minimaler
+// Klangerzeugung fürs Metronom - ein eigener, minimaler
 // AudioContext-Oszillator statt den Haupt-Synth (player.js) zu belasten.
 // Zwei Gründe, warum das eigenständig sein muss statt über einen MIDI-Kanal
 // zu laufen: `score.mid` hat nachweislich keine Metronomnoten (siehe
@@ -22,8 +22,8 @@ export function createMetronomeClick() {
 	 * @param {boolean} [accent] höherer Ton, z.B. für die Eins im Takt
 	 * @param {number} [delaySeconds] Vorlauf: Klick genau in dieser Zeit,
 	 *   terminiert über die Uhr des AudioContext statt über setTimeout/rAF.
-	 *   Seit Phase 22 klickt das Metronom auf jedem Schlag statt nur auf dem
-	 *   Taktanfang - der Aufrufer erkennt einen fälligen Schlag im
+	 *   Das Metronom klickt auf jedem Schlag, nicht nur auf dem Taktanfang -
+	 *   der Aufrufer erkennt einen fälligen Schlag im
 	 *   Bildwiederholtakt (~16ms Raster) und kann deshalb nur SAGEN, dass
 	 *   einer ansteht, nicht exakt WANN. Auf Taktebene fiel dieses Zittern
 	 *   nicht auf, auf Schlagebene hört man es. Der Aufrufer fragt deshalb

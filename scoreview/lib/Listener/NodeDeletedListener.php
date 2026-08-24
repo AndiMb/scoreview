@@ -14,10 +14,10 @@ use Psr\Log\LoggerInterface;
 /**
  * @template-implements IEventListener<NodeDeletedEvent>
  *
- * Räumt den Konvertierungs-Cache einer gelöschten Partitur weg
- * (Codereview-Befund A4). Bis Phase 23 blieben IAppData-Ordner und
- * DB-Zeilen für immer liegen - bei fünf Seiten über 1 MB pro Datei, und
- * niemand hätte je bemerkt, dass es wächst.
+ * Räumt den Konvertierungs-Cache einer gelöschten Partitur weg. Ohne
+ * dieses Aufräumen blieben IAppData-Ordner und DB-Zeilen für immer
+ * liegen - bei fünf Seiten über 1 MB pro Datei, und niemand hätte je
+ * bemerkt, dass es wächst.
  *
  * **Warum hier nur der Cache und nicht die Notizen.** `NodeDeletedEvent`
  * feuert bereits, wenn eine Datei in den Papierkorb wandert - an der

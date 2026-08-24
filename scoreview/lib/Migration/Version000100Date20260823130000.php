@@ -11,9 +11,9 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Phase 11: private Notizen pro Nutzer, verankert an musikalischen statt an
- * Renderer-/Pixel-Koordinaten (siehe PLAN.md Phase 11 - "die zentrale
- * Entscheidung dieser Phase ist der Anker, nicht die UI").
+ * Private Notizen pro Nutzer, verankert an musikalischen statt an
+ * Renderer-/Pixel-Koordinaten ("die zentrale Entscheidung ist der Anker,
+ * nicht die UI").
  *
  * Anker-Design, warum diese Spalten:
  * - `measure_number` + `fraction` (0-1 innerhalb des Taktes): aus timeMs
@@ -24,15 +24,13 @@ use OCP\Migration\SimpleMigrationStep;
  *   Pixel-Koordinate, und übersteht ein Neurendern (Zoom, Seitenumbruch),
  *   solange sich Taktzahl/Metrum nicht ändern.
  * - `elid` + `anchor_etag`: exakter Sekundär-Anker, aber nur innerhalb
- *   desselben etags gültig (siehe Phase 11) - `elid`-Nummerierung ist nicht
- *   über etags hinweg stabil.
+ *   desselben etags gültig - `elid`-Nummerierung ist nicht über etags
+ *   hinweg stabil.
  * - Bewusst NICHT an `etag` gebunden (anders als `scoreview_conversions`):
  *   Notizen müssen einen Re-Upload überleben, der Cache-Eintrag nicht.
- * - `visibility`: 'private' | 'shared'. In Phase 11 war die Spalte reine
- *   Vorsorge (immer 'private'); seit Phase 18 wird sie tatsächlich benutzt -
- *   'shared' heißt für jede Person mit Dateizugriff sichtbar, Schreibrecht
- *   daran hängt an `PERMISSION_UPDATE` der Datei (siehe
- *   AnnotationController::canWriteShared()).
+ * - `visibility`: 'private' | 'shared' - 'shared' heißt für jede Person mit
+ *   Dateizugriff sichtbar, Schreibrecht daran hängt an `PERMISSION_UPDATE`
+ *   der Datei (siehe AnnotationController::canWriteShared()).
  */
 class Version000100Date20260823130000 extends SimpleMigrationStep {
 

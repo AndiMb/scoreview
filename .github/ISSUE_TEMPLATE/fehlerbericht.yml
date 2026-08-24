@@ -1,0 +1,44 @@
+name: Fehlerbericht
+description: Etwas funktioniert nicht wie erwartet
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fuer den Bericht. Die haeufigsten Faelle stehen schon in
+        [docs/troubleshooting.md](https://github.com/AndiMb/scoreview/blob/master/docs/troubleshooting.md)
+        – vor allem „`.mscz` bietet nur Herunterladen an", „der Viewer dreht sich
+        endlos" und „Konvertierungsdienst nicht erreichbar". Ein kurzer Blick
+        dorthin spart oft eine Runde.
+
+  - type: textarea
+    id: was-passiert
+    attributes:
+      label: Was passiert?
+      description: Was hast du getan, was war zu sehen, was hattest du erwartet?
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnose
+    attributes:
+      label: Betriebsdiagnose
+      description: >
+        Der Inhalt von Einstellungen → Verwaltung → ScoreView. Er beantwortet die
+        meisten Rueckfragen im Voraus: Sidecar erreichbar, SoundFont vorhanden,
+        Alter des letzten Cron-Laufs, Zahl der Konvertierungen je Status.
+      render: text
+
+  - type: input
+    id: versionen
+    attributes:
+      label: Versionen
+      description: Nextcloud, PHP, ScoreView (steht in appinfo/info.xml bzw. in der App-Liste)
+      placeholder: "Nextcloud 31.0.5, PHP 8.3, ScoreView 0.0.24"
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log-Ausschnitt
+      description: Passende Zeilen aus `data/nextcloud.log` oder `docker logs scoreview-sidecar`, falls vorhanden.
+      render: text

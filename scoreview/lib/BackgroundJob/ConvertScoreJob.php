@@ -25,9 +25,9 @@ use Psr\Log\LoggerInterface;
  *
  * Reicht die Konvertierung beim Sidecar ein und übergibt das Pollen sofort
  * an PollConversionJob (siehe dort) - dieser Job selbst läuft in
- * Millisekunden durch und blockiert die Job-Queue nicht (Phase 7: der
- * vorherige blockierende sleep()-Poll-Loop hier belegte bis zu 300s lang
- * die gesamte Job-Queue der Instanz).
+ * Millisekunden durch und blockiert die Job-Queue nicht (ein blockierender
+ * sleep()-Poll-Loop hier wuerde bis zu 300s lang die gesamte Job-Queue der
+ * Instanz belegen).
  */
 class ConvertScoreJob extends QueuedJob {
 	// Gesamt-Obergrenze für die Konvertierung inkl. aller Poll-Zyklen in
@@ -37,13 +37,13 @@ class ConvertScoreJob extends QueuedJob {
 	private const MAX_TOTAL_SECONDS = 300;
 
 	/**
-	 * Obergrenze fuer die Dateigroesse (Codereview-Befund A7), ueberschreibbar
-	 * ueber die App-Einstellung `max_score_bytes`.
+	 * Obergrenze fuer die Dateigroesse, ueberschreibbar ueber die
+	 * App-Einstellung `max_score_bytes`.
 	 *
-	 * Bis Phase 23 gab es gar keine: die App reichte jede Datei weiter, egal
-	 * wie gross. Seit dem Umstieg auf einen Stream (SidecarClient) ist das
-	 * kein Speicherproblem mehr - aber eine absurd grosse Datei belegt
-	 * weiterhin einen MuseScore-Prozess, bis der Timeout greift. 100 MB liegen
+	 * Ohne diese Grenze reicht die App jede Datei unveraendert weiter, egal
+	 * wie gross. Der Stream-Upload (SidecarClient) macht das selbst kein
+	 * Speicherproblem - aber eine absurd grosse Datei belegt weiterhin
+	 * einen MuseScore-Prozess, bis der Timeout greift. 100 MB liegen
 	 * weit ueber jeder echten Partitur (die groesste gemessene .mscz im
 	 * Testbestand ist unter 1 MB) und unter dem Upload-Limit des Sidecars
 	 * (200 MB), damit die Ablehnung hier passiert - mit eigenem Fehlercode
@@ -83,7 +83,7 @@ class ConvertScoreJob extends QueuedJob {
 		$conversion = $this->conversionService->find($fileId, $etag);
 		if ($conversion !== null) {
 			$alreadyInProgress = in_array($conversion->getStatus(), [ScoreConversion::STATUS_PENDING, ScoreConversion::STATUS_PROCESSING], true);
-			// "ready" allein reicht nicht mehr aus (Phase 14): ein Datensatz kann
+			// "ready" allein reicht nicht aus: ein Datensatz kann
 			// "ready" UND veraltet sein (aeltere format_version, siehe
 			// ConversionController::status() -> retryConversion()) - der reicht
 			// diesen Job gezielt fuer GENAU diesen Fall neu ein und braucht ihn

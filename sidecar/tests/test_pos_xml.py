@@ -1,10 +1,9 @@
 """Tests fuer ``_parse_pos_xml`` - die Funktion, auf der der gesamte Cursor
-steht (PLAN.md M4/M7).
+steht (docs/architecture.md M4/M7).
 
-Sie war bis zum Codereview (Befund B4) ungetestet, waehrend die JS-Seite 99
-Tests hatte. Geprueft werden genau die Zusagen, die anderswo als gemessen
-gelten: die Division durch 12, die Sortierung nach Zeit, und dass ein
-mehrfach vorkommendes ``elid`` (Wiederholung) NICHT zusammengefasst wird.
+Geprueft werden genau die Zusagen, die anderswo als gemessen gelten: die
+Division durch 12, die Sortierung nach Zeit, und dass ein mehrfach
+vorkommendes ``elid`` (Wiederholung) NICHT zusammengefasst wird.
 """
 
 import base64
@@ -20,7 +19,7 @@ def encode(xml: str) -> str:
 
 def test_teilt_koordinaten_durch_zwoelf():
     # M4: --score-media liefert Koordinaten im 12-fachen der SVG-viewBox.
-    # Der Client soll diese Konstante nie kennen muessen (PLAN.md Phase 6).
+    # Der Client soll diese Konstante nie kennen muessen.
     result = musescore.parse_pos_xml(encode("""
         <score>
           <elements>

@@ -1,8 +1,7 @@
 """The HTTP surface: Flask routes and nothing else.
 
-Split out of the former single-file ``server.py`` in Phase 23/step 5 (code
-review finding B3). Everything that knows anything lives in ``config``,
-``musescore`` and ``jobs``; this module only maps URLs onto it.
+Everything that knows anything lives in ``config``, ``musescore`` and
+``jobs``; this module only maps URLs onto it.
 
 The secret check moved from twelve individual ``require_secret()`` calls to a
 single ``before_request`` hook with an explicit allowlist. Before, adding a
@@ -73,14 +72,13 @@ def create_app(start_reaper: bool = True) -> Flask:
     def health():
         return "ok"
 
-    # Phase 21 (MuseScore-Versionspflege): "Wie kommt eine neue
-    # MuseScore-Version ins Image, ohne dass --score-media unbemerkt bricht?"
-    # Der Selbsttest laesst eine echte Konvertierung gegen die mitgelieferte
-    # Minipartitur laufen und prueft das Ergebnis auf die Merkmale, an denen
-    # ein Formatwechsel zuerst auffiele. Absichtlich KEIN Test beim
-    # Containerstart: das wuerde jeden Start um ~6s verzoegern und einen an
-    # sich benutzbaren Sidecar bei einem Teilproblem gar nicht erst
-    # hochkommen lassen.
+    # "Wie kommt eine neue MuseScore-Version ins Image, ohne dass
+    # --score-media unbemerkt bricht?" Der Selbsttest laesst eine echte
+    # Konvertierung gegen die mitgelieferte Minipartitur laufen und prueft
+    # das Ergebnis auf die Merkmale, an denen ein Formatwechsel zuerst
+    # auffiele. Absichtlich KEIN Test beim Containerstart: das wuerde jeden
+    # Start um ~6s verzoegern und einen an sich benutzbaren Sidecar bei
+    # einem Teilproblem gar nicht erst hochkommen lassen.
     @app.get("/selftest")
     def selftest():
         if not config.SELFTEST_SCORE.exists():
@@ -158,10 +156,10 @@ def create_app(start_reaper: bool = True) -> Flask:
             body["error"] = job.get("error", "unknown error")
         return jsonify(body)
 
-    # EINE Auslieferungsroute statt fuenf fast identischer (Befund B2): die
-    # frueheren convert_page/-midi/-timing/-measures/-meta unterschieden sich
-    # nur in Dateiname und MIME-Typ. Ein weiteres Artefakt - etwa ein zweites
-    # serverseitiges Layout (PLAN.md Phase 16) - ist damit ein Eintrag in
+    # EINE Auslieferungsroute statt fuenf fast identischer: die frueheren
+    # convert_page/-midi/-timing/-measures/-meta unterschieden sich nur in
+    # Dateiname und MIME-Typ. Ein weiteres Artefakt - etwa ein zweites
+    # serverseitiges Layout (siehe docs/limits.md) - ist damit ein Eintrag in
     # ARTIFACTS statt eines neuen Handlers.
     ARTIFACTS = {
         "midi": ("midi", "audio/midi"),

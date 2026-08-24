@@ -1,5 +1,5 @@
 /**
- * ESLint-Konfiguration (Codereview Phase 23/Schritt 2, Befund C4).
+ * ESLint-Konfiguration.
  *
  * Bis hierher gab es keinen Linter - im Bestand standen aber bereits sechs
  * `// eslint-disable-next-line no-console`-Kommentare. Die Erwartung war also
@@ -23,14 +23,12 @@ export default [
 	{
 		languageOptions: {
 			globals: {
-				// Laufzeit-Globals von Nextcloud, keine Importe: der Viewer
-				// registriert sich bei OCA.Viewer (src/viewer.js), die
-				// Einstellungsseite nutzt noch OC.generateUrl/OC.requestToken
-				// (src/settings.js). Letzteres meldet der Linter zu Recht als
-				// deprecated - das ist genau Befund C3 und wird in Schritt 3 auf
-				// @nextcloud/axios und @nextcloud/router umgestellt. Bis dahin
-				// bleibt es eine Warnung, kein Fehler.
-				OC: 'readonly',
+				// Laufzeit-Global von Nextcloud, kein Import: der Viewer
+				// registriert sich bei OCA.Viewer (src/viewer.js). Das
+				// veraltete OC.* wird nirgends mehr benutzt - HTTP laeuft
+				// ueber @nextcloud/axios, URLs ueber @nextcloud/router - und
+				// steht deshalb bewusst nicht hier: eine Rueckkehr zu OC.*
+				// soll der Linter melden, nicht stillschweigend durchlassen.
 				OCA: 'readonly',
 			},
 		},
@@ -56,7 +54,7 @@ export default [
 		// tools/l10n.mjs ist ein Node-CLI-Werkzeug (`npm run l10n:extract`), kein
 		// Browsercode: `process` ist dort ein regulaeres Global, und die
 		// Konsolenausgabe IST seine Schnittstelle - sie meldet fehlende und
-		// verwaiste Uebersetzungen (siehe E4/Phase 14).
+		// verwaiste Uebersetzungen (siehe E4).
 		files: ['tools/**/*.mjs', 'tools/**/*.js'],
 		languageOptions: {
 			globals: {

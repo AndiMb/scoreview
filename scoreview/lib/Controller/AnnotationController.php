@@ -19,7 +19,7 @@ use OCP\IL10N;
 use OCP\IRequest;
 
 /**
- * Notizen: privat (Phase 11) und geteilt (Phase 18). fileId wird wie in
+ * Notizen: privat und geteilt. fileId wird wie in
  * ConversionController ausschliesslich ueber UserFileResolver aufgeloest
  * (Zugriffskontrolle ueber den Dateibaum), die eigentliche Annotation-Zeile
  * zusaetzlich ueber (id, fileId) in AnnotationService/-Mapper geprueft -
@@ -54,8 +54,7 @@ class AnnotationController extends Controller {
 		} catch (\Throwable) {
 			// Konvertierung (noch) nicht fertig/verfuegbar - orphaned-Markierung
 			// entfaellt dann einfach (null), die Notizen selbst bleiben trotzdem
-			// abrufbar (siehe PLAN.md Phase 11: Notizen ueberleben unabhaengig
-			// vom Cache-Status).
+			// abrufbar (Notizen ueberleben unabhaengig vom Cache-Status).
 		}
 
 		return new JSONResponse($this->annotationService->listForFile($fileId, $userId, $currentMeasureCount));
@@ -127,17 +126,16 @@ class AnnotationController extends Controller {
 
 	/**
 	 * Ob die anfragende Nutzerin geteilte Notizen dieser Datei anlegen/
-	 * aendern/loeschen darf (PLAN.md Phase 18: "an den Dateirechten
-	 * festmachen, statt eine eigene Rechteverwaltung zu bauen"). Der
-	 * aufgeloeste Node spiegelt bereits die Rechte AUS SICHT der anfragenden
-	 * Nutzerin wider (UserFileResolver liest ueber deren eigenen
-	 * Dateibaum) - bei einer geteilten Datei ist das genau die vom Share
-	 * gewaehrte Berechtigung.
+	 * aendern/loeschen darf - an den Dateirechten festgemacht, statt eine
+	 * eigene Rechteverwaltung zu bauen. Der aufgeloeste Node spiegelt
+	 * bereits die Rechte AUS SICHT der anfragenden Nutzerin wider
+	 * (UserFileResolver liest ueber deren eigenen Dateibaum) - bei einer
+	 * geteilten Datei ist das genau die vom Share gewaehrte Berechtigung.
 	 *
-	 * Nimmt den bereits aufgeloesten Node entgegen statt einer fileId
-	 * (Codereview-Befund E3): jede Aufloesung ist ein
-	 * `getUserFolder()->getById()` samt Filesystem-Aufbau, und vorher lief das
-	 * pro Schreibanfrage zweimal - einmal in requireOwnAccess(), einmal hier.
+	 * Nimmt den bereits aufgeloesten Node entgegen statt einer fileId: jede
+	 * Aufloesung ist ein `getUserFolder()->getById()` samt
+	 * Filesystem-Aufbau, und vorher lief das pro Schreibanfrage zweimal -
+	 * einmal in requireOwnAccess(), einmal hier.
 	 */
 	private function canWriteShared(Node $node): bool {
 		return ($node->getPermissions() & Constants::PERMISSION_UPDATE) !== 0;

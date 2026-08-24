@@ -6,9 +6,9 @@
 		@pointerdown="onPointerDown"
 		@click="onClick">
 		<!--
-			Overlay HINTER dem Notenbild (siehe PLAN.md M9): das SVG hat keine
-			id-Attribute, mit denen sich der Notenkopf selbst einfärben ließe,
-			daher bleibt es beim Cursor-Overlay - jetzt aber hinter statt vor dem
+			Overlay HINTER dem Notenbild (siehe docs/architecture.md M9): das SVG
+			hat keine id-Attribute, mit denen sich der Notenkopf selbst einfärben
+			ließe, daher bleibt es beim Cursor-Overlay - hinter statt vor dem
 			Notenbild, damit es keinen Notenkopf verdeckt. Die Stapelreihenfolge
 			kommt aus dem CSS (.score-page-svg bekommt ein explizites z-index),
 			nicht aus dieser Template-Reihenfolge - siehe Kommentar dort. Nur
@@ -27,9 +27,9 @@
 			Nutzer-Upload, MuseScore rendert Titel, Liedtext und freie Textfelder
 			aus der Partitur hinein: `svgMarkup` ist deshalb IMMER durch
 			lib/svgSanitizer.js (DOMPurify) gegangen, nie roher Antworttext -
-			siehe load() unten und PLAN.md Phase 20. Wird diese Regel je gelockert,
-			muss die Zeile hier wieder auffallen, darum nur diese eine Zeile
-			ausgenommen statt der Datei.
+			siehe load() unten. Wird diese Regel je gelockert, muss die Zeile
+			hier wieder auffallen, darum nur diese eine Zeile ausgenommen statt
+			der Datei.
 		-->
 		<!-- eslint-disable-next-line vue/no-v-html -->
 		<div v-if="svgMarkup" class="score-page-svg" v-html="svgMarkup" />
@@ -53,10 +53,10 @@
 			:title="t('Note')"
 			@click.stop="$emit('markerClick', marker.id)" />
 		<!--
-			Sichtbare Loop-Bereichsmarkierung (Phase 17) - zwei schmale, farbige
-			Flaggen an Start-/Ende-Takt statt eines vollflächigen Bereichs:
-			measures.json liefert nur Punktkoordinaten je Takt (M4), keine
-			Taktbreite, ein Vollbereich wäre also erfunden.
+			Sichtbare Loop-Bereichsmarkierung - zwei schmale, farbige Flaggen an
+			Start-/Ende-Takt statt eines vollflächigen Bereichs: measures.json
+			liefert nur Punktkoordinaten je Takt (M4), keine Taktbreite, ein
+			Vollbereich wäre also erfunden.
 		-->
 		<div
 			v-for="marker in pageLoopMarkers"
@@ -91,13 +91,13 @@ const UNLOAD_MARGIN_PX = 2400
 
 /**
  * Eine Seite als eingebettetes SVG (E2: MuseScore-eigenes Rendering statt
- * OSMD-Neusatz - siehe PLAN.md). Lädt lazy per IntersectionObserver
- * ("sichtbare Seiten bevorzugt laden, nicht alle auf einmal", Phase 8),
- * nicht alle Seiten sofort beim Öffnen.
+ * OSMD-Neusatz - siehe docs/architecture.md). Lädt lazy per
+ * IntersectionObserver ("sichtbare Seiten bevorzugt laden, nicht alle auf
+ * einmal"), nicht alle Seiten sofort beim Öffnen.
  *
  * Der Cursor ist ein reines CSS-Overlay in Prozent-Koordinaten relativ zur
  * eigenen viewBox (siehe scoreLayout.js/parseViewBox) - kein
- * Renderer-interner Zustand (PLAN.md Abschnitt 2).
+ * Renderer-interner Zustand.
  */
 export default {
 	name: 'ScorePage',
@@ -121,22 +121,22 @@ export default {
 			default: null,
 		},
 
-		// Stufenloser Zoom (Phase 10, "über die SVG-Skalierung") - 1 =
-		// Standardbreite, skaliert die max-width linear.
+		// Stufenloser Zoom ("über die SVG-Skalierung") - 1 = Standardbreite,
+		// skaliert die max-width linear.
 		zoom: {
 			type: Number,
 			default: 1,
 		},
 
-		// Notiz-Marker (Phase 11): {id, page, x, y, w, h} in SVG-Einheiten,
-		// unabhängig von der Seite gefiltert - siehe pageMarkers.
+		// Notiz-Marker: {id, page, x, y, w, h} in SVG-Einheiten, unabhängig
+		// von der Seite gefiltert - siehe pageMarkers.
 		markers: {
 			type: Array,
 			default: () => [],
 		},
 
-		// Loop-Bereichsmarkierung (Phase 17): {id, kind:'start'|'end', page, x,
-		// y, w, h}, siehe pageLoopMarkers.
+		// Loop-Bereichsmarkierung: {id, kind:'start'|'end', page, x, y, w, h},
+		// siehe pageLoopMarkers.
 		loopMarkers: {
 			type: Array,
 			default: () => [],
@@ -150,9 +150,9 @@ export default {
 			svgMarkup: null,
 			viewBox: null,
 			sizeMm: null,
-			// Ladefehler dieser einen Seite (Befund A2). Bis Phase 23 gab es
-			// den Zustand nicht: ein 404 oder ein Verbindungsabriss liess die
-			// Seite dauerhaft leer, ohne Hinweis und ohne zweiten Versuch.
+			// Ladefehler dieser einen Seite (Befund A2): ohne ihn liesse ein 404
+			// oder ein Verbindungsabriss die Seite dauerhaft leer, ohne Hinweis
+			// und ohne zweiten Versuch.
 			loadError: '',
 			loading: false,
 			// Position des letzten pointerdown - siehe onClick() zum Grund
@@ -164,21 +164,20 @@ export default {
 	computed: {
 		pageStyle() {
 			// Reserviert die Seitenhöhe schon vor dem Laden (A4-Hochformat als
-			// grobe Näherung, siehe PLAN.md E2 - "A4 ist das native
-			// Seitenformat") - verhindert Scroll-Sprünge beim Nachladen weiter
-			// unten liegender Seiten.
+			// grobe Näherung, siehe docs/architecture.md E2 - "A4 ist das
+			// native Seitenformat") - verhindert Scroll-Sprünge beim Nachladen
+			// weiter unten liegender Seiten.
 			const box = this.viewBox
 			return {
 				aspectRatio: box ? `${box.width} / ${box.height}` : '210 / 297',
-				// Echte Breite statt `width: 100%` + `max-width` (Phase 22):
-				// mit der alten Fassung war die Containerbreite eine harte
-				// Obergrenze - `900 * zoom` wirkte nur, solange es KLEINER als
-				// der Container war. Hineinzoomen und schieben (der Normalfall
-				// am Tablet) ging damit gar nicht. Die Zoomstufe legt die
-				// Breite jetzt allein fest; der Scroll-Container in
-				// ScoreViewer.vue erlaubt dafür waagerechtes Scrollen, und
-				// "Seitenbreite" ist dort der Startwert, damit sich nichts
-				// ändert, solange niemand selbst zoomt.
+				// Echte Breite statt `width: 100%` + `max-width`: mit `max-width`
+				// bliebe die Containerbreite eine harte Obergrenze - `900 * zoom`
+				// wirkte nur, solange es KLEINER als der Container war.
+				// Hineinzoomen und schieben (der Normalfall am Tablet) ginge damit
+				// gar nicht. Die Zoomstufe legt die Breite allein fest; der
+				// Scroll-Container in ScoreViewer.vue erlaubt dafür waagerechtes
+				// Scrollen, und "Seitenbreite" ist dort der Startwert, damit sich
+				// nichts ändert, solange niemand selbst zoomt.
 				width: `${BASE_PAGE_WIDTH_PX * this.zoom}px`,
 			}
 		},
@@ -288,7 +287,7 @@ export default {
 				this.viewBox = parseViewBox(res.data)
 				this.sizeMm = parseSvgSizeMm(res.data)
 				this.svgMarkup = sanitizeSvg(res.data)
-				// Für die Zoom-Presets (Phase 16, "Seitenbreite/ganze Seite/100%") -
+				// Für die Zoom-Presets ("Seitenbreite/ganze Seite/100%") -
 				// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
 				// jeweils geladene ScorePage.
 				this.$emit('loaded', { index: this.pageIndex, viewBox: this.viewBox, sizeMm: this.sizeMm })
@@ -310,12 +309,9 @@ export default {
 		 * Gibt das Notenbild wieder frei, wenn die Seite weit aus dem Bild
 		 * gescrollt ist (Codereview-Befund E2).
 		 *
-		 * Die Risikotabelle in PLAN.md führt „SVG-Seiten großer Partituren zu
-		 * schwer fürs DOM" mit der Gegenmaßnahme „nur sichtbare Seiten
-		 * rendern" - umgesetzt war davon bis Phase 23 nur die Hälfte: es wurde
-		 * lazy geladen, aber nie freigegeben. Bei einer Orchesterpartitur hatte
-		 * man nach einmaligem Durchscrollen alle Seiten samt zehntausender
-		 * `<path>`-Knoten gleichzeitig im DOM.
+		 * Ohne das Freigeben waeren bei einer Orchesterpartitur nach einmaligem
+		 * Durchscrollen alle Seiten samt zehntausender `<path>`-Knoten
+		 * gleichzeitig im DOM - siehe docs/limits.md zur DOM-Last.
 		 *
 		 * Freigegeben wird **nur** das Markup: `viewBox` und `sizeMm` bleiben,
 		 * damit die Seite ihre Höhe weiter über `aspectRatio` reserviert (kein
@@ -337,9 +333,9 @@ export default {
 			this.svgMarkup = null
 		},
 
-		// Umkehrung von M4 (Koordinate -> elid, Phase 10 "Klick auf eine Note
-		// springt dorthin"): rechnet die Klickposition in SVG-Einheiten dieser
-		// Seite um und reicht sie an ScoreViewer.vue weiter, die dort per
+		// Umkehrung von M4 (Koordinate -> elid: "Klick auf eine Note springt
+		// dorthin"): rechnet die Klickposition in SVG-Einheiten dieser Seite
+		// um und reicht sie an ScoreViewer.vue weiter, die dort per
 		// findElementAtPoint()/findNearestOccurrenceTimeMs() (scoreLayout.js)
 		// aufgelöst wird - diese Komponente kennt die Notenkoordinaten selbst
 		// nicht (nur ihre eigene viewBox).
@@ -376,7 +372,7 @@ export default {
 			})
 		},
 
-		// Für den Autoscroll (Phase 16, src/lib/scrollPlan.js): der Aufrufer
+		// Für den Autoscroll (src/lib/scrollPlan.js): der Aufrufer
 		// (ScoreViewer.vue) kennt nur ein SVG-Rechteck (page/x/y/w/h), nicht die
 		// tatsächliche Bildschirmposition des gerenderten Cursor-Overlays -
 		// getBoundingClientRect() liefert genau die, inklusive Zoom/Scroll, ohne
@@ -426,7 +422,7 @@ export default {
 	 * (score-page-cursor) malt CSS-spezifikationsgemäß immer NACH
 	 * nicht-positionierten Elementen, unabhängig von der DOM-Reihenfolge -
 	 * ohne dieses z-index läge der Cursor also trotz der Template-Reihenfolge
-	 * weiter oben, nicht hinter dem Notenbild (PLAN.md Phase 16/M9).
+	 * weiter oben, nicht hinter dem Notenbild (siehe docs/architecture.md M9).
 	 */
 	position: relative;
 	z-index: 1;
@@ -453,20 +449,21 @@ export default {
 
 /*
  * MuseScore rendert als allererstes Element ein deckendes weißes
- * Hintergrundrechteck über die volle viewBox (siehe PLAN.md M9) - ohne
- * diese Regel würde es den dahinterliegenden Cursor vollständig verdecken.
- * path[class=""] ist laut M9 im ganzen Dokument eindeutig nur dieses eine
- * Element (kein id-Attribut vorhanden, das sich sonst anbieten würde).
- * :deep() aus demselben Grund wie oben (v-html, kein Scoped-Attribut).
+ * Hintergrundrechteck über die volle viewBox (siehe docs/architecture.md
+ * M9) - ohne diese Regel würde es den dahinterliegenden Cursor vollständig
+ * verdecken. path[class=""] ist laut M9 im ganzen Dokument eindeutig nur
+ * dieses eine Element (kein id-Attribut vorhanden, das sich sonst
+ * anbieten würde). :deep() aus demselben Grund wie oben (v-html, kein
+ * Scoped-Attribut).
  */
 .score-page-svg :deep(path[class=""]) {
 	fill: none;
 }
 
 /*
- * Rechteck statt Ellipse (Nutzer-Feedback nach Phase 16: eine hochskalierte
- * Ellipse ragte deutlich über das eigentliche System hinaus). Das Overlay
- * liegt hinter dem Notenbild (siehe .score-page-svg oben) und darf den
+ * Rechteck statt Ellipse (Nutzer-Feedback: eine hochskalierte Ellipse
+ * ragte deutlich über das eigentliche System hinaus). Das Overlay liegt
+ * hinter dem Notenbild (siehe .score-page-svg oben) und darf den
  * Notenkopf deshalb ohne Weichzeichnung markieren - die Notenlinien werden
  * ohnehin vom SVG darüber gezeichnet, kein Scale-Trick nötig.
  */
@@ -521,9 +518,9 @@ export default {
 }
 
 /*
- * Geteilte Notizen bekommen eine eigene Farbe (Phase 18: "eigene und
- * geteilte Notizen unterscheidbar, Markerfarbe") - dieselbe Primärfarbe wie
- * der linke Akzentbalken in ScoreAnnotations.vue, damit Notenbild und Liste
+ * Geteilte Notizen bekommen eine eigene Farbe ("eigene und geteilte
+ * Notizen unterscheidbar, Markerfarbe") - dieselbe Primärfarbe wie der
+ * linke Akzentbalken in ScoreAnnotations.vue, damit Notenbild und Liste
  * dieselbe Sprache sprechen.
  */
 .score-page-marker--shared {

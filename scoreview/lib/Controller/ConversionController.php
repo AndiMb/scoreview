@@ -32,7 +32,7 @@ use OCP\IURLGenerator;
  * unveraenderlich (der etag steckt bereits im IAppData-Cache-Pfad, siehe
  * ConversionService) - ETag/Last-Modified/Cache-Control:immutable setzen,
  * damit ein zweites Oeffnen derselben Datei 304 statt einer erneuten
- * Uebertragung bekommt (Phase 7 - vorher wurde bei jedem Oeffnen alles neu
+ * Uebertragung bekommt (vorher wurde bei jedem Oeffnen alles neu
  * uebertragen). Die eigentliche 304-Antwort baut Nextclouds
  * NotModifiedMiddleware anhand von setETag()/setLastModified() automatisch,
  * hier wird nur gesetzt.
@@ -55,7 +55,7 @@ class ConversionController extends Controller {
 	/**
 	 * Kein #[NoCSRFRequired] hier (anders als auf den reinen
 	 * Auslieferungsrouten unten) - dieser Endpunkt hat mit jobList->add()
-	 * einen Seiteneffekt (siehe PLAN.md Phase 7).
+	 * einen Seiteneffekt.
 	 */
 	#[NoAdminRequired]
 	public function status(int $fileId): JSONResponse {
@@ -69,7 +69,7 @@ class ConversionController extends Controller {
 		if ($conversion === null) {
 			// Lazy-Trigger: Datei existierte schon vor App-Aktivierung, oder
 			// der Event-Listener hat die Konvertierung nicht eager angestoßen
-			// (Standardfall seit Phase 7 - siehe ScoreFileListener). Bewusst
+			// (Standardfall, siehe ScoreFileListener). Bewusst
 			// KEIN eigenes createPending() hier: ConvertScoreJob::run() legt
 			// die Zeile selbst an. Würde der Controller sie vorab anlegen,
 			// fände der Job beim Start bereits eine (von ihm selbst noch gar
@@ -85,7 +85,7 @@ class ConversionController extends Controller {
 		$body = ['status' => $conversion->getStatus()];
 		if ($conversion->getStatus() === ScoreConversion::STATUS_ERROR) {
 			$body['error'] = $conversion->getErrorMessage();
-			// error_code statt uebersetztem error_message (Phase 14): der Text wird
+			// error_code statt uebersetztem error_message: der Text wird
 			// einmal beim Konvertieren geschrieben, aber von beliebigen Nutzerinnen
 			// in beliebigen Sprachen gelesen - IL10N ist an die Sprache der GERADE
 			// ANFRAGENDEN Person gebunden, waere hier also falsch. error_message
@@ -101,8 +101,7 @@ class ConversionController extends Controller {
 			$this->retryConversion($fileId);
 		} elseif ($conversion->getStatus() === ScoreConversion::STATUS_READY) {
 			if (!$this->conversionService->isCurrentFormat($conversion)) {
-				// Aeltere Cache-Formatversion (PLAN.md Phase 12 "Neu gefundene
-				// Luecke"/Phase 14 format_version) - wie "nicht fertig" behandeln
+				// Aeltere Cache-Formatversion - wie "nicht fertig" behandeln
 				// statt Cache-Dateien auszuliefern, die nicht mehr zum aktuellen
 				// Controller/Sidecar-Format passen, und eine Neukonvertierung
 				// anstossen statt manuellem Eingriff in der DB.
@@ -114,13 +113,13 @@ class ConversionController extends Controller {
 			} catch (NotFoundException) {
 				// Cache-Datei fehlt trotz status=ready (z.B. Ordner ausserhalb der
 				// App geloescht) - wie "nicht fertig" behandeln statt eines 500ers,
-				// analog zur format_version-Pruefung oben (PLAN.md Phase 12).
+				// analog zur format_version-Pruefung oben.
 				$this->retryConversion($fileId);
 				return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 			}
 			// Kein Cache-Artefakt einer bestimmten Partitur, sondern eine
-			// instanzweite Ressource (Phase 9/E1) - deshalb hier statt in
-			// buildFileUrls() mitgegeben.
+			// instanzweite Ressource (siehe docs/architecture.md E1) -
+			// deshalb hier statt in buildFileUrls() mitgegeben.
 			$body['soundFontUrl'] = $this->soundFontUrl();
 		}
 		return new JSONResponse($body);
@@ -135,11 +134,11 @@ class ConversionController extends Controller {
 	}
 
 	/**
-	 * Alle Cache-Artefakte ueber EINE Route (Codereview-Befund B2, Phase
-	 * 23/Schritt 6) - vorher fuenf Methoden, die sich nur in Dateiname und
-	 * MIME-Typ unterschieden. Welche Namen gueltig sind und welchen Typ sie
-	 * tragen, weiss ConversionService::getArtifact(); dieser Controller
-	 * kuemmert sich nur um Zugriffsrecht, Cache-Status und HTTP-Header.
+	 * Alle Cache-Artefakte ueber EINE Route - statt fuenf Methoden, die
+	 * sich nur in Dateiname und MIME-Typ unterschieden. Welche Namen
+	 * gueltig sind und welchen Typ sie tragen, weiss
+	 * ConversionService::getArtifact(); dieser Controller kuemmert sich
+	 * nur um Zugriffsrecht, Cache-Status und HTTP-Header.
 	 */
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
@@ -214,7 +213,7 @@ class ConversionController extends Controller {
 			'timingJson' => $artifact('timing'),
 			'measuresJson' => $artifact('measures'),
 			'metaJson' => $artifact('meta'),
-			// Anker-Etag für Notizen (Phase 11) - der aktuelle etag dieser
+			// Anker-Etag für Notizen - der aktuelle etag dieser
 			// Konvertierung, damit der Client neue Notizen mit einem gültigen
 			// Sekundäranker (elid + anchorEtag) anlegen kann.
 			'etag' => $etag,

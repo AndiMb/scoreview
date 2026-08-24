@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
 	Reine Unit-Tests gegen Interface-Mocks - bewusst KEIN Bootstrap der
-	echten Nextcloud-Instanz (Codereview Phase 23/Schritt 2, Befund B5).
+	echten Nextcloud-Instanz.
 	`nextcloud/ocp` liefert die OCP-Schnittstellen als dev-Abhaengigkeit,
 	composer.json haengt sie fuer die Laufzeit in `autoload-dev` ein (das
 	Paket selbst deklariert keinen Autoload, es ist fuer Psalm gedacht).
 
 	Damit laufen diese Tests in Sekunden und ohne Container - genau die
-	Eigenschaft, die sie in CI und vor dem grossen Umbau aus Schritt 6
-	brauchbar macht. Was echte Nextcloud-Integration braucht (Routen,
+	Eigenschaft, die sie in CI brauchbar macht. Was echte
+	Nextcloud-Integration braucht (Routen,
 	Migrationen, IAppData), bleibt weiterhin Sache des Durchlaufs gegen die
 	Testinstanz; siehe scoreview/README.md.
 -->

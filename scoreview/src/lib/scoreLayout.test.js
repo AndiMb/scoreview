@@ -19,8 +19,8 @@ import {
 } from './scoreLayout.js'
 
 describe('buildTimeline / resolveCursorRect', () => {
-	// Nachgebildet aus der echten Phase-5/M7-Messung gegen
-	// spike/test-scores/repeat-test.mscz: elid 0-3 (Takt 1) läuft wegen der
+	// Nachgebildet aus der echten M7-Messung gegen
+	// sidecar/testdata/repeat-test.mscz: elid 0-3 (Takt 1) läuft wegen der
 	// Wiederholung zweimal durch, mit unterschiedlichen timeMs-Werten.
 	const timingJson = {
 		events: [
@@ -47,7 +47,7 @@ describe('buildTimeline / resolveCursorRect', () => {
 	it('liefert für ein wiederholtes elid bei jedem Durchlauf dieselbe Koordinate', () => {
 		const timeline = buildTimeline(timingJson)
 		// elid 0 taucht zweimal auf (t=0 und t=4000) - beide Male dieselbe
-		// Koordinate, kein Sonderfall (siehe PLAN.md M7).
+		// Koordinate, kein Sonderfall (siehe docs/architecture.md M7).
 		expect(resolveCursorRect(timeline, 0)).toEqual(resolveCursorRect(timeline, 4000))
 	})
 
@@ -64,8 +64,8 @@ describe('buildTimeline / resolveCursorRect', () => {
 
 describe('findMeasureStartTime', () => {
 	// Nachgebildet aus der echten M7-Messung: measures.json fuer
-	// repeat-test.mscz (5 Takte, Takt 1 = elid 0 spielt wegen der
-	// Wiederholung zweimal, bei t=0 und t=4000).
+	// sidecar/testdata/repeat-test.mscz (5 Takte, Takt 1 = elid 0 spielt
+	// wegen der Wiederholung zweimal, bei t=0 und t=4000).
 	const measuresTimeline = buildTimeline({
 		events: [
 			{ elid: 0, timeMs: 0 },
@@ -93,9 +93,10 @@ describe('findMeasureStartTime', () => {
 })
 
 describe('resolveMeasurePosition / measurePositionToTimeMs', () => {
-	// repeat-test.mscz-Struktur (M7): Takt 1 (elid 0) t=0, Takt 2 (elid 1)
-	// t=2000, Takt 1 zweiter Durchlauf t=4000, Takt 3 (elid 2) t=6000, Takt 4
-	// (elid 3) t=8000, Takt 5 (elid 4) t=10000. Stückende (Annahme) t=11500.
+	// sidecar/testdata/repeat-test.mscz-Struktur (M7): Takt 1 (elid 0) t=0,
+	// Takt 2 (elid 1) t=2000, Takt 1 zweiter Durchlauf t=4000, Takt 3
+	// (elid 2) t=6000, Takt 4 (elid 3) t=8000, Takt 5 (elid 4) t=10000.
+	// Stückende (Annahme) t=11500.
 	const measuresTimeline = buildTimeline({
 		events: [
 			{ elid: 0, timeMs: 0 },
@@ -236,7 +237,7 @@ describe('parseSvgSizeMm', () => {
 	})
 })
 
-describe('Zoom-Presets (Phase 16)', () => {
+describe('Zoom-Presets', () => {
 	it('computeFitWidthZoom liefert 1 bei Basisbreite, skaliert linear', () => {
 		expect(computeFitWidthZoom(BASE_PAGE_WIDTH_PX)).toBe(1)
 		expect(computeFitWidthZoom(BASE_PAGE_WIDTH_PX * 2)).toBe(2)
@@ -270,9 +271,9 @@ describe('Zoom-Presets (Phase 16)', () => {
 	})
 })
 
-// Die sanitizeSvg-Tests sind nach svgSanitizer.test.js gewandert (Phase 20,
-// DOMPurify statt Regex - braucht ein DOM, siehe dortiger
-// @vitest-environment-Hinweis). Diese Datei bleibt DOM-frei.
+// Die sanitizeSvg-Tests sind nach svgSanitizer.test.js gewandert (DOMPurify
+// statt Regex - braucht ein DOM, siehe dortiger @vitest-environment-Hinweis).
+// Diese Datei bleibt DOM-frei.
 
 describe('computePinchZoom', () => {
 	it('verdoppelt den Zoom, wenn sich der Fingerabstand verdoppelt', () => {

@@ -60,8 +60,8 @@ import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import { computeEffectiveVolumes, computeVoiceFocusVolumes, resolveMixerGroups } from '../lib/mixerLayout.js'
 
 /**
- * UI + Zustand für Lautstärke/Mute/Solo/Instrument pro Kanal (Phase 9,
- * Stimmgruppen + "meine Stimme"-Preset seit Phase 17). Die eigentliche
+ * UI + Zustand für Lautstärke/Mute/Solo/Instrument pro Kanal, Stimmgruppen
+ * + "meine Stimme"-Preset. Die eigentliche
  * Solo/Mute/Fokus-Auflösung ist rein und lebt in mixerLayout.js - diese
  * Komponente hält nur den UI-Zustand (je MIDI-Kanal, siehe `states`) und
  * ruft player.js über die vom Elternteil (ScoreViewer.vue) durchgereichten
@@ -166,7 +166,7 @@ export default {
 			this.emitVolumes()
 		},
 
-		// "Meine Stimme"-Preset (Phase 17): anders als Solo werden die übrigen
+		// "Meine Stimme"-Preset: anders als Solo werden die übrigen
 		// Kanäle nur gedämpft, nicht stumm geschaltet (siehe mixerLayout.js
 		// computeVoiceFocusVolumes) - der Probenfall ist "meine Stimme klar
 		// heraushören", nicht "die anderen ausblenden".
@@ -219,7 +219,7 @@ export default {
 }
 
 /*
- * Umbruchfähig seit Phase 22: der Mixer steht jetzt in einer Karte von
+ * Umbruchfähig: der Mixer steht in einer Karte von
  * höchstens 420px über dem Notenbild, nicht mehr über die volle Breite des
  * Viewers. Ohne Umbruch würde die Instrumentenauswahl den Lautstärkeregler
  * auf wenige Pixel zusammenquetschen.

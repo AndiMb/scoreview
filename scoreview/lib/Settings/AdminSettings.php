@@ -13,9 +13,8 @@ use OCP\Util;
 
 /**
  * Erscheint unter Einstellungen → Verwaltung. Die Seite selbst ist eine
- * Vue-Komponente auf `@nextcloud/vue` (src/components/AdminSettings.vue,
- * Phase 23/Schritt 3); dieses Template liefert nur noch den Mountpunkt und
- * den Startzustand.
+ * Vue-Komponente auf `@nextcloud/vue` (src/components/AdminSettings.vue);
+ * dieses Template liefert nur noch den Mountpunkt und den Startzustand.
  *
  * Startzustand über `IInitialState` statt über Template-Variablen oder eine
  * eigene GET-Route: Nextcloud rendert ihn als `<input type="hidden">` in die

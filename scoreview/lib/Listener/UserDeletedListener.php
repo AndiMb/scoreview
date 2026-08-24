@@ -13,13 +13,13 @@ use Psr\Log\LoggerInterface;
 /**
  * @template-implements IEventListener<UserDeletedEvent>
  *
- * Löscht die Notizen eines gelöschten Kontos (Codereview-Befund A4).
+ * Löscht die Notizen eines gelöschten Kontos.
  *
- * Bis Phase 23 überlebten sie die Kontolöschung unbegrenzt - inklusive ihres
- * Inhalts, also echter Nutzertexte, und inklusive der `user_id` in der
- * Spalte. Für einen Prototyp folgenlos, für eine Produktivinstallation ein
- * Datenschutzthema: „Konto gelöscht" muss heißen, dass seine Inhalte weg
- * sind.
+ * Ohne dieses Löschen überlebten sie die Kontolöschung unbegrenzt -
+ * inklusive ihres Inhalts, also echter Nutzertexte, und inklusive der
+ * `user_id` in der Spalte. Für einen Prototyp folgenlos, für eine
+ * Produktivinstallation ein Datenschutzthema: „Konto gelöscht" muss
+ * heißen, dass seine Inhalte weg sind.
  *
  * Anders als beim Löschen einer *Datei* (siehe NodeDeletedListener) ist der
  * Fall hier eindeutig: eine Kontolöschung ist nicht umkehrbar, es gibt

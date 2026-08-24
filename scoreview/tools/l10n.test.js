@@ -32,7 +32,7 @@ describe('extractFromSource', () => {
 	})
 })
 
-// Der eigentliche Vollstaendigkeitstest (PLAN.md Phase 14: "Ein
+// Der eigentliche Vollstaendigkeitstest ("Ein
 // vitest-Test ruft dieselbe Logik auf, damit npm test fehlschlägt, sobald
 // ein String ohne deutsche Übersetzung dazukommt") - scannt den echten
 // Quellbaum, nicht nur Beispieltexte wie oben.

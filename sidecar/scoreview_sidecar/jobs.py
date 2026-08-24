@@ -1,8 +1,5 @@
 """In-memory job registry, the conversion worker, and the reaper thread.
 
-Split out of the former single-file ``server.py`` in Phase 23/step 5 (code
-review finding B3).
-
 Deliberately not persisted: this service is a stateless-ish converter behind
 ConversionService's own durable IAppData cache. If the sidecar restarts
 mid-job, the caller (PollConversionJob) sees a missing job and simply
@@ -95,7 +92,7 @@ def _convert(job_id: str, input_path: Path, workdir: Path):
         meta_path.write_text(json.dumps(media.get("metadata") or {}), encoding="utf-8")
 
         # pngs/pdf/mxml are present in `media` but intentionally never
-        # written to disk - see PLAN.md "Was ersatzlos entfaellt" (E1/E2).
+        # written to disk - see docs/architecture.md M2.
 
         with JOBS_LOCK:
             JOBS[job_id].update(

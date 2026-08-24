@@ -9,7 +9,7 @@ use OCP\IAppConfig;
 use OCP\IDBConnection;
 
 /**
- * Betriebsdiagnose für die Admin-Seite (Phase 21). Beantwortet die drei
+ * Betriebsdiagnose für die Admin-Seite. Beantwortet die drei
  * Fragen, deren Antwort bisher nur im Log oder gar nicht stand:
  * Ist der Sidecar erreichbar? Ist ein SoundFont da? **Läuft der
  * Nextcloud-Cron?**

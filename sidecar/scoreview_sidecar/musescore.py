@@ -1,17 +1,16 @@
 """Everything that talks to MuseScore, and the parsing of what it returns.
 
-Split out of the former single-file ``server.py`` in Phase 23/step 5 (code
-review finding B3). Deliberately free of Flask and of the job registry: the
-two functions here are the ones the unit tests in ``tests/`` cover, and they
-should be importable without starting a web application.
+Deliberately free of Flask and of the job registry: the two functions here
+are the ones the unit tests in ``tests/`` cover, and they should be
+importable without starting a web application.
 
-Previously (Phase 3) this ran three separate `mscore4portable` invocations
-(-o score.musicxml / audio.mp3 / score.spos) because MuseScore 4 does not
-reliably honour multiple `-o` flags in one call. `--score-media` sidesteps
-that entirely: one process, one JSON blob on stdout containing every
-artifact MuseScore can produce for the score (see M2). We keep svgs, midi,
-sposXML, mposXML and metadata; pngs/pdf/mxml are decoded only to be
-discarded (see PLAN.md "Was ersatzlos entfaellt").
+MuseScore 4 does not reliably honour multiple `-o` flags in one call, so
+producing musicxml/audio/spos artifacts separately would need three
+separate `mscore4portable` invocations (-o score.musicxml / audio.mp3 /
+score.spos). `--score-media` sidesteps that entirely: one process, one JSON
+blob on stdout containing every artifact MuseScore can produce for the
+score (see M2). We keep svgs, midi, sposXML, mposXML and metadata;
+pngs/pdf/mxml are decoded only to be discarded (see docs/architecture.md M2).
 """
 
 import base64
@@ -24,7 +23,7 @@ from . import config
 
 
 def run_score_media(input_path: Path) -> dict:
-    # Mirrors entrypoint.sh (Phase 1 spike): xvfb-run because
+    # Mirrors entrypoint.sh: xvfb-run because
     # mscore4portable needs an X server even for pure CLI conversion,
     # timeout as a hard guard against MuseScore hanging on unusual input
     # (Risiko "MuseScore-Sicherheitsluecke ueber praeparierte .mscz").
@@ -104,9 +103,9 @@ def check_promises(media: dict) -> tuple[list[str], dict]:
     """Checks a `--score-media` result against the promises the rest of the
     app is built on (M2/M4/M7) - the substance of ``GET /selftest``.
 
-    Separate from the route (Phase 23/step 5) so that it is testable without
-    a request context, and so the route stays what it should be: an entry
-    point, not a place where knowledge lives.
+    Separate from the route so that it is testable without a request
+    context, and so the route stays what it should be: an entry point, not
+    a place where knowledge lives.
 
     Every violated promise is named individually, so that a MuseScore version
     change is diagnosable rather than merely "broken".

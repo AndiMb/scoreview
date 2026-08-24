@@ -1,11 +1,11 @@
-// Ab Phase 8 nur noch die binäre Suche - der Rest dieser Datei
-// (buildStepTimes, das lineare Interpolieren zwischen Cursor-Schritten und
-// Timing-Events) ist mit OSMD entfernt worden. Der Sidecar liefert jetzt
-// über sposXML/mposXML für jedes elid einen exakten timeMs-Wert (siehe
-// PLAN.md M7) - es gibt keine zweite, unabhängig gezählte Schrittfolge
-// (den früheren OSMD-Cursor) mehr, gegen die interpoliert werden müsste.
-// scoreLayout.js baut auf dieser Funktion auf, um zu einer gegebenen
-// Wiedergabezeit das aktuelle Element zu finden.
+// Nur die binäre Suche - kein lineares Interpolieren zwischen
+// Cursor-Schritten und Timing-Events: der Sidecar liefert über sposXML/
+// mposXML für jedes elid einen exakten timeMs-Wert (siehe
+// docs/architecture.md M7), es gibt also keine zweite, unabhängig gezählte
+// Schrittfolge, gegen die interpoliert werden müsste (kein Renderer-interner
+// Cursor-Zustand wie bei einem Neusatz, siehe E2). scoreLayout.js baut auf
+// dieser Funktion auf, um zu einer gegebenen Wiedergabezeit das aktuelle
+// Element zu finden.
 
 /**
  * Größter Index i mit times[i] <= timeMs (binäre Suche). 0, wenn timeMs vor

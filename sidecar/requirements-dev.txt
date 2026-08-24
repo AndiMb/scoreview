@@ -1,6 +1,6 @@
-# Nur fuer die Unit-Tests des Sidecars (Codereview Phase 23/Schritt 2,
-# Befund B4). Das Laufzeit-Image installiert Flask ueber das Debian-Paket
-# python3-flask (siehe Dockerfile) und braucht diese Datei nicht.
+# Nur fuer die Unit-Tests des Sidecars. Das Laufzeit-Image installiert
+# Flask ueber das Debian-Paket python3-flask (siehe Dockerfile) und
+# braucht diese Datei nicht.
 #
 #   python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 #   .venv/bin/python -m pytest

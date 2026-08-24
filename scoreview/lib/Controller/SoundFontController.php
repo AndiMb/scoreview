@@ -17,8 +17,9 @@ use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 
 /**
- * Liefert das SoundFont fuer die Browser-Wiedergabe aus (Phase 9/E1) -
- * bewusst als eigener Controller und nicht in ConversionController: das
+ * Liefert das SoundFont fuer die Browser-Wiedergabe aus (siehe
+ * docs/architecture.md E1) - bewusst als eigener Controller und nicht in
+ * ConversionController: das
  * SoundFont haengt an keiner fileId und durchlaeuft deshalb auch keine der
  * dortigen Datei-/Rechtepruefungen.
  *

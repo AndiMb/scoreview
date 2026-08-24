@@ -13,10 +13,9 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Die Rechte-Verzweigungen fuer Notizen (Phase 11 privat, Phase 18 geteilt)
- * sind die sicherheitsrelevanteste PHP-Logik der App - und bis zum
- * Codereview (Befund B5) ausschliesslich von Hand gegen die Testinstanz
- * geprueft. Vier Faelle je Schreiboperation, und der Unterschied zwischen
+ * Die Rechte-Verzweigungen fuer Notizen (privat, geteilt) sind die
+ * sicherheitsrelevanteste PHP-Logik der App. Vier Faelle je
+ * Schreiboperation, und der Unterschied zwischen
  * "404, ohne Existenz zu bestaetigen" und "403" ist eine bewusste
  * Entscheidung (siehe AnnotationService), die ein Refactoring still
  * umdrehen koennte.
@@ -69,8 +68,8 @@ class AnnotationServiceTest extends TestCase {
 	}
 
 	public function testUpdateGeteilteNotizMitSchreibrechtGehtAuchFremd(): void {
-		// Kernzusage aus Phase 18: geteilt heisst "wer die Datei bearbeiten
-		// darf, darf auch die Notiz bearbeiten" - unabhaengig von der Autorin.
+		// Kernzusage: geteilt heisst "wer die Datei bearbeiten darf, darf
+		// auch die Notiz bearbeiten" - unabhaengig von der Autorin.
 		$annotation = $this->annotation('bob', Annotation::VISIBILITY_SHARED);
 		$this->mapper->method('findByIdAndFileId')->willReturn($annotation);
 		$this->mapper->expects($this->once())->method('update')->willReturnArgument(0);
@@ -187,7 +186,7 @@ class AnnotationServiceTest extends TestCase {
 
 	public function testSerializeMarkiertVerwaisteNotiz(): void {
 		// Takt 80 in einer Partitur, die nach einem Re-Upload nur noch 63
-		// Takte hat (PLAN.md Phase 11).
+		// Takte hat.
 		$data = $this->service->serialize($this->annotation('alice', Annotation::VISIBILITY_PRIVATE, 80), 'alice', 63);
 		$this->assertTrue($data['orphaned']);
 	}

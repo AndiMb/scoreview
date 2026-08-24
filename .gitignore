@@ -4,7 +4,7 @@ node_modules/
 vendor/
 *.log
 
-# Werkzeug-Caches und lokale Umgebungen (Phase 23/Schritt 2 - Linter, Tests)
+# Werkzeug-Caches und lokale Umgebungen
 .phpunit.cache/
 .phpunit.result.cache
 .php-cs-fixer.cache
@@ -14,27 +14,23 @@ vendor/
 __pycache__/
 .pytest_cache/
 
-# Spike scratch output (regenerated from test-scores/)
-spike/output/
+# Testpartituren sind nicht garantiert frei lizenziert - nie stillschweigend
+# committen. Siehe sidecar/testdata/README.md.
+sidecar/testdata/*.mscz
+sidecar/testdata/*.mp3
+sidecar/testdata/*.wav
+sidecar/testdata/*.mid
+sidecar/testdata/*.musicxml
+sidecar/testdata/*.spos
+sidecar/testdata/*.mpos
 
-# Test scores are not guaranteed to be public domain / freely licensed.
-# Never commit them silently - see spike/test-scores/README.md.
-spike/test-scores/*.mscz
-spike/test-scores/*.mp3
-spike/test-scores/*.wav
-spike/test-scores/*.mid
-spike/test-scores/*.musicxml
-spike/test-scores/*.spos
-spike/test-scores/*.mpos
+# Ausnahme: selbst erstellte, lizenzklare Testpartitur (Wiederholung, Volta,
+# D.C.) - Vorlage fuer selftest-score.mscz.
+!sidecar/testdata/repeat-test.mscz
+!sidecar/testdata/repeat-test.musicxml
 
-# Exception: self-composed, license-clean fixture for Phase 5 (repeats /
-# volta / D.C.) - see spike/test-scores/README.md.
-!spike/test-scores/repeat-test.mscz
-!spike/test-scores/repeat-test.musicxml
-
-# Converted spike assets served to the browser - derived from the same
-# not-guaranteed-public-domain sources as spike/test-scores/.
-spike/public/scores/
+# Lokale Wegwerf-Arbeitsverzeichnisse
+spike/
 
 # OS
 Thumbs.db

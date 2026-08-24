@@ -13,7 +13,7 @@ use OCP\IAppConfig;
 use OCP\ITempManager;
 
 /**
- * Haelt das SoundFont fuer die Browser-Wiedergabe (Phase 9/E1) vor.
+ * Haelt das SoundFont fuer die Browser-Wiedergabe (siehe docs/architecture.md E1) vor.
  *
  * Warum ueberhaupt: Ohne SoundFont gibt es keinen Ton - die Synthese
  * passiert im Browser (E1), und ein Synthesizer ohne Sample-Bank ist

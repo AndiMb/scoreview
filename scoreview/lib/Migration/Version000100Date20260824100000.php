@@ -11,8 +11,7 @@ use OCP\Migration\IOutput;
 use OCP\Migration\SimpleMigrationStep;
 
 /**
- * Phase 23/Schritt 3 (Codereview-Befund C2): markiert `sidecar_secret`
- * nachträglich als sensibel.
+ * Markiert `sidecar_secret` nachträglich als sensibel.
  *
  * Warum überhaupt: `IAppConfig` kann einen Wert als sensibel führen und
  * blendet ihn dann in `occ config:app:list`, im Support-Bericht und in

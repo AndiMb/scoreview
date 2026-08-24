@@ -1,6 +1,6 @@
 import { planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
 
-// Pausendauer für das Nachführen nach manuellem Scrollen (Phase 16, siehe
+// Pausendauer für das Nachführen nach manuellem Scrollen (siehe
 // scrollPlan.js) - lang genug, um in Ruhe zu lesen, kurz genug, um nicht wie
 // ein Hänger zu wirken.
 const MANUAL_SCROLL_RESUME_MS = 2500
@@ -15,8 +15,8 @@ const PROGRAMMATIC_SCROLL_WINDOW_MS = 700
  * Führt das Notenbild der Wiedergabe nach und hält sich zurück, solange
  * jemand selbst scrollt.
  *
- * Viertes Composable aus der Zerlegung von `ScoreViewer.vue`
- * (Codereview-Befund B1, Phase 23/Schritt 6). Hier steht ausschließlich die
+ * Viertes Composable aus der Zerlegung von `ScoreViewer.vue`. Hier steht
+ * ausschließlich die
  * **DOM-Messung**; die Entscheidung „ob und wohin" ist reine Rechnung und
  * bleibt in `scrollPlan.js`, wo sie ohne Browser getestet wird.
  *
@@ -111,8 +111,8 @@ export function useAutoScroll({ scrollEl }) {
 			viewportHeight: el.clientHeight,
 		})
 		// Waagerecht nur, wenn die Seite überhaupt breiter als das Bild ist
-		// (Phase 22: das kann sie jetzt, siehe ScorePage.vue) - sonst wäre
-		// jeder Aufruf eine überflüssige DOM-Schreiboperation.
+		// (siehe ScorePage.vue) - sonst wäre jeder Aufruf eine überflüssige
+		// DOM-Schreiboperation.
 		let targetLeft = null
 		if (el.scrollWidth > el.clientWidth) {
 			targetLeft = planHorizontalScroll({
@@ -128,8 +128,8 @@ export function useAutoScroll({ scrollEl }) {
 	}
 
 	/**
-	 * Erkennt manuelles Scrollen (PLAN.md: "bei manuellem Scrollen aussetzen
-	 * und nach kurzer Zeit wieder übernehmen") - jedes scroll-Event, das nicht
+	 * Erkennt manuelles Scrollen ("bei manuellem Scrollen aussetzen und nach
+	 * kurzer Zeit wieder übernehmen") - jedes scroll-Event, das nicht
 	 * innerhalb des Ignorierfensters eines eigenen scrollTo() liegt, gilt als
 	 * Nutzereingriff.
 	 */

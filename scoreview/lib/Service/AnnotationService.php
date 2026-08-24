@@ -9,7 +9,7 @@ use OCA\ScoreView\Db\AnnotationMapper;
 use OCP\IUserManager;
 
 /**
- * Verwaltet Notizen (Phase 11: privat, Phase 18: zusätzlich geteilt). Der
+ * Verwaltet Notizen (privat und geteilt). Der
  * Anker ist musikalisch (Taktnummer + Bruchteil innerhalb des Taktes, siehe
  * Migration\Version000100Date20260823130000) - diese Klasse berechnet den
  * Anker nicht selbst (das passiert clientseitig aus timing.json/
@@ -46,7 +46,7 @@ class AnnotationService {
 	 * `mine` (fürs Bearbeiten-UI - nicht anhand der rohen userId im Client
 	 * geprüft, die wird absichtlich gar nicht erst ausgeliefert) und
 	 * `authorName` (nur für geteilte Notizen sinnvoll - Displayname statt
-	 * roher userId, siehe PLAN.md Phase 18 "Autor über IUserManager").
+	 * roher userId, aufgelöst über IUserManager).
 	 */
 	public function serialize(Annotation $a, string $currentUserId, ?int $currentMeasureCount = null): array {
 		$data = $a->jsonSerialize();
@@ -55,8 +55,8 @@ class AnnotationService {
 			? ($this->userManager->get($a->getUserId())?->getDisplayName() ?? $a->getUserId())
 			: null;
 		if ($currentMeasureCount !== null) {
-			// "Verwaist" (PLAN.md Phase 11 - "nicht aufloesbare Notizen sichtbar
-			// als verwaist markieren statt sie zu verlieren"): die Partitur hat
+			// "Verwaist" (nicht aufloesbare Notizen sichtbar als verwaist
+			// markieren statt sie zu verlieren): die Partitur hat
 			// inzwischen weniger Takte als der Anker referenziert - kann nach
 			// einem Re-Upload passieren, der Takte entfernt hat. Ein
 			// UNveraendertes measure_number bei einer GROESSEREN Taktzahl gilt
