@@ -18,7 +18,7 @@ verweisen.
 | Pfad | Inhalt |
 |---|---|
 | `scoreview/` | Die Nextcloud-App (PHP in `lib/`, Vue 3 in `src/`) |
-| `sidecar/` | Docker-Container mit MuseScore 4 + kleiner Flask-HTTP-API |
+| `sidecar/` | Docker-Container mit MuseScore 4 + kleiner Flask-HTTP-API (Paket `scoreview_sidecar`, hinter gunicorn) |
 | `spike/` | Vorarbeiten aus Phase 1, nicht Teil der App |
 
 Der Sidecar ist zwingende Voraussetzung (siehe `PLAN.md` E3). Das Frontend
@@ -80,7 +80,11 @@ und `scoreview/README.md`.
 - **Sidecar braucht Neubau *und* neuen Container**:
   `docker build -t scoreview-musescore-cli sidecar/`, dann
   `docker rm -f scoreview-sidecar` und das `docker run` aus
-  `sidecar/README.md`.
+  `sidecar/README.md`. **`--network scoreview-net` nicht vergessen** – ohne
+  das Flag startet der Container fehlerfrei, ist aber von Nextcloud aus
+  nicht per Containernamen erreichbar (Dockers Standard-Bridge kennt keine
+  Namensauflösung), und die Betriebsdiagnose meldet nur
+  „Konvertierungsdienst nicht erreichbar".
 - **Kein System-Cron im Image.** Ohne den manuellen Loop laufen
   Background-Jobs nicht, und Konvertierungen bleiben auf „pending" stehen.
   Vor der Fehlersuche prüfen: `docker exec nextcloud-test ps aux | grep cron.php`.

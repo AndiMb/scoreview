@@ -1,12 +1,13 @@
-"""Macht ``server`` importierbar, ohne den Container zu starten.
+"""Macht ``scoreview_sidecar`` importierbar, ohne den Container zu starten.
 
-``server.py`` erzwingt beim Import ein Secret (bewusst - ein
-unauthentifizierter Konvertierungsdienst soll gar nicht erst hochkommen),
-legt ``JOBS_DIR`` an und startet den Reaper-Thread. Fuer reine Unit-Tests
-der Parserfunktionen wird das hier vorab gesetzt bzw. in ein tmp-Verzeichnis
-umgelenkt, statt die Modulstruktur dafuer umzubauen - das Aufteilen von
-server.py steht als eigener Befund (B3) in Schritt 5 an, und die Tests
-sollen VORHER da sein, nicht danach.
+``config`` erzwingt beim Import ein Secret (bewusst - ein
+unauthentifizierter Konvertierungsdienst soll gar nicht erst hochkommen) und
+legt ``JOBS_DIR`` an. Beides wird hier vorab gesetzt bzw. in ein
+tmp-Verzeichnis umgelenkt.
+
+Seit Phase 23/Schritt 5 ist der Reaper-Thread kein Import-Nebeneffekt mehr,
+sondern haengt an ``create_app()`` - Tests, die nur die Parserfunktionen
+brauchen, starten also gar nichts mehr.
 """
 
 import os

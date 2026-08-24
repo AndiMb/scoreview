@@ -2,7 +2,8 @@
 
 Docker-Image mit einer gepinnten MuseScore-Studio-Version (siehe
 `Dockerfile`-`ARG`s), die als extrahiertes AppImage headless unter
-`xvfb-run` läuft. Standard-Kommando ist die HTTP-API (`server.py`); der
+`xvfb-run` läuft. Standard-Kommando ist die HTTP-API (Paket
+`scoreview_sidecar`, gestartet über `wsgi.py` mit gunicorn); der
 reine CLI-Modus aus Phase 1 bleibt als manueller Debug-Weg erreichbar
 (siehe unten).
 
@@ -25,6 +26,19 @@ MSYS_NO_PATHCONV=1 docker run -d --name scoreview-sidecar \
   --memory=2g --pids-limit=512 \
   scoreview-musescore-cli
 ```
+
+**Ohne `--network` ist der Sidecar von Nextcloud aus nicht erreichbar.** Auf
+Dockers Standard-Bridge gibt es keine Namensauflösung zwischen Containern;
+`http://scoreview-sidecar:8765` – die Adresse, die in den Admin-Einstellungen
+steht – läuft dann ins Leere, während `curl` vom Host aus tadellos
+funktioniert. Der Container startet trotzdem fehlerfrei, und die
+Betriebsdiagnose meldet schlicht „Konvertierungsdienst nicht erreichbar".
+Beide Container müssen in dasselbe benutzerdefinierte Netz; wie das für die
+Testumgebung aufgesetzt ist, steht unten unter „Aktuell laufende
+Testumgebung" (`--network scoreview-net`). Der Befehl oben lässt das Flag
+bewusst weg, weil der Netzname von der jeweiligen Installation abhängt – er
+ist damit aber **kein vollständiger Startbefehl**. (Beim Nachbauen des
+Containers in Phase 23/Schritt 5 genau darüber gestolpert.)
 
 `--memory`/`--pids-limit` sind für den Produktivbetrieb empfohlen (Phase 12,
 Minimum-Härtung): der Container lässt eine große C++/Qt-Codebasis
@@ -90,23 +104,27 @@ Weitere Env-Vars (alle optional):
   zusätzlich `files`:
   ```json
   {
-    "pages": ["/convert/{jobId}/page/1", "/convert/{jobId}/page/2", "..."],
-    "midi": "/convert/{jobId}/midi",
-    "timingJson": "/convert/{jobId}/timing",
-    "measuresJson": "/convert/{jobId}/measures",
-    "metaJson": "/convert/{jobId}/meta"
+    "pages": ["/convert/{jobId}/artifact/page-1", "/convert/{jobId}/artifact/page-2", "..."],
+    "midi": "/convert/{jobId}/artifact/midi",
+    "timingJson": "/convert/{jobId}/artifact/timing",
+    "measuresJson": "/convert/{jobId}/artifact/measures",
+    "metaJson": "/convert/{jobId}/artifact/meta"
   }
   ```
   bei `error` zusätzlich `error` (Freitext aus der fehlgeschlagenen
   `mscore4portable`-Ausgabe).
-- `GET /convert/{jobId}/page/{n}` (1-indiziert) - SVG-Seite `n`.
-- `GET /convert/{jobId}/midi` - MIDI-Datei (siehe PLAN.md E1 - Synthese
+- `GET /convert/{jobId}/artifact/{name}` - **eine** Auslieferungsroute für
+  alle Artefakte (seit Phase 23/Schritt 5; vorher fünf fast identische
+  Handler, siehe Codereview-Befund B2). Gültige Namen sind eine Allowlist,
+  kein Dateipfad:
+- `…/artifact/page-{n}` (1-indiziert) - SVG-Seite `n`.
+- `…/artifact/midi` - MIDI-Datei (siehe PLAN.md E1 - Synthese
   passiert im Browser, hier gibt es kein Audio mehr).
-- `GET /convert/{jobId}/timing` - `timing.json`, aus `sposXML` geparst.
-- `GET /convert/{jobId}/measures` - `measures.json`, aus `mposXML`
+- `…/artifact/timing` - `timing.json`, aus `sposXML` geparst.
+- `…/artifact/measures` - `measures.json`, aus `mposXML`
   geparst (für Taktnavigation, nicht für den Notenschritt-Cursor - siehe
   „spos vs. mpos" unten).
-- `GET /convert/{jobId}/meta` - `meta.json`, die von MuseScore gelieferte
+- `…/artifact/meta` - `meta.json`, die von MuseScore gelieferte
   `metadata` unverändert (Titel, Takte, `tracks[]`/`parts[]` für den
   Mixer - siehe M6).
 - `GET /selftest` (Header `X-ScoreView-Secret`) → `{"ok": true|false,
@@ -276,7 +294,7 @@ fehlenden/fehlgeschlagenen Job nach einem Sidecar-Neustart und übermittelt
 einfach neu).
 
 End-to-end gegen beide Testpartituren verifiziert (2026-08-23, gegen den
-in Phase 6 umgestellten `server.py`): `repeat-test.mscz` (1 Seite, siehe
+in Phase 6 umgestellten Konvertierung): `repeat-test.mscz` (1 Seite, siehe
 M7) und die SATB-Partitur (4 Seiten, `tracks`/`parts` mit 5 Stimmen +
 Metronom, siehe M6) liefern beide `status: ready` mit allen fünf
 Dateiarten. Ein Prozessstart statt drei, messbar an der Laufzeit

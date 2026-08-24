@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-import server
+from scoreview_sidecar import musescore
 
 
 class FakeCompletedProcess:
@@ -36,7 +36,7 @@ def fake_run(monkeypatch, stdout: bytes, returncode: int = 0, stderr: bytes = b"
         calls.append(cmd)
         return FakeCompletedProcess(stdout, returncode, stderr)
 
-    monkeypatch.setattr(subprocess, "run", _run)
+    monkeypatch.setattr(musescore.subprocess, "run", _run)
     return calls
 
 
@@ -52,7 +52,7 @@ def test_schneidet_qt_rauschen_vor_dem_json_weg(monkeypatch):
     stdout = QT_RAUSCHEN + b"\n" + json.dumps(nutzlast, indent=1).encode()
     fake_run(monkeypatch, stdout)
 
-    assert server.run_score_media(Path("egal.mscz")) == nutzlast
+    assert musescore.run_score_media(Path("egal.mscz")) == nutzlast
 
 
 def test_findet_json_auch_ohne_vorheriges_rauschen(monkeypatch):
@@ -61,7 +61,7 @@ def test_findet_json_auch_ohne_vorheriges_rauschen(monkeypatch):
     nutzlast = {"svgs": ["abc"]}
     fake_run(monkeypatch, b"\n" + json.dumps(nutzlast, indent=1).encode())
 
-    assert server.run_score_media(Path("egal.mscz")) == nutzlast
+    assert musescore.run_score_media(Path("egal.mscz")) == nutzlast
 
 
 def test_meldet_fehlenden_json_marker_deutlich(monkeypatch):
@@ -70,7 +70,7 @@ def test_meldet_fehlenden_json_marker_deutlich(monkeypatch):
     fake_run(monkeypatch, b"nur Rauschen, kein JSON\n")
 
     with pytest.raises(RuntimeError, match="no recognizable JSON"):
-        server.run_score_media(Path("egal.mscz"))
+        musescore.run_score_media(Path("egal.mscz"))
 
 
 def test_meldet_ungueltiges_json_getrennt(monkeypatch):
@@ -79,14 +79,14 @@ def test_meldet_ungueltiges_json_getrennt(monkeypatch):
     fake_run(monkeypatch, b"Rauschen\n{\n das ist kein JSON")
 
     with pytest.raises(RuntimeError, match="not valid JSON"):
-        server.run_score_media(Path("egal.mscz"))
+        musescore.run_score_media(Path("egal.mscz"))
 
 
 def test_meldet_exitcode_mit_stderr_auszug(monkeypatch):
     fake_run(monkeypatch, b"", returncode=124, stderr=b"getoetet nach timeout")
 
     with pytest.raises(RuntimeError, match="exited 124") as exc:
-        server.run_score_media(Path("egal.mscz"))
+        musescore.run_score_media(Path("egal.mscz"))
     assert "getoetet nach timeout" in str(exc.value)
 
 
@@ -98,7 +98,7 @@ def test_ruft_mscore_mit_timeout_und_xvfb_auf(monkeypatch):
     nutzlast = {"svgs": ["abc"]}
     calls = fake_run(monkeypatch, b"\n" + json.dumps(nutzlast, indent=1).encode())
 
-    server.run_score_media(Path("/data/eingabe.mscz"))
+    musescore.run_score_media(Path("/data/eingabe.mscz"))
 
     cmd = calls[0]
     assert cmd[0] == "timeout"

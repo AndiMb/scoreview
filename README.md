@@ -58,8 +58,12 @@ wiederholbar statt endgültig; ein Klick abseits der Noten springt nicht mehr
 gelöschter Dateien und Konten werden aufgeräumt – die Notizen bewusst erst,
 wenn die Datei auch aus dem Papierkorb verschwunden ist; und zu große
 Partituren werden mit eigenem Fehlercode abgelehnt statt in einen Speicher-
-oder Timeout-Fehler zu laufen. Die Schritte 5–7 (Sidecar-Härtung, Zerlegung
-von `ScoreViewer.vue`, Feinschliff) stehen mit Reihenfolge und Begründung in
+oder Timeout-Fehler zu laufen. **Schritt 5** ebenfalls: der Sidecar ist aus
+einer 515-Zeilen-Datei ein Paket geworden (`scoreview_sidecar`), läuft hinter
+gunicorn statt Flasks Entwicklungsserver, begrenzt gleichzeitige
+Konvertierungen (Standard 2 – vorher unbegrenzt) und liefert alle Artefakte
+über eine Route statt über fünf fast gleiche. Die Schritte 6–7 (Zerlegung von
+`ScoreViewer.vue`, Feinschliff) stehen mit Reihenfolge und Begründung in
 `PLAN.md`.
 Siehe `PLAN.md` für den vollständigen Stand inklusive offener Punkte.
 
@@ -71,7 +75,8 @@ die App läuft nicht ohne ihn (E3 in `PLAN.md`).
 - `spike/` – Wegwerfcode aus Phase 1 (isolierter Sync-Spike, historisch) plus
   `spike/test-scores/` mit lokalen Testpartituren (nicht committet, bis auf
   eine selbst komponierte Ausnahme - siehe dortige README).
-- `sidecar/` – MuseScore-CLI-Docker-Image + HTTP-API (`server.py`). Läuft als
+- `sidecar/` – MuseScore-CLI-Docker-Image + HTTP-API (Paket
+  `scoreview_sidecar`, hinter gunicorn). Läuft als
   eigenständiger Container neben Nextcloud, ist nicht Teil des App-Pakets.
   Siehe `sidecar/README.md` für Betrieb, API und Sicherheitshinweise.
 - `scoreview/` – die eigentliche Nextcloud-App, Layout analog zu bestehenden

@@ -2213,7 +2213,7 @@ den man sonst in Schritt 6 mit umbaut.
 | 2 | Netz spannen: ESLint/Stylelint, PHP-Tests, Sidecar-Tests, CI | C4, C5, C6, B4, B5 | **umgesetzt** |
 | 3 | Mechanische Modernisierung: `IAppConfig`, Secret als sensibel, Einstellungsseite auf `@nextcloud/vue` | C1, C2, C3 | **umgesetzt** |
 | 4 | Echte Fehler: CSP-Reichweite, Seitenladefehler, Klick-Trefferradius, Aufräumen bei Lösch-Events | A1, A2, A3, A4, A7 | **umgesetzt** |
-| 5 | Sidecar produktionsfähig: Nebenläufigkeitsgrenze, WSGI-Server, Modulaufteilung | A5, A6, B3 | offen |
+| 5 | Sidecar produktionsfähig: Nebenläufigkeitsgrenze, WSGI-Server, Modulaufteilung | A5, A6, B3 | **umgesetzt** |
 | 6 | Der große Umbau: `ScoreViewer.vue` in Composables, Auslieferungsrouten zusammenführen | B1, B2 | offen |
 | 7 | Feinschliff: rAF-Schleifen, SVG-Entladen, Store-Metadaten | E1, E2, E3, C7 | offen |
 
@@ -2564,6 +2564,83 @@ Tests kam außerdem ein Stub für `OC\Hooks\Emitter` dazu: `IRootFolder`
 erweitert diese Schnittstelle, sie liegt aber in Nextclouds privatem
 Namensraum und fehlt in `nextcloud/ocp` – ohne sie lässt sich der Dateibaum
 gar nicht mocken.
+
+**Umsetzungsstand Schritt 5 (2026-08-24).** Der Sidecar war der letzte Teil,
+der noch Prototypenstand im Betriebsmodell trug.
+
+*B3 – Aufteilung.* Aus `server.py` (515 Zeilen mit Konfiguration,
+Job-Registry, MuseScore-Aufruf, XML-Parsing und zwölf Routen) ist das Paket
+`scoreview_sidecar` geworden: `config` (alles aus der Umgebung, einmal beim
+Import), `musescore` (der `--score-media`-Aufruf und das Parsen – ohne Flask,
+ohne Registry, also genau der unit-getestete Teil), `jobs` (Registry, Worker,
+Reaper) und `app` (nur noch Routen). Die 13 Tests aus Schritt 2 liefen nach
+dem Umbau unverändert durch – dafür waren sie da.
+
+Zwei Dinge sind dabei mit erledigt worden, weil sie in genau der Datei
+lagen, die ohnehin auseinandergenommen wurde:
+
+- Die Secret-Prüfung liegt nicht mehr als `require_secret()` in zwölf
+  Handlern, sondern in **einem** `before_request`-Hook mit Ausnahmeliste.
+  Vorher war eine neue Route ohne Prüfung ein reiner Vergessensfehler; jetzt
+  müsste jemand den Pfad ausdrücklich in `PUBLIC_PATHS` eintragen.
+- Der **Sidecar-Teil von B2**: die fünf fast identischen Auslieferungsrouten
+  sind zu `GET /convert/{jobId}/artifact/{name}` zusammengefallen, mit einer
+  Allowlist statt eines Dateipfads. Das ist Vorgriff auf Schritt 6 – die
+  PHP-Hälfte von B2 steht dort noch aus. Gefahrlos, weil die PHP-Seite diese
+  URLs nie selbst baut, sondern unverändert aus der Statusantwort übernimmt
+  (`SidecarClient::fetchFile()`).
+
+*A5 – Nebenläufigkeitsgrenze.* Ein `BoundedSemaphore` um die Konvertierung,
+Standard 2, über `SCOREVIEW_MAX_CONCURRENT` einstellbar. Wartende Aufträge
+bleiben schlicht auf `pending` – die PHP-Seite pollt ohnehin und muss von der
+Warteschlange nichts wissen. Am laufenden Container gemessen, 6 Einreichungen
+gleichzeitig:
+
+| Zeit | processing | pending | ready |
+|---|---|---|---|
+| 3 s | 2 | 4 | 0 |
+| 9 s | 2 | 2 | 2 |
+| 12 s | 2 | 0 | 4 |
+| 18 s | 0 | 0 | 6 |
+
+Vorher wären alle sechs sofort mit eigenem MuseScore-Prozess samt Xvfb
+gestartet. Der Unit-Test dazu ist gegen einen Mutationstest abgesichert
+(Semaphor auf 999 gesetzt → „es liefen 5 statt 2"), und ein eigener Test
+deckt ab, dass ein **Fehlschlag den Slot wieder freigibt** – sonst wäre der
+Sidecar nach zwei kaputten Partituren dauerhaft blockiert, ohne dass
+irgendwo ein Fehler erschiene.
+
+*A6 – gunicorn statt Flasks Entwicklungsserver.* `wsgi.py` als Einstieg,
+ENTRYPOINT auf `gunicorn --workers 1 --threads 8`. Im Log steht jetzt
+`Starting gunicorn 20.1.0 … Using worker: threads` statt Werkzeugs eigener
+Warnung.
+
+**Genau ein Worker, und das ist keine Sparsamkeit.** Die Job-Registry liegt
+im Speicher des Prozesses; mit mehreren Workern träfe eine Statusabfrage
+früher oder später einen Prozess, der den Job nie gesehen hat – sporadisch
+und schwer erklärbar. Die Zahl gleichzeitiger *Konvertierungen* regelt
+stattdessen das Semaphor, unabhängig von den HTTP-Threads. Das steht so im
+Dockerfile, in `wsgi.py` und in `jobs.py`, weil es die eine Stelle ist, an
+der eine gut gemeinte Änderung („mehr Worker = schneller") die App still
+kaputtmacht.
+
+**Beim Nachbauen des Containers gefunden – eine Lücke in der eigenen
+Anleitung.** Der Schnellstart in `sidecar/README.md` nennt kein
+`--network`. Genau so ausgeführt startet der Container fehlerfrei, ist aber
+von Nextcloud aus nicht erreichbar: auf Dockers Standard-Bridge gibt es
+keine Namensauflösung zwischen Containern, `http://scoreview-sidecar:8765`
+läuft ins Leere, während `curl` vom Host tadellos funktioniert – und die
+Betriebsdiagnose meldet nur „Konvertierungsdienst nicht erreichbar". Der
+richtige Befehl stand weiter unten unter „Aktuell laufende Testumgebung";
+die beiden Stellen widersprachen sich. Jetzt steht die Einschränkung an
+beiden Stellen, und `CLAUDE.md` warnt beim Container-Neubau ausdrücklich
+davor.
+
+Verifiziert nach dem Umbau: `/selftest` liefert weiterhin „MuseScore 4.7.4
+… ok, 24 Events, 4 wiederholte elids" (also M7 unverändert bestätigt), und
+eine vollständige Konvertierung über den neuen Aufbau – Streaming-Upload aus
+Schritt 4, Semaphor, neue Artefakt-URLs – endet auf `status=ready`. 39
+pytest-Tests (von 13).
 
 ## 4. Was ersatzlos entfällt
 

@@ -22,7 +22,7 @@ ARG MUSESCORE_APPIMAGE_URL
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-suggests \
         xvfb wget libopengl0 musescore ca-certificates libpipewire-0.3-0 \
-        python3 python3-flask && \
+        python3 python3-flask gunicorn && \
     wget -O /tmp/musescore.AppImage "${MUSESCORE_APPIMAGE_URL}" && \
     chmod +x /tmp/musescore.AppImage && \
     cd /opt && /tmp/musescore.AppImage --appimage-extract && \
@@ -38,7 +38,12 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # invocation. entrypoint.sh is kept in the image for manual one-off CLI
 # debugging (docker run --entrypoint /usr/local/bin/entrypoint.sh ...) but
 # is no longer the container's default command.
-COPY server.py /opt/scoreview-sidecar/server.py
+#
+# Phase 23/Schritt 5 (Befund B3): aus der einen 515-Zeilen-Datei server.py
+# ist ein Paket geworden - config / musescore / jobs / app. wsgi.py ist der
+# Einstiegspunkt fuer gunicorn.
+COPY scoreview_sidecar /opt/scoreview-sidecar/scoreview_sidecar
+COPY wsgi.py /opt/scoreview-sidecar/wsgi.py
 
 # Phase 21: die gepinnte Version zur Bauzeit ins Image schreiben, statt sie
 # zur Laufzeit aus `mscore4portable --version` zu lesen. Grund: dieser Aufruf
@@ -57,7 +62,8 @@ ENV SCOREVIEW_MUSESCORE_VERSION="${MUSESCORE_VERSION} (${MUSESCORE_BUILD})"
 # auffiele (PLAN.md M7).
 COPY selftest-score.mscz /opt/scoreview-sidecar/selftest-score.mscz
 
-# Overridable per `docker run -e`; server.py enforces this as a hard
+# Overridable per `docker run -e`; scoreview_sidecar/musescore.py enforces
+# this as a hard
 # wall-clock guard so a hung MuseScore process (Risiko 6) cannot hang a
 # conversion job indefinitely.
 #
@@ -67,6 +73,12 @@ COPY selftest-score.mscz /opt/scoreview-sidecar/selftest-score.mscz
 # fallback default on purpose - this ENV wins over that fallback, so leaving
 # it at 120 here would have silently kept the old behaviour.
 ENV MSCORE_TIMEOUT_SECONDS=600
+
+# Wie viele MuseScore-Prozesse gleichzeitig laufen duerfen (Phase 23/Schritt
+# 5, Befund A5). Vorher: unbegrenzt - jedes /convert startete sofort einen
+# eigenen Prozess samt Xvfb. Wartende Auftraege bleiben schlicht auf
+# "pending", die PHP-Seite pollt ohnehin.
+ENV SCOREVIEW_MAX_CONCURRENT=2
 
 # Phase 12 (Haertung, Minimum aus PLAN.md): der Konvertierungsprozess
 # (mscore4portable, eine grosse C++/Qt-Codebasis auf beliebigen,
@@ -80,4 +92,20 @@ ENV HOME=/home/scoreview
 USER scoreview
 
 EXPOSE 8765
-ENTRYPOINT ["python3", "/opt/scoreview-sidecar/server.py"]
+WORKDIR /opt/scoreview-sidecar
+
+# gunicorn statt Flasks Entwicklungsserver (Phase 23/Schritt 5, Befund A6).
+# Werkzeug warnt beim Start selbst davor, und zu Recht: kein
+# Worker-Management, kein definiertes Verhalten unter Last, kein Neustart
+# nach dem Absturz eines Threads.
+#
+# GENAU EIN WORKER, und das ist keine Sparsamkeit, sondern Voraussetzung:
+# die Job-Registry liegt im Speicher des Prozesses (scoreview_sidecar/jobs.py).
+# Mit mehreren Workern traefe eine Statusabfrage frueher oder spaeter einen
+# Prozess, der den Job nie gesehen hat - sporadisch und schwer erklaerbar.
+# Die Zahl gleichzeitiger KONVERTIERUNGEN regelt stattdessen
+# SCOREVIEW_MAX_CONCURRENT, unabhaengig von den HTTP-Threads.
+#
+# --timeout grosszuegig: /selftest laesst eine echte Konvertierung laufen
+# (~6s gemessen) und /soundfont schiebt rund 40 MB durch die Leitung.
+ENTRYPOINT ["sh", "-c", "exec gunicorn --workers 1 --threads 8 --timeout 300 --graceful-timeout 30 --access-logfile - --bind 0.0.0.0:${PORT:-8765} wsgi:app"]

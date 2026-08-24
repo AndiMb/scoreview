@@ -11,7 +11,7 @@ import base64
 
 import pytest
 
-import server
+from scoreview_sidecar import musescore
 
 
 def encode(xml: str) -> str:
@@ -21,7 +21,7 @@ def encode(xml: str) -> str:
 def test_teilt_koordinaten_durch_zwoelf():
     # M4: --score-media liefert Koordinaten im 12-fachen der SVG-viewBox.
     # Der Client soll diese Konstante nie kennen muessen (PLAN.md Phase 6).
-    result = server._parse_pos_xml(encode("""
+    result = musescore.parse_pos_xml(encode("""
         <score>
           <elements>
             <element id="0" page="0" x="15447" y="25786" sx="1200" sy="600"/>
@@ -40,7 +40,7 @@ def test_teilt_koordinaten_durch_zwoelf():
 
 
 def test_rundet_auf_zwei_nachkommastellen():
-    result = server._parse_pos_xml(encode(
+    result = musescore.parse_pos_xml(encode(
         '<score><elements>'
         '<element id="3" page="1" x="1000" y="1000" sx="7" sy="7"/>'
         '</elements><events/></score>'
@@ -52,7 +52,7 @@ def test_rundet_auf_zwei_nachkommastellen():
 def test_sortiert_events_nach_zeit():
     # Die Binaersuche im Client (findStepIndex) setzt aufsteigende Zeiten
     # voraus; die Sortierung passiert hier, nicht dort.
-    result = server._parse_pos_xml(encode(
+    result = musescore.parse_pos_xml(encode(
         '<score><elements/><events>'
         '<event elid="2" position="1000"/>'
         '<event elid="0" position="0"/>'
@@ -67,7 +67,7 @@ def test_behaelt_mehrfache_elids_bei_wiederholung():
     # M7: bei einer Wiederholung erscheint dasselbe elid mehrfach mit
     # steigender Zeit. Genau darauf steht das Cursor-Datenmodell - wuerde
     # hier entdoppelt, waere der Cursor im zweiten Durchgang still falsch.
-    result = server._parse_pos_xml(encode(
+    result = musescore.parse_pos_xml(encode(
         '<score><elements/><events>'
         '<event elid="0" position="0"/>'
         '<event elid="1" position="500"/>'
@@ -82,12 +82,12 @@ def test_behaelt_mehrfache_elids_bei_wiederholung():
 def test_kommt_mit_fehlenden_abschnitten_klar():
     # mposXML einer einseitigen Partitur ohne Events darf keinen KeyError
     # ausloesen, sondern leere Listen liefern.
-    result = server._parse_pos_xml(encode("<score/>"))
+    result = musescore.parse_pos_xml(encode("<score/>"))
     assert result == {"events": [], "elements": {}}
 
 
 def test_liefert_leere_elemente_bei_leerem_abschnitt():
-    result = server._parse_pos_xml(encode("<score><elements/><events/></score>"))
+    result = musescore.parse_pos_xml(encode("<score><elements/><events/></score>"))
     assert result["elements"] == {}
     assert result["events"] == []
 
@@ -102,7 +102,7 @@ def test_beide_exporte_haben_dieselbe_form():
         '<event elid="0" position="0"/>'
         '</events></score>'
     )
-    spos = server._parse_pos_xml(encode(xml))
-    mpos = server._parse_pos_xml(encode(xml))
+    spos = musescore.parse_pos_xml(encode(xml))
+    mpos = musescore.parse_pos_xml(encode(xml))
     assert spos == mpos
     assert set(spos) == {"events", "elements"}
