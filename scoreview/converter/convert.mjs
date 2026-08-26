@@ -11,8 +11,8 @@
  * Service\LocalConverter.
  *
  * Aufruf:
- *   node convert.mjs <eingabe.mscz> <ausgabeverzeichnis>
- *   node convert.mjs --selftest
+ *   node convert.mjs [--fonts <verzeichnis>] <eingabe.mscz> <ausgabeverzeichnis>
+ *   node convert.mjs [--fonts <verzeichnis>] --selftest
  *
  * Ergebnis geht als eine Zeile JSON nach stdout, Fehler als Klartext nach
  * stderr mit Exitcode != 0. Kein Lograuschen auf stdout: webmscore schreibt
@@ -20,7 +20,7 @@
  * werden deshalb unten stillgelegt, bevor das Modul geladen wird.
  */
 
-import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { checkPromises, toPositions } from './lib/artifacts.mjs'
@@ -51,22 +51,52 @@ process.stdout.write = (chunk, ...rest) => process.stderr.write(chunk, ...rest)
 
 const { default: WebMscore } = await import('webmscore4')
 
+/** Dateiendungen, die MuseScores Fontengine liest. */
+const FONT_ENDUNGEN = /\.(woff2?|otf|ttf|ttc)$/i
+
 /**
  * Zusatzfonts fuer chinesische, japanische und koreanische Liedtexte. Ohne sie
  * setzt MuseScore solche Texte als Ersatzkaestchen - alles andere bleibt
  * unberuehrt.
  *
- * **Optional, und zwar aus einem harten Grund:** Sie wiegen 4,2 MB, und der
- * Nextcloud App Store nimmt Archive nur bis 20 MB an. Das Paket liegt damit
- * bei rund 14 statt 18 MB - Luft, die ein kuenftiger MuseScore-Sprung
- * braucht. Wer CJK-Liedtexte setzt, holt sie mit `npm ci` in `converter/`
- * nach (siehe docs/limits.md).
+ * Zwei Quellen, in dieser Reihenfolge:
+ *
+ * 1. **Ein Verzeichnis ausserhalb der App**, uebergeben per `--fonts` (die
+ *    Einstellung `cjk_font_dir`, siehe Service\LocalConverter). Das ist der
+ *    vorgesehene Weg - und zwar nicht aus Geschmack: Das ausgelieferte
+ *    App-Verzeichnis ist SIGNIERT. Wer dort Dateien hineinlegt, holt sich in
+ *    Nextclouds Integritaetspruefung eine dauerhafte Warnung.
+ * 2. Das Paket `@librescore/fonts`, falls jemand es danebengelegt hat. Im
+ *    Auslieferungspaket ist es NICHT enthalten: Es wiegt 4,2 MB, und der App
+ *    Store nimmt Archive nur bis 20 MB an.
+ *
+ * @param {?string} fontVerzeichnis
+ * @return {Promise<Uint8Array[]>}
  */
-async function loadFonts() {
+async function loadFonts(fontVerzeichnis) {
+	if (fontVerzeichnis) {
+		try {
+			return readdirSync(fontVerzeichnis)
+				.filter((name) => FONT_ENDUNGEN.test(name))
+				.sort()
+				.map((name) => readFileSync(join(fontVerzeichnis, name)))
+		} catch (error) {
+			// Ein ausdruecklich eingetragenes Verzeichnis, das nicht lesbar
+			// ist, ist ein Konfigurationsfehler und kein Grund, still ohne
+			// Fonts weiterzumachen.
+			throw new Error(`Font-Verzeichnis ${fontVerzeichnis} nicht lesbar: ${error.message}`, { cause: error })
+		}
+	}
 	try {
 		const fonts = await import('@librescore/fonts')
 		return [readFileSync(fonts.CN), readFileSync(fonts.KR)]
-	} catch {
+	} catch (error) {
+		// Nicht installiert ist der Normalfall und bleibt still. Alles andere
+		// - eine kaputte Datei, ein Rechteproblem - waere sonst unsichtbar:
+		// Die Konvertierung gelingt ja, nur die Liedtexte sind Kaestchen.
+		if (error?.code !== 'ERR_MODULE_NOT_FOUND') {
+			process.stderr.write(`Zusatzfonts nicht ladbar: ${error?.message ?? error}\n`)
+		}
 		return []
 	}
 }
@@ -92,11 +122,12 @@ async function museScoreVersion() {
 
 /**
  * @param {string} msczPath
+ * @param {?string} fontVerzeichnis
  * @return {Promise<{pages: string[], midi: Uint8Array, timing: object, measures: object, meta: object}>}
  */
-async function convert(msczPath) {
+async function convert(msczPath, fontVerzeichnis) {
 	await WebMscore.ready
-	const score = await WebMscore.load('mscz', readFileSync(msczPath), await loadFonts())
+	const score = await WebMscore.load('mscz', readFileSync(msczPath), await loadFonts(fontVerzeichnis))
 
 	const pageCount = await score.npages()
 	if (pageCount < 1) {
@@ -139,13 +170,25 @@ function writeArtifacts(outDir, { pages, midi, timing, measures, meta }) {
 async function main() {
 	const args = process.argv.slice(2)
 
+	// `--fonts <verzeichnis>` steht vor den Stellungsargumenten und wird hier
+	// herausgeschnitten, damit die Zaehlung darunter unberuehrt bleibt.
+	let fontVerzeichnis = null
+	const fontsAn = args.indexOf('--fonts')
+	if (fontsAn !== -1) {
+		fontVerzeichnis = args[fontsAn + 1] ?? null
+		args.splice(fontsAn, fontVerzeichnis === null ? 1 : 2)
+		if (!fontVerzeichnis) {
+			throw new Error('--fonts erwartet ein Verzeichnis.')
+		}
+	}
+
 	if (args[0] === '--selftest') {
 		// Gegenstueck zu GET /selftest des Sidecars: eine echte Konvertierung
 		// der mitgelieferten Minipartitur, geprueft auf dieselben Zusagen.
 		// Antwortform absichtlich identisch, damit die Admin-Seite fuer beide
 		// Wege dieselbe Anzeige benutzt.
 		const started = performance.now()
-		const converted = await convert(join(HERE, 'selftest-score.mscz'))
+		const converted = await convert(join(HERE, 'selftest-score.mscz'), fontVerzeichnis)
 		const seconds = Math.round((performance.now() - started) / 100) / 10
 		const { problems, details } = checkPromises({
 			pages: converted.pages.length,
@@ -163,10 +206,10 @@ async function main() {
 	}
 
 	if (args.length !== 2) {
-		throw new Error('Aufruf: convert.mjs <eingabe.mscz> <ausgabeverzeichnis> | --selftest')
+		throw new Error('Aufruf: convert.mjs [--fonts <verzeichnis>] <eingabe.mscz> <ausgabeverzeichnis> | --selftest')
 	}
 	const [input, outDir] = args
-	const converted = await convert(resolve(input))
+	const converted = await convert(resolve(input), fontVerzeichnis)
 	writeArtifacts(resolve(outDir), converted)
 
 	stdoutWrite(JSON.stringify({

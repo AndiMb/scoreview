@@ -239,6 +239,7 @@ aus.
 | `soundfont_url` | Verwaltung | Übersteuerung: Der Browser lädt direkt von dieser Adresse |
 | `eager_conversion` | Verwaltung | Beim Hochladen sofort konvertieren statt beim ersten Öffnen |
 | `local_timeout` | nur `occ` | Zeitgrenze eines lokalen Konvertierungslaufs in Sekunden (Vorgabe 120) |
+| `cjk_font_dir` | nur `occ` | Verzeichnis mit Zusatzfonts für CJK-Liedtexte, außerhalb der App (Weg B) |
 | `max_score_bytes` | nur `occ` | Obergrenze der Dateigröße (Vorgabe 100 MB) |
 
 ## Prüfen, ob alles läuft

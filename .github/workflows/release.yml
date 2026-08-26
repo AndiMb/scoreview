@@ -103,6 +103,11 @@ jobs:
       # MuseScore-Sprung braucht. Siehe docs/limits.md.
       - name: Auslieferungsbaum zusammenstellen
         run: |
+          # pipefail ist hier keine Formalie: ohne ihn zaehlt nur der Status des
+          # ENTPACKENDEN tar. Bricht das packende ab (fehlerhaftes Muster,
+          # Lesefehler), entpackt das zweite den halben Strom erfolgreich, und
+          # der Schritt gilt als gelungen - mit einem unvollstaendigen Paket.
+          set -o pipefail
           rm -rf dist && mkdir -p dist
           # Kopiert ueber eine tar-Pipe statt mit cp+rm: Die Ausschluesse
           # tragen den vollen Pfad ab der Wurzel (`scoreview/node_modules`
@@ -165,16 +170,39 @@ jobs:
           done
           echo "Auslieferungsbaum vollstaendig."
 
+      # Der Selbsttest oben lief gegen den ENTWICKLUNGSBAUM - mit CJK-Fonts und
+      # allen Browser-Bundles. Ausgeliefert wird ein anderer. Deshalb hier
+      # nochmal, gegen genau das, was ins Paket geht: Ein Fehler in der
+      # Ausschlussliste faellt sonst erst auf einer fremden Instanz auf.
+      - name: Gegenprobe - der Konverter laeuft im Auslieferungsbaum
+        working-directory: dist/scoreview/converter
+        run: node convert.mjs --selftest 2>/dev/null
+
       # Der App Store nimmt nur signierte Apps an. Signiert wird mit dem
       # App-Zertifikat, das Nextcloud auf eine CSR hin ausstellt; `occ` gibt es
       # nur in einer installierten Instanz, deshalb der Container.
       - name: App signieren
         if: env.APP_PRIVATE_KEY != '' && env.APP_CERTIFICATE != ''
         run: |
-          mkdir -p /tmp/cert
+          # Raeumt Schluessel und Container auch dann weg, wenn das Signieren
+          # scheitert - sonst bliebe der unverschluesselte private Schluessel
+          # auf einem selbstgehosteten Runner liegen.
+          aufraeumen() { docker rm -f nc-sign >/dev/null 2>&1 || true; rm -rf /tmp/cert; }
+          trap aufraeumen EXIT
+
+          mkdir -p /tmp/cert && chmod 700 /tmp/cert
           printf '%s' "$APP_PRIVATE_KEY" > /tmp/cert/scoreview.key
           printf '%s' "$APP_CERTIFICATE" > /tmp/cert/scoreview.crt
-          chmod -R a+rwX dist/scoreview
+          chmod 600 /tmp/cert/scoreview.key
+
+          # NUR appinfo/ beschreibbar machen, und nur fuer diesen Schritt:
+          # `occ` schreibt dort die signature.json, laeuft im Container aber
+          # als www-data. Ein `chmod -R a+rwX` ueber den ganzen Baum landete
+          # als 0666/0777 im Tarball - Nextclouds Installer stellt die Modi
+          # beim Entpacken wieder her, und jede Instanz haette
+          # weltbeschreibbaren PHP-Code im Webroot.
+          chmod 777 dist/scoreview/appinfo
+
           docker run -d --name nc-sign \
             -e SQLITE_DATABASE=nc.db \
             -e NEXTCLOUD_ADMIN_USER=admin \
@@ -182,22 +210,33 @@ jobs:
             -v "$PWD/dist/scoreview:/var/www/html/custom_apps/scoreview" \
             -v /tmp/cert:/tmp/cert:ro \
             nextcloud:31
+          BEREIT=nein
           for i in $(seq 1 60); do
             if docker exec -u www-data nc-sign php occ status 2>/dev/null | grep -q 'installed: true'; then
+              BEREIT=ja
               break
             fi
             sleep 5
           done
+          if [ "$BEREIT" != "ja" ]; then
+            echo "Der Signier-Container wurde in 5 Minuten nicht betriebsbereit." >&2
+            docker logs --tail 40 nc-sign >&2 || true
+            exit 1
+          fi
+
           docker exec -u www-data nc-sign php occ integrity:sign-app \
             --privateKey=/tmp/cert/scoreview.key \
             --certificate=/tmp/cert/scoreview.crt \
             --path=/var/www/html/custom_apps/scoreview
-          docker rm -f nc-sign
-          rm -rf /tmp/cert
           test -s dist/scoreview/appinfo/signature.json
+          chmod 755 dist/scoreview/appinfo
 
       - name: Tarball packen
         run: |
+          # Modi vereinheitlichen, statt die des Runners zu uebernehmen: tar
+          # speichert sie, und Nextclouds Installer stellt sie beim Entpacken
+          # wieder her. Nichts im Paket darf fuer andere schreibbar sein.
+          chmod -R u=rwX,go=rX dist/scoreview
           tar --create --gzip --file scoreview.tar.gz -C dist scoreview
           GROESSE=$(stat -c%s scoreview.tar.gz)
           echo "Tarball: $((GROESSE / 1048576)) MB ($GROESSE B)"
@@ -223,8 +262,16 @@ jobs:
       # Erst jetzt, weil der App Store das Archiv selbst herunterlaedt: die
       # Release-Datei muss oeffentlich liegen, bevor er davon erfaehrt.
       - name: Beim App Store anmelden
-        if: startsWith(github.ref, 'refs/tags/v') && env.APPSTORE_TOKEN != '' && env.APP_PRIVATE_KEY != ''
+        if: startsWith(github.ref, 'refs/tags/v') && env.APPSTORE_TOKEN != '' && env.APP_PRIVATE_KEY != '' && env.APP_CERTIFICATE != ''
         run: |
+          # Ohne diese Probe koennte ein fehlendes/falsch benanntes
+          # APP_CERTIFICATE den Signierschritt still ueberspringen (ein
+          # uebersprungener Schritt ist kein Fehlschlag) - und ein unsigniertes
+          # Paket ginge an den App Store, ohne dass es irgendwo auffiele.
+          if [ ! -s dist/scoreview/appinfo/signature.json ]; then
+            echo "Das Paket ist nicht signiert - Anmeldung abgebrochen." >&2
+            exit 1
+          fi
           printf '%s' "$APP_PRIVATE_KEY" > /tmp/scoreview.key
           SIGNATUR=$(openssl dgst -sha512 -sign /tmp/scoreview.key scoreview.tar.gz | openssl base64 -A)
           rm -f /tmp/scoreview.key

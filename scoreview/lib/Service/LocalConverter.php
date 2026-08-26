@@ -211,8 +211,20 @@ class LocalConverter {
 		if ($timeout <= 0) {
 			$timeout = self::DEFAULT_TIMEOUT_SECONDS;
 		}
+
+		$command = [$node, $this->getConverterDir() . '/convert.mjs'];
+		// Zusatzfonts fuer CJK-Liedtexte, falls eingerichtet. Bewusst ein
+		// Verzeichnis AUSSERHALB der App: Das ausgelieferte App-Verzeichnis ist
+		// signiert, dort abgelegte Dateien liessen Nextclouds
+		// Integritaetspruefung dauerhaft Alarm schlagen.
+		$fontDir = trim($this->appConfig->getValueString(Application::APP_ID, 'cjk_font_dir'));
+		if ($fontDir !== '') {
+			$command[] = '--fonts';
+			$command[] = $fontDir;
+		}
+
 		$result = $this->execute(
-			array_merge([$node, $this->getConverterDir() . '/convert.mjs'], $arguments),
+			array_merge($command, $arguments),
 			$this->getConverterDir(),
 			$timeout,
 		);

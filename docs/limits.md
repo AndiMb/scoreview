@@ -123,7 +123,15 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
 - **Keine CJK-Fonts im App-Store-Paket.** Auf dem lokalen Konvertierungsweg
   setzt MuseScore chinesische, japanische und koreanische Liedtexte deshalb als
   Ersatzkästchen; alles andere ist unberührt. Die Fonts wiegen 4,2 MB, und der
-  App Store nimmt Archive nur bis 20 MB an. Wer sie braucht, holt sie mit
-  `npm ci` in `scoreview/converter/` nach – der Konverter benutzt sie
-  automatisch, sobald sie da sind. Der Sidecar-Weg hat die Systemfonts seines
-  Images und ist davon nicht betroffen.
+  App Store nimmt Archive nur bis 20 MB an. Wer sie braucht, legt Fontdateien
+  (`.woff2`, `.otf`, `.ttf`) in ein Verzeichnis **außerhalb der App** und trägt
+  es ein:
+
+  ```sh
+  occ config:app:set scoreview cjk_font_dir --value=/srv/scoreview-fonts
+  ```
+
+  Außerhalb der App, weil das ausgelieferte App-Verzeichnis **signiert** ist –
+  jede zusätzliche Datei darin lässt Nextclouds Integritätsprüfung dauerhaft
+  Alarm schlagen. Der Sidecar-Weg hat die Systemfonts seines Images und ist von
+  alldem nicht betroffen.
