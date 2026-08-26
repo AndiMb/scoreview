@@ -34,7 +34,7 @@
 		<!-- eslint-disable-next-line vue/no-v-html -->
 		<div v-if="svgMarkup" class="score-page-svg" v-html="svgMarkup" />
 		<!--
-			Sichtbarer Fehlerzustand statt weisser Flaeche (Befund A2). Die
+			Sichtbarer Fehlerzustand statt weisser Flaeche. Die
 			Seite behaelt ihre reservierte Hoehe, das Notenbild rutscht also
 			nicht - nur diese eine Seite fehlt, und man sieht, dass sie fehlt.
 		-->
@@ -75,13 +75,13 @@ import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLa
 import { sanitizeSvg } from '../lib/svgSanitizer.js'
 
 // Wie weit der Zeiger zwischen pointerdown und click wandern darf, damit es
-// noch als Klick gilt (Befund A3). Grosszuegig genug fuer das Zittern eines
+// noch als Klick gilt. Grosszuegig genug fuer das Zittern eines
 // Fingers auf Glas, klein genug, dass ein bewusstes Wischen nicht mehr
 // hineinfaellt.
 const CLICK_MOVE_TOLERANCE_PX = 8
 
 // Abstand zum Sichtbereich, ab dem eine Seite geladen (LOAD) bzw. wieder
-// freigegeben wird (UNLOAD, Codereview-Befund E2). Der Unterschied ist
+// freigegeben wird (UNLOAD). Der Unterschied ist
 // Absicht: laden knapp vorher, entladen erst deutlich weiter weg. Waeren
 // beide gleich, laege die Seite genau an der Grenze im Wechsel zwischen
 // geladen und entladen - und jedes Nachladen ist ein HTTP-Abruf samt
@@ -150,13 +150,12 @@ export default {
 			svgMarkup: null,
 			viewBox: null,
 			sizeMm: null,
-			// Ladefehler dieser einen Seite (Befund A2): ohne ihn liesse ein 404
+			// Ladefehler dieser einen Seite: ohne ihn liesse ein 404
 			// oder ein Verbindungsabriss die Seite dauerhaft leer, ohne Hinweis
 			// und ohne zweiten Versuch.
 			loadError: '',
 			loading: false,
-			// Position des letzten pointerdown - siehe onClick() zum Grund
-			// (Befund A3).
+			// Position des letzten pointerdown - siehe onClick() zum Grund.
 			pointerDownAt: null,
 		}
 	},
@@ -266,7 +265,7 @@ export default {
 		 * Laedt das Seiten-SVG nach (lazy, siehe IntersectionObserver in
 		 * mounted()).
 		 *
-		 * Der Observer wird erst NACH Erfolg abgemeldet (Befund A2). Vorher
+		 * Der Observer wird erst NACH Erfolg abgemeldet. Vorher
 		 * geschah es davor, und zusammen mit dem fehlenden catch war ein
 		 * einzelner Fehlschlag endgueltig: die Seite blieb fuer den Rest der
 		 * Sitzung weiss, ohne Hinweis, und weil der Observer schon weg war,
@@ -307,7 +306,7 @@ export default {
 
 		/**
 		 * Gibt das Notenbild wieder frei, wenn die Seite weit aus dem Bild
-		 * gescrollt ist (Codereview-Befund E2).
+		 * gescrollt ist.
 		 *
 		 * Ohne das Freigeben waeren bei einer Orchesterpartitur nach einmaligem
 		 * Durchscrollen alle Seiten samt zehntausender `<path>`-Knoten
@@ -349,7 +348,7 @@ export default {
 			}
 			// Ein Klick, zwischen dessen Nieder- und Loslassen der Zeiger
 			// gewandert ist, war kein Klick, sondern das Ende eines Ziehens
-			// oder einer Zweifinger-Geste (Befund A3). Auf dem Tablet ist das
+			// oder einer Zweifinger-Geste. Auf dem Tablet ist das
 			// der haeufigste Fall ueberhaupt: jedes Wischen und jedes
 			// Pinch-Zoom endet sonst mit einem Sprung an eine andere Stelle.
 			// Kein pointerdown gesehen (synthetischer Klick, Tastatur) zaehlt
@@ -397,7 +396,7 @@ export default {
 }
 
 /*
- * Fehlerzustand einer einzelnen Seite (Befund A2) - mittig auf der ohnehin
+ * Fehlerzustand einer einzelnen Seite - mittig auf der ohnehin
  * reservierten Seitenflaeche, damit die uebrigen Seiten an ihrem Platz
  * bleiben.
  */

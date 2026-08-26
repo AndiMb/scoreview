@@ -72,7 +72,7 @@ findet die Wege unter
 ## 1b. Weg B: Node.js bereitstellen
 
 Für den lokalen Weg ist nichts zu bauen und nichts zu starten – der Konverter
-liegt fertig im App-Paket (`scoreview/converter/`, rund 25 MB). Nötig ist nur
+liegt fertig im App-Paket (`scoreview/converter/`, rund 21 MB). Nötig ist nur
 eine Node.js-Laufzeit, die der Nextcloud-Prozess starten darf:
 
 ```sh

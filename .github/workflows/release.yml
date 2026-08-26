@@ -1,8 +1,18 @@
-# Baut den App-Tarball zu einem Tag. Der Grund, warum das ueberhaupt eine
-# eigene Automatik braucht:
+# Baut den App-Tarball zu einem Tag, signiert ihn und meldet ihn beim
+# Nextcloud App Store an. Der Grund, warum das ueberhaupt eine eigene
+# Automatik braucht:
 # `scoreview/js/` ist gitignored, ein aus dem Repo gepacktes `scoreview/`
 # enthaelt also KEIN einziges Frontend-Bundle und waere unbrauchbar. Der
 # Tarball muss aus einem echten Build entstehen, nicht aus einem Checkout.
+#
+# Der Ablauf ist bewusst: bauen -> AUSLIEFERUNGSBAUM ZUSAMMENSTELLEN ->
+# signieren -> packen. Die Signatur listet jede Datei einzeln auf; wuerde
+# erst signiert und danach beim Packen etwas ausgeschlossen, meldete die
+# Integritaetspruefung jeder Instanz fehlende Dateien.
+#
+# Die drei Secrets sind optional: ohne sie baut der Job ein unsigniertes
+# Paket und laedt nichts hoch - ein Fork kommt so trotzdem zu einem Tarball.
+# Ihre Einrichtung steht in docs/development.md#veroeffentlichung-im-app-store.
 name: Release
 
 on:
@@ -18,6 +28,12 @@ jobs:
   tarball:
     name: App-Tarball bauen
     runs-on: ubuntu-latest
+    env:
+      # Ueber env statt direkt ueber `secrets`, weil `if:`-Bedingungen den
+      # secrets-Kontext nicht sehen.
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+      APP_CERTIFICATE: ${{ secrets.APP_CERTIFICATE }}
+      APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -41,7 +57,7 @@ jobs:
 
       # Der lokale Konvertierungsweg (docs/architecture.md E3) muss FERTIG
       # INSTALLIERT ins Paket: eine Instanz ohne Container hat kein npm, mit
-      # dem sie das nachholen koennte. Das sind rund 25 MB webmscore-Wasm im
+      # dem sie das nachholen koennte. Das sind rund 21 MB webmscore-Wasm im
       # Tarball - der Preis dafuer, dass ScoreView ohne Sidecar laeuft.
       - name: Konverter installieren (webmscore)
         working-directory: scoreview/converter
@@ -78,23 +94,120 @@ jobs:
             exit 1
           fi
 
-      - name: Tarball packen
+      # Was hier NICHT mitgeht und warum: Der App Store nimmt Archive nur bis
+      # 20 MB an. Der Symbol-Map und die Browser-Bundles von webmscore sind
+      # 8 MB, die nur beim Debuggen des Wasm-Moduls bzw. im Browser gebraucht
+      # werden; die CJK-Fonts sind 4,2 MB fuer chinesische, japanische und
+      # koreanische Liedtexte. Der Konverter laeuft ohne beides (nachgemessen),
+      # und das Paket bleibt bei rund 14 statt 18 MB - Luft, die ein kuenftiger
+      # MuseScore-Sprung braucht. Siehe docs/limits.md.
+      - name: Auslieferungsbaum zusammenstellen
         run: |
-          tar --create --gzip --file "scoreview.tar.gz" \
+          rm -rf dist && mkdir -p dist
+          # Kopiert ueber eine tar-Pipe statt mit cp+rm: Die Ausschluesse
+          # tragen den vollen Pfad ab der Wurzel (`scoreview/node_modules`
+          # trifft NICHT `scoreview/converter/node_modules`), und es bleibt bei
+          # genau einer Liste - derselben, deren Ergebnis der Schritt darunter
+          # nachzaehlt.
+          tar --create --file - \
             --exclude='scoreview/node_modules' \
-            --exclude='scoreview/converter/lib/*.test.mjs' \
             --exclude='scoreview/src' \
             --exclude='scoreview/tests' \
             --exclude='scoreview/tools' \
             --exclude='scoreview/.php-cs-fixer*' \
             --exclude='scoreview/.stylelintrc.json' \
             --exclude='scoreview/eslint.config.mjs' \
-            --exclude='scoreview/package*.json' \
+            --exclude='scoreview/package.json' \
+            --exclude='scoreview/package-lock.json' \
             --exclude='scoreview/webpack.config.js' \
             --exclude='scoreview/composer.json' \
             --exclude='scoreview/composer.lock' \
-            scoreview
-          tar --list --file scoreview.tar.gz | head -40
+            --exclude='scoreview/converter/package-lock.json' \
+            --exclude='scoreview/converter/lib/*.test.mjs' \
+            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.lib.symbols' \
+            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.js' \
+            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.mjs' \
+            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.cdn.mjs' \
+            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.webpack.mjs' \
+            --exclude='scoreview/converter/node_modules/@librescore' \
+            scoreview | tar --extract --file - --directory dist
+          du -sh dist/scoreview
+          echo "Dateien: $(find dist/scoreview -type f | wc -l)"
+
+      # Was hier stehen bleibt, entscheidet, ob die App auf einer fremden
+      # Instanz ueberhaupt laeuft - deshalb nachgezaehlt statt gehofft.
+      - name: Gegenprobe - der Auslieferungsbaum ist vollstaendig
+        run: |
+          for PFLICHT in \
+            appinfo/info.xml \
+            js/scoreview-viewer.js \
+            js/scoreview-settings.js \
+            lib/AppInfo/Application.php \
+            l10n/de.js \
+            l10n/de.json \
+            vendor/autoload.php \
+            converter/convert.mjs \
+            converter/package.json \
+            converter/selftest-score.mscz \
+            converter/node_modules/webmscore4/webmscore.lib.wasm \
+            converter/node_modules/webmscore4/webmscore.lib.data \
+            converter/node_modules/webmscore4/webmscore.nodejs.cjs; do
+            if [ ! -e "dist/scoreview/$PFLICHT" ]; then
+              echo "Im Paket fehlt: $PFLICHT - Release abgebrochen." >&2
+              exit 1
+            fi
+          done
+          for VERBOTEN in src tests tools node_modules; do
+            if [ -e "dist/scoreview/$VERBOTEN" ]; then
+              echo "Im Paket steht $VERBOTEN, das dort nicht hingehoert - Release abgebrochen." >&2
+              exit 1
+            fi
+          done
+          echo "Auslieferungsbaum vollstaendig."
+
+      # Der App Store nimmt nur signierte Apps an. Signiert wird mit dem
+      # App-Zertifikat, das Nextcloud auf eine CSR hin ausstellt; `occ` gibt es
+      # nur in einer installierten Instanz, deshalb der Container.
+      - name: App signieren
+        if: env.APP_PRIVATE_KEY != '' && env.APP_CERTIFICATE != ''
+        run: |
+          mkdir -p /tmp/cert
+          printf '%s' "$APP_PRIVATE_KEY" > /tmp/cert/scoreview.key
+          printf '%s' "$APP_CERTIFICATE" > /tmp/cert/scoreview.crt
+          chmod -R a+rwX dist/scoreview
+          docker run -d --name nc-sign \
+            -e SQLITE_DATABASE=nc.db \
+            -e NEXTCLOUD_ADMIN_USER=admin \
+            -e NEXTCLOUD_ADMIN_PASSWORD="$(openssl rand -hex 24)" \
+            -v "$PWD/dist/scoreview:/var/www/html/custom_apps/scoreview" \
+            -v /tmp/cert:/tmp/cert:ro \
+            nextcloud:31
+          for i in $(seq 1 60); do
+            if docker exec -u www-data nc-sign php occ status 2>/dev/null | grep -q 'installed: true'; then
+              break
+            fi
+            sleep 5
+          done
+          docker exec -u www-data nc-sign php occ integrity:sign-app \
+            --privateKey=/tmp/cert/scoreview.key \
+            --certificate=/tmp/cert/scoreview.crt \
+            --path=/var/www/html/custom_apps/scoreview
+          docker rm -f nc-sign
+          rm -rf /tmp/cert
+          test -s dist/scoreview/appinfo/signature.json
+
+      - name: Tarball packen
+        run: |
+          tar --create --gzip --file scoreview.tar.gz -C dist scoreview
+          GROESSE=$(stat -c%s scoreview.tar.gz)
+          echo "Tarball: $((GROESSE / 1048576)) MB ($GROESSE B)"
+          # Der App Store lehnt Archive ueber 20 MB ab - lieber hier auffallen
+          # als nach dem Hochladen.
+          if [ "$GROESSE" -gt 20971520 ]; then
+            echo "Tarball ueber der App-Store-Grenze von 20 MB - Release abgebrochen." >&2
+            exit 1
+          fi
+          tar --list --file scoreview.tar.gz | head -20
 
       - uses: actions/upload-artifact@v7
         with:
@@ -106,3 +219,23 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: scoreview.tar.gz
+
+      # Erst jetzt, weil der App Store das Archiv selbst herunterlaedt: die
+      # Release-Datei muss oeffentlich liegen, bevor er davon erfaehrt.
+      - name: Beim App Store anmelden
+        if: startsWith(github.ref, 'refs/tags/v') && env.APPSTORE_TOKEN != '' && env.APP_PRIVATE_KEY != ''
+        run: |
+          printf '%s' "$APP_PRIVATE_KEY" > /tmp/scoreview.key
+          SIGNATUR=$(openssl dgst -sha512 -sign /tmp/scoreview.key scoreview.tar.gz | openssl base64 -A)
+          rm -f /tmp/scoreview.key
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/scoreview.tar.gz"
+          ANTWORT=$(curl -sS -w '\n%{http_code}' -X POST https://apps.nextcloud.com/api/v1/apps/releases \
+            -H "Authorization: Token ${APPSTORE_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg d "$URL" --arg s "$SIGNATUR" '{download: $d, signature: $s, nightly: false}')")
+          CODE=$(echo "$ANTWORT" | tail -1)
+          echo "$ANTWORT" | head -n -1
+          case "$CODE" in
+            200|201) echo "App Store: Release angelegt/aktualisiert ($CODE)." ;;
+            *) echo "App Store lehnte das Release ab (HTTP $CODE)." >&2; exit 1 ;;
+          esac

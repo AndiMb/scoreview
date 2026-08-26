@@ -158,20 +158,15 @@ import Refresh from 'vue-material-design-icons/Refresh.vue'
 import Stethoscope from 'vue-material-design-icons/Stethoscope.vue'
 
 /**
- * Admin-Einstellungen (Codereview-Befund C3). Ersetzt 163 Zeilen
- * handgeschriebenes DOM (`getElementById` + `fetch` + das globale
- * `OC`-Objekt) und ein Template mit `style="width: 320px"` an jedem Feld.
- *
- * E5 hatte fuer den Viewer bereits entschieden, dass Tastaturbedienung,
- * Fokusfuehrung, Theming und Dark Mode nicht von Hand nachgebaut werden -
- * die Einstellungsseite wurde damals nur nicht mitgenommen. Alle Bausteine
- * waren also schon da; neu ist nur `@nextcloud/initial-state` fuer den
- * Startzustand.
+ * Admin-Einstellungen, auf `@nextcloud/vue` statt auf handgeschriebenem DOM -
+ * dieselbe Entscheidung wie fuer den Viewer (E5): Tastaturbedienung,
+ * Fokusfuehrung, Theming und Dark Mode kommen aus der Bibliothek und werden
+ * nicht nachgebaut.
  *
  * Der Startzustand kommt ueber `IInitialState` (Settings\AdminSettings) statt
  * ueber eine zusaetzliche GET-Route: der Server rendert die Seite ohnehin,
- * eine zweite Runde nur fuer vier Felder waere verschenkt. Das Secret ist
- * dabei bewusst NICHT enthalten - nur die Angabe, ob eines gesetzt ist.
+ * eine zweite Runde nur fuer eine Handvoll Felder waere verschenkt. Das Secret
+ * ist dabei bewusst NICHT enthalten - nur die Angabe, ob eines gesetzt ist.
  */
 export default {
 	name: 'AdminSettings',
@@ -304,9 +299,10 @@ export default {
 
 		/**
 		 * Wiedergabe ist auch dann moeglich, wenn die Quelle gerade nicht
-		 * erreichbar ist - solange eine Kopie im Cache liegt. Frueher stand
-		 * hier bei unerreichbarem Sidecar ein ✓ neben der rohen
-		 * cURL-Fehlermeldung, eine Zeile, die sich selbst widersprach.
+		 * erreichbar ist - solange eine Kopie im Cache liegt. Deshalb zaehlt
+		 * hier der Cache und NICHT die Erreichbarkeit: ein ✓ neben einer rohen
+		 * Verbindungsfehlermeldung waere eine Zeile, die sich selbst
+		 * widerspricht.
 		 *
 		 * @param {object} sf h.soundFont aus dem Health-Endpunkt
 		 * @return {{ok: boolean, detail: string}}

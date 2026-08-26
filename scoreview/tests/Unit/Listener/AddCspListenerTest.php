@@ -14,7 +14,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * Die CSP-Lockerung ist die Stelle mit der groessten Reichweite im ganzen
  * Backend: was dieser Listener hinzufuegt, landet in der Default-Policy
- * JEDER Response der Instanz (siehe Codereview-Befund A1). Deshalb Tests
+ * JEDER Response der Instanz. Deshalb Tests
  * darauf, bevor Schritt 4 die Reichweite eingrenzt - sie halten fest, was
  * heute gilt, und schlagen an, falls die Eingrenzung dabei zu viel wegnimmt.
  *
@@ -115,7 +115,7 @@ class AddCspListenerTest extends TestCase {
 		$this->addToAssertionCount(1);
 	}
 
-	// --- Reichweite (Befund A1) ----------------------------------------------
+	// --- Reichweite ----------------------------------------------
 
 	/**
 	 * Der Kern der Eingrenzung: ausserhalb der Files-App darf GAR KEINE Policy

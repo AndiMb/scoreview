@@ -17,12 +17,10 @@ use OCP\ITempManager;
  * Haelt das SoundFont fuer die Browser-Wiedergabe (siehe docs/architecture.md E1) vor.
  *
  * Warum ueberhaupt: Ohne SoundFont gibt es keinen Ton - die Synthese
- * passiert im Browser (E1), und ein Synthesizer ohne Sample-Bank ist
- * stumm. Bis hierher war das Beschaffen und Hosten dieses SoundFonts
- * vollstaendig Aufgabe des Betreibers (Admin-Einstellung `soundfont_url`,
- * leer = kein Ton). Das ist in der Praxis der Normalzustand geblieben: die
- * App war fuer jeden, der nicht selbst ein 40-MB-SF3 irgendwo
- * CORS-faehig hinlegt, dauerhaft stumm.
+ * passiert im Browser (E1), und ein Synthesizer ohne Sample-Bank ist stumm.
+ * Das Beschaffen und Hosten dem Betreiber zu ueberlassen, bedeutet in der
+ * Praxis "stumm": Kaum jemand legt ein 40-MB-SF3 eigens CORS-faehig ab.
+ * Deshalb beschafft die App es selbst.
  *
  * Es gibt zwei Quellen, und die Reihenfolge ist Absicht:
  *

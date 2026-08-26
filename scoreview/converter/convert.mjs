@@ -50,14 +50,26 @@ const stdoutWrite = process.stdout.write.bind(process.stdout)
 process.stdout.write = (chunk, ...rest) => process.stderr.write(chunk, ...rest)
 
 const { default: WebMscore } = await import('webmscore4')
-const FONTS = await import('@librescore/fonts')
 
 /**
- * Die CJK-Fonts sind kein Beiwerk: ohne sie setzt MuseScore chinesische,
- * japanische und koreanische Liedtexte als Ersatzkaestchen. Der Sidecar hat
- * dafuer die Systemfonts seines Images, dieser Weg muss sie mitbringen.
+ * Zusatzfonts fuer chinesische, japanische und koreanische Liedtexte. Ohne sie
+ * setzt MuseScore solche Texte als Ersatzkaestchen - alles andere bleibt
+ * unberuehrt.
+ *
+ * **Optional, und zwar aus einem harten Grund:** Sie wiegen 4,2 MB, und der
+ * Nextcloud App Store nimmt Archive nur bis 20 MB an. Das Paket liegt damit
+ * bei rund 14 statt 18 MB - Luft, die ein kuenftiger MuseScore-Sprung
+ * braucht. Wer CJK-Liedtexte setzt, holt sie mit `npm ci` in `converter/`
+ * nach (siehe docs/limits.md).
  */
-const loadFonts = () => [readFileSync(FONTS.CN), readFileSync(FONTS.KR)]
+async function loadFonts() {
+	try {
+		const fonts = await import('@librescore/fonts')
+		return [readFileSync(fonts.CN), readFileSync(fonts.KR)]
+	} catch {
+		return []
+	}
+}
 
 /**
  * Welches MuseScore hier steckt.
@@ -84,7 +96,7 @@ async function museScoreVersion() {
  */
 async function convert(msczPath) {
 	await WebMscore.ready
-	const score = await WebMscore.load('mscz', readFileSync(msczPath), loadFonts())
+	const score = await WebMscore.load('mscz', readFileSync(msczPath), await loadFonts())
 
 	const pageCount = await score.npages()
 	if (pageCount < 1) {

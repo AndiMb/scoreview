@@ -165,19 +165,98 @@ Ausgangsindex mitführen, sonst misst er nur den Effektbus und meldet fälschlic
 
 ## Release
 
-Ein Tag `v*` löst `.github/workflows/release.yml` aus: Die Action baut das
+Ein Tag `v*` löst `.github/workflows/release.yml` aus. Die Action baut das
 Frontend, installiert die PHP-Abhängigkeiten ohne Dev-Pakete **und den lokalen
-Konverter samt webmscore**, dann packt sie `scoreview/` als Tarball.
-
-Der Konverter muss fertig installiert mit: Eine Instanz ohne Container hat kein
-npm, mit dem sie das nachholen könnte. Das sind rund 25 MB im Tarball – der
-Preis dafür, dass ScoreView ohne Sidecar läuft. Die Action prüft eigens nach,
-dass `webmscore.lib.wasm` im Paket liegt und der Selbsttest durchläuft.
+Konverter samt webmscore**, stellt daraus den Auslieferungsbaum zusammen,
+signiert ihn, packt ihn und hängt ihn an das GitHub-Release.
 
 Der Umweg über die Action ist notwendig, nicht bequem: `scoreview/js/` ist
 gitignored, ein direkt aus dem Repo gepacktes `scoreview/` enthielte also **kein
 einziges Frontend-Bundle** und wäre unbrauchbar. Der Tarball muss aus einem
-echten Build entstehen, nicht aus einem Checkout.
+echten Build entstehen, nicht aus einem Checkout. Dasselbe gilt für den
+Konverter: Eine Instanz ohne Container hat kein npm, mit dem sie webmscore
+nachholen könnte.
+
+**Die Reihenfolge ist wesentlich:** erst den Auslieferungsbaum zusammenstellen,
+dann signieren, dann packen. Die Signatur listet jede Datei einzeln auf – würde
+erst signiert und danach beim Packen etwas ausgeschlossen, meldete die
+Integritätsprüfung auf jeder Instanz fehlende Dateien.
+
+### Was nicht mit ins Paket geht
+
+Der App Store nimmt Archive nur **bis 20 MB** an. Ausgeschlossen sind deshalb
+drei Posten, die zur Laufzeit niemand braucht:
+
+| Posten | Größe | Warum entbehrlich |
+|---|---|---|
+| `webmscore.lib.symbols` | 7,2 MB | Symboltabelle, nur zum Debuggen des Wasm-Moduls |
+| Browser-Bundles von webmscore | 1,1 MB | Der Konverter läuft unter Node, nicht im Browser |
+| `@librescore/fonts` | 4,2 MB | Nur für chinesische, japanische und koreanische Liedtexte (siehe [Grenzwerte](limits.md#bekannte-lücken)) |
+
+Das Paket liegt damit bei rund 14 statt 18 MB. Die Action bricht ab, wenn der
+Tarball die 20 MB überschreitet – lieber dort auffallen als nach dem Hochladen.
+
+## Veröffentlichung im App Store
+
+Der Nextcloud App Store nimmt **nur signierte Apps** an. Die drei folgenden
+Schritte sind einmalig; danach genügt ein Tag.
+
+### 1. Zertifikat beantragen
+
+Schlüssel und Zertifikatsanfrage erzeugen – der private Schlüssel bleibt
+geheim und gehört **niemals ins Repo**:
+
+```sh
+openssl req -nodes -newkey rsa:4096 -keyout scoreview.key -out scoreview.csr -subj "/CN=scoreview"
+```
+
+Die `scoreview.csr` als Pull Request bei
+[nextcloud/app-certificate-requests](https://github.com/nextcloud/app-certificate-requests)
+einreichen, mit Link auf dieses Repo. Nextcloud stellt daraufhin
+`scoreview.crt` aus.
+
+### 2. API-Token holen
+
+Im App-Store-Konto unter *Settings → API Token*. Er ersetzt Benutzername und
+Passwort beim Hochladen.
+
+### 3. Als Repository-Secrets hinterlegen
+
+Unter *Settings → Secrets and variables → Actions*:
+
+| Secret | Inhalt |
+|---|---|
+| `APP_PRIVATE_KEY` | Inhalt von `scoreview.key` |
+| `APP_CERTIFICATE` | Inhalt von `scoreview.crt` |
+| `APPSTORE_TOKEN` | Der API-Token |
+
+Alle drei sind optional: Fehlen sie, baut die Action trotzdem ein
+(unsigniertes) Paket und lädt nichts hoch – so kommt auch ein Fork zu einem
+Tarball.
+
+### Ein Release fahren
+
+```sh
+# Version in scoreview/appinfo/info.xml und CHANGELOG.md setzen, committen
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Die Action baut, signiert, hängt den Tarball an das GitHub-Release und meldet
+ihn beim App Store an. Dessen Prüfung lädt das Archiv selbst herunter und
+verifiziert die Signatur gegen das Zertifikat – deshalb passiert die Anmeldung
+erst, nachdem die Datei am Release hängt.
+
+Von Hand ginge dasselbe so:
+
+```sh
+openssl dgst -sha512 -sign scoreview.key scoreview.tar.gz | openssl base64 -A
+
+curl -X POST https://apps.nextcloud.com/api/v1/apps/releases \
+  -H "Authorization: Token <token>" \
+  -H 'Content-Type: application/json' \
+  -d '{"download": "https://…/scoreview.tar.gz", "signature": "<signatur>", "nightly": false}'
+```
 
 ## Fallstricke
 

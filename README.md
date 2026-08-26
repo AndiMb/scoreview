@@ -1,11 +1,16 @@
 # ScoreView
 
+[![CI](https://github.com/AndiMb/scoreview/actions/workflows/ci.yml/badge.svg)](https://github.com/AndiMb/scoreview/actions/workflows/ci.yml)
+[![Lizenz: AGPL-3.0-or-later](https://img.shields.io/badge/Lizenz-AGPL--3.0--or--later-blue.svg)](LICENSE)
+
 Nextcloud-App, die MuseScore-Partituren direkt aus Files anzeigt und im Browser
 abspielt – als originalgetreue MuseScore-Notation mit einem Wiedergabe-Cursor,
 der synchron mitläuft, statt als starrer PDF-Export.
 
 Gedacht für Chor- und Ensemblearbeit: Die Noten sehen aus wie die eigenen Noten,
 jede Stimme ist einzeln hörbar, und jeder Takt ist in einem Klick erreichbar.
+
+![Der Viewer mit laufendem Wiedergabe-Cursor](docs/img/viewer.png)
 
 ## Was die App kann
 
@@ -19,6 +24,8 @@ stummschalten und solo hören, das Tempo in BPM ändern und ein Metronom
 zuschalten – auf jedem Schlag oder nur auf dem Taktanfang. „Meine Stimme" hebt
 eine Stimme hervor und lässt die übrigen leise mithörbar.
 
+![Mixer mit Lautstärke, Mute und Solo je Stimme](docs/img/mixer.png)
+
 **Gezielt proben.** Taktnavigation mit dauerhaft sichtbarer Taktangabe, ein Loop
 über einen frei gewählten Taktbereich mit Markierung im Notenbild, und ein Klick
 auf eine Note springt genau dorthin.
@@ -26,6 +33,8 @@ auf eine Note springt genau dorthin.
 **Notizen machen.** Privat oder mit allen geteilt, die die Datei sehen. Sie
 hängen an einer musikalischen Position statt an Pixeln und überstehen deshalb
 ein Neurendern und einen Re-Upload derselben Partitur.
+
+![Notiz an Takt 5, verankert an der musikalischen Position](docs/img/annotations.png)
 
 **Auf dem Tablet am Notenständer.** Touch-Bedienung, Pinch-Zoom und ein
 Bildschirm, der während der Wiedergabe nicht schlafen geht.
@@ -38,25 +47,28 @@ Oberfläche auf Deutsch und Englisch.
 ## Wie es funktioniert
 
 Eine hochgeladene `.mscz`-Datei wird **einmalig** serverseitig zu Notenseiten
-(SVG), MIDI und Timing-Daten konvertiert und das Ergebnis gecacht. Dafür gibt es
-zwei gleichwertige Wege: einen MuseScore-Container neben Nextcloud oder – ohne
-Container – MuseScore als WebAssembly, ausgeführt von der Node-Laufzeit des
-Servers. Erneutes Öffnen rendert nicht neu; erst eine Änderung an
-der Datei stößt eine neue Konvertierung an. Die Audiowiedergabe passiert
-clientseitig im Browser, mit einem SoundFont, das die App ohne Konfiguration
-selbst ausliefert.
+(SVG), MIDI und Timing-Daten konvertiert und das Ergebnis gecacht. Erneutes
+Öffnen rendert nicht neu; erst eine Änderung an der Datei stößt eine neue
+Konvertierung an. Die Audiowiedergabe passiert clientseitig im Browser, mit
+einem SoundFont, das die App selbst ausliefert.
+
+Für die Konvertierung gibt es **zwei gleichwertige Wege**, die dasselbe
+Ergebnis liefern und sich nur darin unterscheiden, was der Server dafür braucht:
+
+| | **Sidecar** | **Lokal** |
+|---|---|---|
+| Braucht | einen Docker-Host | Node.js ≥ 18 auf dem Nextcloud-Server |
+| MuseScore | echtes MuseScore 4 im Container | MuseScore 4.7.4 als WebAssembly, im App-Paket |
+| Empfohlen, wenn | ohnehin Container laufen | keine laufen |
 
 Ausführlich in [docs/architecture.md](docs/architecture.md).
 
 ## Voraussetzungen
 
 - Nextcloud 31–35, PHP 8.1–8.5
-- **Einer von zwei Konvertierungswegen**
-  ([E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)):
-  entweder der **MuseScore-Sidecar** (in `sidecar/` enthalten, läuft als eigener
-  Container) oder eine **Node.js-Laufzeit ab Version 18** auf dem
-  Nextcloud-Server, die PHP starten darf. Verwaltetes Hosting ohne beides bleibt
-  außen vor.
+- Einer der beiden Konvertierungswege oben. Verwaltetes Hosting, das weder
+  Container noch eine Node-Laufzeit erlaubt, bleibt außen vor – warum, steht
+  unter [E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
 
 ## Installation
 
@@ -78,6 +90,8 @@ occ app:enable scoreview
 Danach unter **Einstellungen → Verwaltung → ScoreView** die Sidecar-Adresse und
 das Secret eintragen.
 
+![Verwaltungseinstellungen mit Wegwahl und Betriebsdiagnose](docs/img/admin.png)
+
 Ohne Container entfällt Schritt 1; stattdessen in denselben Einstellungen den
 lokalen Weg wählen und eine SoundFont-Download-URL hinterlegen. So oder so
 fehlen noch zwei einmalige Schritte – die Mimetype-Registrierung für `.mscz` und
@@ -95,14 +109,24 @@ Background-Jobs im Modus `cron`:
 | [Entwicklung](docs/development.md) | Bauen, testen, Konventionen, Release |
 | [Sidecar](sidecar/README.md) | Betrieb und HTTP-API des Konvertierungsdienstes |
 
+Was sich von Fassung zu Fassung geändert hat, steht im
+[Changelog](CHANGELOG.md).
+
 ## Mitarbeiten
 
 Siehe [CONTRIBUTING.md](CONTRIBUTING.md). Fehler und Wünsche gehören in die
 [Issues](https://github.com/AndiMb/scoreview/issues).
 
-## Lizenz
+## Lizenz und Herkunft
 
-AGPL-3.0-or-later, siehe [LICENSE](LICENSE).
+ScoreView steht unter AGPL-3.0-or-later, siehe [LICENSE](LICENSE).
 
-Das mitgelieferte SoundFont stammt aus der MuseScore-Installation im
-Sidecar-Image (MuseScore General von S. Christian Collins, MIT).
+- Die Notensatz- und Konvertierungsarbeit macht **MuseScore Studio** (GPL-3.0) –
+  im Sidecar als gepinntes AppImage, auf dem lokalen Weg über
+  [webmscore](https://github.com/AndiMb/webmscore), MuseScore nach WebAssembly
+  übersetzt.
+- Das **SoundFont** für die Wiedergabe stammt aus der MuseScore-Installation
+  (MuseScore General von S. Christian Collins, MIT) beziehungsweise aus der
+  Quelle, die der Betreiber hinterlegt.
+- Die Partitur auf den Bildern ist Anton Bruckners *Aequale Nr. 1* in der
+  [OpenScore-Ausgabe](https://musescore.com/openscore/scores/4074271) (CC0).

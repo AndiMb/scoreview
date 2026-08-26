@@ -183,12 +183,12 @@ class ConversionController extends Controller {
 	/**
 	 * Woher der Browser sein SoundFont holt. Eine gesetzte
 	 * Admin-Einstellung gewinnt (eigenes Hosting, anderes/besseres
-	 * SoundFont); ohne sie liefert die App selbst aus, was der ohnehin
-	 * vorausgesetzte Sidecar mitbringt (Controller\SoundFontController).
+	 * SoundFont); ohne sie liefert die App es selbst aus
+	 * (Controller\SoundFontController).
 	 *
-	 * Vorher hiess "keine Admin-URL gesetzt" schlicht "kein Ton" - und weil
-	 * das der Auslieferungszustand ist, war die App fuer jeden stumm, der
-	 * nicht selbst ein 40-MB-SF3 CORS-faehig gehostet hat.
+	 * Der leere Auslieferungszustand darf deshalb NICHT "kein Ton" bedeuten:
+	 * sonst waere die App fuer jeden stumm, der nicht selbst ein 40-MB-SF3
+	 * CORS-faehig hostet.
 	 */
 	private function soundFontUrl(): string {
 		$configured = trim($this->appConfig->getValueString(Application::APP_ID, 'soundfont_url'));

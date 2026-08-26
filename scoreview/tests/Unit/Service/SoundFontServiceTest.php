@@ -73,7 +73,7 @@ class SoundFontServiceTest extends TestCase {
 	}
 
 	public function testLiefertCacheWennSidecarNichtErreichbarIst(): void {
-		// Der eigentliche Punkt der Phase-9-Korrektur: eine Probe darf nicht
+		// Der eigentliche Punkt: eine Probe darf nicht
 		// verstummen, nur weil der Konvertierungsdienst gerade weg ist.
 		$cached = $this->withCachedFile(40_000_000);
 		$this->sidecar->method('fetchSoundFontInfo')

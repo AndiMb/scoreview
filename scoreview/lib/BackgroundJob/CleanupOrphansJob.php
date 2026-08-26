@@ -13,8 +13,7 @@ use OCP\Files\IRootFolder;
 use Psr\Log\LoggerInterface;
 
 /**
- * Räumt Cache und Notizen von Dateien weg, die es nicht mehr gibt
- * (Codereview-Befund A4).
+ * Räumt Cache und Notizen von Dateien weg, die es nicht mehr gibt.
  *
  * Zwei Aufgaben, die der ereignisbasierte Weg nicht abdecken kann:
  *

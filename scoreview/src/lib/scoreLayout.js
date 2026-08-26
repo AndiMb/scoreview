@@ -87,7 +87,7 @@ export function findMeasureStartTime(measuresTimeline, measureNumber) {
 
 /**
  * Groesster Abstand (in SVG-Einheiten), bei dem ein Klick noch als "gilt
- * dieser Note" zaehlt (Codereview-Befund A3).
+ * dieser Note" zaehlt.
  *
  * Ohne diese Grenze würde `findElementAtPoint()` IMMER das naechstgelegene
  * Element liefern, egal wie weit weg. Ein Klick auf den Seitenrand, in

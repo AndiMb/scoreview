@@ -27,7 +27,7 @@ from .musescore import parse_pos_xml, run_score_media
 JOBS = {}
 JOBS_LOCK = threading.Lock()
 
-# Bounds how many MuseScore processes run at once (code review finding A5).
+# Bounds how many MuseScore processes run at once.
 # Waiting submissions simply stay on "pending" - the PHP side polls anyway
 # and needs no knowledge of the queue.
 _CONVERSION_SLOTS = threading.BoundedSemaphore(config.MAX_CONCURRENT_CONVERSIONS)

@@ -17,7 +17,7 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Der Aufraeum-Job entscheidet ueber Datenverlust: er ist die einzige Stelle,
- * die Notizen ohne Zutun der Nutzerin loescht (Codereview-Befund A4). Die
+ * die Notizen ohne Zutun der Nutzerin loescht. Die
  * Bedingung dafuer - "die fileId ist NIRGENDS mehr aufloesbar, auch nicht im
  * Papierkorb" - ist deshalb der Kern dieser Tests.
  *

@@ -15,14 +15,10 @@ nicht offensichtlich ist – **die fachliche Wahrheit steht in `docs/`**.
 | Ein Fehlerbild einordnen | `docs/troubleshooting.md` |
 | Sidecar-API und -Betrieb | `sidecar/README.md` |
 
-`docs/history/plan.md` ist der **archivierte** Umsetzungsplan: Phasen,
-Zwischenstände, Messreihen im Moment ihres Entstehens. Nachschlagen ja – er
-begründet vieles ausführlicher, als eine Referenz es tun sollte –, aber nicht
-fortschreiben und nicht als Stand der App zitieren. Neue Erkenntnisse gehören in
-die Dokumente oben.
-
 Nichts aus `docs/` in andere Dateien duplizieren – stattdessen dorthin
-verweisen.
+verweisen. Die Dokumente beschreiben den **Stand der App**, nicht ihren
+Entstehungsweg: Was einmal anders war, gehört in die Git-Historie, nicht in
+eine Referenz.
 
 ## Layout
 

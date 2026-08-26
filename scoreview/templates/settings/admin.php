@@ -1,13 +1,9 @@
 <?php
 declare(strict_types=1);
 /**
- * Nur noch der Mountpunkt.
- *
- * Bis hierher stand hier das vollstaendige Formular als handgeschriebenes
- * HTML mit `style="width: 320px"` an jedem Feld, bedient von 163 Zeilen
- * getElementById/fetch in src/settings.js. Beides ersetzt jetzt
- * src/components/AdminSettings.vue auf Basis von @nextcloud/vue - dieselbe
- * Entscheidung, die E5 fuer den Viewer schon getroffen hatte.
+ * Nur der Mountpunkt. Das Formular selbst ist eine Vue-Komponente auf
+ * @nextcloud/vue (src/components/AdminSettings.vue) - dieselbe
+ * Entscheidung wie fuer den Viewer, siehe E5 in docs/architecture.md.
  *
  * Den Startzustand liefert IInitialState (siehe Settings\AdminSettings), er
  * wird von Nextcloud als <input type="hidden"> in die Seite gerendert und

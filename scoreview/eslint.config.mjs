@@ -1,11 +1,6 @@
 /**
  * ESLint-Konfiguration.
  *
- * Bis hierher gab es keinen Linter - im Bestand standen aber bereits sechs
- * `// eslint-disable-next-line no-console`-Kommentare. Die Erwartung war also
- * da, nur nichts, was sie eingeloest haette: der Stil war ausschliesslich
- * durch Disziplin gehalten, und die Disable-Kommentare waren wirkungslos.
- *
  * `recommendedJavascript` statt `recommended`: die App ist Vue 3, aber die
  * `<script>`-Bloecke sind JavaScript, nicht TypeScript. `recommended` wuerde
  * sie als TS parsen (siehe @nextcloud/eslint-config README).

@@ -120,3 +120,10 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
 - **Keine mitgelieferte Node-Laufzeit.** Der lokale Weg benutzt das `node` des
   Servers; die App bringt keines mit und lädt auch keines nach (wie es etwa
   Nextclouds `recognize` tut).
+- **Keine CJK-Fonts im App-Store-Paket.** Auf dem lokalen Konvertierungsweg
+  setzt MuseScore chinesische, japanische und koreanische Liedtexte deshalb als
+  Ersatzkästchen; alles andere ist unberührt. Die Fonts wiegen 4,2 MB, und der
+  App Store nimmt Archive nur bis 20 MB an. Wer sie braucht, holt sie mit
+  `npm ci` in `scoreview/converter/` nach – der Konverter benutzt sie
+  automatisch, sobald sie da sind. Der Sidecar-Weg hat die Systemfonts seines
+  Images und ist davon nicht betroffen.

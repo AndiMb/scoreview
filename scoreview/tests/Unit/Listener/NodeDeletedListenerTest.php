@@ -15,8 +15,8 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
 /**
- * Der Listener raeumt beim Loeschen einer Partitur den Cache weg
- * (Codereview-Befund A4) - und ruehrt die Notizen ausdruecklich NICHT an.
+ * Der Listener raeumt beim Loeschen einer Partitur den Cache weg - und
+ * ruehrt die Notizen ausdruecklich NICHT an.
  *
  * Letzteres ist der eigentliche Testgegenstand: `NodeDeletedEvent` feuert
  * schon beim Verschieben in den Papierkorb (an der Testinstanz nachgemessen,

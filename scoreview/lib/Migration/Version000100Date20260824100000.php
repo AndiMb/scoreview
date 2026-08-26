@@ -16,8 +16,8 @@ use OCP\Migration\SimpleMigrationStep;
  * Warum überhaupt: `IAppConfig` kann einen Wert als sensibel führen und
  * blendet ihn dann in `occ config:app:list`, im Support-Bericht und in
  * Systemreports aus - also genau in den Ausgaben, die man beim Fehlersuchen
- * weitergibt. Bis hierher stand das gemeinsame Geheimnis zwischen App und
- * Sidecar dort im Klartext.
+ * weitergibt. Ohne dieses Flag stuende das gemeinsame Geheimnis zwischen
+ * App und Sidecar dort im Klartext.
  *
  * Warum als Migration und nicht nur beim Speichern: Das `sensitive`-Flag von
  * `setValueString()` greift nur, wenn der Schlüssel noch nicht existiert -

@@ -31,8 +31,7 @@ class ScoreConversionMapper extends QBMapper {
 	}
 
 	/**
-	 * Alle fileIds mit einem Cache-Eintrag - fuer den Aufraeum-Job
-	 * (Codereview-Befund A4).
+	 * Alle fileIds mit einem Cache-Eintrag - fuer den Aufraeum-Job.
 	 *
 	 * @return int[]
 	 */

@@ -161,7 +161,7 @@ describe('findElementAtPoint', () => {
 		expect(findElementAtPoint(elements, 5, 0, 0)).toBeNull()
 	})
 
-	// --- Trefferradius (Befund A3) -----------------------------------------
+	// --- Trefferradius -----------------------------------------
 
 	it('liefert null, wenn nichts innerhalb des Trefferradius liegt', () => {
 		// Weit weg vom naechsten Rechteck (Rand der Seite, leerer Raum unter

@@ -41,7 +41,7 @@ class SidecarClient {
 	/**
 	 * Lädt die .mscz hoch und startet die Konvertierung.
 	 *
-	 * `$mscz` ist ein **Stream**, kein String (Codereview-Befund A7): Guzzle
+	 * `$mscz` ist ein **Stream**, kein String: Guzzle
 	 * schiebt ihn direkt in den Multipart-Body, statt dass die ganze Datei
 	 * erst als PHP-String im Speicher landet und für den Body ein zweites Mal
 	 * kopiert wird. Bei der Größenordnung, die der Sidecar erlaubt, kippte ein

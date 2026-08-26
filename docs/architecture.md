@@ -2,8 +2,7 @@
 
 Wie ScoreView aufgebaut ist, welche Entwurfsentscheidungen dahinterstehen und
 auf welchen Eigenschaften des MuseScore-Exports die Umsetzung aufbaut. Dieses
-Dokument beschreibt den Stand der App; die Entwicklungsgeschichte liegt in
-[`history/plan.md`](history/plan.md) und ist nicht gepflegt.
+Dokument beschreibt den Stand der App, nicht ihren Entstehungsweg.
 
 ## Überblick
 
@@ -204,7 +203,7 @@ Voreinstellung `sidecar`) und wird an genau einer Stelle im Code ausgewertet
 | MuseScore | echtes MuseScore 4 aus gepinntem AppImage | MuseScore 4.7.4 als WebAssembly ([AndiMb/webmscore](https://github.com/AndiMb/webmscore)) |
 | Läuft als | eigener Container, HTTP-API | Kindprozess der Node-Laufzeit des Servers |
 | Voraussetzung beim Betreiber | Docker o. ä. | Node.js ≥ 18, `proc_open` erlaubt |
-| Im App-Paket | nichts | rund 25 MB Wasm (`converter/`) |
+| Im App-Paket | nichts | rund 21 MB Wasm (`converter/`) |
 | SoundFont | bringt das Image mit | Download-URL in den Einstellungen |
 | Vorab-Konvertierung, Selbsttest | ja | ja |
 
@@ -259,9 +258,10 @@ entfällt (`converter/lib/artifacts.mjs`).
 
 - **Eine Node-Laufzeit auf dem Server.** Das offizielle Nextcloud-Docker-Image
   bringt keine mit; auf verwaltetem Hosting ist sie meist nicht nachrüstbar.
-- **Rund 25 MB mehr im App-Paket** (16 MB Wasm, 4 MB Wasm-Daten, 4 MB CJK-Fonts).
-  Das Paket muss sie fertig installiert enthalten – eine Instanz ohne Container
-  hat kein npm, mit dem sie das nachholen könnte (siehe `release.yml`).
+- **Rund 21 MB mehr im App-Paket** (16 MB Wasm, 4 MB Wasm-Daten). Das Paket
+  muss sie fertig installiert enthalten – eine Instanz ohne Container hat kein
+  npm, mit dem sie das nachholen könnte (siehe `release.yml`). Die CJK-Fonts
+  bleiben deshalb draußen, siehe [Grenzwerte](limits.md#bekannte-lücken).
 - **`proc_open`.** Auf geteiltem Hosting oft per `disable_functions` gesperrt.
   Die Betriebsdiagnose beantwortet das getrennt, weil es von außen wie ein
   Konvertierungsfehler aussieht.

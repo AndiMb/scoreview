@@ -29,6 +29,13 @@ sidecar/testdata/*.mpos
 !sidecar/testdata/repeat-test.mscz
 !sidecar/testdata/repeat-test.musicxml
 
+# Signaturmaterial der App: der private Schluessel darf NIE ins Repo, und
+# signature.json entsteht je Release neu (siehe docs/development.md).
+*.key
+*.crt
+*.csr
+scoreview/appinfo/signature.json
+
 # Lokale Wegwerf-Arbeitsverzeichnisse
 spike/
 
