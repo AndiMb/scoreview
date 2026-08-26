@@ -22,8 +22,9 @@ Erste öffentliche Fassung.
 
 - MIDI wird im Browser synthetisiert, gegen ein SoundFont, das die App selbst
   ausliefert – ohne Konfiguration und ohne fremden Host.
-- Wiedergabe-Cursor, der synchron mitläuft, und ein Klick auf eine Note springt
-  dorthin.
+- Wiedergabe-Cursor, der synchron mitläuft – ein schmales Band je Notenzeile
+  hinter den klingenden Noten statt eines Balkens über das ganze System.
+- Ein Klick auf eine Note springt dorthin.
 - Tempo in BPM, Mixer mit Lautstärke, Mute und Solo je Stimme, „meine
   Stimme"-Preset.
 - Metronom auf jedem Schlag oder nur auf dem Taktanfang, Einzähler vor dem
@@ -38,6 +39,23 @@ Erste öffentliche Fassung.
   derselben Partitur.
 - Privat oder geteilt; geteilte Notizen hängen an den Dateirechten, nicht an
   einer eigenen Rechteverwaltung.
+- **Auf Wunsch direkt im Notenbild** über dem zugehörigen System, statt nur im
+  Panel: „In Takt 10 bitte forte" ist damit beim Singen lesbar, ohne etwas
+  aufzuklappen. Mehrere Notizen am selben Takt stapeln sich, statt sich zu
+  überlagern.
+
+### Die eigene Stimme
+
+- Wer im Mixer „meine Stimme" wählt, bekommt sie **auch im Notenbild markiert** –
+  ein durchgehender Streifen unter der eigenen Zeile, das Gegenstück zum
+  Buntstiftstrich.
+- **„Nur meine Zeile"** nimmt die übrigen Stimmen zurück, statt sie zu
+  entfernen: Das Seitenbild bleibt dasselbe (kein Reflow, E2), die
+  Nachbarstimmen sind zur Orientierung noch schemenhaft da.
+- Beides erscheint nur, wenn sich die Notenzeilen den Stimmen zweifelsfrei
+  zuordnen lassen. Bei einem Klavierauszug oder einer Partitur mit
+  ausgeblendeten leeren Zeilen bleibt es aus – eine falsche Markierung wäre
+  schlimmer als keine.
 
 ### Betrieb
 

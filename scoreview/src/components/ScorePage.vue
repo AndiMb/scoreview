@@ -14,11 +14,28 @@
 			nicht aus dieser Template-Reihenfolge - siehe Kommentar dort. Nur
 			messbar/anfassbar über ref="cursor" (siehe getCursorClientRect()).
 		-->
+		<!--
+			Markierung der eigenen Stimme, ganz unten in der Stapelfolge: Sie
+			liegt hinter dem Cursor und hinter dem Notenbild und faerbt damit
+			nur den Untergrund der Zeile ein - wie ein Buntstiftstrich unter
+			den Noten, nicht darueber.
+		-->
 		<div
-			v-if="cursorStyle"
-			ref="cursor"
+			v-for="(band, i) in myPartBands"
+			:key="`mine-${i}`"
+			class="score-page-mystaff"
+			:style="band" />
+		<div
+			v-for="(band, i) in dimmedBands"
+			:key="`dim-${i}`"
+			class="score-page-dimmed"
+			:style="band" />
+		<div
+			v-for="(band, i) in cursorBands"
+			:key="`cursor-${i}`"
+			:ref="i === 0 ? 'cursor' : undefined"
 			class="score-page-cursor"
-			:style="cursorStyle" />
+			:style="band" />
 		<!--
 			v-html ist hier unvermeidbar: das MuseScore-SVG soll als echtes DOM
 			im Dokument liegen, damit Zoom, Scoped-CSS (siehe :deep(svg) unten)
@@ -53,6 +70,20 @@
 			:title="t('Note')"
 			@click.stop="$emit('markerClick', marker.id)" />
 		<!--
+			Der Notiztext im Notenbild: „In Takt 10 bitte forte" muss beim
+			Singen lesbar sein, ohne ein Panel zu oeffnen - so, wie es sonst
+			mit Bleistift danebensteht. Deshalb am Anker, nicht in einer Liste.
+		-->
+		<div
+			v-for="label in pageNoteLabels"
+			:key="`text-${label.id}`"
+			class="score-page-note"
+			:class="{ 'score-page-note--shared': label.visibility === 'shared' }"
+			:style="label.style"
+			@click.stop="$emit('markerClick', label.id)">
+			{{ label.content }}
+		</div>
+		<!--
 			Sichtbare Loop-Bereichsmarkierung - zwei schmale, farbige Flaggen an
 			Start-/Ende-Takt statt eines vollflächigen Bereichs: measures.json
 			liefert nur Punktkoordinaten je Takt (M4), keine Taktbreite, ein
@@ -72,6 +103,7 @@ import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
+import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, stavesOfPart } from '../lib/staffBands.js'
 import { sanitizeSvg } from '../lib/svgSanitizer.js'
 
 // Wie weit der Zeiger zwischen pointerdown und click wandern darf, damit es
@@ -141,9 +173,43 @@ export default {
 			type: Array,
 			default: () => [],
 		},
+
+		// Taktrechtecke DIESER Seite aus measures.json. Sie liefern die
+		// Systemgrenzen, an denen die Notenzeilen aufgeteilt werden - siehe
+		// lib/staffBands.js, warum das nicht aus der Geometrie allein geht.
+		systemRects: {
+			type: Array,
+			default: () => [],
+		},
+
+		// Welche Stimme "meine" ist (Index in metadata.parts) oder null.
+		myPartIndex: {
+			type: Number,
+			default: null,
+		},
+
+		// Nur die eigene Zeile zeigen: die uebrigen werden zurueckgenommen,
+		// nicht entfernt - das Seitenbild bleibt dasselbe (E2, kein Reflow).
+		focusMyPart: {
+			type: Boolean,
+			default: false,
+		},
+
+		// Anzahl der Stimmen aus meta.json - die Gegenprobe fuer die
+		// Zuordnung Notenzeile -> Stimme (siehe lib/staffBands.js).
+		partCount: {
+			type: Number,
+			default: 0,
+		},
+
+		// Notiztexte im Notenbild anzeigen statt nur die Marker.
+		showNoteText: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
-	emits: ['noteClick', 'markerClick', 'loaded'],
+	emits: ['noteClick', 'markerClick', 'loaded', 'staffMapping'],
 
 	data() {
 		return {
@@ -181,18 +247,90 @@ export default {
 			}
 		},
 
-		cursorStyle() {
+		/**
+		 * Die Notenzeilen dieser Seite, nach Systemen gruppiert. Wird einmal
+		 * nach dem Laden berechnet und danach nur noch nachgeschlagen: Das
+		 * SVG aendert sich nicht mehr, und die Ableitung laeuft ueber alle
+		 * Notenlinien der Seite.
+		 */
+		staffSystems() {
+			if (!this.svgMarkup) {
+				return []
+			}
+			return groupBandsIntoSystems(findStaffBands(this.svgMarkup), this.systemRects)
+		},
+
+		/**
+		 * Der Wiedergabecursor - EIN Band je Notenzeile statt eines Balkens
+		 * ueber das ganze System.
+		 *
+		 * Der Unterschied ist nicht nur Optik: Ein durchgehender Balken
+		 * ueberdeckt auch den Zwischenraum mit Liedtext und Dynamik und wirkt
+		 * dadurch schwerer, als er muss. Aufgeteilt markiert er genau das, was
+		 * gerade klingt - die Noten auf den Zeilen.
+		 *
+		 * Faellt die Zeilenerkennung aus (fremdes Notenbild, fehlende
+		 * Taktrechtecke), bleibt es beim einen Rechteck ueber das System. Ohne
+		 * diesen Rueckfall waere der Cursor dort ganz verschwunden.
+		 */
+		cursorBands() {
 			const rect = this.cursorRect
 			const box = this.viewBox
 			if (!rect || !box || rect.page !== this.pageIndex) {
-				return null
+				return []
 			}
-			return {
-				left: `${((rect.x - box.minX) / box.width) * 100}%`,
-				top: `${((rect.y - box.minY) / box.height) * 100}%`,
-				width: `${(rect.w / box.width) * 100}%`,
-				height: `${(rect.h / box.height) * 100}%`,
+			const links = `${((rect.x - box.minX) / box.width) * 100}%`
+			const breite = `${(rect.w / box.width) * 100}%`
+
+			const system = this.staffSystems.find((s) => rect.y < s.bottom + 1 && rect.y + rect.h > s.top - 1)
+			if (!system) {
+				return [{
+					left: links,
+					top: `${((rect.y - box.minY) / box.height) * 100}%`,
+					width: breite,
+					height: `${(rect.h / box.height) * 100}%`,
+				}]
 			}
+			// Etwas ueber die aeusseren Notenlinien hinaus, damit Noten in
+			// Hilfslinien noch im Band liegen.
+			const luft = (system.staves[0].bottom - system.staves[0].top) / 4
+			return system.staves.map((band) => ({
+				left: links,
+				top: `${((band.top - luft - box.minY) / box.height) * 100}%`,
+				width: breite,
+				height: `${((band.bottom - band.top + 2 * luft) / box.height) * 100}%`,
+			}))
+		},
+
+		/**
+		 * Ob sich die Notenzeilen dieser Seite ueberhaupt Stimmen zuordnen
+		 * lassen - unabhaengig davon, ob schon eine gewaehlt ist. Der Viewer
+		 * blendet die Bedienelemente danach aus (siehe onStaffMapping dort).
+		 */
+		staffMappingPossible() {
+			return canMapStavesToParts(this.staffSystems, this.partCount)
+		},
+
+		/** Ob auf DIESER Seite eine Stimme markiert werden kann. */
+		partsMappable() {
+			return this.myPartIndex !== null && this.staffMappingPossible
+		},
+
+		myPartBands() {
+			if (!this.partsMappable) {
+				return []
+			}
+			return stavesOfPart(this.staffSystems, this.myPartIndex).map((band) => this.bandStyle(band))
+		},
+
+		/** Die uebrigen Zeilen, wenn „nur meine Zeile" eingeschaltet ist. */
+		dimmedBands() {
+			if (!this.partsMappable || !this.focusMyPart) {
+				return []
+			}
+			return this.staffSystems
+				.flatMap((system) => system.staves.filter((_, i) => i !== this.myPartIndex))
+				.map((band) => this.bandStyle(band, 1.2))
 		},
 
 		pageMarkers() {
@@ -210,6 +348,54 @@ export default {
 						top: `${((m.y - box.minY) / box.height) * 100}%`,
 					},
 				}))
+		},
+
+		/**
+		 * Die Notiztexte dieser Seite, am oberen Rand ihres Systems.
+		 *
+		 * Bewusst ueber dem System statt am Anker selbst: Am Anker laege der
+		 * Text mitten in den Noten und verdeckte sie. Ueber dem System steht
+		 * er dort, wo in gedruckten Noten ohnehin Anweisungen stehen - und
+		 * bleibt beim Scrollen zusammen mit seinem Takt im Blick.
+		 */
+		pageNoteLabels() {
+			const box = this.viewBox
+			if (!box || !this.showNoteText) {
+				return []
+			}
+			// Mehrere Notizen koennen am selben Takt haengen - in einer Probe
+			// ist das der Normalfall, nicht die Ausnahme. Gestapelt statt
+			// uebereinander gedruckt: ohne das ueberlagern sich die Texte bis
+			// zur Unlesbarkeit (an zwei Notizen im selben Takt nachgestellt).
+			const belegt = []
+			return this.markers
+				.filter((m) => m.page === this.pageIndex && (m.content ?? '') !== '')
+				.map((m) => {
+					const system = this.staffSystems.find((sys) => m.y < sys.bottom + 1 && m.y + m.h > sys.top - 1)
+					const oben = system ? system.top : m.y
+					// Ein Notenzeilen-Abstand ueber dem System - genug, um nicht
+					// auf den Noten zu liegen, nah genug, um zuzugehoeren.
+					const abstand = system ? (system.staves[0].bottom - system.staves[0].top) / 2 : m.h / 2
+					const links = ((m.x - box.minX) / box.width) * 100
+					const zeile = ((oben - abstand - box.minY) / box.height) * 100
+
+					// Als belegt gilt, was in derselben Hoehe steht und
+					// waagerecht naeher als eine Textbreite liegt.
+					const stapel = belegt.filter((b) => Math.abs(b.zeile - zeile) < 0.5 && Math.abs(b.links - links) < 12).length
+					belegt.push({ links, zeile })
+
+					return {
+						id: m.id,
+						content: m.content,
+						visibility: m.visibility,
+						style: {
+							left: `${links}%`,
+							top: `${zeile}%`,
+							maxWidth: `${100 - links}%`,
+							transform: `translateY(calc(-100% - ${stapel * 1.7}em))`,
+						},
+					}
+				})
 		},
 
 		pageLoopMarkers() {
@@ -290,6 +476,9 @@ export default {
 				// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
 				// jeweils geladene ScorePage.
 				this.$emit('loaded', { index: this.pageIndex, viewBox: this.viewBox, sizeMm: this.sizeMm })
+				// Erst jetzt steht das SVG - vorher gaebe es keine Notenlinien
+				// zu zaehlen.
+				this.$emit('staffMapping', this.staffMappingPossible)
 			} catch (err) {
 				this.loadError = err.response?.status
 					? `HTTP ${err.response.status}`
@@ -378,7 +567,38 @@ export default {
 		// dass ScoreViewer.vue selbst rechnen müsste. null, solange kein Cursor
 		// auf dieser Seite gerendert ist (siehe cursorStyle).
 		getCursorClientRect() {
-			return this.$refs.cursor?.getBoundingClientRect() ?? null
+			// Seit der Cursor in Baender je Notenzeile zerfaellt, liefert Vue
+			// hier ein Array. Das Autoscroll will das ganze System im Blick
+			// behalten, nicht nur die oberste Zeile - deshalb die Huelle ueber
+			// alle Baender statt des ersten.
+			const baender = [this.$refs.cursor].flat().filter(Boolean)
+			if (baender.length === 0) {
+				return null
+			}
+			const rechtecke = baender.map((el) => el.getBoundingClientRect())
+			const top = Math.min(...rechtecke.map((r) => r.top))
+			const bottom = Math.max(...rechtecke.map((r) => r.bottom))
+			const left = Math.min(...rechtecke.map((r) => r.left))
+			const right = Math.max(...rechtecke.map((r) => r.right))
+			return new DOMRect(left, top, right - left, bottom - top)
+		},
+
+		/**
+		 * Ein Notenzeilen-Band als CSS-Position, ueber die volle Systembreite.
+		 *
+		 * @param {{top:number,bottom:number,left:number,right:number}} band
+		 * @param {number} luftFaktor Vielfaches des Linienabstands als Rand
+		 * @return {object}
+		 */
+		bandStyle(band, luftFaktor = 0.5) {
+			const box = this.viewBox
+			const luft = ((band.bottom - band.top) / 4) * luftFaktor
+			return {
+				left: `${((band.left - box.minX) / box.width) * 100}%`,
+				top: `${((band.top - luft - box.minY) / box.height) * 100}%`,
+				width: `${((band.right - band.left) / box.width) * 100}%`,
+				height: `${((band.bottom - band.top + 2 * luft) / box.height) * 100}%`,
+			}
 		},
 	},
 }
@@ -466,13 +686,75 @@ export default {
  * Notenkopf deshalb ohne Weichzeichnung markieren - die Notenlinien werden
  * ohnehin vom SVG darüber gezeichnet, kein Scale-Trick nötig.
  */
+/*
+ * Der Cursor liegt HINTER dem Notenbild (siehe .score-page-svg), faerbt also
+ * den Untergrund der klingenden Noten ein, statt sie zu ueberdecken. Dezent
+ * genug, dass er beim Lesen nicht traegt: eine weiche Flaeche mit leichter
+ * Rundung, kein Rahmen. Der Rahmen der frueheren Fassung zog auf jeder Zeile
+ * eine zweite Linie ins Bild und konkurrierte mit den Notenlinien.
+ */
 .score-page-cursor {
 	position: absolute;
-	background: rgba(0, 130, 201, 0.25);
-	border: 1px solid rgba(0, 130, 201, 0.7);
-	border-radius: 2px;
+	background: rgba(0, 130, 201, 0.22);
+	border-radius: 4px;
 	pointer-events: none;
-	transition: left 0.08s linear, top 0.08s linear;
+	transition: left 0.08s linear, top 0.08s linear, height 0.08s linear;
+}
+
+/*
+ * „Meine Stimme": ein durchgehender, blasser Streifen unter der eigenen
+ * Notenzeile - das digitale Gegenstueck zum Buntstiftstrich, mit dem
+ * Singende ihre Zeile markieren. Bewusst blass: Er soll beim Blaettern ins
+ * Auge fallen, aber beim Lesen der Noten nicht mithalten.
+ */
+.score-page-mystaff {
+	position: absolute;
+	background: rgba(255, 193, 7, 0.18);
+	border-inline-start: 3px solid rgba(255, 152, 0, 0.75);
+	border-radius: 3px;
+	pointer-events: none;
+}
+
+/*
+ * „Nur meine Zeile": Die uebrigen Zeilen werden mit der Seitenfarbe
+ * ueberblendet statt entfernt. Entfernen ginge nur mit einem zweiten
+ * Notensatz (E2: kein Reflow) - so bleibt das Seitenbild erhalten, und wer
+ * doch in die Nachbarstimme schauen will, erkennt sie noch schemenhaft.
+ *
+ * Liegt als einziges dieser Overlays VOR dem Notenbild - es soll ja gerade
+ * ueberdecken.
+ */
+.score-page-dimmed {
+	position: absolute;
+	background: var(--color-main-background, #fff);
+	opacity: 0.78;
+	pointer-events: none;
+	z-index: 2;
+}
+
+/*
+ * Notiztext im Notenbild. Klein, aber nicht kleiner als lesbar: Er steht am
+ * Notenstaender in Armlaenge. Er skaliert bewusst NICHT mit dem Zoom (feste
+ * Punktgroesse), damit er beim Herauszoomen lesbar bleibt, wo die Noten es
+ * schon nicht mehr sind.
+ */
+.score-page-note {
+	position: absolute;
+	/* transform kommt aus pageNoteLabels - es traegt den Stapelversatz. */
+	padding: 1px 6px;
+	border-radius: 4px;
+	background: var(--color-primary-element-light, #d5eaff);
+	color: var(--color-main-text, #222);
+	font-size: 13px;
+	line-height: 1.35;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+	z-index: 3;
+}
+
+.score-page-note--shared {
+	background: var(--color-success-hover, #d8f0d8);
 }
 
 .score-page-loop-marker {

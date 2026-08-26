@@ -108,6 +108,8 @@ OC.L10N.register(
     "Conversion" : "Konvertierung",
     "Node.js {version}" : "Node.js {version}",
     "on this server, {version}" : "auf diesem Server, {version}",
-    "cached copy in use" : "zwischengespeicherte Kopie in Benutzung"
+    "cached copy in use" : "zwischengespeicherte Kopie in Benutzung",
+    "Show only my part" : "Nur meine Zeile zeigen",
+    "Show notes in the score" : "Notizen im Notenbild anzeigen"
 },
 "nplurals=2; plural=(n != 1);");

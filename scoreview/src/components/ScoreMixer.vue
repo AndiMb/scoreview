@@ -94,7 +94,7 @@ export default {
 		},
 	},
 
-	emits: ['volumesChanged', 'programChanged'],
+	emits: ['volumesChanged', 'programChanged', 'focusChanged'],
 
 	data() {
 		return {
@@ -185,6 +185,12 @@ export default {
 				}
 			}
 			this.emitVolumes()
+			// "Meine Stimme" ist nicht nur eine Lautstaerkefrage: Wer seine
+			// Stimme heraushoert, will sie auch im Notenbild wiederfinden.
+			// Deshalb geht die Wahl nach oben, statt hier zu enden - die
+			// Markierung im Notenbild haengt an derselben Entscheidung
+			// (ScoreViewer.vue, myPartId).
+			this.$emit('focusChanged', this.focusedGroupKey === null ? null : (group.partId ?? null))
 		},
 
 		onProgramChange(channel, program) {

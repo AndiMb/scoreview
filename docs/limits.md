@@ -108,7 +108,13 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
   aus Files, `/apps/scoreview/` antwortet bewusst 404.
 - **Kein Stift-/Freihand-Layer.** Notizen sind Text an einem musikalischen Anker.
   Freie Striche wären eine zweite Datenart, deren Anker ein Pfad statt eines
-  Punktes sein müsste.
+  Punktes sein müsste – und die anders als Text ein Neurendern der Partitur
+  nicht übersteht, weil ein Strich an Pixeln hängt und nicht an einem Takt.
+- **Kein zweiter Notensatz je Stimme.** „Nur meine Zeile" nimmt die übrigen
+  Stimmen optisch zurück; die Seite behält ihr Layout samt der Leerräume, wo
+  die anderen Zeilen stehen. Ein echter Einzelstimmenauszug wäre ein zweites
+  serverseitiges Layout (MuseScore kann das über Auszüge) und damit ein
+  weiteres Artefakt je Stimme im Cache.
 - **Kein Sandboxing des MuseScore-Prozesses über den Container hinaus.** Der
   Container läuft non-root mit Speicher- und PID-Limit; eine
   Netzwerk-Isolation nur für den Konvertierungs-Subprozess bräuchte eine eigene

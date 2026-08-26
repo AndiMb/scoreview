@@ -55,9 +55,14 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			.map((a) => {
 				const rect = (a.elid !== null && a.anchorEtag === currentEtag() ? notes.elements[String(a.elid)] : null)
 					?? measures.elements[String(a.measureNumber - 1)]
-				// mine/visibility fuers Marker-Styling in ScorePage.vue (Phase
-				// 18: eigene und geteilte Notizen sollen unterscheidbar sein).
-				return rect ? { id: a.id, mine: a.mine, visibility: a.visibility, ...rect } : null
+				// mine/visibility fuers Marker-Styling in ScorePage.vue: eigene
+				// und geteilte Notizen sollen unterscheidbar sein. `content`
+				// kommt mit, weil der Text auf Wunsch IM Notenbild steht und
+				// nicht nur im Panel - "In Takt 10 bitte forte" muss beim
+				// Singen lesbar sein, ohne etwas aufzuklappen.
+				return rect
+					? { id: a.id, mine: a.mine, visibility: a.visibility, content: a.content, ...rect }
+					: null
 			})
 			.filter(Boolean)
 	})

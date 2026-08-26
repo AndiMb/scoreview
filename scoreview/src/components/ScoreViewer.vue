@@ -219,6 +219,31 @@
 						<Tune :size="20" />
 					</template>
 				</NcButton>
+				<!--
+					Erscheint nur, wenn eine Stimme als „meine" gewaehlt ist UND
+					sich die Notenzeilen den Stimmen ueberhaupt zuordnen lassen -
+					sonst waere es ein Schalter, der nichts tut oder, schlimmer,
+					die falsche Zeile markiert (siehe lib/staffBands.js).
+				-->
+				<NcButton
+					v-if="canFocusMyPart"
+					:pressed="focusMyPart"
+					:aria-label="t('Show only my part')"
+					:title="t('Show only my part')"
+					@click="focusMyPart = !focusMyPart">
+					<template #icon>
+						<FormatAlignMiddle :size="20" />
+					</template>
+				</NcButton>
+				<NcButton
+					:pressed="showNoteText"
+					:aria-label="t('Show notes in the score')"
+					:title="t('Show notes in the score')"
+					@click="showNoteText = !showNoteText">
+					<template #icon>
+						<CommentTextOutline :size="20" />
+					</template>
+				</NcButton>
 				<NcButton
 					:pressed="showAnnotations"
 					:aria-label="t('Notes')"
@@ -284,8 +309,14 @@
 							:zoom="zoom"
 							:markers="annotationMarkers"
 							:loopMarkers="loopMarkers"
+							:systemRects="systemRectsForPage(i)"
+							:myPartIndex="myPartIndex"
+							:focusMyPart="focusMyPart"
+							:partCount="partCount"
+							:showNoteText="showNoteText"
 							@noteClick="onNoteClick"
 							@markerClick="onAnnotationJumpToById"
+							@staffMapping="onStaffMapping"
 							@loaded="onPageLoaded" />
 					</div>
 				</div>
@@ -310,7 +341,8 @@
 							:channels="mixerChannels"
 							:presetList="presetList"
 							@volumesChanged="onVolumesChanged"
-							@programChanged="onProgramChanged" />
+							@programChanged="onProgramChanged"
+							@focusChanged="onMyPartChanged" />
 					</section>
 					<section v-if="showAnnotations" class="scoreview-panel">
 						<div class="scoreview-panel-head">
@@ -350,8 +382,10 @@ import NcTextField from '@nextcloud/vue/components/NcTextField'
 import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
 import ArrowExpandHorizontal from 'vue-material-design-icons/ArrowExpandHorizontal.vue'
 import Close from 'vue-material-design-icons/Close.vue'
+import CommentTextOutline from 'vue-material-design-icons/CommentTextOutline.vue'
 import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
 import FitToPage from 'vue-material-design-icons/FitToPage.vue'
+import FormatAlignMiddle from 'vue-material-design-icons/FormatAlignMiddle.vue'
 import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
 import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
 import Magnify from 'vue-material-design-icons/Magnify.vue'
@@ -404,6 +438,8 @@ export default {
 		Tune,
 		NotebookOutline,
 		Close,
+		CommentTextOutline,
+		FormatAlignMiddle,
 		Repeat,
 		AlertCircleOutline,
 		ArrowExpandHorizontal,
@@ -614,6 +650,17 @@ export default {
 			// Unterschied nur für die Tempo-/Mixer-Zusatzfunktionen kennen
 			// (hasRealPlayer).
 			showMixer: false,
+			// Welche Stimme "meine" ist - gesetzt ueber "Meine Stimme" im
+			// Mixer (ScoreMixer.vue). Dieselbe Wahl steuert Lautstaerke UND
+			// Markierung im Notenbild; zwei getrennte Bedienelemente fuer
+			// dieselbe Aussage waeren eine Fehlerquelle.
+			myPartId: null,
+			focusMyPart: false,
+			showNoteText: false,
+			scoreParts: [],
+			// Ob sich die Notenzeilen ueberhaupt Stimmen zuordnen lassen -
+			// gemeldet von der ersten geladenen Seite (ScorePage.vue).
+			staffMappingOk: false,
 			sync: null,
 			timeDisplayHandle: null,
 			// Autoscroll (siehe scrollPlan.js) und Kopfangaben. Der Partiturtitel
@@ -657,6 +704,31 @@ export default {
 
 		// Der Mixer braucht echte Wiedergabe UND aufgelöste Kanäle - ohne
 		// beides bliebe eine leere Karte über dem Notenbild stehen.
+		partCount() {
+			return this.scoreParts.length
+		},
+
+		/**
+		 * Die Stimme, die als „meine" gilt, als Index in meta.parts - also in
+		 * derselben Reihenfolge, in der die Notenzeilen im System stehen.
+		 */
+		myPartIndex() {
+			if (this.myPartId === null) {
+				return null
+			}
+			const index = this.scoreParts.findIndex((part) => String(part.id) === String(this.myPartId))
+			return index === -1 ? null : index
+		},
+
+		/**
+		 * Ob „nur meine Zeile" ueberhaupt etwas bewirken kann. Ohne diese
+		 * Pruefung stuende dort ein Schalter, der bei einem Klavierauszug oder
+		 * einer Partitur mit ausgeblendeten leeren Zeilen wirkungslos bliebe.
+		 */
+		canFocusMyPart() {
+			return this.myPartIndex !== null && this.staffMappingOk
+		},
+
 		showMixerPanel() {
 			return this.hasRealPlayer && this.showMixer && this.mixerChannels.length > 0
 		},
@@ -737,6 +809,47 @@ export default {
 			return translate('scoreview', text, vars)
 		},
 
+		/**
+		 * Die Wahl aus dem Mixer uebernehmen. Wird sie zurueckgenommen, geht
+		 * auch „nur meine Zeile" aus - sonst bliebe ein Notenbild zurueck, in
+		 * dem alle Zeilen gedaempft sind und keine hervorgehoben.
+		 *
+		 * @param {?string} partId Stimme aus meta.parts, null = keine
+		 */
+		onMyPartChanged(partId) {
+			this.myPartId = partId
+			if (partId === null) {
+				this.focusMyPart = false
+			}
+		},
+
+		/**
+		 * Meldung der Seiten, ob sich Notenzeilen ueberhaupt Stimmen zuordnen
+		 * lassen (siehe lib/staffBands.js).
+		 *
+		 * @param {boolean} moeglich
+		 */
+		onStaffMapping(moeglich) {
+			this.staffMappingOk = moeglich
+			if (!moeglich) {
+				this.focusMyPart = false
+			}
+		},
+
+		/**
+		 * Die Taktrechtecke einer Seite - sie liefern ScorePage die
+		 * Systemgrenzen (siehe lib/staffBands.js).
+		 *
+		 * @param {number} pageIndex 0-indiziert
+		 * @return {Array<object>}
+		 */
+		systemRectsForPage(pageIndex) {
+			if (!this.measuresTimeline) {
+				return []
+			}
+			return Object.values(this.measuresTimeline.elements).filter((rect) => rect.page === pageIndex)
+		},
+
 		reset() {
 			this.cleanup()
 			this.resetConversion()
@@ -746,6 +859,10 @@ export default {
 			this.showMixer = false
 			this.resetAutoScroll()
 			this.totalMeasures = 0
+			this.scoreParts = []
+			this.myPartId = null
+			this.focusMyPart = false
+			this.staffMappingOk = false
 			this.pageDimensions = {}
 			this.timeline = null
 			this.measuresTimeline = null
@@ -784,6 +901,10 @@ export default {
 				this.pageUrls = files.pages
 				this.currentEtag = files.etag
 				this.applyScoreMetadata(metaRes.data)
+				// Fuer die Zuordnung Notenzeile -> Stimme: Reihenfolge UND
+				// Anzahl aus meta.json, nicht aus dem Mixer - der laesst die
+				// Metronomspur weg und zaehlt damit anders (siehe mixerLayout.js).
+				this.scoreParts = metaRes.data.parts ?? []
 				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
 				this.loadAnnotations()
 				// Startzoom "Seitenbreite" statt fester Faktor 1: die Seite hat
