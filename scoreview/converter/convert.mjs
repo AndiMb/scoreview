@@ -1,0 +1,176 @@
+#!/usr/bin/env node
+/**
+ * Konvertiert eine .mscz in genau die Artefakte, die
+ * Service\ConversionService cached: page-1.svg … page-N.svg, score.mid,
+ * timing.json, measures.json, meta.json.
+ *
+ * Das ist der zweite Konvertierungsweg neben dem Sidecar (E3): dieselben
+ * Artefakte, dieselbe HTTP-API der App darueber, nur ohne Container -
+ * MuseScore 4.7.4 als WebAssembly, ausgefuehrt von der Node-Laufzeit des
+ * Servers. Aufgerufen wird das hier ausschliesslich von
+ * Service\LocalConverter.
+ *
+ * Aufruf:
+ *   node convert.mjs <eingabe.mscz> <ausgabeverzeichnis>
+ *   node convert.mjs --selftest
+ *
+ * Ergebnis geht als eine Zeile JSON nach stdout, Fehler als Klartext nach
+ * stderr mit Exitcode != 0. Kein Lograuschen auf stdout: webmscore schreibt
+ * MuseScores Qt-Meldungen dorthin (M3 beim Sidecar, hier dasselbe Bild), sie
+ * werden deshalb unten stillgelegt, bevor das Modul geladen wird.
+ */
+
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { dirname, join, resolve } from 'path'
+import { fileURLToPath } from 'url'
+import { checkPromises, toPositions } from './lib/artifacts.mjs'
+
+const HERE = dirname(fileURLToPath(import.meta.url))
+
+/**
+ * Muss VOR dem webmscore-Import passieren: dessen Node-Shim schreibt
+ * `globalThis.navigator`, und seit Node 18 ist das ein Getter ohne Setter -
+ * der Import scheitert sonst mit "Cannot set property navigator". Hier wird
+ * dieselbe Navigator-Instanz als beschreibbare Eigenschaft neu hinterlegt,
+ * damit die Zuweisung des Shims ins Leere laeuft statt zu werfen. Kein
+ * Eingriff in node_modules, und mit einem kuenftig korrigierten webmscore
+ * bleibt es wirkungslos statt schaedlich.
+ */
+Object.defineProperty(globalThis, 'navigator', {
+	value: globalThis.navigator,
+	writable: true,
+	configurable: true,
+})
+
+// MuseScore meldet Fontladen und Audio-Engine ueber stdout. Diese Zeilen
+// wuerden das JSON-Ergebnis unbrauchbar machen, deshalb wandern sie nach
+// stderr - dort sind sie fuer die Fehlersuche noch da (LocalConverter legt
+// stderr ins Nextcloud-Log, wenn die Konvertierung scheitert).
+const stdoutWrite = process.stdout.write.bind(process.stdout)
+process.stdout.write = (chunk, ...rest) => process.stderr.write(chunk, ...rest)
+
+const { default: WebMscore } = await import('webmscore4')
+const FONTS = await import('@librescore/fonts')
+
+/**
+ * Die CJK-Fonts sind kein Beiwerk: ohne sie setzt MuseScore chinesische,
+ * japanische und koreanische Liedtexte als Ersatzkaestchen. Der Sidecar hat
+ * dafuer die Systemfonts seines Images, dieser Weg muss sie mitbringen.
+ */
+const loadFonts = () => [readFileSync(FONTS.CN), readFileSync(FONTS.KR)]
+
+/**
+ * Welches MuseScore hier steckt.
+ *
+ * Zur Laufzeit ist das nicht zu erfahren: `WebMscore.version()` liefert die
+ * MSCZ-DATEIFORMATversion (470), und das mitgelieferte package.json des
+ * webmscore-Pakets traegt noch die Versionsnummer des 4.6.5-Zweigs. Die
+ * einzige verlaessliche Angabe ist deshalb der Release-Tag, auf den die
+ * Abhaengigkeit hier zeigt - eine Stelle, dieselbe, die auch bestimmt, was
+ * installiert wird.
+ */
+async function museScoreVersion() {
+	const own = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8'))
+	const tag = /\/download\/v?([^/]+)\//.exec(own.dependencies?.webmscore4 ?? '')?.[1]
+	const formatVersion = await WebMscore.version()
+	// Ohne fuehrendes "webmscore": die Oberflaeche setzt "MuseScore" davor
+	// (siehe AdminSettings.vue), sonst stuende dort beides.
+	return `${tag ?? 'unbekannt'} (webmscore, Dateiformat ${formatVersion})`
+}
+
+/**
+ * @param {string} msczPath
+ * @return {Promise<{pages: string[], midi: Uint8Array, timing: object, measures: object, meta: object}>}
+ */
+async function convert(msczPath) {
+	await WebMscore.ready
+	const score = await WebMscore.load('mscz', readFileSync(msczPath), loadFonts())
+
+	const pageCount = await score.npages()
+	if (pageCount < 1) {
+		throw new Error('webmscore lieferte keine SVG-Seite.')
+	}
+
+	const pages = []
+	for (let i = 0; i < pageCount; i++) {
+		// drawPageBackground=true: der weisse Hintergrundpfad gehoert dazu
+		// (M9), sonst steht die Partitur auf dem Seitenhintergrund des
+		// Viewers statt auf Papier.
+		pages.push(await score.saveSvg(i, true))
+	}
+
+	const result = {
+		pages,
+		midi: await score.saveMidi(),
+		timing: toPositions(JSON.parse(await score.savePositions(true))),
+		measures: toPositions(JSON.parse(await score.savePositions(false))),
+		meta: await score.metadata(),
+	}
+
+	// KEIN score.destroy(): der Aufruf hinterlaesst die Wasm-Instanz
+	// beschaedigt, das naechste load() im selben Prozess bricht mit
+	// "null function or function signature mismatch" ab (gemessen mit
+	// webmscore v4.7.4-scoreview.4). Dieser Prozess konvertiert genau eine
+	// Partitur und endet danach - das Aufraeumen erledigt der Prozessabbau.
+	return result
+}
+
+function writeArtifacts(outDir, { pages, midi, timing, measures, meta }) {
+	mkdirSync(outDir, { recursive: true })
+	pages.forEach((svg, i) => writeFileSync(join(outDir, `page-${i + 1}.svg`), svg))
+	writeFileSync(join(outDir, 'score.mid'), midi)
+	writeFileSync(join(outDir, 'timing.json'), JSON.stringify(timing))
+	writeFileSync(join(outDir, 'measures.json'), JSON.stringify(measures))
+	writeFileSync(join(outDir, 'meta.json'), JSON.stringify(meta))
+}
+
+async function main() {
+	const args = process.argv.slice(2)
+
+	if (args[0] === '--selftest') {
+		// Gegenstueck zu GET /selftest des Sidecars: eine echte Konvertierung
+		// der mitgelieferten Minipartitur, geprueft auf dieselben Zusagen.
+		// Antwortform absichtlich identisch, damit die Admin-Seite fuer beide
+		// Wege dieselbe Anzeige benutzt.
+		const started = performance.now()
+		const converted = await convert(join(HERE, 'selftest-score.mscz'))
+		const seconds = Math.round((performance.now() - started) / 100) / 10
+		const { problems, details } = checkPromises({
+			pages: converted.pages.length,
+			timing: converted.timing,
+			midi: converted.midi,
+			meta: converted.meta,
+		})
+		stdoutWrite(JSON.stringify({
+			ok: problems.length === 0,
+			error: problems.length > 0 ? problems.join('; ') : null,
+			problems,
+			details: { musescoreVersion: await museScoreVersion(), seconds, ...details },
+		}) + '\n')
+		return
+	}
+
+	if (args.length !== 2) {
+		throw new Error('Aufruf: convert.mjs <eingabe.mscz> <ausgabeverzeichnis> | --selftest')
+	}
+	const [input, outDir] = args
+	const converted = await convert(resolve(input))
+	writeArtifacts(resolve(outDir), converted)
+
+	stdoutWrite(JSON.stringify({
+		pages: converted.pages.length,
+		measures: converted.meta?.measures ?? null,
+		mscoreVersion: converted.meta?.mscoreVersion ?? null,
+	}) + '\n')
+}
+
+try {
+	await main()
+	// Ohne das bleibt der Prozess haengen: die Wasm-Instanz haelt Timer und
+	// den Audio-Thread der Engine offen, und ohne destroy() (siehe oben)
+	// gibt sie die nie wieder her.
+	process.exit(0)
+} catch (error) {
+	process.stderr.write(String(error?.stack ?? error) + '\n')
+	process.exit(1)
+}

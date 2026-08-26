@@ -1,27 +1,35 @@
 # Installation und Konfiguration
 
-ScoreView besteht aus der Nextcloud-App und einem Konvertierungsdienst
-(Sidecar), der als eigener Container daneben läuft. Beides muss eingerichtet
-sein, sonst zeigt die App nur eine Fehlermeldung – der Sidecar ist
-Voraussetzung, nicht Zubehör
-([E3](architecture.md#e3-der-sidecar-ist-voraussetzung)).
+ScoreView besteht aus der Nextcloud-App und einem Konvertierungsweg. Davon gibt
+es **zwei zur Wahl**, und sie liefern dasselbe Ergebnis
+([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)):
 
-Rechnen Sie mit 15 Minuten. Vier der fünf Schritte sind einmalig.
+| | **Weg A: Sidecar** | **Weg B: Lokal** |
+|---|---|---|
+| Braucht | einen Docker-Host | Node.js ≥ 18 auf dem Nextcloud-Server |
+| MuseScore | echtes MuseScore 4 im Container | MuseScore 4.7.4 als WebAssembly, im App-Paket |
+| SoundFont | bringt der Container mit | einmalig von einer URL zu holen |
+| Empfohlen, wenn | ohnehin Container laufen | keine laufen |
+
+Eines von beiden muss eingerichtet sein, sonst zeigt die App nur eine
+Fehlermeldung. Rechnen Sie mit 15 Minuten.
 
 ## Voraussetzungen
 
 - Nextcloud 31 bis 35
 - PHP 8.1 bis 8.5
 - SQLite, MySQL/MariaDB oder PostgreSQL
-- Ein Docker-Host für den Sidecar – dieselbe Maschine wie Nextcloud oder eine
-  andere, erreichbar über HTTP
 - Background-Jobs im Modus `cron` (Schritt 5)
+- Je nach Weg: **A** ein Docker-Host – dieselbe Maschine wie Nextcloud oder eine
+  andere, erreichbar über HTTP. **B** eine Node.js-Laufzeit ab Version 18 auf
+  dem Nextcloud-Server, und PHP muss Prozesse starten dürfen (`proc_open` nicht
+  per `disable_functions` gesperrt).
 
 Die `occ`-Befehle unten stehen so, wie sie auf einer nativen Installation
 laufen. In einer Container-Installation davor `docker exec -u www-data
 <container> php` setzen.
 
-## 1. Sidecar starten
+## 1a. Weg A: Sidecar starten
 
 Das Image bauen (enthält eine gepinnte MuseScore-Studio-Version):
 
@@ -61,6 +69,29 @@ Wer den Sidecar auf einer anderen Maschine oder ohne Docker betreiben will,
 findet die Wege unter
 [Bereitstellung](../sidecar/README.md#bereitstellung).
 
+## 1b. Weg B: Node.js bereitstellen
+
+Für den lokalen Weg ist nichts zu bauen und nichts zu starten – der Konverter
+liegt fertig im App-Paket (`scoreview/converter/`, rund 25 MB). Nötig ist nur
+eine Node.js-Laufzeit, die der Nextcloud-Prozess starten darf:
+
+```sh
+node --version   # muss v18 oder neuer melden
+```
+
+**Das offizielle Nextcloud-Docker-Image bringt keine mit.** Dort nachrüsten:
+
+```sh
+docker exec <container> sh -c 'apt-get update && apt-get install -y nodejs'
+```
+
+Bei einer nativen Installation über die Paketverwaltung der Distribution. Damit
+das ein Image-Update übersteht, gehört die Zeile in ein eigenes Dockerfile
+`FROM nextcloud:…` statt in den laufenden Container.
+
+Der Konverter selbst ist reines JavaScript und WebAssembly, also unabhängig von
+Betriebssystem und Prozessorarchitektur – es gibt nichts zu kompilieren.
+
 ## 2. App installieren
 
 Über den Nextcloud App Store, oder das Verzeichnis `scoreview/` als
@@ -71,9 +102,15 @@ occ app:enable scoreview
 occ upgrade
 ```
 
-## 3. Sidecar-Zugang eintragen
+## 3. Konvertierungsweg einstellen
 
-Unter **Einstellungen → Verwaltung → ScoreView** die Sidecar-URL (z. B.
+Unter **Einstellungen → Verwaltung → ScoreView** steht die Wahl ganz oben; sie
+schaltet darunter frei, was jeweils einzutragen ist. Voreingestellt ist der
+Sidecar.
+
+### Weg A: Sidecar
+
+Die Sidecar-URL (z. B.
 `http://scoreview-sidecar:8765`) und das Secret aus Schritt 1 eintragen.
 Alternativ auf der Kommandozeile:
 
@@ -91,10 +128,29 @@ Collabora- und OnlyOffice-Integrationen:
 occ config:system:set allow_local_remote_servers --value=true --type=boolean
 ```
 
-Auf der Verwaltungsseite prüft ein Knopf die Verbindung und ein zweiter startet
-den **Selbsttest** des Sidecars: eine echte Konvertierung der mitgelieferten
-Minipartitur samt Prüfung aller Zusagen, auf denen die App aufbaut. Nach jedem
-Wechsel der MuseScore-Version im Image einmal auslösen.
+### Weg B: Lokal
+
+Den lokalen Weg auswählen und – falls `node` nicht an einer der üblichen Stellen
+liegt – den Pfad eintragen. Auf der Kommandozeile:
+
+```sh
+occ config:app:set scoreview conversion_backend --value=local
+occ config:app:set scoreview node_path --value=/usr/bin/node   # nur falls nötig
+```
+
+Dazu eine **SoundFont-Download-URL**, sonst bleibt die Wiedergabe stumm (siehe
+[SoundFont](#soundfont)):
+
+```sh
+occ config:app:set scoreview soundfont_fetch_url --value="https://…/FluidR3Mono_GM.sf3"
+```
+
+### Prüfen
+
+Auf der Verwaltungsseite prüft ein Knopf den Zustand und ein zweiter startet den
+**Selbsttest**: eine echte Konvertierung der mitgelieferten Minipartitur über
+den gewählten Weg, samt Prüfung aller Zusagen, auf denen die App aufbaut. Nach
+jedem Wechsel der MuseScore-Version einmal auslösen.
 
 ## 4. Mimetype registrieren
 
@@ -142,37 +198,54 @@ ist.
 
 ## SoundFont
 
-**Hier ist nichts zu tun.** Die Wiedergabe synthetisiert im Browser
+Die Wiedergabe synthetisiert im Browser
 ([E1](architecture.md#e1-midi-statt-mp3-als-audioartefakt)) und braucht dafür ein
-SoundFont. Die App holt es einmalig vom ohnehin vorausgesetzten Sidecar, der
+SoundFont. Woher es kommt, hängt vom gewählten Weg ab.
+
+**Weg A: Hier ist nichts zu tun.** Die App holt es einmalig vom Sidecar, der
 durch die MuseScore-Installation bereits eines mitbringt, legt es in ihrem
 IAppData-Cache ab und liefert es selbst aus. Der Browser spricht nie mit dem
 Sidecar.
 
-Der erste Abruf nach einer Neuinstallation überträgt ~40 MB vom Sidecar zu
-Nextcloud und von dort zum Browser. Danach greifen der serverseitige Cache und
-`Cache-Control: immutable` im Browser.
+**Weg B: Eine Download-URL eintragen.** Ohne Sidecar gibt es kein Image, aus dem
+sich ein SoundFont nehmen ließe – ohne diese Einstellung bleibt die App stumm.
+Das Feld **SoundFont-Download-URL** nennt eine Adresse, von der der **Server**
+die Datei einmalig holt; danach liefert er sie selbst aus. Sie muss also nur vom
+Server aus erreichbar sein und braucht kein CORS. Ein brauchbares, frei
+lizenziertes General-MIDI-SoundFont ist `FluidR3Mono_GM.sf3` (~24 MB), das
+MuseScore selbst mitbringt.
 
-Das Feld **SoundFont-URL** in den Verwaltungseinstellungen ist eine reine
-Übersteuerung für ein anderes oder besseres SoundFont. Die Adresse muss dann vom
-**Browser** aus erreichbar sein, nicht nur vom Server, und CORS erlauben; den
-Host trägt die App automatisch in die `connect-src`-Richtlinie ein. Ein leeres
-Feld bedeutet: das mitgelieferte SoundFont verwenden.
+Geholt wird einmal je URL. Wer dieselbe Adresse später mit einer anderen Datei
+belegt, speichert die Einstellung einmal neu.
+
+In beiden Fällen überträgt der erste Abruf nach einer Neuinstallation ~40 MB zum
+Browser. Danach greifen der serverseitige Cache und `Cache-Control: immutable`.
+
+Das Feld **SoundFont-URL** ist etwas anderes: eine Übersteuerung, bei der der
+**Browser** direkt von dieser Adresse lädt. Sie muss dann vom Browser aus
+erreichbar sein und CORS erlauben; den Host trägt die App automatisch in die
+`connect-src`-Richtlinie ein. Ein leeres Feld bedeutet: die App liefert selbst
+aus.
 
 ## Einstellungen im Überblick
 
 | Schlüssel | Wo | Bedeutung |
 |---|---|---|
-| `sidecar_url` | Verwaltung | Adresse des Konvertierungsdienstes |
-| `sidecar_secret` | Verwaltung | Shared Secret, als sensibel geführt und in `occ config:list` ausgeblendet |
-| `soundfont_url` | Verwaltung | Optionale Übersteuerung des SoundFonts |
+| `conversion_backend` | Verwaltung | `sidecar` (Voreinstellung) oder `local` |
+| `sidecar_url` | Verwaltung | Adresse des Konvertierungsdienstes (Weg A) |
+| `sidecar_secret` | Verwaltung | Shared Secret, als sensibel geführt und in `occ config:list` ausgeblendet (Weg A) |
+| `node_path` | Verwaltung | Pfad zu `node`; leer = übliche Orte durchsuchen (Weg B) |
+| `soundfont_fetch_url` | Verwaltung | Adresse, von der der Server das SoundFont einmalig holt (Weg B) |
+| `soundfont_url` | Verwaltung | Übersteuerung: Der Browser lädt direkt von dieser Adresse |
 | `eager_conversion` | Verwaltung | Beim Hochladen sofort konvertieren statt beim ersten Öffnen |
+| `local_timeout` | nur `occ` | Zeitgrenze eines lokalen Konvertierungslaufs in Sekunden (Vorgabe 120) |
+| `max_score_bytes` | nur `occ` | Obergrenze der Dateigröße (Vorgabe 100 MB) |
 
 ## Prüfen, ob alles läuft
 
 1. **Einstellungen → Verwaltung → ScoreView** öffnen. Die Betriebsdiagnose zeigt
-   Sidecar-Erreichbarkeit, SoundFont-Zustand, Cron-Alter und die Zahl der
-   Konvertierungen je Status.
+   den Zustand des gewählten Konvertierungswegs, den SoundFont-Zustand, das
+   Cron-Alter und die Zahl der Konvertierungen je Status.
 2. Eine `.mscz`-Datei in Files hochladen und anklicken. Beim ersten Mal läuft
    die Konvertierung sichtbar an; danach öffnet dieselbe Datei aus dem Cache.
 
@@ -182,8 +255,11 @@ Wenn etwas klemmt: [Troubleshooting](troubleshooting.md).
 
 App-Updates laufen über den üblichen Weg (`occ upgrade`).
 
-Der Sidecar wird getrennt aktualisiert – neu bauen, alten Container entfernen,
-neuen mit denselben Parametern starten:
+Der lokale Konverter kommt mit dem App-Paket und braucht keinen eigenen
+Schritt.
+
+Der Sidecar dagegen wird getrennt aktualisiert – neu bauen, alten Container
+entfernen, neuen mit denselben Parametern starten:
 
 ```sh
 docker build -t scoreview-musescore-cli sidecar/

@@ -7,17 +7,20 @@ Dokument beschreibt den Stand der App; die Entwicklungsgeschichte liegt in
 
 ## Überblick
 
-ScoreView besteht aus drei Teilen, die über HTTP miteinander sprechen:
+ScoreView besteht aus diesen Teilen:
 
 | Teil | Wo | Aufgabe |
 |---|---|---|
 | Nextcloud-App | `scoreview/lib/` (PHP) | Konvertierung anstoßen, Ergebnis cachen, Artefakte ausliefern, Notizen verwalten |
 | Viewer | `scoreview/src/` (Vue 3) | Notenseiten anzeigen, MIDI im Browser synthetisieren, Cursor führen |
-| Sidecar | `sidecar/` (Python + MuseScore 4) | `.mscz` in Notenseiten, MIDI und Timing-Daten übersetzen |
+| Sidecar | `sidecar/` (Python + MuseScore 4) | `.mscz` übersetzen – im eigenen Container |
+| Lokaler Konverter | `scoreview/converter/` (Node + MuseScore als WebAssembly) | dasselbe, ohne Container |
 
-Der Sidecar läuft als eigener Container neben Nextcloud und ist nicht Teil des
-App-Pakets (siehe [E3](#e3-der-sidecar-ist-voraussetzung)). Seine HTTP-API
-beschreibt [`../sidecar/README.md`](../sidecar/README.md).
+Konvertiert wird über **einen von zwei Wegen**, wahlweise über den Sidecar oder
+lokal auf dem Server; beide erzeugen dieselben Artefakte (siehe
+[E3](#e3-zwei-konvertierungswege-hinter-einer-api)). Der Sidecar ist nicht Teil
+des App-Pakets, der lokale Konverter schon. Die HTTP-API des Sidecars beschreibt
+[`../sidecar/README.md`](../sidecar/README.md).
 
 ## Datenfluss
 
@@ -27,9 +30,13 @@ beschreibt [`../sidecar/README.md`](../sidecar/README.md).
    |  Öffnen im Viewer stößt die Konvertierung an; ein Datei-Listener
    |  invalidiert nur den Cache, er konvertiert nicht selbst
    v
-Sidecar: ein mscore-Aufruf --score-media
+Konvertierung - einer von zwei Wegen, gleiche Artefakte (E3)
+   |
+   |  Sidecar: ein mscore-Aufruf --score-media
    |     -> svgs[] · midi · sposXML · mposXML · metadata
    |     (pngs/pdf/mxml werden verworfen)
+   |  Lokal:   ein node-Prozess mit MuseScore als WebAssembly
+   |     -> saveSvg() · saveMidi() · savePositions() · metadata()
    v
 IAppData-Cache  scoreview/<fileId>/<etag>/
    |     page-1.svg … page-N.svg · score.mid · timing.json · measures.json · meta.json
@@ -45,9 +52,10 @@ Browser
 ```
 
 **Leitprinzip: Das Frontend kennt ausschließlich die HTTP-API der App.** Es
-erfährt an keiner Stelle, dass ein Sidecar existiert. Nur deshalb bleibt
-[E3](#e3-der-sidecar-ist-voraussetzung) revidierbar – ein späterer Weg ohne
-Sidecar wäre ein reiner Backend-Austausch. Diese Trennung bitte nicht
+erfährt an keiner Stelle, welcher Konvertierungsweg gelaufen ist – oder ob es
+überhaupt mehr als einen gibt. Genau deshalb konnte der zweite Weg
+([E3](#e3-zwei-konvertierungswege-hinter-einer-api)) ein reiner Backend-Austausch
+bleiben, ohne eine einzige Zeile im Viewer. Diese Trennung bitte nicht
 aufweichen.
 
 ## Serverseite
@@ -75,9 +83,13 @@ unbekannter Name als 404 aus dem Controller kommt und nicht als Routing-Fehler.
 ### Konvertierung und Cache
 
 Konvertiert wird **lazy**: Erst das Öffnen einer Partitur reiht
-`ConvertScoreJob` ein, `PollConversionJob` holt das Ergebnis ab. Optional lässt
-sich in den Admin-Einstellungen die Vorab-Konvertierung beim Hochladen
-einschalten (`eager_conversion`).
+`ConvertScoreJob` ein. Auf dem Sidecar-Weg reicht der Job die Partitur nur ein
+und überlässt das Abholen `PollConversionJob` – ein blockierender Poll-Loop
+würde sonst bis zu 300 s die gesamte Job-Queue der Instanz belegen. Auf dem
+lokalen Weg gibt es nichts zu pollen: Der Kindprozess läuft gemessen 0,7–2,9 s
+mit harter Zeitgrenze, und der Job schreibt das Ergebnis selbst in den Cache.
+Optional lässt sich in den Admin-Einstellungen die Vorab-Konvertierung beim
+Hochladen einschalten (`eager_conversion`).
 
 Der Cache-Schlüssel ist `(fileId, etag)`: Eine geänderte Datei bekommt ein neues
 `etag` und damit automatisch einen neuen Cache-Eintrag; der alte wird verworfen.
@@ -178,19 +190,128 @@ Der Cursor ist ein Overlay über bekannten Koordinaten
 Renderer-internen Zustands, und Wiederholungen lösen sich strukturell auf
 ([M7](#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)).
 
-### E3: Der Sidecar ist Voraussetzung
+### E3: Zwei Konvertierungswege hinter einer API
 
-Die App setzt einen erreichbaren Sidecar voraus; ein Betrieb ohne ihn ist nicht
-vorgesehen. Der Sidecar ist der einzige Weg zu aktuellem, echtem MuseScore 4.
-Die Alternative (webmscore/WASM) ist auf MuseScore 3 eingefroren und liefert für
-aktuelle `.mscz`-Dateien leere Ergebnisse.
+Die Konvertierung läuft wahlweise über den **Sidecar-Container** oder **lokal
+auf dem Server**. Beide erzeugen dieselben Artefakte im selben Cache und stehen
+hinter derselben HTTP-API; welcher gelaufen ist, erfährt das Frontend nie. Die
+Wahl ist eine einzelne Admin-Einstellung (`conversion_backend`,
+Voreinstellung `sidecar`) und wird an genau einer Stelle im Code ausgewertet
+(`ConvertScoreJob`).
 
-**Bewusst in Kauf genommen:** Auf SaaS-gehosteten Nextcloud-Instanzen ist die App
-damit nicht installierbar. Das Leitprinzip oben hält die Tür für eine spätere
-Lockerung offen.
+| | Sidecar | Lokal |
+|---|---|---|
+| MuseScore | echtes MuseScore 4 aus gepinntem AppImage | MuseScore 4.7.4 als WebAssembly ([AndiMb/webmscore](https://github.com/AndiMb/webmscore)) |
+| Läuft als | eigener Container, HTTP-API | Kindprozess der Node-Laufzeit des Servers |
+| Voraussetzung beim Betreiber | Docker o. ä. | Node.js ≥ 18, `proc_open` erlaubt |
+| Im App-Paket | nichts | rund 25 MB Wasm (`converter/`) |
+| SoundFont | bringt das Image mit | Download-URL in den Einstellungen |
+| Vorab-Konvertierung, Selbsttest | ja | ja |
+
+**Warum es den Sidecar weiterhin gibt.** Er bringt echtes, aktuelles MuseScore 4
+mit: eine Abhängigkeit, die ein Versionswechsel aktualisiert, und keine, die
+jemand portieren und pflegen muss. Wo ohnehin Container laufen, ist das der
+robustere Weg – und der einzige, dessen MuseScore-Version sich unabhängig von
+einem Fork nachziehen lässt.
+
+**Warum es den lokalen Weg gibt.** Der Sidecar setzt voraus, dass der Betreiber
+einen zweiten Container betreiben kann. Das schließt Instanzen ohne Docker aus –
+und war der Grund, warum ScoreView auf verwalteten Instanzen gar nicht lief.
+
+#### Was der lokale Weg leistet
+
+Gemessen an denselben drei Partituren wie in
+[Grenzwerte](limits.md#gemessene-werte), auf derselben Maschine:
+
+| Partitur | Sidecar | Lokal |
+|---|---|---|
+| Minipartitur, 1 Seite | 6,3 s | **1,9 s** |
+| Chorsatz, 4 Seiten | 23,0 s | **2,9 s** |
+| Chorsatz, 5 Seiten | 27,7 s | **2,5 s** |
+
+Der Abstand kommt nicht von schnellerem Code, sondern von weniger Arbeit: Der
+Sidecar startet je Konvertierung einen MuseScore-Prozess unter Xvfb und rendert
+PNG, PDF und MusicXML mit, die anschließend verworfen werden
+([M2](#m2-schlüssel-im---score-media-json)). Von den lokalen Zeiten sind rund
+1,7 s die einmalige Übersetzung des Wasm-Moduls; die eigentliche Konvertierung
+dauert 0,2–1,2 s.
+
+**Die Artefakte sind deckungsgleich, nicht nur ähnlich.** Gegen den laufenden
+Sidecar Datei für Datei verglichen: MIDI **byteweise identisch**, SVG-Seiten
+innerhalb von 0,4 %, gleiche Zahl an spos-Events mit identischer elid-Folge und
+identischen Zeiten (24/315/357), gleiche Seitenzuordnung, größte
+Koordinatenabweichung 1,5 SVG-Einheiten auf einer 13200 Einheiten hohen Seite.
+Auch die Formatgrundlagen halten: Element 0 der fünfseitigen Partitur liegt bei
+`y=2148` ([M4](#m4-koordinaten-passen-mit-faktor-12-auf-das-svg)), `repeat-test`
+zeigt vier doppelte `elid`
+([M7](#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)), der weiße
+Hintergrundpfad ist vorhanden (M9), `metadata.tracks` führt die Stimmen samt
+Metronomspur (M6). In `meta.json` ist `parts[].instrumentName` lokal *gefüllt*
+und beim Sidecar `null` – der einzige gefundene Unterschied, und keiner, den der
+Viewer liest.
+
+Der Grund für die Deckungsgleichheit ist, dass es dieselbe Software ist: nur
+einmal als AppImage und einmal nach WebAssembly übersetzt. `savePositions`
+liefert die Koordinaten dort bereits in SVG-Einheiten, die Division durch 12
+entfällt (`converter/lib/artifacts.mjs`).
+
+#### Was der lokale Weg kostet
+
+- **Eine Node-Laufzeit auf dem Server.** Das offizielle Nextcloud-Docker-Image
+  bringt keine mit; auf verwaltetem Hosting ist sie meist nicht nachrüstbar.
+- **Rund 25 MB mehr im App-Paket** (16 MB Wasm, 4 MB Wasm-Daten, 4 MB CJK-Fonts).
+  Das Paket muss sie fertig installiert enthalten – eine Instanz ohne Container
+  hat kein npm, mit dem sie das nachholen könnte (siehe `release.yml`).
+- **`proc_open`.** Auf geteiltem Hosting oft per `disable_functions` gesperrt.
+  Die Betriebsdiagnose beantwortet das getrennt, weil es von außen wie ein
+  Konvertierungsfehler aussieht.
+- **Ein SoundFont muss von irgendwo kommen.** Ohne Sidecar gibt es kein Image,
+  aus dem sich eines nehmen ließe; die Einstellung `soundfont_fetch_url` lässt
+  den Server einmalig eines holen und danach selbst ausliefern (`SoundFontService`).
+- **Ein Prozess je Partitur.** `destroy()` lässt die Wasm-Instanz beschädigt
+  zurück – das nächste Laden im selben Prozess bricht mit „null function or
+  function signature mismatch" ab –, und ohne `destroy()` wächst der Speicher je
+  Partitur um rund 12 MB. Ein langlebiger Dienst müsste ohnehin recyceln; ein
+  Prozess je Konvertierung erledigt dasselbe ohne Zustand.
+- **Der webmscore-Fork will gepflegt werden.** Er hängt an einer bestimmten
+  Qt-Version für WebAssembly, und die MuseScore-Version zieht nicht von selbst
+  nach. Der Selbsttest der Betriebsdiagnose prüft deshalb für beide Wege
+  dieselben Zusagen aus M2/M4/M7.
+
+Zwei Rauheiten des Forks fängt der Konverter selbst ab: Sein Node-Shim schreibt
+`globalThis.navigator`, das seit Node 18 ein Getter ohne Setter ist – der Import
+scheitert sonst; `convert.mjs` legt die Eigenschaft vorher beschreibbar an. Und
+MuseScores Qt-Meldungen gehen auf stdout (dasselbe Bild wie
+[M3](#m3-stdout-ist-nicht-sauber)), wo das JSON-Ergebnis steht – sie werden nach
+stderr umgeleitet.
+
+#### Was auch der lokale Weg nicht löst: echtes SaaS
+
+Auf verwalteten Instanzen, die weder eine Node-Laufzeit noch das Starten von
+Prozessen erlauben, ist **serverseitiges Rendern nicht möglich** – auch nicht in
+PHP selbst. Das Wasm-Modul ist ein Emscripten-Build: 16 MB Code, der
+123 Funktionen aus seiner JavaScript-Laufzeit importiert und keinen einzigen
+WASI-Import trägt. Eine PHP-Wasm-Erweiterung (wasmer, wasmtime, extism) müsste
+diese Laufzeit vollständig nachbauen – und wäre ihrerseits eine
+PECL/FFI-Erweiterung, die auf verwaltetem Hosting nicht installierbar ist. Ein
+WASI-Build scheidet aus, weil Qt für WebAssembly nur Emscripten kennt.
+
+Für diesen Fall bliebe nur, im Browser zu konvertieren und die Artefakte zum
+Server hochzuladen. Das ist keine Umverdrahtung, sondern eine neue
+Vertrauensgrenze: Der Server lieferte dann an alle Leser einer Datei aus, was
+ein einzelner Browser erzeugt hat. Solange das nicht entschieden ist, bleibt
+SaaS außen vor.
+
+#### Welchen Weg wählen
+
+Wo Container laufen, der Sidecar – eine Abhängigkeit weniger, die im Repo
+gepflegt werden muss. Wo keine laufen, der lokale Weg. Umstellen heißt: die
+Einstellung ändern; bereits konvertierte Partituren bleiben im Cache gültig,
+weil die Artefakte dieselben sind.
 
 Wege, den Sidecar bereitzustellen, stehen in
-[`../sidecar/README.md`](../sidecar/README.md#bereitstellung).
+[`../sidecar/README.md`](../sidecar/README.md#bereitstellung); die Einrichtung
+des lokalen Wegs in [Installation](installation.md).
 
 ### E4: Englische Quellstrings, Deutsch als gepflegte Übersetzung
 

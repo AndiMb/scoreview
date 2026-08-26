@@ -29,12 +29,16 @@ verweisen.
 | Pfad | Inhalt |
 |---|---|
 | `scoreview/` | Die Nextcloud-App (PHP in `lib/`, Vue 3 in `src/`) |
+| `scoreview/converter/` | Lokaler Konvertierungsweg: Node + MuseScore als WebAssembly (webmscore) |
 | `sidecar/` | Docker-Container mit MuseScore 4 + Flask-HTTP-API (Paket `scoreview_sidecar`, hinter gunicorn) |
 | `docs/` | Die gepflegte Dokumentation |
 
-Der Sidecar ist zwingende Voraussetzung (E3). Das Frontend kennt ausschließlich
-die HTTP-API der App und erfährt nie, dass es ihn gibt – dieses Leitprinzip
-bitte nicht aufweichen, es hält E3 revidierbar.
+Konvertiert wird über **einen von zwei Wegen** – Sidecar oder lokal –, die
+dieselben Artefakte erzeugen (E3). Die Wahl wird an genau einer Stelle
+ausgewertet (`ConvertScoreJob`); das Frontend kennt ausschließlich die HTTP-API
+der App und erfährt nie, welcher Weg gelaufen ist. Dieses Leitprinzip bitte
+nicht aufweichen – es ist der Grund, warum der zweite Weg keine Zeile im Viewer
+gekostet hat.
 
 ## Befehle
 
@@ -70,6 +74,17 @@ Stubs mit ausgeliefert; die Release-Action prüft das eigens nach. Was echte
 Nextcloud-Integration braucht (Routen, Migrationen, IAppData), bleibt Sache
 eines Durchlaufs gegen die Testinstanz.
 
+Lokaler Konverter, aus `scoreview/converter/`:
+
+```sh
+npm ci                       # laedt webmscore als Release-Tarball (~11 MB)
+node convert.mjs --selftest  # echte Konvertierung, prueft M2/M4/M7
+```
+
+Die reine Umformung liegt in `converter/lib/artifacts.mjs` und laeuft in
+`npm test` der App mit. **`converter/node_modules` ist gitignored** und muss im
+Release-Tarball trotzdem enthalten sein – das erledigt `release.yml`.
+
 Sidecar, aus `sidecar/`:
 
 ```sh
@@ -77,11 +92,15 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest      # Parser-Unit-Tests, ohne MuseScore/Xvfb/Container
 ```
 
-Alles drei läuft zusätzlich in CI (`.github/workflows/ci.yml`).
+Alles davon läuft zusätzlich in CI (`.github/workflows/ci.yml`).
 
 ## Testumgebung
 
 Zwei Docker-Container, `nextcloud-test` (Port 8080) und `scoreview-sidecar`.
+Fuer den lokalen Konvertierungsweg braucht `nextcloud-test` zusaetzlich eine
+Node-Laufzeit (`apt-get install -y nodejs`, das Image bringt keine mit);
+umgestellt wird mit
+`occ config:app:set scoreview conversion_backend --value local`.
 Aufsetzen wie in `docs/installation.md`; die Besonderheiten der lokalen
 Testinstanz stehen in `docs/development.md#testumgebung`.
 

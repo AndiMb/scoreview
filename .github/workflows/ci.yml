@@ -2,8 +2,9 @@
 # laeuft gegen die Testinstanz; ob das auch auf einer anderen Maschine
 # ueberhaupt baut, ist damit nicht abgedeckt.
 #
-# Bewusst drei getrennte Jobs statt eines grossen: sie laufen parallel, und
-# ein roter Job sagt sofort, WO es klemmt (Frontend, Backend, Sidecar).
+# Bewusst getrennte Jobs statt eines grossen: sie laufen parallel, und ein
+# roter Job sagt sofort, WO es klemmt (Frontend, Backend, Sidecar, lokaler
+# Konverter).
 name: CI
 
 on:
@@ -87,6 +88,39 @@ jobs:
 
       - name: Unit-Tests (PHPUnit)
         run: composer run test:unit
+
+  # Der lokale Konvertierungsweg (docs/architecture.md E3). Die reine
+  # Umformungslogik deckt schon `npm test` im Frontend-Job ab; hier laeuft
+  # der Weg EINMAL vollstaendig - mit echtem webmscore-Wasm, echter Partitur
+  # und den Zusagen aus M2/M4/M7 als Pruefung. Genau das faengt ab, was ein
+  # webmscore-Versionswechsel still kaputtmachen wuerde.
+  konverter:
+    name: Lokaler Konverter (webmscore)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scoreview/converter
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: scoreview/converter/package-lock.json
+
+      # Kein `npm ci --omit=dev`: das Paket hat ohnehin nur Laufzeit-
+      # Abhaengigkeiten, und der Release-Job soll denselben Baum bekommen.
+      - run: npm ci
+
+      - name: Selbsttest (echte Konvertierung, prueft M2/M4/M7)
+        run: |
+          ERGEBNIS=$(node convert.mjs --selftest 2>/dev/null)
+          echo "$ERGEBNIS"
+          echo "$ERGEBNIS" | node -e '
+            const r = JSON.parse(require("fs").readFileSync(0, "utf8"))
+            if (!r.ok) { console.error("Zusagen verletzt:", r.problems.join("; ")); process.exit(1) }
+          '
 
   sidecar:
     name: Sidecar (Python ${{ matrix.python }})

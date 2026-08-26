@@ -8,19 +8,28 @@ geschätzt; wo etwas Hochrechnung ist, steht es dabei.
 
 Drei Partituren, gemessen auf einer gewöhnlichen Arbeitsmaschine:
 
-| Partitur | Seiten | Takte | `.mscz` | Konvertierung | SVG gesamt | größte Seite | MIDI | Cache gesamt |
-|---|---|---|---|---|---|---|---|---|
-| Minipartitur | 1 | 5 | 30 KB | **6,3 s** | 107 KB | 107 KB | 0,4 KB | 111 KB |
-| Chorsatz | 4 | 58 | 114 KB | **23,0 s** | 3236 KB | 1041 KB | 12,4 KB | 5038 KB |
-| Chorsatz | 5 | 63 | 98 KB | **27,7 s** | 1174 KB | 303 KB | 8,3 KB | 4623 KB |
+| Partitur | Seiten | Takte | `.mscz` | Sidecar | lokal | SVG gesamt | größte Seite | MIDI | Cache gesamt |
+|---|---|---|---|---|---|---|---|---|---|
+| Minipartitur | 1 | 5 | 30 KB | **6,3 s** | **1,9 s** | 107 KB | 107 KB | 0,4 KB | 111 KB |
+| Chorsatz | 4 | 58 | 114 KB | **23,0 s** | **2,9 s** | 3236 KB | 1041 KB | 12,4 KB | 5038 KB |
+| Chorsatz | 5 | 63 | 98 KB | **27,7 s** | **2,5 s** | 1174 KB | 303 KB | 8,3 KB | 4623 KB |
+
+Die Artefaktspalten gelten für beide Konvertierungswege
+([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)): die MIDI ist
+byteweise identisch, die SVG-Summen liegen innerhalb von 0,4 %.
 
 Daraus abgeleitet:
 
-- **Konvertierungsdauer ≈ 5,4 s pro Seite + 1 s Grundlast** (lineare Regression
-  über die drei Messpunkte). Daran hängt der Default von
+- **Konvertierungsdauer über den Sidecar ≈ 5,4 s pro Seite + 1 s Grundlast**
+  (lineare Regression über die drei Messpunkte). Daran hängt der Default von
   `MSCORE_TIMEOUT_SECONDS` (600 s, rechnerisch ~110 Seiten). Wer sehr große
   Partituren erwartet, rechnet mit `Seitenzahl × 5,4 s + Puffer` hoch. Die Zahl
   hängt spürbar von der CPU ab – Größenordnung, keine Garantie.
+- **Lokal sind rund 1,7 s davon Grundlast** – die einmalige Übersetzung des
+  Wasm-Moduls je Prozess. Die eigentliche Konvertierung dauert 0,2–1,2 s, also
+  etwa 0,25 s pro Seite. Der lokale Weg gewinnt vor allem, weil er keine
+  PNG/PDF/MusicXML mitrendert, die anschließend verworfen werden
+  ([M2](architecture.md#m2-schlüssel-im---score-media-json)).
 - **Die SVG-Größe schwankt stark pro Seite** (303 KB gegen 1041 KB je nach
   Notendichte, Faktor ~3,4). Eine Hochrechnung „Seitenzahl × Durchschnitt" ist
   deshalb grob. Für 30 Seiten dichten Satzes sind ~30 MB SVG im Cache plausibel.
@@ -59,6 +68,20 @@ stammt vor allem aus der SoundFont-Wahl und fehlenden Master-Effekten. Wer
 besseren Klang braucht, hinterlegt ein eigenes SoundFont – siehe
 [Installation](installation.md#soundfont).
 
+**Der lokale Konvertierungsweg unter Last.** Gemessen ist er an einer einzelnen
+Maschine mit einer Partitur nach der anderen. Wie sich mehrere gleichzeitige
+Konvertierungen verhalten, ist ungeprüft: Jeder Lauf ist ein eigener Prozess mit
+rund 130–250 MB Speicherbedarf, und anders als beim Sidecar begrenzt nichts ihre
+Zahl (dort tut das eine Semaphore). Auf einem kleinen Server kann eine
+Sammel-Vorabkonvertierung (`eager_conversion`) deshalb spürbar werden.
+
+**Die MuseScore-Version des lokalen Wegs hängt an einem Fork.**
+[AndiMb/webmscore](https://github.com/AndiMb/webmscore) trägt 4.7.4; sie zieht
+nicht von selbst nach, wenn MuseScore weitergeht, und der Build hängt an einer
+bestimmten Qt-Version für WebAssembly. Der Selbsttest der Betriebsdiagnose
+prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine neuere
+MuseScore-Version verfügbar wäre, meldet er nicht.
+
 **Tablet-Hardware.** Touch-Bedienung, Pinch-Zoom und Wachhalten des Bildschirms
 sind umgesetzt und im Browser verifiziert, aber nicht auf einem echten Tablet in
 einer Probe erprobt.
@@ -70,10 +93,11 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
 
 ## Was die App bewusst nicht tut
 
-- **Kein Betrieb ohne Sidecar**, und damit keine Installation auf
-  SaaS-gehosteten Nextcloud-Instanzen. Siehe
-  [E3](architecture.md#e3-der-sidecar-ist-voraussetzung); die Trennung im Code
-  hält eine spätere Lockerung offen.
+- **Kein serverseitiges Rendern auf verwaltetem Hosting.** Der lokale
+  Konvertierungsweg braucht eine Node.js-Laufzeit und die Erlaubnis, Prozesse
+  zu starten; wo es beides nicht gibt, ist ScoreView nicht betreibbar. In PHP
+  allein lässt sich das Wasm-Modul nicht ausführen – die Gründe stehen in
+  [E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
 - **Kein Reflow.** Das Seitenbild ist MuseScores A4-Satz
   ([E2](architecture.md#e2-musescore-svg-statt-neusatz-im-browser)).
   „Bildschirmfüllend" ist eine Skalierung, kein Umbruch. Echter Umbruch bräuchte
@@ -93,3 +117,6 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
   Datei, keine Umstellung ([E4](architecture.md#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung)).
 - **Keine Verpackung als AppAPI/ExApp.** Der Sidecar wird heute als eigener
   Container betrieben, nicht von Nextcloud verwaltet.
+- **Keine mitgelieferte Node-Laufzeit.** Der lokale Weg benutzt das `node` des
+  Servers; die App bringt keines mit und lädt auch keines nach (wie es etwa
+  Nextclouds `recognize` tut).

@@ -6,7 +6,10 @@ namespace OCA\ScoreView\BackgroundJob;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\ConverterException;
+use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SidecarException;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -15,6 +18,7 @@ use OCP\BackgroundJob\QueuedJob;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\IAppConfig;
+use OCP\ITempManager;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -23,11 +27,17 @@ use Psr\Log\LoggerInterface;
  * IJobList::add() eingereiht - siehe Listener\ScoreFileListener und
  * Controller\ConversionController.
  *
- * Reicht die Konvertierung beim Sidecar ein und übergibt das Pollen sofort
- * an PollConversionJob (siehe dort) - dieser Job selbst läuft in
- * Millisekunden durch und blockiert die Job-Queue nicht (ein blockierender
- * sleep()-Poll-Loop hier wuerde bis zu 300s lang die gesamte Job-Queue der
- * Instanz belegen).
+ * Hier faellt die Entscheidung zwischen den beiden Konvertierungswegen
+ * (Service\ConversionBackend, siehe docs/architecture.md E3) - und zwar nur
+ * hier: alles danach ist wieder gemeinsam, weil beide Wege dieselben
+ * Artefakte in denselben Cache legen.
+ *
+ * Auf dem Sidecar-Weg reicht dieser Job die Konvertierung nur ein und
+ * übergibt das Pollen sofort an PollConversionJob (siehe dort) - er selbst
+ * läuft in Millisekunden durch und blockiert die Job-Queue nicht (ein
+ * blockierender sleep()-Poll-Loop hier wuerde bis zu 300s lang die gesamte
+ * Job-Queue der Instanz belegen). Auf dem lokalen Weg gibt es nichts
+ * einzureichen und nichts zu pollen; siehe convertLocally().
  */
 class ConvertScoreJob extends QueuedJob {
 	// Gesamt-Obergrenze für die Konvertierung inkl. aller Poll-Zyklen in
@@ -55,9 +65,12 @@ class ConvertScoreJob extends QueuedJob {
 		ITimeFactory $time,
 		private IRootFolder $rootFolder,
 		private ConversionService $conversionService,
+		private ConversionBackend $backend,
 		private SidecarClient $sidecarClient,
+		private LocalConverter $localConverter,
 		private IJobList $jobList,
 		private IAppConfig $appConfig,
+		private ITempManager $tempManager,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -112,6 +125,11 @@ class ConvertScoreJob extends QueuedJob {
 
 		$this->conversionService->markProcessing($conversion);
 
+		if ($this->backend->isLocal()) {
+			$this->convertLocally($conversion, $node);
+			return;
+		}
+
 		try {
 			// fopen() statt getContent(): der Inhalt geht als Stream an Guzzle,
 			// nicht als PHP-String (siehe SidecarClient::submitConversion()).
@@ -126,7 +144,7 @@ class ConvertScoreJob extends QueuedJob {
 				'message' => $e->getMessage(),
 				'exception' => $e,
 			]);
-			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof SidecarException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
+			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof ConverterException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
 			return;
 		}
 
@@ -136,6 +154,75 @@ class ConvertScoreJob extends QueuedJob {
 			'jobId' => $jobId,
 			'deadline' => $this->time->getTime() + self::MAX_TOTAL_SECONDS,
 		]);
+	}
+
+	/**
+	 * Der lokale Weg laeuft vollstaendig in DIESEM Job - es gibt nichts zu
+	 * pollen, also auch keinen PollConversionJob.
+	 *
+	 * Dass er dabei blockiert, ist vertretbar und anders als beim Sidecar:
+	 * dort wartet die App auf einen fremden Dienst mit unbekannter
+	 * Warteschlange (bis zu 300 s, siehe MAX_TOTAL_SECONDS), hier auf einen
+	 * eigenen Kindprozess mit gemessenen 0,7-2,9 s und harter Zeitgrenze
+	 * (Service\LocalConverter). Ein Poll-Umweg ueber die Job-Queue waere
+	 * dafuer mehr Wartezeit als Arbeit.
+	 */
+	private function convertLocally(ScoreConversion $conversion, Node $node): void {
+		$temporaryPath = null;
+		try {
+			$temporaryPath = $this->copyToTempFile($node);
+			$artifacts = $this->localConverter->convert($temporaryPath);
+			$this->conversionService->markReady(
+				$conversion,
+				$artifacts['pages'],
+				$artifacts['midi'],
+				$artifacts['timing'],
+				$artifacts['measures'],
+				$artifacts['meta'],
+			);
+		} catch (\Throwable $e) {
+			$this->logger->error('ScoreView: lokale Konvertierung fehlgeschlagen für fileId={fileId}: {message}', [
+				'fileId' => $conversion->getFileId(),
+				'message' => $e->getMessage(),
+				'exception' => $e,
+			]);
+			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof ConverterException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
+		} finally {
+			if ($temporaryPath !== null) {
+				@unlink($temporaryPath);
+			}
+		}
+	}
+
+	/**
+	 * Der Konverter braucht einen echten Pfad im Dateisystem - die Partitur
+	 * kann aber auf einem beliebigen Storage liegen (Objektspeicher, externer
+	 * Mount), wo es keinen gibt. Kopiert wird als Stream, nicht ueber
+	 * getContent(): der Inhalt soll nie als PHP-String im Speicher stehen.
+	 *
+	 * @throws \RuntimeException
+	 */
+	private function copyToTempFile(Node $node): string {
+		$target = $this->tempManager->getTemporaryFile('.mscz');
+		if ($target === false) {
+			throw new \RuntimeException('Kein temporaerer Dateiname fuer die Partitur verfuegbar.');
+		}
+		$source = $node->fopen('rb');
+		if ($source === false) {
+			throw new \RuntimeException('Partitur konnte nicht zum Lesen geoeffnet werden.');
+		}
+		$sink = fopen($target, 'wb');
+		if ($sink === false) {
+			fclose($source);
+			throw new \RuntimeException('Temporaere Datei konnte nicht geschrieben werden.');
+		}
+		try {
+			stream_copy_to_stream($source, $sink);
+		} finally {
+			fclose($source);
+			fclose($sink);
+		}
+		return $target;
 	}
 
 	private function resolveNode(string $userId, int $fileId): ?Node {

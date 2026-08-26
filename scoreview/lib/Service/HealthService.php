@@ -9,10 +9,12 @@ use OCP\IAppConfig;
 use OCP\IDBConnection;
 
 /**
- * Betriebsdiagnose für die Admin-Seite. Beantwortet die drei
- * Fragen, deren Antwort bisher nur im Log oder gar nicht stand:
- * Ist der Sidecar erreichbar? Ist ein SoundFont da? **Läuft der
- * Nextcloud-Cron?**
+ * Betriebsdiagnose für die Admin-Seite. Beantwortet die Fragen, deren
+ * Antwort sonst nur im Log oder gar nicht steht: Welcher
+ * Konvertierungsweg gilt, und ist er lauffähig - beim Sidecar heißt das
+ * "erreichbar", beim lokalen Weg "node da, Konverter vollständig, darf PHP
+ * überhaupt Prozesse starten" (Service\LocalConverter)? Ist ein SoundFont
+ * da? **Läuft der Nextcloud-Cron?**
  *
  * Der Cron-Punkt ist ausdrücklich Teil des Plans („Dessen Fehlen hat schon
  * Zeit gekostet und ist von außen nur als ‚bleibt auf pending stehen'
@@ -23,6 +25,8 @@ use OCP\IDBConnection;
 class HealthService {
 	public function __construct(
 		private SidecarClient $sidecarClient,
+		private LocalConverter $localConverter,
+		private ConversionBackend $backend,
 		private SoundFontService $soundFontService,
 		private IAppConfig $appConfig,
 		private IDBConnection $db,
@@ -34,13 +38,21 @@ class HealthService {
 	 */
 	public function collect(): array {
 		return [
+			'backend' => $this->backend->current(),
 			'sidecar' => $this->sidecarStatus(),
+			'local' => $this->localConverter->describe(),
 			'soundFont' => $this->soundFontStatus(),
 			'cron' => $this->cronStatus(),
 			'conversions' => $this->conversionStats(),
 		];
 	}
 
+	/**
+	 * Auch dann erhoben, wenn der lokale Weg gewaehlt ist: ein Betreiber, der
+	 * gerade umstellt, will sehen, ob der Sidecar noch laeuft - und der
+	 * Aufruf kostet nichts, wenn gar keine URL konfiguriert ist (siehe
+	 * SidecarClient::checkHealth()).
+	 */
 	private function sidecarStatus(): array {
 		$configured = $this->sidecarClient->isConfigured();
 		$health = $this->sidecarClient->checkHealth();
@@ -53,22 +65,38 @@ class HealthService {
 	}
 
 	private function soundFontStatus(): array {
-		// Zwei getrennte Fragen: liegt schon eine Kopie im IAppData-Cache
-		// (dann funktioniert Wiedergabe auch bei gerade nicht erreichbarem
-		// Sidecar), und was meldet der Sidecar? Ein Override per
-		// `soundfont_url` sticht beides.
+		// Vier getrennte Fragen, weil "kein Ton" von aussen fuer alle vier
+		// gleich aussieht: laedt der Browser direkt woanders (`soundfont_url`),
+		// holt der Server es von einer URL (`soundfont_fetch_url`), liegt
+		// schon eine Kopie im IAppData-Cache (dann spielt es auch ohne
+		// erreichbare Quelle), und was meldet der Sidecar?
 		$override = $this->appConfig->getValueString(Application::APP_ID, 'soundfont_url');
+		$fetchUrl = $this->soundFontService->getFetchUrl();
 		$cachedVersion = $this->appConfig->getValueString(Application::APP_ID, 'soundfont_cache_version');
 		$sidecarInfo = null;
 		$error = null;
-		try {
-			$sidecarInfo = $this->sidecarClient->fetchSoundFontInfo();
-		} catch (\Throwable $e) {
-			$error = $e->getMessage();
+		// Auf dem lokalen Weg gibt es keinen Sidecar zu fragen - und eine
+		// Fehlermeldung "Sidecar nicht konfiguriert" waere dort keine
+		// Diagnose, sondern Rauschen.
+		if (!$this->backend->isLocal() && $fetchUrl === '') {
+			try {
+				$sidecarInfo = $this->sidecarClient->fetchSoundFontInfo();
+			} catch (\Throwable $e) {
+				$error = $e->getMessage();
+			}
+		}
+		$cached = $cachedVersion !== '';
+		if (!$cached && $override === '' && $fetchUrl !== '') {
+			// Noch nie geholt: das ist der Zustand, in dem die App stumm ist,
+			// obwohl alles konfiguriert aussieht. Der Abruf passiert beim
+			// ersten GET /api/soundfont, nicht hier - diese Diagnose bleibt
+			// bewusst ohne Seiteneffekt.
+			$error = 'SoundFont noch nicht geholt - beim ersten Abspielen wird es von der angegebenen URL geladen.';
 		}
 		return [
 			'overrideUrl' => $override,
-			'cached' => $cachedVersion !== '',
+			'fetchUrl' => $fetchUrl,
+			'cached' => $cached,
 			'availableInSidecar' => $sidecarInfo['available'] ?? false,
 			'name' => $sidecarInfo['name'] ?? null,
 			'size' => $sidecarInfo['size'] ?? null,

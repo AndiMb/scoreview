@@ -9,6 +9,7 @@ use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\SimpleFS\ISimpleFolder;
+use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;
 use OCP\ITempManager;
 
@@ -23,17 +24,23 @@ use OCP\ITempManager;
  * App war fuer jeden, der nicht selbst ein 40-MB-SF3 irgendwo
  * CORS-faehig hinlegt, dauerhaft stumm.
  *
- * Der Sidecar ist ohnehin zwingende Voraussetzung (E3) und enthaelt
- * bereits ein General-MIDI-SoundFont - MuseScore kann ohne eines gar kein
- * Audio rendern. Diese Klasse holt es einmalig von dort und legt es im
- * IAppData-Cache ab; ausgeliefert wird es danach von der App selbst
+ * Es gibt zwei Quellen, und die Reihenfolge ist Absicht:
+ *
+ * 1. **`soundfont_fetch_url`** - eine beliebige URL, von der der SERVER die
+ *    Datei einmalig holt. Das ist die Quelle fuer den lokalen
+ *    Konvertierungsweg (E3): ohne Sidecar gibt es kein Image, aus dem sich
+ *    ein SoundFont nehmen liesse, und ohne SoundFont bleibt die App stumm.
+ * 2. **Der Sidecar**, wo einer laeuft: er enthaelt bereits ein
+ *    General-MIDI-SoundFont - MuseScore kann ohne eines gar kein Audio
+ *    rendern -, also muss der Betreiber dafuer nichts weiter tun.
+ *
+ * Ausgeliefert wird in beiden Faellen von der App selbst
  * (Controller\SoundFontController), also same-origin: kein CORS, keine
  * CSP-Ausnahme fuer einen fremden Host, kein zusaetzlicher Hosting-Aufwand.
  *
- * Die Admin-Einstellung `soundfont_url` bleibt als Uebersteuerung
- * bestehen - wer ein besseres/anderes SoundFont ausliefern will, traegt es
- * dort ein und umgeht diesen Cache komplett (siehe
- * ConversionController::status()).
+ * Davon zu unterscheiden ist die Admin-Einstellung `soundfont_url`: die
+ * laesst den BROWSER direkt von dort laden und umgeht diesen Cache komplett
+ * (siehe ConversionController::status()).
  */
 class SoundFontService {
 	/**
@@ -45,11 +52,15 @@ class SoundFontService {
 	private const FILE = 'soundfont.sf3';
 	private const VERSION_KEY = 'soundfont_cache_version';
 
+	/** Einstellung: URL, von der der Server das SoundFont einmalig holt. */
+	public const FETCH_URL_KEY = 'soundfont_fetch_url';
+
 	public function __construct(
 		private IAppData $appData,
 		private SidecarClient $sidecarClient,
 		private IAppConfig $appConfig,
 		private ITempManager $tempManager,
+		private IClientService $clientService,
 	) {
 	}
 
@@ -68,6 +79,11 @@ class SoundFontService {
 	 */
 	public function getOrFetch(): ISimpleFile {
 		$cached = $this->findCached();
+
+		$fetchUrl = $this->getFetchUrl();
+		if ($fetchUrl !== '') {
+			return $this->getOrFetchFromUrl($fetchUrl, $cached);
+		}
 
 		try {
 			$info = $this->sidecarClient->fetchSoundFontInfo();
@@ -109,12 +125,54 @@ class SoundFontService {
 		return $file->getSize() > 0 ? $file : null;
 	}
 
-	/** @throws SidecarException */
-	private function fetchIntoCache(string $version): ISimpleFile {
+	public function getFetchUrl(): string {
+		return trim($this->appConfig->getValueString(Application::APP_ID, self::FETCH_URL_KEY));
+	}
+
+	/**
+	 * Quelle 1: eine konfigurierte URL. Geholt wird sie genau einmal je
+	 * URL - die Version ist ihr Hash, nicht der Inhalt. Wer dieselbe URL mit
+	 * einer anderen Datei belegt, muss die Einstellung einmal neu speichern;
+	 * bei jedem Aufruf einen HEAD-Request zu schicken waere fuer eine Datei,
+	 * die sich praktisch nie aendert, der teurere Fehler.
+	 *
+	 * @throws ConverterException wenn nichts zu holen und nichts im Cache ist
+	 */
+	private function getOrFetchFromUrl(string $url, ?ISimpleFile $cached): ISimpleFile {
+		$version = 'url:' . substr(sha1($url), 0, 12);
+		if ($cached !== null && $version === $this->getVersion()) {
+			return $cached;
+		}
+		try {
+			return $this->fetchIntoCache($version, function (string $tempPath) use ($url): void {
+				// sink statt Body-als-String: ein SF3 ist ~40 MB und wuerde
+				// als PHP-String am memory_limit kratzen.
+				$this->clientService->newClient()->get($url, ['sink' => $tempPath, 'timeout' => 300]);
+			});
+		} catch (\Throwable $e) {
+			// Ein nicht erreichbarer Hoster darf eine Probe nicht verstummen
+			// lassen, solange schon etwas im Cache liegt - dieselbe Zusage
+			// wie beim Sidecar-Ausfall.
+			if ($cached !== null) {
+				return $cached;
+			}
+			throw new ConverterException('SoundFont-Download von ' . $url . ' fehlgeschlagen: ' . $e->getMessage(), 0, $e);
+		}
+	}
+
+	/**
+	 * @param callable(string): void $downloadTo laedt die Datei an den uebergebenen Pfad
+	 * @throws SidecarException
+	 */
+	private function fetchIntoCache(string $version, ?callable $downloadTo = null): ISimpleFile {
 		$tempPath = $this->tempManager->getTemporaryFile('.sf3');
-		$this->sidecarClient->downloadSoundFontTo($tempPath);
+		if ($downloadTo !== null) {
+			$downloadTo($tempPath);
+		} else {
+			$this->sidecarClient->downloadSoundFontTo($tempPath);
+		}
 		if (!is_file($tempPath) || filesize($tempPath) === 0) {
-			throw new SidecarException('SoundFont-Download vom Sidecar lieferte eine leere Datei.');
+			throw new SidecarException('SoundFont-Download lieferte eine leere Datei.');
 		}
 
 		$folder = $this->getOrCreateFolder();

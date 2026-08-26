@@ -37,9 +37,11 @@ Oberfläche auf Deutsch und Englisch.
 
 ## Wie es funktioniert
 
-Eine hochgeladene `.mscz`-Datei wird **einmalig** serverseitig konvertiert –
-über einen MuseScore-Sidecar zu Notenseiten (SVG), MIDI und Timing-Daten – und
-das Ergebnis gecacht. Erneutes Öffnen rendert nicht neu; erst eine Änderung an
+Eine hochgeladene `.mscz`-Datei wird **einmalig** serverseitig zu Notenseiten
+(SVG), MIDI und Timing-Daten konvertiert und das Ergebnis gecacht. Dafür gibt es
+zwei gleichwertige Wege: einen MuseScore-Container neben Nextcloud oder – ohne
+Container – MuseScore als WebAssembly, ausgeführt von der Node-Laufzeit des
+Servers. Erneutes Öffnen rendert nicht neu; erst eine Änderung an
 der Datei stößt eine neue Konvertierung an. Die Audiowiedergabe passiert
 clientseitig im Browser, mit einem SoundFont, das die App ohne Konfiguration
 selbst ausliefert.
@@ -49,12 +51,16 @@ Ausführlich in [docs/architecture.md](docs/architecture.md).
 ## Voraussetzungen
 
 - Nextcloud 31–35, PHP 8.1–8.5
-- Ein erreichbarer **MuseScore-Sidecar** (in `sidecar/` enthalten, läuft als
-  eigener Container). Die App läuft nicht ohne ihn – warum, steht unter
-  [E3](docs/architecture.md#e3-der-sidecar-ist-voraussetzung). Auf
-  SaaS-gehosteten Nextcloud-Instanzen ist ScoreView damit nicht installierbar.
+- **Einer von zwei Konvertierungswegen**
+  ([E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)):
+  entweder der **MuseScore-Sidecar** (in `sidecar/` enthalten, läuft als eigener
+  Container) oder eine **Node.js-Laufzeit ab Version 18** auf dem
+  Nextcloud-Server, die PHP starten darf. Verwaltetes Hosting ohne beides bleibt
+  außen vor.
 
 ## Installation
+
+Mit Container:
 
 ```sh
 # 1. Konvertierungsdienst bauen und starten
@@ -70,8 +76,12 @@ occ app:enable scoreview
 ```
 
 Danach unter **Einstellungen → Verwaltung → ScoreView** die Sidecar-Adresse und
-das Secret eintragen. Es fehlen noch zwei einmalige Schritte – die
-Mimetype-Registrierung für `.mscz` und Background-Jobs im Modus `cron`:
+das Secret eintragen.
+
+Ohne Container entfällt Schritt 1; stattdessen in denselben Einstellungen den
+lokalen Weg wählen und eine SoundFont-Download-URL hinterlegen. So oder so
+fehlen noch zwei einmalige Schritte – die Mimetype-Registrierung für `.mscz` und
+Background-Jobs im Modus `cron`:
 **[vollständige Anleitung](docs/installation.md)**.
 
 ## Dokumentation

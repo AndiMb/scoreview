@@ -50,7 +50,7 @@ Die Betriebsdiagnose meldet diesen Fall ausdrücklich („kein Lauf in den letzt
 
 ## „Der Konvertierungsdienst konnte nicht erreicht werden"
 
-Drei Ursachen, in dieser Reihenfolge zu prüfen:
+Gilt für den Sidecar-Weg. Drei Ursachen, in dieser Reihenfolge zu prüfen:
 
 1. **Kein gemeinsames Docker-Netz.** Auf Dockers Standard-Bridge lösen sich
    Containernamen nicht auf. Der Sidecar läuft, `curl` vom Host funktioniert,
@@ -63,6 +63,33 @@ Drei Ursachen, in dieser Reihenfolge zu prüfen:
 3. **Falsches Secret.** Der Sidecar antwortet dann 401. Der Selbsttest-Knopf auf
    der Verwaltungsseite unterscheidet die Fälle.
 
+## Der lokale Konvertierungsweg läuft nicht
+
+Die Betriebsdiagnose auf der Verwaltungsseite beantwortet die drei Fragen
+getrennt, weil sie von außen alle gleich aussehen:
+
+- **„PHP darf keine Prozesse starten"** – `proc_open` ist per
+  `disable_functions` gesperrt. Das lässt sich nur in der PHP-Konfiguration
+  ändern; wo das nicht geht, bleibt nur der Sidecar-Weg.
+- **„Keine Node.js-Laufzeit gefunden"** – gesucht wird `node` über `PATH` und
+  an den üblichen Stellen. PHP-FPM läuft oft mit einem ausgedünnten `PATH`;
+  dann den absoluten Pfad eintragen. Gegenprobe mit demselben Konto, unter dem
+  Nextcloud läuft:
+  ```sh
+  sudo -u www-data /usr/bin/node --version
+  ```
+- **„Das webmscore-Paket fehlt"** – im App-Paket fehlt
+  `converter/node_modules`. Das passiert, wenn die App aus einem Git-Checkout
+  statt aus einem Release-Tarball installiert wurde; dort ist das Verzeichnis
+  gitignored. Nachholen mit `npm ci` in `scoreview/converter/`.
+
+Der Selbsttest-Knopf konvertiert eine mitgelieferte Minipartitur über den
+gewählten Weg und nennt die Ursache im Klartext. Dasselbe von Hand:
+
+```sh
+cd /var/www/html/custom_apps/scoreview/converter && node convert.mjs --selftest
+```
+
 ## „Kein Ton: …" über der Notenansicht
 
 Die Notenansicht funktioniert weiter, nur die Wiedergabe nicht; der Text hinter
@@ -74,9 +101,14 @@ dem Doppelpunkt nennt die Ursache.
   ```sh
   curl -s -H "X-ScoreView-Secret: <secret>" http://scoreview-sidecar:8765/soundfont/info
   ```
-- **HTTP-Fehler bei einer selbst eingetragenen SoundFont-URL** – die Adresse muss
-  vom **Browser** aus erreichbar sein, nicht nur vom Server, und CORS erlauben.
-  Ein leeres Feld verwendet das mitgelieferte SoundFont.
+- **Stumm auf dem lokalen Konvertierungsweg** – dort gibt es kein Image, das ein
+  SoundFont mitbrächte. Ohne die Einstellung **SoundFont-Download-URL** bleibt
+  die Wiedergabe stumm; siehe [Installation](installation.md#soundfont).
+- **HTTP-Fehler bei einer selbst eingetragenen SoundFont-URL** – bei der
+  **SoundFont-URL** muss die Adresse vom **Browser** aus erreichbar sein, nicht
+  nur vom Server, und CORS erlauben. Bei der **SoundFont-Download-URL** genügt
+  Erreichbarkeit vom Server. Ein leeres Feld verwendet das mitgelieferte
+  SoundFont.
 
 ## Die Konvertierung schlägt fehl
 
@@ -88,9 +120,10 @@ daneben. Die Fehlercodes:
 | `sidecar_unreachable` | Dienst nicht erreichbar | siehe oben |
 | `sidecar_rejected` | Datei abgelehnt (z. B. Secret, Größe) | Secret und `SCOREVIEW_MAX_UPLOAD_BYTES` prüfen |
 | `too_large` | Partitur überschreitet das Limit | Limit anheben oder Partitur teilen |
-| `timeout` | Konvertierung nicht rechtzeitig fertig | `MSCORE_TIMEOUT_SECONDS` anheben – rund 5,4 s pro Seite einplanen, siehe [Grenzwerte](limits.md) |
-| `conversion_failed` | MuseScore selbst ist gescheitert | Datei in MuseScore öffnen; oft eine defekte `.mscz` |
+| `timeout` | Konvertierung nicht rechtzeitig fertig | Sidecar: `MSCORE_TIMEOUT_SECONDS` anheben – rund 5,4 s pro Seite einplanen, siehe [Grenzwerte](limits.md). Lokal: `local_timeout` (Vorgabe 120 s) |
+| `conversion_failed` | MuseScore selbst ist gescheitert | Datei in MuseScore öffnen; oft eine defekte `.mscz`. Auf dem lokalen Weg steht die Ausgabe des Konverters im `nextcloud.log` |
 | `no_pages` | Konvertierung lief, lieferte aber keine Seite | Selbsttest auslösen; deutet auf ein Problem im Image hin |
+| `local_unavailable` | Lokaler Weg gewählt, aber nicht lauffähig | siehe [oben](#der-lokale-konvertierungsweg-läuft-nicht) |
 | `unknown` | Alles andere | `nextcloud.log` auf die Exception prüfen |
 
 ## Der Viewer meldet HTTP 500

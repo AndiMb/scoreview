@@ -39,6 +39,23 @@ jobs:
           npm ci
           npm run build
 
+      # Der lokale Konvertierungsweg (docs/architecture.md E3) muss FERTIG
+      # INSTALLIERT ins Paket: eine Instanz ohne Container hat kein npm, mit
+      # dem sie das nachholen koennte. Das sind rund 25 MB webmscore-Wasm im
+      # Tarball - der Preis dafuer, dass ScoreView ohne Sidecar laeuft.
+      - name: Konverter installieren (webmscore)
+        working-directory: scoreview/converter
+        run: npm ci --omit=dev
+
+      - name: Gegenprobe - webmscore liegt im Paket
+        working-directory: scoreview/converter
+        run: |
+          if [ ! -f node_modules/webmscore4/webmscore.lib.wasm ]; then
+            echo "webmscore fehlt im Konverter - Release abgebrochen." >&2
+            exit 1
+          fi
+          node convert.mjs --selftest 2>/dev/null
+
       # --no-dev ist hier wesentlich: autoload-dev haengt die OCP-Stubs aus
       # nextcloud/ocp ein (siehe composer.json). Die duerfen NIE mit
       # ausgeliefert werden - auf einer echten Instanz kommen die
@@ -65,6 +82,7 @@ jobs:
         run: |
           tar --create --gzip --file "scoreview.tar.gz" \
             --exclude='scoreview/node_modules' \
+            --exclude='scoreview/converter/lib/*.test.mjs' \
             --exclude='scoreview/src' \
             --exclude='scoreview/tests' \
             --exclude='scoreview/tools' \

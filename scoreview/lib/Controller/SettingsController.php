@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\HealthService;
+use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\SidecarClient;
+use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Settings\AdminSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
@@ -19,7 +22,9 @@ class SettingsController extends Controller {
 		IRequest $request,
 		private IAppConfig $appConfig,
 		private HealthService $healthService,
+		private ConversionBackend $backend,
 		private SidecarClient $sidecarClient,
+		private LocalConverter $localConverter,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -36,19 +41,43 @@ class SettingsController extends Controller {
 	}
 
 	/**
-	 * Startet den Sidecar-Selbsttest (MuseScore-Versionspflege):
-	 * eine echte Konvertierung der mitgelieferten Minipartitur, geprueft auf
-	 * die Zusagen aus M2/M4/M7. Getrennt von health(), weil er ~8s dauert
-	 * und eine Konvertierung ausloest - das soll nur passieren, wenn jemand
-	 * es ausdruecklich anstoesst.
+	 * Startet den Selbsttest des AKTIVEN Konvertierungswegs
+	 * (MuseScore-Versionspflege): eine echte Konvertierung der mitgelieferten
+	 * Minipartitur, geprueft auf die Zusagen aus M2/M4/M7. Getrennt von
+	 * health(), weil er eine Konvertierung ausloest - das soll nur passieren,
+	 * wenn jemand es ausdruecklich anstoesst.
+	 *
+	 * Beide Wege antworten in derselben Form (`ok`, `problems`, `details`),
+	 * die Oberflaeche muss den Unterschied also nicht kennen.
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function selfTest(): JSONResponse {
-		return new JSONResponse($this->sidecarClient->runSelfTest());
+		$result = $this->backend->isLocal()
+			? $this->localConverter->runSelfTest()
+			: $this->sidecarClient->runSelfTest();
+		return new JSONResponse($result + ['backend' => $this->backend->current()]);
 	}
 
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
-	public function update(string $sidecarUrl, string $sidecarSecret, bool $eagerConversion = false, string $soundFontUrl = ''): JSONResponse {
+	public function update(
+		string $sidecarUrl,
+		string $sidecarSecret,
+		bool $eagerConversion = false,
+		string $soundFontUrl = '',
+		string $conversionBackend = ConversionBackend::SIDECAR,
+		string $nodePath = '',
+		string $soundFontFetchUrl = '',
+	): JSONResponse {
+		// Ueber normalize(), damit ein unbekannter Wert nicht als dritter,
+		// nirgends behandelter Zustand in der Konfiguration landet.
+		$this->appConfig->setValueString(Application::APP_ID, ConversionBackend::CONFIG_KEY, ConversionBackend::normalize($conversionBackend));
+		// Leer = automatisch suchen (siehe Service\LocalConverter), nicht
+		// "kein node".
+		$this->appConfig->setValueString(Application::APP_ID, 'node_path', trim($nodePath));
+		// Serverseitige SoundFont-Quelle - der Weg zu Ton ohne Sidecar
+		// (Service\SoundFontService). Nicht zu verwechseln mit
+		// `soundfont_url` weiter unten, die den Browser direkt laden laesst.
+		$this->appConfig->setValueString(Application::APP_ID, SoundFontService::FETCH_URL_KEY, trim($soundFontFetchUrl));
 		$this->appConfig->setValueString(Application::APP_ID, 'sidecar_url', trim($sidecarUrl));
 		// Leeres Feld = "unveraendert lassen", nicht "Secret loeschen" - ein
 		// bereits gesetztes Secret wird im Formular nie im Klartext angezeigt

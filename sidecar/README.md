@@ -6,8 +6,10 @@ MuseScore-Studio-Version, die als extrahiertes AppImage headless unter
 gestartet über `wsgi.py` mit gunicorn).
 
 Er läuft als eigener Container neben Nextcloud und ist **nicht** Teil des
-App-Pakets. Warum er Voraussetzung ist und nicht optional, steht unter
-[E3](../docs/architecture.md#e3-der-sidecar-ist-voraussetzung).
+App-Pakets. Er ist einer von zwei Konvertierungswegen – der andere kommt ohne
+Container aus und liegt im App-Paket. Beide erzeugen dieselben Artefakte; wann
+welcher die bessere Wahl ist, steht unter
+[E3](../docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
 
 ## Build und Start
 
@@ -32,7 +34,7 @@ fehlerfrei, und die Betriebsdiagnose meldet nur „Konvertierungsdienst nicht
 erreichbar". Beide Container müssen in dasselbe benutzerdefinierte Netz; der
 Netzname hängt von der Installation ab, deshalb steht hier ein Beispiel und kein
 fertiger Befehl. Einrichtung siehe
-[Installation](../docs/installation.md#1-sidecar-starten).
+[Installation](../docs/installation.md#1a-weg-a-sidecar-starten).
 
 Der Port muss nur dann nach außen veröffentlicht werden (`-p 8765:8765`), wenn
 etwas anderes als Nextcloud selbst zugreift.

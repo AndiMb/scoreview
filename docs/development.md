@@ -9,6 +9,7 @@ zu einem Release. Wie die App funktioniert, steht in
 | Pfad | Inhalt |
 |---|---|
 | `scoreview/` | Die Nextcloud-App: PHP in `lib/`, Vue 3 in `src/`. Nur dieses Verzeichnis wird als Release-Tarball gepackt. |
+| `scoreview/converter/` | Der lokale Konvertierungsweg: Node + MuseScore als WebAssembly ([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)) |
 | `sidecar/` | Docker-Image mit MuseScore 4 und HTTP-API (Paket `scoreview_sidecar`, hinter gunicorn) |
 | `docs/` | Diese Dokumentation |
 
@@ -75,12 +76,37 @@ docker run -d --name scoreview-sidecar --network scoreview-net \
 `--network` nicht vergessen – ohne das Flag startet der Container fehlerfrei, ist
 aber von Nextcloud aus nicht erreichbar.
 
+## Lokaler Konverter
+
+Aus `scoreview/converter/`:
+
+```sh
+npm ci                       # laedt rund 11 MB webmscore als Release-Tarball
+node convert.mjs --selftest  # echte Konvertierung, prueft M2/M4/M7
+node convert.mjs partitur.mscz /tmp/out   # schreibt die Artefakte einzeln
+```
+
+Die reine Umformungslogik liegt in `lib/artifacts.mjs` und ist ohne Wasm
+testbar; ihre Tests laufen in `npm test` der App mit (vitest sammelt das
+Verzeichnis mit ein). Alles, was webmscore selbst braucht, deckt der Selbsttest
+ab – lokal wie in CI.
+
+Welches webmscore installiert wird, steht als **Release-Tarball-URL** in
+`converter/package.json`. Eine neue MuseScore-Version heißt: im Fork
+[AndiMb/webmscore](https://github.com/AndiMb/webmscore) bauen, ein Release
+setzen, hier die URL hochziehen, `npm install` laufen lassen und den Selbsttest
+prüfen. Die Datei `converter/selftest-score.mscz` ist eine Kopie von
+`sidecar/testdata/repeat-test.mscz` – dieselbe Partitur, die auch der Sidecar
+für seinen Selbsttest benutzt; sie enthält Wiederholung, Volta und D.C., damit
+M7 überhaupt prüfbar ist.
+
 ## CI
 
-`.github/workflows/ci.yml` fährt alle drei Sprachen des Repos: Frontend (Build,
+`.github/workflows/ci.yml` fährt alle Sprachen des Repos: Frontend (Build,
 vitest, ESLint, Stylelint, l10n-Vollständigkeit), Backend (Syntaxprüfung,
-Codingstandard, PHPUnit über mehrere PHP-Versionen) und Sidecar (pytest über
-mehrere Python-Versionen). Was lokal grün ist, ist es dort in aller Regel auch.
+Codingstandard, PHPUnit über mehrere PHP-Versionen), lokaler Konverter (echte
+Konvertierung mit webmscore) und Sidecar (pytest über mehrere Python-Versionen).
+Was lokal grün ist, ist es dort in aller Regel auch.
 
 ## Übersetzungen
 
@@ -140,8 +166,13 @@ Ausgangsindex mitführen, sonst misst er nur den Effektbus und meldet fälschlic
 ## Release
 
 Ein Tag `v*` löst `.github/workflows/release.yml` aus: Die Action baut das
-Frontend, installiert die PHP-Abhängigkeiten ohne Dev-Pakete und packt
-`scoreview/` als Tarball.
+Frontend, installiert die PHP-Abhängigkeiten ohne Dev-Pakete **und den lokalen
+Konverter samt webmscore**, dann packt sie `scoreview/` als Tarball.
+
+Der Konverter muss fertig installiert mit: Eine Instanz ohne Container hat kein
+npm, mit dem sie das nachholen könnte. Das sind rund 25 MB im Tarball – der
+Preis dafür, dass ScoreView ohne Sidecar läuft. Die Action prüft eigens nach,
+dass `webmscore.lib.wasm` im Paket liegt und der Selbsttest durchläuft.
 
 Der Umweg über die Action ist notwendig, nicht bequem: `scoreview/js/` ist
 gitignored, ein direkt aus dem Repo gepacktes `scoreview/` enthielte also **kein

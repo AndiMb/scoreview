@@ -66,4 +66,16 @@ export default [
 			'no-console': 'off',
 		},
 	},
+	{
+		// converter/ ist der lokale Konvertierungsweg (docs/architecture.md
+		// E3): Node-Code, der von PHP als Kindprozess gestartet wird, kein
+		// Browsercode. `process` ist dort ein regulaeres Global - stdout ist
+		// seine Rueckgabe, stderr seine Fehlermeldung.
+		files: ['converter/**/*.mjs'],
+		languageOptions: {
+			globals: {
+				process: 'readonly',
+			},
+		},
+	},
 ]

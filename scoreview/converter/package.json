@@ -1,0 +1,15 @@
+{
+	"name": "scoreview-converter",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Serverseitige Konvertierung von .mscz ohne Sidecar - MuseScore als WebAssembly unter Node",
+	"license": "AGPL-3.0-or-later",
+	"type": "module",
+	"dependencies": {
+		"@librescore/fonts": "^0.4.1",
+		"webmscore4": "https://github.com/AndiMb/webmscore/releases/download/v4.7.4-scoreview.4/webmscore4-4.7.4-scoreview.4.tgz"
+	},
+	"engines": {
+		"node": ">=18"
+	}
+}

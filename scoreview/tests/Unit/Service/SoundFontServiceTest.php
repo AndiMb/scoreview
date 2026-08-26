@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Tests\Unit\Service;
 
+use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SidecarException;
 use OCA\ScoreView\Service\SoundFontService;
@@ -11,6 +12,8 @@ use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\Files\SimpleFS\ISimpleFolder;
+use OCP\Http\Client\IClient;
+use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;
 use OCP\ITempManager;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -28,16 +31,18 @@ class SoundFontServiceTest extends TestCase {
 	private SidecarClient&MockObject $sidecar;
 	private IAppConfig&MockObject $appConfig;
 	private ITempManager&MockObject $tempManager;
+	private IClientService&MockObject $clientService;
 
 	protected function setUp(): void {
 		$this->appData = $this->createMock(IAppData::class);
 		$this->sidecar = $this->createMock(SidecarClient::class);
 		$this->appConfig = $this->createMock(IAppConfig::class);
 		$this->tempManager = $this->createMock(ITempManager::class);
+		$this->clientService = $this->createMock(IClientService::class);
 	}
 
 	private function service(): SoundFontService {
-		return new SoundFontService($this->appData, $this->sidecar, $this->appConfig, $this->tempManager);
+		return new SoundFontService($this->appData, $this->sidecar, $this->appConfig, $this->tempManager, $this->clientService);
 	}
 
 	/** Legt einen IAppData-Ordner an, der die Cache-Datei mit der gegebenen Groesse enthaelt. */
@@ -52,6 +57,19 @@ class SoundFontServiceTest extends TestCase {
 
 	private function withoutCache(): void {
 		$this->appData->method('getFolder')->willThrowException(new NotFoundException());
+	}
+
+	/**
+	 * Antwortet je Schluessel statt pauschal. Noetig, seit der Dienst zwei
+	 * Einstellungen liest (Cache-Version und `soundfont_fetch_url`): ein
+	 * pauschales willReturn() haette die URL-Quelle eingeschaltet und damit
+	 * genau den Sidecar-Pfad umgangen, den diese Tests pruefen.
+	 *
+	 * @param array<string, string> $values
+	 */
+	private function withConfig(array $values): void {
+		$this->appConfig->method('getValueString')
+			->willReturnCallback(static fn (string $app, string $key, string $default = '') => $values[$key] ?? $default);
 	}
 
 	public function testLiefertCacheWennSidecarNichtErreichbarIst(): void {
@@ -97,9 +115,7 @@ class SoundFontServiceTest extends TestCase {
 		$cached = $this->withCachedFile(40_000_000);
 		$this->sidecar->method('fetchSoundFontInfo')
 			->willReturn(['available' => true, 'version' => 'abc123']);
-		$this->appConfig->method('getValueString')
-			->with('scoreview', 'soundfont_cache_version')
-			->willReturn('abc123');
+		$this->withConfig(['soundfont_cache_version' => 'abc123']);
 		$this->sidecar->expects($this->never())->method('downloadSoundFontTo');
 
 		$this->assertSame($cached, $this->service()->getOrFetch());
@@ -111,7 +127,7 @@ class SoundFontServiceTest extends TestCase {
 		$this->withCachedFile(40_000_000);
 		$this->sidecar->method('fetchSoundFontInfo')
 			->willReturn(['available' => true, 'version' => 'neu456']);
-		$this->appConfig->method('getValueString')->willReturn('alt123');
+		$this->withConfig(['soundfont_cache_version' => 'alt123']);
 		$this->tempManager->method('getTemporaryFile')->willReturn('');
 		$this->sidecar->expects($this->once())->method('downloadSoundFontTo');
 
@@ -119,6 +135,49 @@ class SoundFontServiceTest extends TestCase {
 		// als leere Datei erkennen und melden statt sie als gueltig zu fuehren.
 		$this->expectException(SidecarException::class);
 		$this->expectExceptionMessageMatches('/leere Datei/');
+		$this->service()->getOrFetch();
+	}
+
+	public function testHoltVonDerKonfiguriertenUrlStattVomSidecar(): void {
+		// Der Weg zu Ton ohne Sidecar (docs/architecture.md E3): liegt die
+		// Datei schon im Cache und passt die Version zur URL, darf weder
+		// heruntergeladen noch der Sidecar gefragt werden.
+		$cached = $this->withCachedFile(40_000_000);
+		$url = 'https://example.invalid/FluidR3Mono_GM.sf3';
+		$this->withConfig([
+			'soundfont_fetch_url' => $url,
+			'soundfont_cache_version' => 'url:' . substr(sha1($url), 0, 12),
+		]);
+		$this->sidecar->expects($this->never())->method('fetchSoundFontInfo');
+		$this->clientService->expects($this->never())->method('newClient');
+
+		$this->assertSame($cached, $this->service()->getOrFetch());
+	}
+
+	public function testLiefertDenCacheWennDerDownloadScheitert(): void {
+		// Dieselbe Zusage wie beim Sidecar-Ausfall: ein nicht erreichbarer
+		// Hoster darf eine laufende Probe nicht verstummen lassen.
+		$cached = $this->withCachedFile(40_000_000);
+		$this->withConfig([
+			'soundfont_fetch_url' => 'https://example.invalid/sf3',
+			'soundfont_cache_version' => 'url:veraltet',
+		]);
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willThrowException(new \RuntimeException('Name oder Dienst nicht bekannt'));
+		$this->clientService->method('newClient')->willReturn($client);
+
+		$this->assertSame($cached, $this->service()->getOrFetch());
+	}
+
+	public function testMeldetEinenGescheitertenDownloadOhneCache(): void {
+		$this->withoutCache();
+		$this->withConfig(['soundfont_fetch_url' => 'https://example.invalid/sf3']);
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willThrowException(new \RuntimeException('Name oder Dienst nicht bekannt'));
+		$this->clientService->method('newClient')->willReturn($client);
+
+		$this->expectException(ConverterException::class);
+		$this->expectExceptionMessageMatches('/example.invalid/');
 		$this->service()->getOrFetch();
 	}
 

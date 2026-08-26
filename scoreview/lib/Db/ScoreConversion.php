@@ -44,6 +44,8 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	 */
 	public const ERROR_SIDECAR_UNREACHABLE = 'sidecar_unreachable';
 	public const ERROR_SIDECAR_REJECTED = 'sidecar_rejected';
+	/** Lokaler Weg gewaehlt, aber nicht lauffaehig - siehe Service\LocalConverter. */
+	public const ERROR_LOCAL_UNAVAILABLE = 'local_unavailable';
 	public const ERROR_CONVERSION_FAILED = 'conversion_failed';
 	public const ERROR_TIMEOUT = 'timeout';
 	public const ERROR_NO_PAGES = 'no_pages';

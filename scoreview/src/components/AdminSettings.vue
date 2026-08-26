@@ -1,38 +1,80 @@
 <template>
 	<div>
-		<NcSettingsSection :name="t('ScoreView')" :description="t('Address and shared secret of the MuseScore sidecar container (see sidecar/README.md).')">
+		<NcSettingsSection :name="t('ScoreView')" :description="t('How scores are converted into pages, MIDI and timing data. Both ways produce the same result; they differ in what the server needs.')">
 			<form @submit.prevent="save">
-				<NcTextField
-					v-model="form.sidecarUrl"
-					class="scoreview-field"
-					:label="t('Sidecar URL')"
-					placeholder="http://scoreview-sidecar:8765" />
-
 				<!--
-					NcPasswordField statt eines nackten type=password: es bringt
-					den Sichtbarkeits-Umschalter samt Beschriftung mit, den die
-					handgeschriebene Fassung nicht hatte. Der Wert wird nie
-					vorbefuellt - der Server liefert bewusst nur, OB eines
-					gesetzt ist (siehe Settings\AdminSettings), nie das Secret
-					selbst.
+					Die Wahl steht ganz oben und schaltet darunter frei, was
+					jeweils zu konfigurieren ist: die beiden Wege teilen keine
+					einzige Einstellung, und beide gleichzeitig anzuzeigen hat
+					in der Testinstanz nur die Frage aufgeworfen, welche Felder
+					denn nun gelten.
 				-->
-				<NcPasswordField
-					v-model="form.sidecarSecret"
+				<NcCheckboxRadioSwitch
+					v-model="form.conversionBackend"
+					type="radio"
+					name="conversion-backend"
+					value="sidecar"
+					class="scoreview-field">
+					{{ t('Sidecar container (MuseScore 4 in its own container)') }}
+				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch
+					v-model="form.conversionBackend"
+					type="radio"
+					name="conversion-backend"
+					value="local"
+					class="scoreview-field">
+					{{ t('On this server, without a container (MuseScore as WebAssembly, needs Node.js)') }}
+				</NcCheckboxRadioSwitch>
+
+				<template v-if="form.conversionBackend === 'sidecar'">
+					<NcTextField
+						v-model="form.sidecarUrl"
+						class="scoreview-field"
+						:label="t('Sidecar URL')"
+						placeholder="http://scoreview-sidecar:8765" />
+
+					<!--
+						NcPasswordField statt eines nackten type=password: es bringt
+						den Sichtbarkeits-Umschalter samt Beschriftung mit, den die
+						handgeschriebene Fassung nicht hatte. Der Wert wird nie
+						vorbefuellt - der Server liefert bewusst nur, OB eines
+						gesetzt ist (siehe Settings\AdminSettings), nie das Secret
+						selbst.
+					-->
+					<NcPasswordField
+						v-model="form.sidecarSecret"
+						class="scoreview-field"
+						:label="t('Shared secret')"
+						:placeholder="secretPlaceholder"
+						:helperText="initial.sidecarSecretSet ? t('Leave empty to keep the current secret.') : ''" />
+				</template>
+
+				<NcTextField
+					v-else
+					v-model="form.nodePath"
 					class="scoreview-field"
-					:label="t('Shared secret')"
-					:placeholder="secretPlaceholder"
-					:helperText="initial.sidecarSecretSet ? t('Leave empty to keep the current secret.') : ''" />
+					:label="t('Path to node (optional)')"
+					placeholder="/usr/bin/node"
+					:helperText="t('Leave empty to search the usual locations. Node.js 18 or newer is required, and PHP must be allowed to start processes.')" />
 
 				<NcCheckboxRadioSwitch v-model="form.eagerConversion" type="switch" class="scoreview-field">
 					{{ t('Convert new/changed scores immediately (instead of on first open)') }}
 				</NcCheckboxRadioSwitch>
 
 				<NcTextField
+					v-if="form.conversionBackend === 'local'"
+					v-model="form.soundFontFetchUrl"
+					class="scoreview-field"
+					:label="t('SoundFont download URL (SF2/SF3)')"
+					placeholder="https://…/FluidR3Mono_GM.sf3"
+					:helperText="t('Without a sidecar there is no SoundFont on the server, and playback stays silent. The server downloads this file once and then delivers it itself - so the address only needs to be reachable from the server, and needs no CORS.')" />
+
+				<NcTextField
 					v-model="form.soundFontUrl"
 					class="scoreview-field"
 					:label="t('Custom SoundFont URL (SF2/SF3, optional)')"
 					placeholder="https://…/MuseScore_General.sf3"
-					:helperText="t('Leave empty: playback then uses the SoundFont that the sidecar brings along (MuseScore General Lite, ~40 MB), delivered by the app itself. Only fill in if a different SoundFont should be used - that address must then be reachable via HTTP(S) from the browser and allow CORS.')" />
+					:helperText="t('Leave empty: the app delivers the SoundFont itself. Only fill in to have the browser load a different SoundFont directly - that address must then be reachable from the browser and allow CORS.')" />
 
 				<div class="scoreview-actions">
 					<NcButton variant="primary" type="submit" :disabled="saving">
@@ -84,7 +126,7 @@
 						<NcLoadingIcon v-if="selfTestRunning" :size="20" />
 						<Stethoscope v-else :size="20" />
 					</template>
-					{{ t('Run sidecar self-test') }}
+					{{ t('Run conversion self-test') }}
 				</NcButton>
 			</div>
 
@@ -93,7 +135,7 @@
 			</NcNoteCard>
 
 			<p class="scoreview-hint">
-				{{ t('The self-test converts a small bundled score and checks that MuseScore still returns what the app expects. Run it after changing the MuseScore version in the sidecar image.') }}
+				{{ t('The self-test converts a small bundled score with the selected conversion path and checks that MuseScore still returns what the app expects. Run it after a MuseScore version change.') }}
 			</p>
 		</NcSettingsSection>
 	</div>
@@ -152,6 +194,9 @@ export default {
 		return {
 			initial,
 			form: {
+				conversionBackend: initial.conversionBackend,
+				nodePath: initial.nodePath,
+				soundFontFetchUrl: initial.soundFontFetchUrl,
 				sidecarUrl: initial.sidecarUrl,
 				// Immer leer: leer heisst beim Speichern "unveraendert lassen",
 				// nicht "loeschen" (siehe SettingsController::update()).
@@ -195,9 +240,8 @@ export default {
 			const stuck = (c.pending || 0) + (c.processing || 0)
 			return [
 				{
-					label: t('Conversion service'),
-					ok: h.sidecar.reachable,
-					detail: h.sidecar.reachable ? h.sidecar.url : (h.sidecar.error || t('not configured')),
+					label: t('Conversion'),
+					...this.backendLine(h),
 				},
 				{
 					label: t('SoundFont'),
@@ -234,7 +278,32 @@ export default {
 		t,
 
 		/**
-		 * Wiedergabe ist auch dann moeglich, wenn der Sidecar gerade nicht
+		 * Die Diagnosezeile des AKTIVEN Konvertierungswegs - beim Sidecar
+		 * "erreichbar?", lokal "node da, Konverter vollstaendig, darf PHP
+		 * ueberhaupt Prozesse starten?". Der Server liefert immer beides
+		 * (siehe Service\HealthService); welche Antwort zaehlt, entscheidet
+		 * sich hier, damit die Zeile nicht von einem Dienst rot wird, der gar
+		 * nicht benutzt wird.
+		 *
+		 * @param {object} h die Antwort des Health-Endpunkts
+		 * @return {{ok: boolean, detail: string}}
+		 */
+		backendLine(h) {
+			if (h.backend === 'local') {
+				const version = h.local.nodeVersion ? t('Node.js {version}', { version: h.local.nodeVersion }) : ''
+				return {
+					ok: h.local.available,
+					detail: h.local.available ? t('on this server, {version}', { version }) : (h.local.error || ''),
+				}
+			}
+			return {
+				ok: h.sidecar.reachable,
+				detail: h.sidecar.reachable ? h.sidecar.url : (h.sidecar.error || t('not configured')),
+			}
+		},
+
+		/**
+		 * Wiedergabe ist auch dann moeglich, wenn die Quelle gerade nicht
 		 * erreichbar ist - solange eine Kopie im Cache liegt. Frueher stand
 		 * hier bei unerreichbarem Sidecar ein ✓ neben der rohen
 		 * cURL-Fehlermeldung, eine Zeile, die sich selbst widersprach.
@@ -247,11 +316,11 @@ export default {
 			if (sf.overrideUrl) {
 				return { ok, detail: t('custom URL configured') }
 			}
+			if (sf.cached) {
+				return { ok, detail: sf.name || t('cached copy in use') }
+			}
 			if (sf.availableInSidecar) {
 				return { ok, detail: sf.name || '' }
-			}
-			if (sf.cached) {
-				return { ok, detail: t('cached copy in use (conversion service currently unreachable)') }
 			}
 			return { ok, detail: sf.error || t('no SoundFont available') }
 		},
@@ -306,8 +375,9 @@ export default {
 		},
 
 		async runSelfTest() {
-			// Dauert eine echte Konvertierung lang (~8s gemessen) - deshalb ein
-			// sichtbarer Zwischenstand statt eines scheinbar toten Knopfes.
+			// Dauert eine echte Konvertierung lang (gemessen: rund 8 s ueber den
+			// Sidecar, rund 2 s lokal) - deshalb ein sichtbarer Zwischenstand
+			// statt eines scheinbar toten Knopfes.
 			this.selfTestRunning = true
 			this.selfTest = null
 			try {

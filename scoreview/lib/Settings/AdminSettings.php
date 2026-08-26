@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Settings;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Service\ConversionBackend;
+use OCA\ScoreView\Service\SoundFontService;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IAppConfig;
@@ -30,11 +32,15 @@ class AdminSettings implements ISettings {
 	public function __construct(
 		private IAppConfig $appConfig,
 		private IInitialState $initialState,
+		private ConversionBackend $backend,
 	) {
 	}
 
 	public function getForm(): TemplateResponse {
 		$this->initialState->provideInitialState('admin-settings', [
+			'conversionBackend' => $this->backend->current(),
+			'nodePath' => $this->appConfig->getValueString(Application::APP_ID, 'node_path'),
+			'soundFontFetchUrl' => $this->appConfig->getValueString(Application::APP_ID, SoundFontService::FETCH_URL_KEY),
 			'sidecarUrl' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'),
 			'sidecarSecretSet' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_secret') !== '',
 			'eagerConversion' => $this->appConfig->getValueBool(Application::APP_ID, 'eager_conversion'),
