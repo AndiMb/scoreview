@@ -96,7 +96,7 @@ jobs:
 
       # Was hier NICHT mitgeht und warum: Der App Store nimmt Archive nur bis
       # 20 MB an. Der Symbol-Map und die Browser-Bundles von webmscore sind
-      # 8 MB, die nur beim Debuggen des Wasm-Moduls bzw. im Browser gebraucht
+      # 7 MB, die nur beim Debuggen des Wasm-Moduls bzw. im Browser gebraucht
       # werden; die CJK-Fonts sind 4,2 MB fuer chinesische, japanische und
       # koreanische Liedtexte. Der Konverter laeuft ohne beides (nachgemessen),
       # und das Paket bleibt bei rund 14 statt 18 MB - Luft, die ein kuenftiger

@@ -77,10 +77,10 @@ Sammel-Vorabkonvertierung (`eager_conversion`) deshalb spürbar werden.
 
 **Die MuseScore-Version des lokalen Wegs hängt an einem Fork.**
 [AndiMb/webmscore](https://github.com/AndiMb/webmscore) trägt 4.7.4; sie zieht
-nicht von selbst nach, wenn MuseScore weitergeht, und der Build hängt an einer
-bestimmten Qt-Version für WebAssembly. Der Selbsttest der Betriebsdiagnose
-prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine neuere
-MuseScore-Version verfügbar wäre, meldet er nicht.
+nicht von selbst nach, wenn MuseScore weitergeht – ein neuer Kern heißt, den
+Fork zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
+Betriebsdiagnose prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine
+neuere MuseScore-Version verfügbar wäre, meldet er nicht.
 
 **Tablet-Hardware.** Touch-Bedienung, Pinch-Zoom und Wachhalten des Bildschirms
 sind umgesetzt und im Browser verifiziert, aber nicht auf einem echten Tablet in

@@ -6,6 +6,16 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 ## [Unveröffentlicht]
 
+### Geändert
+
+- Der lokale Konvertierungsweg läuft auf webmscore `v4.7.4-scoreview.6`:
+  derselbe MuseScore-Kern 4.7.4, aber gegen Qt 6.10.2 mit Emscripten 4.0.7
+  gebaut statt gegen Qt 6.4.3 mit Emscripten 3.1.14. Am Ergebnis ändert sich
+  nichts – der Selbsttest über M2/M4/M7 bleibt grün, auf Node 18, 20 und 22.
+- Der Konverter legt unter Node 18 und 20 ein `navigator` mit `languages` an:
+  Das globale `navigator` bringt Node erst ab Version 21 mit, und MuseScores
+  Qt-Schicht liest es beim Start. Ohne das startet das Wasm-Modul dort nicht.
+
 ## [1.0.0] – 2026-08-26
 
 Erste öffentliche Fassung.

@@ -21,12 +21,12 @@ use Psr\Log\LoggerInterface;
  * damit exakt das, was auch der Sidecar liefert.
  *
  * **Ein Prozess je Partitur, und das ist kein Versehen.** Die Wasm-Instanz
- * bleibt nach `destroy()` beschaedigt zurueck (gemessen mit
- * webmscore v4.7.4-scoreview.4: das naechste Laden bricht mit "null function
- * or function signature mismatch" ab), und ohne `destroy()` waechst der
- * Speicher je Partitur um rund 12 MB. Ein langlebiger Dienst muesste also
- * ohnehin recyceln - ein Prozess je Konvertierung erledigt dasselbe, kostet
- * einmalig rund 1,7 s Wasm-Instanziierung und braucht keinen Zustand.
+ * ueber mehrere Konvertierungen zu halten, hiesse einen langlebigen Dienst zu
+ * betreiben - genau das ist der Sidecar, und PHP hat dafuer keinen Ort: jeder
+ * Lauf von ConvertScoreJob ist ein eigener Prozess. Der Prozessabbau raeumt
+ * die rund 105 MB der Instanz vollstaendig ab und braucht keinen Zustand;
+ * bezahlt wird das mit rund 1 s Anlauf je Partitur (gemessen, Wasm-
+ * Instanziierung samt Audio-Engine).
  */
 class LocalConverter {
 	/**

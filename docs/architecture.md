@@ -258,7 +258,7 @@ entfällt (`converter/lib/artifacts.mjs`).
 
 - **Eine Node-Laufzeit auf dem Server.** Das offizielle Nextcloud-Docker-Image
   bringt keine mit; auf verwaltetem Hosting ist sie meist nicht nachrüstbar.
-- **Rund 21 MB mehr im App-Paket** (16 MB Wasm, 4 MB Wasm-Daten). Das Paket
+- **Rund 21 MB mehr im App-Paket** (17 MB Wasm, 4 MB Wasm-Daten). Das Paket
   muss sie fertig installiert enthalten – eine Instanz ohne Container hat kein
   npm, mit dem sie das nachholen könnte (siehe `release.yml`). Die CJK-Fonts
   bleiben deshalb draußen, siehe [Grenzwerte](limits.md#bekannte-lücken).
@@ -268,29 +268,32 @@ entfällt (`converter/lib/artifacts.mjs`).
 - **Ein SoundFont muss von irgendwo kommen.** Ohne Sidecar gibt es kein Image,
   aus dem sich eines nehmen ließe; die Einstellung `soundfont_fetch_url` lässt
   den Server einmalig eines holen und danach selbst ausliefern (`SoundFontService`).
-- **Ein Prozess je Partitur.** `destroy()` lässt die Wasm-Instanz beschädigt
-  zurück – das nächste Laden im selben Prozess bricht mit „null function or
-  function signature mismatch" ab –, und ohne `destroy()` wächst der Speicher je
-  Partitur um rund 12 MB. Ein langlebiger Dienst müsste ohnehin recyceln; ein
-  Prozess je Konvertierung erledigt dasselbe ohne Zustand.
-- **Der webmscore-Fork will gepflegt werden.** Er hängt an einer bestimmten
-  Qt-Version für WebAssembly, und die MuseScore-Version zieht nicht von selbst
-  nach. Der Selbsttest der Betriebsdiagnose prüft deshalb für beide Wege
-  dieselben Zusagen aus M2/M4/M7.
+- **Ein Prozess je Partitur.** Die Wasm-Instanz über mehrere Konvertierungen zu
+  halten hieße, einen langlebigen Dienst zu betreiben – genau das ist der
+  Sidecar, und PHP hat dafür keinen Ort. Der Prozessabbau räumt die rund 105 MB
+  der Instanz vollständig ab und braucht keinen Zustand; bezahlt wird das mit
+  rund 1 s Anlauf je Partitur.
+- **Der webmscore-Fork will gepflegt werden.** Die MuseScore-Version zieht nicht
+  von selbst nach: ein neuer Kern heißt bauen, Release setzen, Tarball-URL in
+  `converter/package.json` hochziehen. Die Toolchain ist dabei nicht das
+  Hindernis (gebaut gegen Qt 6.10.2 mit Emscripten 4.0.7 – das Paar, auf das
+  MuseScore selbst zielt); im Weg steht die Auslagerung von MuseScores
+  `src/framework` in ein eigenes Repository. Der Selbsttest der Betriebsdiagnose
+  prüft deshalb für beide Wege dieselben Zusagen aus M2/M4/M7.
 
-Zwei Rauheiten des Forks fängt der Konverter selbst ab: Sein Node-Shim schreibt
-`globalThis.navigator`, das seit Node 18 ein Getter ohne Setter ist – der Import
-scheitert sonst; `convert.mjs` legt die Eigenschaft vorher beschreibbar an. Und
-MuseScores Qt-Meldungen gehen auf stdout (dasselbe Bild wie
-[M3](#m3-stdout-ist-nicht-sauber)), wo das JSON-Ergebnis steht – sie werden nach
-stderr umgeleitet.
+Zwei Rauheiten des Forks fängt der Konverter selbst ab: MuseScores Qt-Schicht
+liest beim Start `navigator.languages`, und das globale `navigator` bringt Node
+erst ab Version 21 mit – unter Node 18 und 20 startet das Wasm-Modul sonst nicht,
+`convert.mjs` legt deshalb vorher eines an. Und MuseScores Qt-Meldungen gehen auf
+stdout (dasselbe Bild wie [M3](#m3-stdout-ist-nicht-sauber)), wo das
+JSON-Ergebnis steht – sie werden nach stderr umgeleitet.
 
 #### Was auch der lokale Weg nicht löst: echtes SaaS
 
 Auf verwalteten Instanzen, die weder eine Node-Laufzeit noch das Starten von
 Prozessen erlauben, ist **serverseitiges Rendern nicht möglich** – auch nicht in
-PHP selbst. Das Wasm-Modul ist ein Emscripten-Build: 16 MB Code, der
-123 Funktionen aus seiner JavaScript-Laufzeit importiert und keinen einzigen
+PHP selbst. Das Wasm-Modul ist ein Emscripten-Build: 17 MB Code, der
+162 Funktionen aus seiner JavaScript-Laufzeit importiert und keinen einzigen
 WASI-Import trägt. Eine PHP-Wasm-Erweiterung (wasmer, wasmtime, extism) müsste
 diese Laufzeit vollständig nachbauen – und wäre ihrerseits eine
 PECL/FFI-Erweiterung, die auf verwaltetem Hosting nicht installierbar ist. Ein

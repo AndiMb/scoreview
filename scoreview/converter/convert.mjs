@@ -21,6 +21,7 @@
  */
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { cpus } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { checkPromises, toPositions } from './lib/artifacts.mjs'
@@ -28,19 +29,30 @@ import { checkPromises, toPositions } from './lib/artifacts.mjs'
 const HERE = dirname(fileURLToPath(import.meta.url))
 
 /**
- * Muss VOR dem webmscore-Import passieren: dessen Node-Shim schreibt
- * `globalThis.navigator`, und seit Node 18 ist das ein Getter ohne Setter -
- * der Import scheitert sonst mit "Cannot set property navigator". Hier wird
- * dieselbe Navigator-Instanz als beschreibbare Eigenschaft neu hinterlegt,
- * damit die Zuweisung des Shims ins Leere laeuft statt zu werfen. Kein
- * Eingriff in node_modules, und mit einem kuenftig korrigierten webmscore
- * bleibt es wirkungslos statt schaedlich.
+ * Muss VOR dem webmscore-Import passieren: MuseScores Qt-Schicht liest beim
+ * Start `navigator.languages`. Das globale `navigator` bringt Node erst seit
+ * Version 21 mit, und der Node-Shim des Forks legt keines an - unter Node 18
+ * und 20 bricht der Start sonst in Emscriptens `__emval_get_property` mit
+ * "Cannot read properties of undefined (reading 'length')" ab (gemessen mit
+ * webmscore v4.7.4-scoreview.6, Node 18 und 20; unter 22 laeuft derselbe
+ * Build). Hinterlegt wird deshalb ein navigator mit den Feldern, die Node ab 21
+ * von sich aus mitbringt; noetig ist davon gemessen nur `languages`, die
+ * uebrigen stehen dabei, damit unter 18 und 20 dieselbe Umgebung steht wie
+ * unter 22. Ein vorhandenes navigator bleibt unangetastet.
  */
-Object.defineProperty(globalThis, 'navigator', {
-	value: globalThis.navigator,
-	writable: true,
-	configurable: true,
-})
+if (globalThis.navigator?.languages === undefined) {
+	Object.defineProperty(globalThis, 'navigator', {
+		value: {
+			hardwareConcurrency: cpus().length,
+			language: 'en-US',
+			languages: ['en-US'],
+			platform: `${process.platform} ${process.arch}`,
+			userAgent: `Node.js/${process.versions.node}`,
+		},
+		writable: true,
+		configurable: true,
+	})
+}
 
 // MuseScore meldet Fontladen und Audio-Engine ueber stdout. Diese Zeilen
 // wuerden das JSON-Ergebnis unbrauchbar machen, deshalb wandern sie nach
@@ -104,12 +116,12 @@ async function loadFonts(fontVerzeichnis) {
 /**
  * Welches MuseScore hier steckt.
  *
- * Zur Laufzeit ist das nicht zu erfahren: `WebMscore.version()` liefert die
- * MSCZ-DATEIFORMATversion (470), und das mitgelieferte package.json des
- * webmscore-Pakets traegt noch die Versionsnummer des 4.6.5-Zweigs. Die
- * einzige verlaessliche Angabe ist deshalb der Release-Tag, auf den die
- * Abhaengigkeit hier zeigt - eine Stelle, dieselbe, die auch bestimmt, was
- * installiert wird.
+ * Zur Laufzeit ist das nicht vollstaendig zu erfahren: `WebMscore.version()`
+ * liefert die MSCZ-DATEIFORMATversion (470), und das package.json des
+ * webmscore-Pakets nennt nur den MuseScore-Kern (4.7.4), nicht den Build des
+ * Forks - zwei Builds desselben Kerns tragen dieselbe Nummer. Die
+ * vollstaendige Angabe ist deshalb der Release-Tag, auf den die Abhaengigkeit
+ * hier zeigt - eine Stelle, dieselbe, die auch bestimmt, was installiert wird.
  */
 async function museScoreVersion() {
 	const own = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8'))
@@ -150,11 +162,11 @@ async function convert(msczPath, fontVerzeichnis) {
 		meta: await score.metadata(),
 	}
 
-	// KEIN score.destroy(): der Aufruf hinterlaesst die Wasm-Instanz
-	// beschaedigt, das naechste load() im selben Prozess bricht mit
-	// "null function or function signature mismatch" ab (gemessen mit
-	// webmscore v4.7.4-scoreview.4). Dieser Prozess konvertiert genau eine
-	// Partitur und endet danach - das Aufraeumen erledigt der Prozessabbau.
+	// Kein score.destroy(): dieser Prozess konvertiert genau eine Partitur und
+	// endet danach, der Prozessabbau gibt die Wasm-Instanz samt Heap frei. Wer
+	// hier je mehrere Partituren nacheinander laedt, braucht den Aufruf - mit
+	// ihm bleibt der Speicher flach (gemessen: fuenf Durchlaeufe, rund 105 MB
+	// unveraendert), ohne ihn waechst er je Partitur.
 	return result
 }
 

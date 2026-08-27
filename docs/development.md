@@ -189,8 +189,8 @@ drei Posten, die zur Laufzeit niemand braucht:
 
 | Posten | Größe | Warum entbehrlich |
 |---|---|---|
-| `webmscore.lib.symbols` | 7,2 MB | Symboltabelle, nur zum Debuggen des Wasm-Moduls |
-| Browser-Bundles von webmscore | 1,1 MB | Der Konverter läuft unter Node, nicht im Browser |
+| `webmscore.lib.symbols` | 6,1 MB | Symboltabelle, nur zum Debuggen des Wasm-Moduls |
+| Browser-Bundles von webmscore | 1,0 MB | Der Konverter läuft unter Node, nicht im Browser |
 | `@librescore/fonts` | 4,2 MB | Nur für chinesische, japanische und koreanische Liedtexte; nachrüstbar über `cjk_font_dir` (siehe [Grenzwerte](limits.md#bekannte-lücken)) |
 
 Das Paket liegt damit bei rund 14 statt 18 MB. Die Action bricht ab, wenn der
