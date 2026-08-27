@@ -95,8 +95,17 @@ jobs:
   # und den Zusagen aus M2/M4/M7 als Pruefung. Genau das faengt ab, was ein
   # webmscore-Versionswechsel still kaputtmachen wuerde.
   konverter:
-    name: Lokaler Konverter (webmscore)
+    name: Lokaler Konverter (webmscore, Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Unter- und Obergrenze der zugesagten Node-Spanne (siehe "engines" in
+        # converter/package.json). Die Untergrenze ist keine Formalie: Das
+        # globale `navigator` gibt es erst ab Node 21, und MuseScores Qt-Schicht
+        # liest es beim Start - ein webmscore-Build, der das nicht selbst
+        # abfaengt, faellt genau hier auf und nirgends sonst.
+        node: ['18', '22']
     defaults:
       run:
         working-directory: scoreview/converter
@@ -105,7 +114,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: scoreview/converter/package-lock.json
 

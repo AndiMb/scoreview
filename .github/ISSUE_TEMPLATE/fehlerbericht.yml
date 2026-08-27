@@ -34,7 +34,7 @@ body:
     attributes:
       label: Versionen
       description: Nextcloud, PHP, ScoreView (steht in appinfo/info.xml bzw. in der App-Liste)
-      placeholder: "Nextcloud 31.0.5, PHP 8.3, ScoreView 0.0.24"
+      placeholder: "Nextcloud 31.0.5, PHP 8.3, ScoreView 1.0.0"
 
   - type: textarea
     id: log

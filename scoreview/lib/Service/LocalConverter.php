@@ -132,10 +132,6 @@ class LocalConverter {
 		];
 	}
 
-	public function isAvailable(): bool {
-		return $this->describe()['available'];
-	}
-
 	/** Verzeichnis des mitgelieferten Konverters (App-Paket, nicht konfigurierbar). */
 	public function getConverterDir(): string {
 		return dirname(__DIR__, 2) . '/converter';

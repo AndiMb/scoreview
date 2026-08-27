@@ -9,16 +9,19 @@ Repository: <https://github.com/AndiMb/scoreview>
 
 ## Kurz zur Einrichtung
 
-ScoreView braucht einen erreichbaren **MuseScore-Sidecar** – einen
-Konvertierungsdienst, der als eigener Container neben Nextcloud läuft. Ohne ihn
-läuft die App nicht.
+Konvertiert wird auf einem von zwei gleichwertigen Wegen: über einen
+**MuseScore-Sidecar** – einen Konvertierungsdienst als eigener Container neben
+Nextcloud – oder **lokal** durch die Node.js-Laufzeit des Servers, für die
+MuseScore als WebAssembly in `converter/` beiliegt. Einer der beiden muss
+stehen, sonst läuft die App nicht.
 
 ```sh
 occ app:enable scoreview
 ```
 
-Danach unter **Einstellungen → Verwaltung → ScoreView** Sidecar-Adresse und
-Secret eintragen. Zwei einmalige Schritte fehlen dann noch: die
+Danach unter **Einstellungen → Verwaltung → ScoreView** den Weg wählen: für den
+Sidecar Adresse und Secret eintragen, für den lokalen Weg eine
+SoundFont-Download-URL. Zwei einmalige Schritte fehlen dann noch: die
 Mimetype-Registrierung für `.mscz` und Background-Jobs im Modus `cron`.
 
 **Vollständige Anleitung:**
@@ -33,6 +36,7 @@ schon zur Ursache; sonst hilft
 | Pfad | Inhalt |
 |---|---|
 | `lib/` | PHP: Controller, Services, Background-Jobs, Listener, Migrationen |
+| `converter/` | Lokaler Konvertierungsweg: MuseScore als WebAssembly unter Node |
 | `src/` | Vue 3: Viewer, Composables und die reine Logik unter `src/lib/` |
 | `js/` | Build-Artefakte (`npm run build`), nicht im Repository |
 | `l10n/` | Übersetzungen; Quellstrings sind Englisch |

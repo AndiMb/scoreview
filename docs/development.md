@@ -105,8 +105,8 @@ M7 überhaupt prüfbar ist.
 `.github/workflows/ci.yml` fährt alle Sprachen des Repos: Frontend (Build,
 vitest, ESLint, Stylelint, l10n-Vollständigkeit), Backend (Syntaxprüfung,
 Codingstandard, PHPUnit über mehrere PHP-Versionen), lokaler Konverter (echte
-Konvertierung mit webmscore) und Sidecar (pytest über mehrere Python-Versionen).
-Was lokal grün ist, ist es dort in aller Regel auch.
+Konvertierung mit webmscore, auf Node 18 und 22) und Sidecar (pytest über
+mehrere Python-Versionen). Was lokal grün ist, ist es dort in aller Regel auch.
 
 ## Übersetzungen
 
