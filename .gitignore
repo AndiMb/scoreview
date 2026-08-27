@@ -36,6 +36,10 @@ sidecar/testdata/*.mpos
 *.csr
 scoreview/appinfo/signature.json
 
+# Geheimnisse ausserhalb des Repos halten: Signaturschluessel und der
+# App-Store-Token liegen hier lokal, nichts davon gehoert in die Historie.
+secrets/
+
 # Lokale Wegwerf-Arbeitsverzeichnisse
 spike/
 
