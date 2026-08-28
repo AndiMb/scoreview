@@ -7,7 +7,7 @@
 	"type": "module",
 	"dependencies": {
 		"@librescore/fonts": "^0.4.1",
-		"webmscore4": "https://github.com/AndiMb/webmscore/releases/download/v4.7.4-scoreview.6/webmscore4-4.7.4.tgz"
+		"webmscore4": "https://github.com/AndiMb/webmscore/releases/download/v4.7.4-scoreview.7/webmscore4-4.7.4.tgz"
 	},
 	"engines": {
 		"node": ">=18"

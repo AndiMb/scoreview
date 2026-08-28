@@ -67,7 +67,15 @@ describe('checkPromises', () => {
 	it('meldet nichts, wenn alles stimmt', () => {
 		const { problems, details } = checkPromises(healthy())
 		expect(problems).toEqual([])
-		expect(details).toEqual({ pages: 1, events: 2, elements: 1, repeatedElids: 1 })
+		expect(details).toEqual({
+			pages: 1,
+			events: 2,
+			elements: 1,
+			repeatedElids: 1,
+			// Ohne uebergebene Seiten bleibt M10 ungeprueft (siehe unten).
+			markedSegments: 0,
+			maxNoteOffset: 0,
+		})
 	})
 
 	it('erkennt, dass Wiederholungen nicht mehr ausgerollt werden (M7)', () => {
@@ -87,5 +95,62 @@ describe('checkPromises', () => {
 	it('meldet jede verletzte Zusage einzeln, damit ein Versionswechsel diagnostizierbar bleibt', () => {
 		const { problems } = checkPromises({ pages: 0, midi: null, meta: {}, timing: { events: [], elements: {} } })
 		expect(problems).toHaveLength(6)
+	})
+
+	// --- M10: die Kennungen im SVG ---------------------------------------
+	//
+	// Die Zahlen unten stammen aus der Selbsttest-Partitur gegen den Build
+	// v4.7.4-scoreview.7: 20 Segmente, groesster Notenkopf-Versatz 0,93
+	// SVG-Einheiten bei 107-162 Einheiten Segmentbreite.
+
+	/** Eine Seite in der Form, die MuseScore mit den Kennungen liefert. */
+	const seite = (inhalt) => `<svg viewBox="0 0 10200 13200">${inhalt}</svg>`
+
+	it('nimmt die Kennungen ab, wenn Notenbild und Zeitachse zusammenpassen', () => {
+		const result = healthy()
+		result.svgs = [seite('<path class="Note seg-0 st-0 vc-0" d="M0.9,2148.8 C1 1"/>')]
+		const { problems, details } = checkPromises(result)
+		expect(problems).toEqual([])
+		expect(details.markedSegments).toBe(1)
+		expect(details.maxNoteOffset).toBe(0.9)
+	})
+
+	it('erkennt ein SVG ohne Kennungen (Stock-MuseScore oder alter Build)', () => {
+		const result = healthy()
+		result.svgs = [seite('<path class="Note" d="M0,0"/>')]
+		expect(checkPromises(result).problems).toEqual([expect.stringContaining('M10')])
+	})
+
+	it('erkennt eine Kennung, zu der es kein Element gibt', () => {
+		const result = healthy()
+		result.svgs = [seite('<path class="Note seg-7 st-0 vc-0" d="M0,0"/>')]
+		expect(checkPromises(result).problems).toEqual([
+			expect.stringContaining('kein Element in spos'),
+		])
+	})
+
+	it('erkennt eine um eins verschobene Nummerierung an der Lage des Notenkopfs', () => {
+		// Der Fall, den die gemeinsame Nummerierung verhindern soll: die
+		// Kennung ist bekannt, sitzt aber am falschen Notenkopf. Ohne die
+		// Lageprobe faende das niemand - der Cursor laege dann dauerhaft ein
+		// Segment daneben.
+		const result = healthy()
+		result.timing.elements = { 0: { page: 0, x: 1000, y: 0, w: 107, h: 900 } }
+		result.svgs = [seite('<path class="Note seg-0 st-0 vc-0" d="M1300,500 C1 1"/>')]
+		expect(checkPromises(result).problems).toEqual([
+			expect.stringContaining('nicht auf ihrer Segmentposition'),
+		])
+	})
+
+	it('haelt NoteDot fuer keinen Notenkopf', () => {
+		// Ein Punkt sitzt rechts neben dem Kopf; als Notenkopf gezaehlt
+		// wuerde er die Lageprobe grundlos reissen lassen.
+		const result = healthy()
+		result.timing.elements = { 0: { page: 0, x: 0, y: 0, w: 10, h: 900 } }
+		result.svgs = [seite('<path class="NoteDot seg-0 st-0 vc-0" d="M500,0"/>')]
+		const { problems, details } = checkPromises(result)
+		expect(problems).toEqual([])
+		expect(details.markedSegments).toBe(1)
+		expect(details.maxNoteOffset).toBe(0)
 	})
 })

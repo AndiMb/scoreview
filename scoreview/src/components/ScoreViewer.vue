@@ -306,6 +306,7 @@
 							:svgUrl="url"
 							:pageIndex="i"
 							:cursorRect="cursorRect"
+							:cursorElid="currentElid"
 							:zoom="zoom"
 							:markers="annotationMarkers"
 							:loopMarkers="loopMarkers"

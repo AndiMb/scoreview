@@ -64,6 +64,13 @@ describe('sanitizeSvg - das echte Notenbild darf nicht kaputtgehen', () => {
 		expect(out).toMatch(/points="1,2 3,4"/)
 	})
 
+	it('behaelt die Segment-, Zeilen- und Stimmenkennung (M10)', () => {
+		// Ohne sie faende svgIndex.js den klingenden Notenkopf nicht mehr -
+		// und zwar still: die Hervorhebung bliebe einfach aus.
+		const out = sanitizeSvg('<svg><path class="Note seg-42 st-1 vc-0" d="M0 0"/></svg>')
+		expect(out).toMatch(/class="Note seg-42 st-1 vc-0"/)
+	})
+
 	it('behaelt das leere class-Attribut des weissen Hintergrundpfads (M9)', () => {
 		// ScorePage.vue schaltet genau dieses Element ueber path[class=""] auf
 		// fill:none, damit der dahinterliegende Cursor sichtbar bleibt - geht

@@ -28,14 +28,19 @@ class ConversionService {
 	private const META_FILE = 'meta.json';
 
 	/**
-	 * Erhoehen bei jedem kuenftigen Cache-Formatwechsel (z.B. ein zweites
-	 * serverseitiges Layout) - `status()`/`serveCachedFile()` behandeln
-	 * einen Datensatz mit kleinerer `format_version` dann automatisch wie
-	 * "nicht fertig" statt Cache-Dateien eines nicht mehr passenden Formats
-	 * auszuliefern oder mit 500 zu enden. Aktuell ist kein Formatwechsel
-	 * geplant - die Konstante existiert vorsorglich.
+	 * Erhoehen bei jedem Cache-Formatwechsel - `status()`/`serveCachedFile()`
+	 * behandeln einen Datensatz mit kleinerer `format_version` dann
+	 * automatisch wie "nicht fertig" statt Cache-Dateien eines nicht mehr
+	 * passenden Formats auszuliefern oder mit 500 zu enden.
+	 *
+	 * 2: Die SVG-Seiten tragen die Segment-, Notenzeilen- und
+	 *    Stimmenkennung (M10), auf der die Hervorhebung des klingenden
+	 *    Notenkopfs aufsetzt. Ohne die Erhoehung blieben vorhandene
+	 *    Konvertierungen ohne Kennungen im Cache stehen, und der Viewer
+	 *    fiele fuer sie dauerhaft auf das Cursor-Band zurueck - ohne dass
+	 *    jemand sieht, warum.
 	 */
-	public const CURRENT_FORMAT_VERSION = 1;
+	public const CURRENT_FORMAT_VERSION = 2;
 
 	public function __construct(
 		private ScoreConversionMapper $mapper,

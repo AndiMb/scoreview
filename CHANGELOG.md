@@ -8,6 +8,14 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 ### Hinzugefügt
 
+- **Der klingende Notenkopf wird eingefärbt**, statt nur von einem Band
+  überdeckt zu werden. Möglich wurde das durch webmscore
+  `v4.7.4-scoreview.7`: MuseScores SVG-Export schreibt jetzt zu jedem
+  gezeichneten Element, zu welchem Segment, welcher Notenzeile und welcher
+  Stimme es gehört – und die Segmentnummer ist dieselbe, die `timing.json`
+  vergibt (M10). Das Band bleibt: Es zeigt die Stelle im System auch dort, wo
+  eine Stimme pausiert. Auf dem Sidecar-Weg (Stock-MuseScore ohne den Patch)
+  bleibt es unverändert beim Band.
 - Ein zweiter Einstieg in den Viewer: eine Dateiaktion auf der Endung `.mscz`,
   die eine Partitur in einem eigenen Vollbildfenster öffnet. Sie greift genau
   dann, wenn Nextclouds Viewer es nicht tut – wenn der Mimetype nicht

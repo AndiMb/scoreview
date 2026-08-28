@@ -82,6 +82,13 @@ Fork zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
 Betriebsdiagnose prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine
 neuere MuseScore-Version verfügbar wäre, meldet er nicht.
 
+**Keine Hervorhebung auf dem Sidecar-Weg.** Der klingende Notenkopf wird nur
+eingefärbt, wo das SVG die Kennungen aus
+[M10](architecture.md#m10-der-fork-schreibt-segment-notenzeile-und-stimme-ins-svg)
+trägt – das tut der lokale Konvertierungsweg, nicht der Sidecar mit seinem
+Stock-AppImage. Dort bleibt es beim Cursor-Band, ohne Fehlermeldung und ohne
+Einstellung. Wirkung: dieselbe Bedienung, weniger Führung im Notenbild.
+
 **Tablet-Hardware.** Touch-Bedienung, Pinch-Zoom und Wachhalten des Bildschirms
 sind umgesetzt und im Browser verifiziert, aber nicht auf einem echten Tablet in
 einer Probe erprobt.

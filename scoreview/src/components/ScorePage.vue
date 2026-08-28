@@ -6,10 +6,12 @@
 		@pointerdown="onPointerDown"
 		@click="onClick">
 		<!--
-			Overlay HINTER dem Notenbild (siehe docs/architecture.md M9): das SVG
-			hat keine id-Attribute, mit denen sich der Notenkopf selbst einfärben
-			ließe, daher bleibt es beim Cursor-Overlay - hinter statt vor dem
-			Notenbild, damit es keinen Notenkopf verdeckt. Die Stapelreihenfolge
+			Overlay HINTER dem Notenbild - hinter statt davor, damit es keinen
+			Notenkopf verdeckt. Es bleibt, obwohl der klingende Notenkopf sich
+			seit M10 selbst einfärben lässt: Das Band zeigt die Stelle im
+			System auch dort, wo eine Stimme gerade pausiert, und es ist die
+			einzige Anzeige, wenn das SVG keine Kennungen trägt (Sidecar-Weg,
+			siehe docs/architecture.md M9/M10). Die Stapelreihenfolge
 			kommt aus dem CSS (.score-page-svg bekommt ein explizites z-index),
 			nicht aus dieser Template-Reihenfolge - siehe Kommentar dort. Nur
 			messbar/anfassbar über ref="cursor" (siehe getCursorClientRect()).
@@ -104,6 +106,7 @@ import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
 import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, stavesOfPart } from '../lib/staffBands.js'
+import { buildSegmentIndex, setHighlight } from '../lib/svgIndex.js'
 import { sanitizeSvg } from '../lib/svgSanitizer.js'
 
 // Wie weit der Zeiger zwischen pointerdown und click wandern darf, damit es
@@ -150,6 +153,14 @@ export default {
 
 		cursorRect: {
 			type: Object,
+			default: null,
+		},
+
+		// Das gerade klingende Segment (elid aus timing.json). Traegt das SVG
+		// die Kennungen aus M10, wird damit der Notenkopf selbst eingefaerbt;
+		// sonst bleibt es beim Band aus cursorRect.
+		cursorElid: {
+			type: Number,
 			default: null,
 		},
 
@@ -417,6 +428,26 @@ export default {
 		},
 	},
 
+	watch: {
+		// Der Wiedergabeschritt: nur Klassen umhaengen, keine Suche im
+		// Dokument (siehe lib/svgIndex.js).
+		cursorElid() {
+			this.applyHighlight()
+		},
+	},
+
+	created() {
+		/*
+		 * Die Segmentkarte (M10) und die gerade eingefaerbten Knoten stehen
+		 * bewusst NICHT in data(): Beides sind DOM-Knoten, die kein Template
+		 * liest. In data() wuerde Vue sie tief reaktiv machen - einen Proxy um
+		 * jeden einzelnen SVG-Knoten legen, je Seite ueber tausend davon - fuer
+		 * einen Wert, dessen Aenderung gar nichts neu rendern soll.
+		 */
+		this.segmentIndex = null
+		this.highlighted = []
+	},
+
 	mounted() {
 		// Zwei Beobachter mit unterschiedlichem Rand: laden knapp vor dem
 		// Sichtbarwerden, entladen erst deutlich weiter weg. Ein einzelner
@@ -479,6 +510,8 @@ export default {
 				// Erst jetzt steht das SVG - vorher gaebe es keine Notenlinien
 				// zu zaehlen.
 				this.$emit('staffMapping', this.staffMappingPossible)
+				// Und erst nach dem naechsten Rendern haengt es im Dokument.
+				this.$nextTick(() => this.indexSegments())
 			} catch (err) {
 				this.loadError = err.response?.status
 					? `HTTP ${err.response.status}`
@@ -491,6 +524,33 @@ export default {
 		/** Erneuter Versuch nach einem Ladefehler (Knopf auf der leeren Seite). */
 		retry() {
 			this.load()
+		},
+
+		/**
+		 * Baut die Karte elid -> Notenkopf fuer diese Seite (M10).
+		 *
+		 * Bleibt sie leer, traegt das SVG keine Kennungen - dann stammt die
+		 * Partitur aus einer aelteren Konvertierung oder vom Sidecar mit
+		 * Stock-MuseScore, und die Anzeige bleibt beim Cursor-Band. Kein
+		 * Schalter, keine Einstellung: was da ist, wird benutzt.
+		 */
+		indexSegments() {
+			const svg = this.$refs.root?.querySelector('.score-page-svg')
+			this.segmentIndex = buildSegmentIndex(svg)
+			this.highlighted = []
+			// Die Seite kann mitten in der Wiedergabe nachgeladen worden sein.
+			this.applyHighlight()
+		},
+
+		/** Haengt die Hervorhebung auf das gerade klingende Segment um. */
+		applyHighlight() {
+			if (!this.segmentIndex) {
+				return
+			}
+			// Nur die Seite, auf der der Cursor steht, faerbt - dieselbe elid
+			// kann bei einer Wiederholung (M7) sonst auf zwei Seiten leuchten.
+			const aktiv = this.cursorRect?.page === this.pageIndex ? this.cursorElid : null
+			this.highlighted = setHighlight(this.segmentIndex, aktiv, this.highlighted, 'scoreview-sounding')
 		},
 
 		/**
@@ -519,6 +579,9 @@ export default {
 				return
 			}
 			this.svgMarkup = null
+			// Die Karte zeigt auf Knoten, die es gleich nicht mehr gibt.
+			this.segmentIndex = null
+			this.highlighted = []
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid: "Klick auf eine Note springt
@@ -699,6 +762,32 @@ export default {
 	border-radius: 4px;
 	pointer-events: none;
 	transition: left 0.08s linear, top 0.08s linear, height 0.08s linear;
+}
+
+/*
+ * Der klingende Notenkopf selbst - moeglich, seit das SVG seine
+ * Segmentkennung mitbringt (M10, siehe lib/svgIndex.js). Das Band darueber
+ * bleibt: Es zeigt die Stelle im System auch dort, wo eine Stimme gerade
+ * pausiert und es keinen Notenkopf zum Faerben gibt.
+ *
+ * Zwei Regeln statt einer, weil MuseScore zwei Maltechniken mischt
+ * (nachgezaehlt an einer ausgelieferten Seite): Note, Rest und Beam sind
+ * gefuellte <path> ohne fill-Attribut, Stem und LedgerLine dagegen
+ * <polyline fill="none" stroke="#000000">. Eine gemeinsame fill-Regel liesse
+ * die Notenhaelse schwarz.
+ *
+ * :deep() ist zwingend: die Knoten kommen aus v-html und tragen deshalb kein
+ * scoped-Attribut. Kein transition - bei acht Ereignissen je Sekunde soll die
+ * Farbe stehen, nicht nachlaufen.
+ */
+.score-page-svg :deep(path.scoreview-sounding),
+.score-page-svg :deep(text.scoreview-sounding) {
+	fill: #0082c9;
+}
+
+.score-page-svg :deep(polyline.scoreview-sounding),
+.score-page-svg :deep(line.scoreview-sounding) {
+	stroke: #0082c9;
 }
 
 /*

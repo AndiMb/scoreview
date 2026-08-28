@@ -23,7 +23,9 @@ import DOMPurify from 'dompurify'
 
 // Was ein von MuseScore erzeugtes Notenbild tatsächlich braucht - alles
 // andere fliegt raus. Ermittelt aus den real ausgelieferten SVGs der
-// Testpartituren (siehe M9: nur `class`, keine `id`s; Elemente sind
+// Testpartituren (siehe M9/M10: adressiert wird ueber `class` - dort stehen
+// auch die Segment-, Zeilen- und Stimmenkennungen, auf denen die
+// Hervorhebung des klingenden Notenkopfs aufsetzt; Elemente sind
 // path/polyline/rect/text/g/image samt Gruppierung), plus die üblichen
 // Struktur-/Defs-Elemente, damit ein anderes MuseScore-Layout nicht
 // versehentlich zerlegt wird.

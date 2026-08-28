@@ -147,13 +147,19 @@ Aufbau:
 - `src/lib/` – **reine Logik ohne DOM, ohne `AudioContext`, ohne Nextcloud** und
   damit ohne Browser testbar: `scoreLayout.js`, `mixerLayout.js`,
   `timingSync.js`, `scrollPlan.js`, `metronome.js`, `svgSanitizer.js`,
-  `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`. Neue Logik
-  gehört hierhin, nicht in die Komponenten.
+  `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`,
+  `svgIndex.js`. Neue Logik gehört hierhin, nicht in die Komponenten.
 
 Wiedergabe: `spessasynth_lib` synthetisiert das MIDI im Browser gegen das
 ausgelieferte SoundFont. Eine einzige `requestAnimationFrame`-Schleife treibt
 Cursor, Autoscroll, Loop und Metronom; SVG-Seiten werden beim Wegscrollen wieder
 aus dem DOM genommen.
+
+Der klingende Notenkopf wird eingefärbt, wo das SVG die Kennungen aus
+[M10](#m10-der-fork-schreibt-segment-notenzeile-und-stimme-ins-svg) trägt.
+`svgIndex.js` baut dafür **einmal je geladener Seite** eine Karte `elid` →
+Knoten; ein Wiedergabeschritt hängt danach nur noch eine CSS-Klasse um, statt
+das Dokument zu durchsuchen.
 
 Nur sichtbare Seiten werden gerendert. Eingehendes SVG läuft durch einen echten
 Sanitizer (DOMPurify), nicht durch reguläre Ausdrücke.
@@ -253,7 +259,18 @@ Metronomspur (M6). In `meta.json` ist `parts[].instrumentName` lokal *gefüllt*
 und beim Sidecar `null` – der einzige gefundene Unterschied, und keiner, den der
 Viewer liest.
 
-Der Grund für die Deckungsgleichheit ist, dass es dieselbe Software ist: nur
+**Eine Ausnahme gibt es seit M10:** Auf dem lokalen Weg tragen die SVG-Elemente
+ihre Segment-, Notenzeilen- und Stimmenkennung, auf dem Sidecar-Weg nicht – der
+Sidecar fährt ein gepinntes Stock-AppImage, das den Patch des Forks nicht
+kennt. Die Artefakte bleiben damit **gleichwertig**, aber nicht mehr in jedem
+Feld deckungsgleich. Der Viewer erkennt das Fehlen beim Aufbau seines Index und
+bleibt dann beim Cursor-Band; es gibt keinen Schalter und keine Einstellung
+dafür. Wer die Hervorhebung auch im Container will, müsste das Image aus dem
+Fork bauen – und gäbe damit das beste Argument des Sidecars auf, nämlich
+echtes, per Versionswechsel aktualisierbares MuseScore.
+
+Der Grund für die Deckungsgleichheit im Übrigen ist, dass es dieselbe Software
+ist: nur
 einmal als AppImage und einmal nach WebAssembly übersetzt. `savePositions`
 liefert die Koordinaten dort bereits in SVG-Einheiten, die Division durch 12
 entfällt (`converter/lib/artifacts.mjs`).
@@ -382,7 +399,7 @@ Aktion auf älteren Ständen einfach nichts: keine Fehlermeldung, kein Eintrag.
 ## Formatgrundlagen
 
 Eigenschaften des MuseScore-Exports, auf denen die Umsetzung aufbaut. Alle gegen
-das gebaute Image gemessen, nicht angenommen. Die Kennungen `M1`…`M9` sind im
+das gebaute Image gemessen, nicht angenommen. Die Kennungen `M1`…`M10` sind im
 Code referenziert.
 
 ### M1: `--score-media` liefert alles in einem Aufruf
@@ -500,19 +517,49 @@ Vier Eigenschaften mit Folgen für den Viewer:
 `duration` ist in Sekunden, `pages` deckt sich mit der Zahl der gelieferten
 SVG-Seiten (Grundlage von `ConversionService::getPageCount()`).
 
-### M9: Das SVG trägt keine Kennung, die sich mit `elid` verbinden lässt
+### M9: Stock-MuseScore adressiert nur über den Elementtyp
 
 Im gesamten Dokument steht kein einziges `id="…"`-Attribut. Adressierbar ist nur
 über `class` (`Note`, `BarLine`, `StaffLines`, `Clef`, …) – eine Kategorie, kein
-Bezug zu einer einzelnen Note. Eine echte Hervorhebung des getroffenen
-Notenkopfs (Füllfarbe, `filter`) ist damit **nicht** möglich; das Overlay bleibt
-die einzige Option.
+Bezug zu einer einzelnen Note. Eine Hervorhebung des klingenden Notenkopfs ist
+damit nicht möglich; es bleibt beim Overlay. **Das gilt weiterhin für den
+Sidecar-Weg**; was der Fork daran ändert, steht in
+[M10](#m10-der-fork-schreibt-segment-notenzeile-und-stimme-ins-svg).
 
 Für die Overlay-Umsetzung wichtig: Das allererste Element im Dokument ist ein
 deckendes weißes Hintergrundrechteck über die volle `viewBox` – als einziges
 Element mit leerem `class`-Attribut zuverlässig über `path[class=""]`
 adressierbar, ohne von der Dokumentreihenfolge abzuhängen. Ein Cursor-Overlay
 hinter dem SVG bliebe ohne diese Regel unsichtbar.
+
+### M10: Der Fork schreibt Segment, Notenzeile und Stimme ins SVG
+
+Auf dem lokalen Weg trägt jedes gezeichnete Element zusätzlich zu seinem Typ
+drei Kennungen: `class="Note seg-42 st-1 vc-0"`.
+
+- **`seg-N`** ist genau die `elid` aus `timing.json` – dieselbe laufende Nummer
+  über die ChordRest-Segmente. Beide Exporte zählen sie an einer Stelle
+  (`src/engraving/dom/segmentindex.h` im Fork), statt getrennt zu zählen und
+  zufällig übereinzustimmen.
+- **`st-N`** ist die Notenzeile, **`vc-N`** die Stimme innerhalb der Zeile.
+  Beide fehlen bei Elementen ohne Track (Titel, Seitenzahlen).
+
+Damit ist die Umkehrung von [M4](#m4-koordinaten-passen-mit-faktor-12-auf-das-svg)
+nicht mehr nur geometrisch möglich: Zu einem Zeitpunkt liefert `timing.json` die
+`elid`, und die zeigt direkt auf die Knoten, die dafür gezeichnet wurden.
+
+An der Selbsttest-Partitur gegen `v4.7.4-scoreview.7` gemessen: 20 Segmente, 44
+Elemente mit Kennung, **jede Kennung hat ein Element in `spos`, und kein
+`spos`-Element bleibt ungezeichnet**. Der größte Abstand zwischen einem
+Notenkopf und der x-Position seines Segments beträgt **0,93 SVG-Einheiten** bei
+107–162 Einheiten Segmentbreite – eine um eins verschobene Nummerierung läge
+ein ganzes Segment daneben und fiele sofort auf. Genau das prüft der Selbsttest
+(`converter/lib/artifacts.mjs`), und zwar in beide Richtungen.
+
+Der Viewer setzt darauf auf, ohne sich darauf zu verlassen: Findet
+`src/lib/svgIndex.js` keine Kennungen, bleibt es beim Cursor-Band. Das Band
+bleibt ohnehin sichtbar – es zeigt die Stelle im System auch dort, wo eine
+Stimme pausiert und es keinen Notenkopf zu färben gibt.
 
 ## Artefaktschema
 

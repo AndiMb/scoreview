@@ -56,6 +56,43 @@ export function toPositions(raw) {
 }
 
 /**
+ * Was eine SVG-Seite ueber die gezeichneten Segmente verraet (M10).
+ *
+ * Regulaere Ausdruecke auf SVG sind sonst ein Fehlgriff (siehe
+ * lib/svgSanitizer.js im Frontend, wo genau das schiefging) - hier aber keine
+ * Sicherheitsgrenze, sondern das Nachlesen der Ausgabe unseres eigenen
+ * Generators, in einer Node-Umgebung ohne DOM.
+ *
+ * @param {string} svgText eine Seite
+ * @return {{ids: Set<number>, notes: Array<{id: number, x: number}>}}
+ *   `ids` alle vorkommenden Segmentkennungen, `notes` die Notenkoepfe mit der
+ *   x-Koordinate ihres ersten Pfadpunkts.
+ */
+export function svgSegments(svgText) {
+	const ids = new Set()
+	const notes = []
+	if (typeof svgText !== 'string') {
+		return { ids, notes }
+	}
+
+	for (const treffer of svgText.matchAll(/class="([^"]*)"/g)) {
+		const kennung = /\bseg-(\d+)\b/.exec(treffer[1])
+		if (kennung) {
+			ids.add(Number(kennung[1]))
+		}
+	}
+
+	// Nur Notenkoepfe fuer die Lageprobe: sie sitzen auf der Segmentposition.
+	// Ein Vorzeichen steht links davon, ein Hals reicht darueber hinaus -
+	// beides waeren Ausreisser ohne Aussage.
+	for (const treffer of svgText.matchAll(/<path class="Note\b[^"]*\bseg-(\d+)\b[^"]*"[^>]*?\sd="M\s*(-?[\d.]+)/g)) {
+		notes.push({ id: Number(treffer[1]), x: Number(treffer[2]) })
+	}
+
+	return { ids, notes }
+}
+
+/**
  * Die Zusagen aus docs/architecture.md, gegen ein Konvertierungsergebnis
  * geprueft - inhaltlich dieselbe Liste wie `check_promises` im Sidecar.
  * Dass es sie zweimal gibt, ist der Preis fuer zwei unabhaengige
@@ -67,9 +104,11 @@ export function toPositions(raw) {
  * @param {object} result.timing timing.json in Cache-Form
  * @param {Uint8Array} result.midi
  * @param {object} result.meta meta.json in Cache-Form
+ * @param {string[]} [result.svgs] die erzeugten Seiten - nur damit ist M10
+ *   pruefbar. Fehlen sie, entfaellt diese Zusage stillschweigend.
  * @return {{problems: string[], details: object}}
  */
-export function checkPromises({ pages, timing, midi, meta }) {
+export function checkPromises({ pages, timing, midi, meta, svgs = [] }) {
 	const problems = []
 	if (pages < 1) {
 		problems.push('keine SVG-Seite geliefert')
@@ -107,6 +146,57 @@ export function checkPromises({ pages, timing, midi, meta }) {
 		problems.push('Event-Zeiten sind nicht monoton steigend')
 	}
 
+	// M10: Das SVG traegt die Segmentkennung, die spos vergibt - sonst kann
+	// der Viewer den klingenden Notenkopf nicht faerben und faellt auf das
+	// Band zurueck. Die Zusage gilt nur fuer diesen Weg: der Sidecar faehrt
+	// Stock-MuseScore ohne den Patch, und sein eigener Selbsttest kennt M10
+	// deshalb nicht (siehe docs/architecture.md E3).
+	let markiert = 0
+	let unbekannt = 0
+	let verrutscht = 0
+	let maxAbstand = 0
+	const bekannt = timing?.elements ?? {}
+	const gezeichnet = new Set()
+
+	for (const svg of svgs) {
+		const { ids, notes } = svgSegments(svg)
+		for (const id of ids) {
+			markiert++
+			if (bekannt[String(id)]) {
+				gezeichnet.add(id)
+			} else {
+				unbekannt++
+			}
+		}
+		for (const note of notes) {
+			const rect = bekannt[String(note.id)]
+			if (!rect) {
+				continue
+			}
+			const abstand = note.x - rect.x
+			maxAbstand = Math.max(maxAbstand, Math.abs(abstand))
+			// Ein Notenkopf sitzt gemessen innerhalb einer Einheit auf der
+			// Segmentposition, bei 107-162 Einheiten Segmentbreite. Waere die
+			// Nummerierung um eins verschoben, laege er ein ganzes Segment
+			// weiter - diese Schranke faengt das, ohne an Rundung zu haengen.
+			if (abstand < -rect.w || abstand > 2 * rect.w) {
+				verrutscht++
+			}
+		}
+	}
+
+	if (svgs.length > 0) {
+		if (markiert === 0) {
+			problems.push('das SVG traegt keine Segmentkennungen - der klingende Notenkopf ist nicht auffindbar (M10 verletzt)')
+		}
+		if (unbekannt > 0) {
+			problems.push(`${unbekannt} Segmentkennungen im SVG haben kein Element in spos (M10 verletzt)`)
+		}
+		if (verrutscht > 0) {
+			problems.push(`${verrutscht} Notenkoepfe liegen nicht auf ihrer Segmentposition - Notenbild und Zeitachse zaehlen auseinander (M10 verletzt)`)
+		}
+	}
+
 	return {
 		problems,
 		details: {
@@ -114,6 +204,8 @@ export function checkPromises({ pages, timing, midi, meta }) {
 			events: events.length,
 			elements: elements.length,
 			repeatedElids: repeated,
+			markedSegments: gezeichnet.size,
+			maxNoteOffset: Math.round(maxAbstand * 100) / 100,
 		},
 	}
 }

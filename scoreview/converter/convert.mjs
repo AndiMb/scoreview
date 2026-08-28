@@ -207,6 +207,9 @@ async function main() {
 			timing: converted.timing,
 			midi: converted.midi,
 			meta: converted.meta,
+			// Die Seiten selbst, nicht nur ihre Zahl: ohne sie ist M10 nicht
+			// pruefbar (siehe checkPromises).
+			svgs: converted.pages,
 		})
 		stdoutWrite(JSON.stringify({
 			ok: problems.length === 0,
