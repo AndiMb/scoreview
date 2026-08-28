@@ -110,6 +110,7 @@ OC.L10N.register(
     "on this server, {version}" : "auf diesem Server, {version}",
     "cached copy in use" : "zwischengespeicherte Kopie in Benutzung",
     "Show only my part" : "Nur meine Zeile zeigen",
-    "Show notes in the score" : "Notizen im Notenbild anzeigen"
+    "Show notes in the score" : "Notizen im Notenbild anzeigen",
+    "Open in ScoreView" : "In ScoreView öffnen"
 },
 "nplurals=2; plural=(n != 1);");

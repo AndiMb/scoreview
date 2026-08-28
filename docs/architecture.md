@@ -63,8 +63,12 @@ aufweichen.
 
 Alle Routen liegen unter `/apps/scoreview/api/` und stehen in
 `scoreview/appinfo/routes.php`. Die App hat bewusst **keine eigene Seite** und
-keinen Navigationseintrag; `/apps/scoreview/` antwortet 404. Einstiegspunkt ist
-ausschließlich die Viewer-Integration in Files.
+keinen Navigationseintrag; `/apps/scoreview/` antwortet 404. Eingestiegen wird
+ausschließlich aus Files, auf zwei Wegen: über Nextclouds Viewer (am Mimetype
+`application/x-musescore`) und, wo der nicht greift, über eine eigene
+Dateiaktion auf der Endung, die dieselbe Komponente in einem Vollbildfenster
+zeigt. Warum es beide braucht, steht in
+[E6](#e6-zwei-einstiege-mimetype-und-dateiendung).
 
 | Route | Zweck |
 |---|---|
@@ -137,14 +141,14 @@ Einstellungsseite.
 Aufbau:
 
 - `src/components/` – `ScoreViewer.vue` als Rahmen, dazu `ScorePage.vue`,
-  `ScoreMixer.vue`, `ScoreAnnotations.vue`, `AdminSettings.vue`.
+  `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreModal.vue`, `AdminSettings.vue`.
 - `src/composables/` – der Zustand des Viewers, nach Themen getrennt:
   Konvertierungsstatus, Notizen, Zoom, Autoscroll, Metronom, Loop, Wiedergabe.
 - `src/lib/` – **reine Logik ohne DOM, ohne `AudioContext`, ohne Nextcloud** und
   damit ohne Browser testbar: `scoreLayout.js`, `mixerLayout.js`,
   `timingSync.js`, `scrollPlan.js`, `metronome.js`, `svgSanitizer.js`,
-  `silentClock.js`, `player.js`, `scoreSync.js`. Neue Logik gehört hierhin, nicht
-  in die Komponenten.
+  `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`. Neue Logik
+  gehört hierhin, nicht in die Komponenten.
 
 Wiedergabe: `spessasynth_lib` synthetisiert das MIDI im Browser gegen das
 ausgelieferte SoundFont. Eine einzige `requestAnimationFrame`-Schleife treibt
@@ -156,9 +160,9 @@ Sanitizer (DOMPurify), nicht durch reguläre Ausdrücke.
 
 ## Entwurfsentscheidungen
 
-Diese fünf Entscheidungen tragen den Aufbau. Sie sind im Code an vielen Stellen
-als `E1`…`E5` referenziert und sollten nicht ohne erneute Bewertung revidiert
-werden.
+Diese sechs Entscheidungen tragen den Aufbau. Sie sind im Code an vielen
+Stellen als `E1`…`E6` referenziert und sollten nicht ohne erneute Bewertung
+revidiert werden.
 
 ### E1: MIDI statt MP3 als Audioartefakt
 
@@ -348,6 +352,32 @@ Sammelimport) und eine stärkere Bindung an die Nextcloud-Version: `info.xml`
 deklariert 31–35, die Bibliotheksversion muss dazu passen. Für Regler
 (Lautstärke, Tempo, Zoom) gibt es keine Entsprechung; dort steht
 `<input type="range">` mit Nextcloud-CSS-Variablen.
+
+### E6: Zwei Einstiege – Mimetype und Dateiendung
+
+Der reguläre Einstieg ist Nextclouds Viewer, und der wählt am **Mimetype**:
+`application/x-musescore`. Diese Registrierung ist server-weit und lässt sich
+aus einer App heraus nicht vornehmen – Nextcloud liest `mimetypemapping.json`
+ausschließlich aus `config/` – und sie braucht anschließend `occ`. Auf
+verwaltetem Hosting gibt es beides nicht. Selbst auf einer eigenen Instanz
+bleiben bereits hochgeladene Dateien bis zu einem `occ files:scan` auf
+`application/octet-stream` stehen und sind für den Viewer unsichtbar.
+
+Deshalb registriert `src/viewer.js` zusätzlich eine **Dateiaktion auf der
+Endung**, die dieselbe Komponente in einem `NcModal` zeigt. Ihre Bedingung
+steht als reine Funktion in `src/lib/scoreFile.js` und lautet: Endung `.mscz`
+**und** Mimetype nicht `application/x-musescore`. Sie greift also genau dort,
+wo der Viewer nichts tut – wo die Registrierung sitzt, gibt es keinen zweiten
+Menüeintrag und keine zweite Standardaktion.
+
+Der Preis ist eine doppelte Registrierung: `@nextcloud/files` hat zwischen den
+Nextcloud-Ständen sowohl den Ablageort der Aktionsliste als auch die
+Rückrufsignatur gewechselt (bis v3 ein globales Array `_nc_fileactions` mit
+`(nodes, view)`, ab v4 `_nc_files_scope.v4_0` mit einem Kontextobjekt). An
+Nextcloud 34 gemessen gibt es nur noch den neuen Ort. `viewer.js` trägt sich
+deshalb im neuen ein und, wenn der fehlt, zusätzlich im alten – beide Male mit
+derselben Bedingung aus `scoreFile.js`. Fehlte der zweite Zweig, täte die
+Aktion auf älteren Ständen einfach nichts: keine Fehlermeldung, kein Eintrag.
 
 ## Formatgrundlagen
 

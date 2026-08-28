@@ -104,8 +104,10 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
   ein zweites serverseitiges Layout.
 - **Kein Bearbeiten von Partituren.** ScoreView zeigt und spielt; es korrigiert
   nichts in der `.mscz`.
-- **Keine eigene Seite in Nextcloud.** Einstieg ist ausschließlich der Viewer
-  aus Files, `/apps/scoreview/` antwortet bewusst 404.
+- **Keine eigene Seite in Nextcloud.** Eingestiegen wird ausschließlich aus
+  Files – über Nextclouds Viewer oder über die Dateiaktion auf der Endung
+  ([E6](architecture.md#e6-zwei-einstiege--mimetype-und-dateiendung));
+  `/apps/scoreview/` antwortet bewusst 404.
 - **Kein Stift-/Freihand-Layer.** Notizen sind Text an einem musikalischen Anker.
   Freie Striche wären eine zweite Datenart, deren Anker ein Pfad statt eines
   Punktes sein müsste – und die anders als Text ein Neurendern der Partitur

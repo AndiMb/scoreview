@@ -61,7 +61,7 @@ preset, tempo in BPM and a metronome; annotations anchored to musical
 position (private or shared, surviving a re-upload); touch controls with
 pinch-zoom for a tablet on the music stand.
 	]]></description>
-	<version>1.0.0</version>
+	<version>1.1.0</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>

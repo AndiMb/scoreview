@@ -94,8 +94,9 @@ das Secret eintragen.
 
 Ohne Container entfällt Schritt 1; stattdessen in denselben Einstellungen den
 lokalen Weg wählen und eine SoundFont-Download-URL hinterlegen. So oder so
-fehlen noch zwei einmalige Schritte – die Mimetype-Registrierung für `.mscz` und
-Background-Jobs im Modus `cron`:
+fehlt noch ein einmaliger Schritt: Background-Jobs im Modus `cron`. Die
+Mimetype-Registrierung für `.mscz` ist empfohlen, aber nicht nötig – ohne sie
+öffnet die Dateiaktion „In ScoreView öffnen" die Partitur:
 **[vollständige Anleitung](docs/installation.md)**.
 
 ## Dokumentation

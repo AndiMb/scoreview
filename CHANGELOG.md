@@ -6,6 +6,14 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 ## [Unveröffentlicht]
 
+### Hinzugefügt
+
+- Ein zweiter Einstieg in den Viewer: eine Dateiaktion auf der Endung `.mscz`,
+  die eine Partitur in einem eigenen Vollbildfenster öffnet. Sie greift genau
+  dann, wenn Nextclouds Viewer es nicht tut – wenn der Mimetype nicht
+  registriert ist oder eine vorhandene Datei noch nicht neu eingelesen wurde.
+  Damit ist die App auch dort benutzbar, wo niemand `occ` ausführen kann.
+
 ### Geändert
 
 - Der lokale Konvertierungsweg läuft auf webmscore `v4.7.4-scoreview.6`:

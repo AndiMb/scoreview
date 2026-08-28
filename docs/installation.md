@@ -152,10 +152,20 @@ Auf der Verwaltungsseite prüft ein Knopf den Zustand und ein zweiter startet de
 den gewählten Weg, samt Prüfung aller Zusagen, auf denen die App aufbaut. Nach
 jedem Wechsel der MuseScore-Version einmal auslösen.
 
-## 4. Mimetype registrieren
+## 4. Mimetype registrieren (empfohlen, nicht zwingend)
 
-Ohne diesen Schritt erkennt Nextcloud `.mscz` als `application/octet-stream` und
-bietet in Files nur „Herunterladen" an, nicht den Viewer.
+Ohne diesen Schritt erkennt Nextcloud `.mscz` als `application/octet-stream`.
+Die Partitur lässt sich trotzdem öffnen – dafür gibt es die Dateiaktion
+**„In ScoreView öffnen"**, die an der Dateiendung hängt und die Partitur in
+einem eigenen Fenster zeigt
+([E6](architecture.md#e6-zwei-einstiege--mimetype-und-dateiendung)). Wer `occ`
+nicht ausführen kann, weil die Instanz verwaltet ist, überspringt diesen
+Abschnitt also.
+
+Was die Registrierung zusätzlich bringt: das eigene Dateisymbol, die Vorschau
+in Nextclouds Viewer samt Blättern zwischen Dateien und das gewohnte
+Öffnen-Verhalten. Wo sie fehlt, übernimmt die Dateiaktion – dieselbe Ansicht,
+nur ohne Viewer-Rahmen.
 
 Die Registrierung wirkt **server-weit**, nicht app-lokal: Nextcloud lädt
 `mimetypemapping.json` und `mimetypealiases.json` nicht aus Apps. Die beiden
