@@ -557,9 +557,10 @@ ein ganzes Segment daneben und fiele sofort auf. Genau das prüft der Selbsttest
 (`converter/lib/artifacts.mjs`), und zwar in beide Richtungen.
 
 Der Viewer setzt darauf auf, ohne sich darauf zu verlassen: Findet
-`src/lib/svgIndex.js` keine Kennungen, bleibt es beim Cursor-Band. Das Band
-bleibt ohnehin sichtbar – es zeigt die Stelle im System auch dort, wo eine
-Stimme pausiert und es keinen Notenkopf zu färben gibt.
+`src/lib/svgIndex.js` keine Kennungen, bleibt es beim Cursor-Band. Leuchten
+dagegen die Notenköpfe, malt das Band nichts mehr – zwei Anzeigen derselben
+Stelle sind eine zu viel. Im DOM bleibt es trotzdem, denn das Autoscroll misst
+seine Bildschirmposition (`getCursorClientRect()`).
 
 ## Artefaktschema
 

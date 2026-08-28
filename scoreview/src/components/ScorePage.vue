@@ -7,14 +7,15 @@
 		@click="onClick">
 		<!--
 			Overlay HINTER dem Notenbild - hinter statt davor, damit es keinen
-			Notenkopf verdeckt. Es bleibt, obwohl der klingende Notenkopf sich
-			seit M10 selbst einfärben lässt: Das Band zeigt die Stelle im
-			System auch dort, wo eine Stimme gerade pausiert, und es ist die
-			einzige Anzeige, wenn das SVG keine Kennungen trägt (Sidecar-Weg,
-			siehe docs/architecture.md M9/M10). Die Stapelreihenfolge
-			kommt aus dem CSS (.score-page-svg bekommt ein explizites z-index),
-			nicht aus dieser Template-Reihenfolge - siehe Kommentar dort. Nur
-			messbar/anfassbar über ref="cursor" (siehe getCursorClientRect()).
+			Notenkopf verdeckt. Es ist der Rückfall, nicht die Ergänzung: Sobald
+			die Notenköpfe selbst leuchten (M10), malt es nichts mehr - zwei
+			Anzeigen derselben Stelle sind eine zu viel. Sichtbar bleibt es, wo
+			das SVG keine Kennungen trägt (Sidecar-Weg, siehe
+			docs/architecture.md M9/M10). Im DOM bleibt es in beiden Fällen: Das
+			Autoscroll misst seine Bildschirmposition (ref="cursor", siehe
+			getCursorClientRect()). Die Stapelreihenfolge kommt aus dem CSS
+			(.score-page-svg bekommt ein explizites z-index), nicht aus dieser
+			Template-Reihenfolge - siehe Kommentar dort.
 		-->
 		<!--
 			Markierung der eigenen Stimme, ganz unten in der Stapelfolge: Sie
@@ -37,6 +38,7 @@
 			:key="`cursor-${i}`"
 			:ref="i === 0 ? 'cursor' : undefined"
 			class="score-page-cursor"
+			:class="{ 'score-page-cursor--hidden': notesHighlighted }"
 			:style="band" />
 		<!--
 			v-html ist hier unvermeidbar: das MuseScore-SVG soll als echtes DOM
@@ -234,6 +236,10 @@ export default {
 			loading: false,
 			// Position des letzten pointerdown - siehe onClick() zum Grund.
 			pointerDownAt: null,
+			// Ob auf dieser Seite gerade Notenkoepfe leuchten. Die Hervorhebung
+			// selbst steht bewusst ausserhalb von data() (siehe created()); dieses
+			// eine Bit liest das Template, es entscheidet, ob das Band malt.
+			notesHighlighted: false,
 		}
 	},
 
@@ -551,6 +557,7 @@ export default {
 			// kann bei einer Wiederholung (M7) sonst auf zwei Seiten leuchten.
 			const aktiv = this.cursorRect?.page === this.pageIndex ? this.cursorElid : null
 			this.highlighted = setHighlight(this.segmentIndex, aktiv, this.highlighted, 'scoreview-sounding')
+			this.notesHighlighted = this.highlighted.length > 0
 		},
 
 		/**
@@ -582,6 +589,7 @@ export default {
 			// Die Karte zeigt auf Knoten, die es gleich nicht mehr gibt.
 			this.segmentIndex = null
 			this.highlighted = []
+			this.notesHighlighted = false
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid: "Klick auf eine Note springt
@@ -765,10 +773,20 @@ export default {
 }
 
 /*
+ * Leuchten die Notenkoepfe selbst (M10), malt das Band nichts mehr - eine
+ * Anzeige der klingenden Stelle genuegt. Es bleibt trotzdem im DOM und
+ * behaelt seine Groesse: Das Autoscroll misst genau dieses Element
+ * (getCursorClientRect()), mit display:none oder v-if haette es keine.
+ */
+.score-page-cursor--hidden {
+	background: transparent;
+}
+
+/*
  * Der klingende Notenkopf selbst - moeglich, seit das SVG seine
- * Segmentkennung mitbringt (M10, siehe lib/svgIndex.js). Das Band darueber
- * bleibt: Es zeigt die Stelle im System auch dort, wo eine Stimme gerade
- * pausiert und es keinen Notenkopf zum Faerben gibt.
+ * Segmentkennung mitbringt (M10, siehe lib/svgIndex.js). Sobald hier etwas
+ * leuchtet, tritt das Cursor-Band zurueck (siehe .score-page-cursor--hidden)
+ * - beides zusammen markierte dieselbe Stelle doppelt.
  *
  * Zwei Regeln statt einer, weil MuseScore zwei Maltechniken mischt
  * (nachgezaehlt an einer ausgelieferten Seite): Note, Rest und Beam sind

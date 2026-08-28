@@ -13,9 +13,9 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   `v4.7.4-scoreview.7`: MuseScores SVG-Export schreibt jetzt zu jedem
   gezeichneten Element, zu welchem Segment, welcher Notenzeile und welcher
   Stimme es gehört – und die Segmentnummer ist dieselbe, die `timing.json`
-  vergibt (M10). Das Band bleibt: Es zeigt die Stelle im System auch dort, wo
-  eine Stimme pausiert. Auf dem Sidecar-Weg (Stock-MuseScore ohne den Patch)
-  bleibt es unverändert beim Band.
+  vergibt (M10). Das Band tritt dafür zurück, sobald Notenköpfe leuchten –
+  zwei Anzeigen derselben Stelle sind eine zu viel. Auf dem Sidecar-Weg
+  (Stock-MuseScore ohne den Patch) bleibt es unverändert beim Band.
 - Ein zweiter Einstieg in den Viewer: eine Dateiaktion auf der Endung `.mscz`,
   die eine Partitur in einem eigenen Vollbildfenster öffnet. Sie greift genau
   dann, wenn Nextclouds Viewer es nicht tut – wenn der Mimetype nicht
