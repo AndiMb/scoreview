@@ -1,0 +1,54 @@
+# Haelt die Abhaengigkeiten per automatischem PR aktuell. Woechentlich und
+# gebuendelt, damit nicht jede Minor-Version einen eigenen PR erzeugt; jeder
+# dieser PRs laeuft durch dieselbe CI wie jeder andere Beitrag (ci.yml).
+#
+# Vier Baeume statt einem, weil das Repo drei Sprachen mischt: scoreview/ und
+# scoreview/converter/ haben getrennte package.json mit voellig verschiedenem
+# Zweck (Oberflaeche gegen Konvertierung), der Sidecar ist Python. Die
+# Verzeichnisse sind ab der Repo-Wurzel angegeben.
+version: 2
+updates:
+  # Die App selbst - Vue, Nextcloud-Bibliotheken, Werkzeuge.
+  - package-ecosystem: npm
+    directory: /scoreview
+    schedule:
+      interval: weekly
+    groups:
+      npm-abhaengigkeiten:
+        patterns: ['*']
+
+  # Der lokale Konvertierungsweg (docs/architecture.md E3). Hier kann
+  # Dependabot nur @librescore/fonts anfassen: webmscore4 haengt an einer
+  # Release-URL, und die kennt keine Registry - dieser Sprung bleibt Handarbeit
+  # und ist es auch wert. Einen schlechten Bump faengt der Selbsttest im
+  # konverter-Job ab, der M2/M4/M7 gegen eine echte Partitur prueft.
+  - package-ecosystem: npm
+    directory: /scoreview/converter
+    schedule:
+      interval: weekly
+
+  # PHP: ausschliesslich dev-Abhaengigkeiten (PHPUnit, Codingstandard,
+  # OCP-Stubs). Die App selbst verlangt zur Laufzeit nichts ausser einer
+  # PHP-Version - was auch der Grund ist, warum ein Bump hier nie eine Instanz
+  # erreichen kann: das Release laeuft mit --no-dev.
+  - package-ecosystem: composer
+    directory: /scoreview
+    schedule:
+      interval: weekly
+
+  # Der Sidecar. requirements-dev.txt deckt nur die Unit-Tests ab; die
+  # Laufzeit-Pakete des Images kommen als Debian-Pakete aus dem Dockerfile
+  # (python3-flask, musescore) und liegen ausserhalb von Dependabots
+  # Reichweite - dort haelt die Ubuntu-Basis die Versionen fest.
+  - package-ecosystem: pip
+    directory: /sidecar
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

@@ -4,13 +4,16 @@
 #
 # Bewusst getrennte Jobs statt eines grossen: sie laufen parallel, und ein
 # roter Job sagt sofort, WO es klemmt (Frontend, Backend, Sidecar, lokaler
-# Konverter).
+# Konverter, info.xml).
 name: CI
 
 on:
   push:
     branches: [master]
   pull_request:
+  # Der Release-Workflow ruft genau diese Pruefungen als Pflicht-Vorstufe auf
+  # (siehe release.yml). Was hier rot ist, wird nicht veroeffentlicht.
+  workflow_call:
 
 permissions:
   contents: read
@@ -74,6 +77,14 @@ jobs:
           php-version: ${{ matrix.php }}
           coverage: none
           tools: composer:v2
+
+      # Vor dem Install, damit ein Fehler in composer.json auch als solcher
+      # gemeldet wird und nicht als merkwuerdiger Aufloesungsfehler. --strict
+      # zieht auch einen composer.lock hoch, der nicht mehr zur composer.json
+      # passt. Nur auf einer Version - die Datei ist nicht versionsabhaengig.
+      - name: composer.json und composer.lock pruefen
+        if: matrix.php == '8.4'
+        run: composer validate --strict --no-check-publish
 
       - run: composer install --no-interaction --no-progress
 
@@ -156,3 +167,21 @@ jobs:
 
       - name: Unit-Tests (pytest)
         run: python -m pytest
+
+  # Der App Store validiert info.xml gegen dieses Schema und lehnt beim
+  # Hochladen ab, was nicht passt - also nach dem Tag, wenn die Version schon
+  # vergeben ist. Hier faellt es bei jedem Push auf. Eigener Job statt ein
+  # Schritt im Backend: das ist reine XML-Pruefung und braucht kein PHP.
+  appinfo:
+    name: info.xml gegen App-Store-Schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: xmllint installieren
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+
+      - name: Validieren
+        run: |
+          curl -fsSL https://apps.nextcloud.com/schema/apps/info.xsd -o /tmp/info.xsd
+          xmllint --noout --schema /tmp/info.xsd scoreview/appinfo/info.xml

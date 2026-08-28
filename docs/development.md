@@ -108,6 +108,16 @@ Codingstandard, PHPUnit über mehrere PHP-Versionen), lokaler Konverter (echte
 Konvertierung mit webmscore, auf Node 18 und 22) und Sidecar (pytest über
 mehrere Python-Versionen). Was lokal grün ist, ist es dort in aller Regel auch.
 
+Dazu ein eigener Job, der `appinfo/info.xml` gegen das Schema des App Stores
+validiert. Der Store lehnt beim Hochladen ab, was nicht passt – also erst
+nach dem Tag, wenn die Version schon vergeben ist.
+
+`.github/dependabot.yml` hält die Abhängigkeiten wöchentlich aktuell, in vier
+getrennten Bäumen (App, lokaler Konverter, PHP-Dev-Pakete, Sidecar) plus den
+GitHub Actions; jeder dieser Pull Requests läuft durch dieselbe CI. Für
+`webmscore4` greift das nicht – die Abhängigkeit hängt an einer Release-URL,
+und die kennt keine Registry. Dieser Sprung bleibt Handarbeit.
+
 ## Übersetzungen
 
 Die Quellstrings sind Englisch, Deutsch ist eine im Repo gepflegte Übersetzung
@@ -177,6 +187,18 @@ echten Build entstehen, nicht aus einem Checkout. Dasselbe gilt für den
 Konverter: Eine Instanz ohne Container hat kein npm, mit dem sie webmscore
 nachholen könnte.
 
+**Vorgeschaltet ist die komplette CI**: `release.yml` ruft `ci.yml` per
+`workflow_call` auf und baut erst, wenn alles grün ist. Eine Version, die
+Linter, Tests, Codingstandard oder den Konverter-Selbsttest nicht besteht,
+wird gar nicht erst gepackt – geschweige denn signiert oder an den App Store
+gemeldet.
+
+Direkt nach dem Checkout prüft die Action außerdem, dass der Tag zur Version
+in `appinfo/info.xml` passt und dass `CHANGELOG.md` einen Abschnitt
+`## [<Version>]` enthält. Beides kostet eine Sekunde und fängt zwei Fehler
+ab, die sonst erst auf einer fremden Instanz bzw. im App Store auffielen –
+der Store zieht seine Release-Notes aus genau diesem Abschnitt.
+
 **Die Reihenfolge ist wesentlich:** erst den Auslieferungsbaum zusammenstellen,
 dann signieren, dann packen. Die Signatur listet jede Datei einzeln auf – würde
 erst signiert und danach beim Packen etwas ausgeschlossen, meldete die
@@ -237,7 +259,8 @@ Tarball.
 ### Ein Release fahren
 
 ```sh
-# Version in scoreview/appinfo/info.xml und CHANGELOG.md setzen, committen
+# Version in scoreview/appinfo/info.xml setzen und in CHANGELOG.md einen
+# Abschnitt "## [1.0.0]" anlegen - die Action prüft beides gegen den Tag
 git tag v1.0.0
 git push origin v1.0.0
 ```

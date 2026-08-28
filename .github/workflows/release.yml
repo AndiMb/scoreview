@@ -25,8 +25,19 @@ permissions:
   contents: write
 
 jobs:
+  # Die komplette CI als Pflicht-Vorstufe: eine Version, die Linter,
+  # Unit-Tests, Codingstandard, den Konverter-Selbsttest oder die
+  # Schema-Pruefung von info.xml nicht besteht, wird gar nicht erst gebaut -
+  # geschweige denn signiert oder an den App Store gemeldet. Das kostet ein
+  # paar Minuten vor jedem Tag; der Gegenwert ist, dass ein Release nie an
+  # etwas scheitert, das die CI laengst wusste.
+  pruefungen:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
   tarball:
     name: App-Tarball bauen
+    needs: pruefungen
     runs-on: ubuntu-latest
     env:
       # Ueber env statt direkt ueber `secrets`, weil `if:`-Bedingungen den
@@ -36,6 +47,31 @@ jobs:
       APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
     steps:
       - uses: actions/checkout@v7
+
+      # Ganz vorn, weil danach zehn Minuten Build folgen und beides in einer
+      # Sekunde zu pruefen ist. Ein Tag, der nicht zur Version in info.xml
+      # passt, ergibt ein Paket, das jede Instanz unter der falschen Version
+      # einspielt - und der App Store zieht seine Release-Notes aus dem
+      # CHANGELOG-Abschnitt zur Version, ein fehlender Abschnitt faellt dort
+      # also erst nach dem Hochladen auf.
+      - name: Tag gegen info.xml und CHANGELOG pruefen
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          XML_VERSION=$(grep -oP '(?<=<version>)[^<]+' scoreview/appinfo/info.xml | head -1)
+          if [ "$VERSION" != "$XML_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME passt nicht zur Version $XML_VERSION in info.xml - Release abgebrochen." >&2
+            exit 1
+          fi
+          # -F, damit die eckigen Klammern nicht als Zeichenklasse gelesen
+          # werden. Was hinter der Version steht, bleibt bewusst ungeprueft:
+          # CHANGELOG.md trennt das Datum mit einem Halbgeviertstrich ab, und
+          # daran soll kein Release haengen.
+          if ! grep -qF "## [$VERSION]" CHANGELOG.md; then
+            echo "CHANGELOG.md hat keinen Abschnitt '## [$VERSION]' - Release abgebrochen." >&2
+            exit 1
+          fi
+          echo "Tag, info.xml und CHANGELOG stimmen ueberein ($VERSION)."
 
       - uses: actions/setup-node@v7
         with:
@@ -255,7 +291,7 @@ jobs:
 
       - name: An das Release haengen
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: scoreview.tar.gz
 
