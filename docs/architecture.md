@@ -210,10 +210,10 @@ Voreinstellung `sidecar`) und wird an genau einer Stelle im Code ausgewertet
 
 | | Sidecar | Lokal |
 |---|---|---|
-| MuseScore | echtes MuseScore 4 aus gepinntem AppImage | MuseScore 4.7.4 als WebAssembly ([AndiMb/webmscore](https://github.com/AndiMb/webmscore)) |
+| MuseScore | echtes MuseScore 4 aus gepinntem AppImage | MuseScore 4.7.4 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) |
 | Läuft als | eigener Container, HTTP-API | Kindprozess der Node-Laufzeit des Servers |
 | Voraussetzung beim Betreiber | Docker o. ä. | Node.js ≥ 18, `proc_open` erlaubt |
-| Im App-Paket | nichts | rund 21 MB Wasm (`converter/`) |
+| Im App-Paket | nichts | rund 19 MB Wasm (`converter/`) |
 | SoundFont | bringt das Image mit | Download-URL in den Einstellungen |
 | Vorab-Konvertierung, Selbsttest | ja | ja |
 
@@ -294,28 +294,30 @@ entfällt (`converter/lib/artifacts.mjs`).
   Sidecar, und PHP hat dafür keinen Ort. Der Prozessabbau räumt die rund 105 MB
   der Instanz vollständig ab und braucht keinen Zustand; bezahlt wird das mit
   rund 1 s Anlauf je Partitur.
-- **Der webmscore-Fork will gepflegt werden.** Die MuseScore-Version zieht nicht
+- **Die Engine will gepflegt werden.** Die MuseScore-Version zieht nicht
   von selbst nach: ein neuer Kern heißt bauen, Release setzen, Tarball-URL in
-  `converter/package.json` hochziehen. Die Toolchain ist dabei nicht das
-  Hindernis (gebaut gegen Qt 6.10.2 mit Emscripten 4.0.7 – das Paar, auf das
-  MuseScore selbst zielt); im Weg steht die Auslagerung von MuseScores
-  `src/framework` in ein eigenes Repository. Der Selbsttest der Betriebsdiagnose
+  `converter/package.json` hochziehen. Seit dem Wechsel von Qt-webmscore auf die
+  Qt-freie [scoreview-engine](https://github.com/AndiMb/scoreview-engine) ist
+  das deutlich leichter: MuseScore als ungepatchtes Submodul, kein Qt in der
+  Toolchain, und ein Korpus-Gate über 569 Partituren prüft jeden Sprung gegen
+  die vorige Ausgabe. Der Selbsttest der Betriebsdiagnose
   prüft deshalb für beide Wege dieselben Zusagen aus M2/M4/M7.
 
-Zwei Rauheiten des Forks fängt der Konverter selbst ab: MuseScores Qt-Schicht
-liest beim Start `navigator.languages`, und das globale `navigator` bringt Node
-erst ab Version 21 mit – unter Node 18 und 20 startet das Wasm-Modul sonst nicht,
-`convert.mjs` legt deshalb vorher eines an. Und MuseScores Qt-Meldungen gehen auf
-stdout (dasselbe Bild wie [M3](#m3-stdout-ist-nicht-sauber)), wo das
-JSON-Ergebnis steht – sie werden nach stderr umgeleitet.
+Zwei Vorkehrungen trifft der Konverter selbst: Er hält einen
+`navigator`-Shim bereit (den brauchte der Qt-webmscore-Vorgänger unter
+Node 18/20 zwingend; die Qt-freie Engine liest `navigator` nicht mehr, der
+Shim kostet nichts und hält die Umgebung über Node-Versionen gleich). Und
+stdout wird nach stderr umgeleitet (dasselbe Bild wie
+[M3](#m3-stdout-ist-nicht-sauber)), damit Engine- oder Emscripten-Meldungen
+nie das JSON-Ergebnis verschmutzen.
 
 #### Was auch der lokale Weg nicht löst: echtes SaaS
 
 Auf verwalteten Instanzen, die weder eine Node-Laufzeit noch das Starten von
 Prozessen erlauben, ist **serverseitiges Rendern nicht möglich** – auch nicht in
-PHP selbst. Das Wasm-Modul ist ein Emscripten-Build: 17 MB Code, der
-162 Funktionen aus seiner JavaScript-Laufzeit importiert und keinen einzigen
-WASI-Import trägt. Eine PHP-Wasm-Erweiterung (wasmer, wasmtime, extism) müsste
+PHP selbst. Das Wasm-Modul ist ein Emscripten-Build: rund 9 MB Code, der
+seine Importe aus der JavaScript-Laufzeit von Emscripten bezieht und keinen
+einzigen WASI-Import trägt. Eine PHP-Wasm-Erweiterung (wasmer, wasmtime, extism) müsste
 diese Laufzeit vollständig nachbauen – und wäre ihrerseits eine
 PECL/FFI-Erweiterung, die auf verwaltetem Hosting nicht installierbar ist. Ein
 WASI-Build scheidet aus, weil Qt für WebAssembly nur Emscripten kennt.

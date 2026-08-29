@@ -21,6 +21,22 @@
 
 import DOMPurify from 'dompurify'
 
+// Glyph-Referenzen der scoreview-engine (Browser-Backend): Text steht als
+// <path id="gN"> in <defs> und wird per <use xlink:href="#gN"> referenziert
+// (halbiert die SVG-Groesse gegenueber wiederholten Pfaden). href bleibt fuer
+// alle anderen Elemente und fuer alles, was kein reines "#wort"-Fragment ist,
+// verboten - insbesondere externe URLs und javascript: (genau die Muster, an
+// denen die alte Regex-Fassung scheiterte).
+const LOCAL_FRAGMENT = /^#[A-Za-z0-9_.:-]+$/
+
+DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+	if ((data.attrName === 'href' || data.attrName === 'xlink:href')
+		&& node.tagName?.toLowerCase() === 'use'
+		&& LOCAL_FRAGMENT.test(data.attrValue)) {
+		data.forceKeepAttr = true
+	}
+})
+
 // Was ein von MuseScore erzeugtes Notenbild tatsächlich braucht - alles
 // andere fliegt raus. Ermittelt aus den real ausgelieferten SVGs der
 // Testpartituren (siehe M9/M10: adressiert wird ueber `class` - dort stehen
@@ -61,24 +77,33 @@ const ALLOWED_ATTR = [
  * Bereinigt SVG-Text für das direkte Einbetten ins DOM.
  *
  * Härter als eine reine Tag-/Attribut-Allowlist: `href`/`xlink:href` sind
- * gar nicht erlaubt (kein `javascript:`, aber auch kein Nachladen von einer
- * fremden Adresse über `<use>` oder `<image>`), `<foreignObject>` ist nicht
- * erlaubt (dort lebt sonst beliebiges HTML), und `<style>` ist nicht erlaubt
- * (sonst könnte `url(...)` externe Ressourcen ziehen und damit den Aufruf
- * einer fremden Adresse verraten). Ein MuseScore-Notenbild braucht nichts
- * davon - alle Grafik steckt in `path`/`polyline`/`text`.
+ * nur als lokale `#fragment`-Referenz auf `<use>` erlaubt (der Hook oben -
+ * kein `javascript:`, kein Nachladen von einer fremden Adresse über `<use>`
+ * oder `<image>`), `<foreignObject>` ist nicht erlaubt (dort lebt sonst
+ * beliebiges HTML), und `<style>` ist nicht erlaubt (sonst könnte `url(...)`
+ * externe Ressourcen ziehen und damit den Aufruf einer fremden Adresse
+ * verraten). Ein MuseScore-Notenbild braucht nichts davon - alle Grafik
+ * steckt in `path`/`polyline`/`text` bzw. `defs`/`use`.
  *
  * @param {string} svgText
  * @return {string}
  */
 export function sanitizeSvg(svgText) {
 	return DOMPurify.sanitize(svgText, {
-		USE_PROFILES: { svg: true, svgFilters: false, html: false, mathMl: false },
+		// KEIN USE_PROFILES mehr: sind Profile gesetzt, gewinnen deren
+		// eingebaute Listen und ALLOWED_TAGS/ALLOWED_ATTR waren wirkungslos
+		// (nachgemessen: <use> flog trotz Allowlist raus, href blieb trotz
+		// fehlender Freigabe drin - deshalb stand href frueher im
+		// FORBID_ATTR). Die expliziten Listen oben sind die Allowlist, wie
+		// es der Kommentar ueber ihnen immer behauptet hat.
 		ALLOWED_TAGS,
 		ALLOWED_ATTR,
 		// Nie erlauben, auch wenn eine Allowlist sie sonst durchliesse.
+		// href/xlink:href stehen NICHT hier: der Hook oben laesst genau die
+		// lokale <use>-Fragmentform durch, alles andere faellt schon durch
+		// die fehlende Freigabe in ALLOWED_ATTR.
 		FORBID_TAGS: ['script', 'foreignObject', 'iframe', 'style', 'set', 'animate', 'animateTransform', 'animateMotion', 'handler'],
-		FORBID_ATTR: ['href', 'xlink:href', 'attributeName', 'to', 'from', 'values', 'begin'],
+		FORBID_ATTR: ['attributeName', 'to', 'from', 'values', 'begin'],
 		// Datenattribute bringen hier keinen Nutzen, koennen aber Payloads tragen.
 		ALLOW_DATA_ATTR: false,
 		ALLOW_ARIA_ATTR: false,

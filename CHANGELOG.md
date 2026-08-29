@@ -24,6 +24,21 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 ### Geändert
 
+- **Der lokale Konvertierungsweg läuft jetzt auf der
+  [scoreview-engine](https://github.com/AndiMb/scoreview-engine)**
+  (`v4.7.4-engine.2`) statt auf dem Qt-webmscore-Fork: derselbe
+  MuseScore-Kern 4.7.4, aber Qt-frei gebaut (MuseScore als ungepatchtes,
+  gepinntes Submodul). Halber Wasm-Fußabdruck (9 statt 17,5 MB), rund
+  dreimal schnellere Konvertierung, und die `duration` in den Metadaten
+  entspricht jetzt der von Desktop-MuseScore (webmscore meldete sie aus
+  einem veralteten Zwischenstand). Die Engine ist korpus-geprüft: 569
+  Testpartituren gegen das Qt-webmscore-Release und gegen
+  Desktop-MuseScore 4.7.4, jede Abweichung einzeln begründet. Text steht
+  im SVG jetzt als referenzierte Glyph-Umrisse (`<defs>`/`<use>`, etwa
+  halbe Dateigröße); der SVG-Sanitizer des Viewers lässt genau diese
+  lokale Referenzform zu – Nebenbefund dabei: seine Allowlists waren
+  wegen `USE_PROFILES` bisher wirkungslos, jetzt gelten sie wirklich.
+  Die Notenkopf-Lageprobe des Selbsttests liest beide Glyph-Formen.
 - Der lokale Konvertierungsweg läuft auf webmscore `v4.7.4-scoreview.6`:
   derselbe MuseScore-Kern 4.7.4, aber gegen Qt 6.10.2 mit Emscripten 4.0.7
   gebaut statt gegen Qt 6.4.3 mit Emscripten 3.1.14. Am Ergebnis ändert sich

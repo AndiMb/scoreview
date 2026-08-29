@@ -78,7 +78,7 @@ getrennt, weil sie von außen alle gleich aussehen:
   ```sh
   sudo -u www-data /usr/bin/node --version
   ```
-- **„Das webmscore-Paket fehlt"** – im App-Paket fehlt
+- **„Das Engine-Paket (scoreview-engine) fehlt"** – im App-Paket fehlt
   `converter/node_modules`. Das passiert, wenn die App aus einem Git-Checkout
   statt aus einem Release-Tarball installiert wurde; dort ist das Verzeichnis
   gitignored. Nachholen mit `npm ci` in `scoreview/converter/`.

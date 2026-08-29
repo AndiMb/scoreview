@@ -153,4 +153,26 @@ describe('checkPromises', () => {
 		expect(details.markedSegments).toBe(1)
 		expect(details.maxNoteOffset).toBe(0)
 	})
+
+	it('liest die Notenkopf-Lage auch aus der Glyph-Form der scoreview-engine', () => {
+		// Die Engine zeichnet Notenkoepfe als <use>-Referenz in einer Gruppe
+		// mit Translations-Matrix statt als Pfad mit d="M x ..." - die
+		// Lageprobe muss beide Schreibweisen lesen, sonst ist sie auf dem
+		// Engine-Weg stillschweigend wirkungslos.
+		const result = healthy()
+		result.svgs = [seite('<g class="Note seg-0 st-0 vc-0">\n<g transform="matrix(1 0 0 1 0.9 2148.8)">\n<use xlink:href="#g4"/>\n</g>\n</g>')]
+		const { problems, details } = checkPromises(result)
+		expect(problems).toEqual([])
+		expect(details.markedSegments).toBe(1)
+		expect(details.maxNoteOffset).toBe(0.9)
+	})
+
+	it('erkennt die verschobene Nummerierung auch in der Glyph-Form', () => {
+		const result = healthy()
+		result.timing.elements = { 0: { page: 0, x: 1000, y: 0, w: 107, h: 900 } }
+		result.svgs = [seite('<g class="Note seg-0 st-0 vc-0">\n<g transform="matrix(1 0 0 1 1300 500)">\n<use xlink:href="#g4"/>\n</g>\n</g>')]
+		expect(checkPromises(result).problems).toEqual([
+			expect.stringContaining('nicht auf ihrer Segmentposition'),
+		])
+	})
 })

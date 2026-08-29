@@ -15,9 +15,9 @@
  *   node convert.mjs [--fonts <verzeichnis>] --selftest
  *
  * Ergebnis geht als eine Zeile JSON nach stdout, Fehler als Klartext nach
- * stderr mit Exitcode != 0. Kein Lograuschen auf stdout: webmscore schreibt
- * MuseScores Qt-Meldungen dorthin (M3 beim Sidecar, hier dasselbe Bild), sie
- * werden deshalb unten stillgelegt, bevor das Modul geladen wird.
+ * stderr mit Exitcode != 0. Kein Lograuschen auf stdout: Engine- und
+ * Emscripten-Meldungen landen dort (M3 beim Sidecar, hier dasselbe Bild),
+ * sie werden deshalb unten stillgelegt, bevor das Modul geladen wird.
  */
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
@@ -29,16 +29,13 @@ import { checkPromises, toPositions } from './lib/artifacts.mjs'
 const HERE = dirname(fileURLToPath(import.meta.url))
 
 /**
- * Muss VOR dem webmscore-Import passieren: MuseScores Qt-Schicht liest beim
- * Start `navigator.languages`. Das globale `navigator` bringt Node erst seit
- * Version 21 mit, und der Node-Shim des Forks legt keines an - unter Node 18
- * und 20 bricht der Start sonst in Emscriptens `__emval_get_property` mit
- * "Cannot read properties of undefined (reading 'length')" ab (gemessen mit
- * webmscore v4.7.4-scoreview.6, Node 18 und 20; unter 22 laeuft derselbe
- * Build). Hinterlegt wird deshalb ein navigator mit den Feldern, die Node ab 21
- * von sich aus mitbringt; noetig ist davon gemessen nur `languages`, die
- * uebrigen stehen dabei, damit unter 18 und 20 dieselbe Umgebung steht wie
- * unter 22. Ein vorhandenes navigator bleibt unangetastet.
+ * Muss VOR dem Engine-Import passieren: unter dem Qt-Vorgaenger (webmscore)
+ * las MuseScores Qt-Schicht beim Start `navigator.languages`, was unter
+ * Node 18/20 (kein globales navigator) den Start abbrechen liess. Die
+ * Qt-freie scoreview-engine liest navigator nicht mehr - der Shim bleibt
+ * vorsorglich stehen, weil er nichts kostet, unter allen Node-Versionen
+ * dieselbe Umgebung herstellt und ein vorhandenes navigator unangetastet
+ * laesst.
  */
 if (globalThis.navigator?.languages === undefined) {
 	Object.defineProperty(globalThis, 'navigator', {
@@ -54,14 +51,20 @@ if (globalThis.navigator?.languages === undefined) {
 	})
 }
 
-// MuseScore meldet Fontladen und Audio-Engine ueber stdout. Diese Zeilen
-// wuerden das JSON-Ergebnis unbrauchbar machen, deshalb wandern sie nach
-// stderr - dort sind sie fuer die Fehlersuche noch da (LocalConverter legt
-// stderr ins Nextcloud-Log, wenn die Konvertierung scheitert).
+// Engine-Logs (kors-Logger, per Voreinstellung still) und Emscripten-Meldungen
+// gehen ueber stdout. Solche Zeilen wuerden das JSON-Ergebnis unbrauchbar
+// machen, deshalb wandern sie nach stderr - dort sind sie fuer die
+// Fehlersuche noch da (LocalConverter legt stderr ins Nextcloud-Log, wenn
+// die Konvertierung scheitert).
 const stdoutWrite = process.stdout.write.bind(process.stdout)
 process.stdout.write = (chunk, ...rest) => process.stderr.write(chunk, ...rest)
 
-const { default: WebMscore } = await import('webmscore4')
+// Die Qt-freie scoreview-engine, API-kompatibel zum frueheren webmscore4
+// fuer genau die hier benutzte Oberflaeche (load/addFont, npages, saveSvg,
+// saveMidi, savePositions, metadata). Halber wasm-Fussabdruck, ~3x
+// schnellere Konvertierung, Durations wie Desktop-MuseScore (webmscore
+// meldete sie vor dem ersten saveMidi aus einem stalen Cache).
+const { default: WebMscore } = await import('scoreview-engine')
 
 /** Dateiendungen, die MuseScores Fontengine liest. */
 const FONT_ENDUNGEN = /\.(woff2?|otf|ttf|ttc)$/i
@@ -118,18 +121,18 @@ async function loadFonts(fontVerzeichnis) {
  *
  * Zur Laufzeit ist das nicht vollstaendig zu erfahren: `WebMscore.version()`
  * liefert die MSCZ-DATEIFORMATversion (470), und das package.json des
- * webmscore-Pakets nennt nur den MuseScore-Kern (4.7.4), nicht den Build des
+ * Engine-Pakets nennt nur den MuseScore-Kern (4.7.4), nicht den Build des
  * Forks - zwei Builds desselben Kerns tragen dieselbe Nummer. Die
  * vollstaendige Angabe ist deshalb der Release-Tag, auf den die Abhaengigkeit
  * hier zeigt - eine Stelle, dieselbe, die auch bestimmt, was installiert wird.
  */
 async function museScoreVersion() {
 	const own = JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8'))
-	const tag = /\/download\/v?([^/]+)\//.exec(own.dependencies?.webmscore4 ?? '')?.[1]
+	const tag = /\/download\/v?([^/]+)\//.exec(own.dependencies?.['scoreview-engine'] ?? '')?.[1]
 	const formatVersion = await WebMscore.version()
-	// Ohne fuehrendes "webmscore": die Oberflaeche setzt "MuseScore" davor
+	// Ohne fuehrendes "MuseScore": die Oberflaeche setzt es davor
 	// (siehe AdminSettings.vue), sonst stuende dort beides.
-	return `${tag ?? 'unbekannt'} (webmscore, Dateiformat ${formatVersion})`
+	return `${tag ?? 'unbekannt'} (scoreview-engine, Dateiformat ${formatVersion})`
 }
 
 /**
@@ -143,14 +146,17 @@ async function convert(msczPath, fontVerzeichnis) {
 
 	const pageCount = await score.npages()
 	if (pageCount < 1) {
-		throw new Error('webmscore lieferte keine SVG-Seite.')
+		throw new Error('Die Engine lieferte keine SVG-Seite.')
 	}
 
 	const pages = []
 	for (let i = 0; i < pageCount; i++) {
-		// drawPageBackground=true: der weisse Hintergrundpfad gehoert dazu
-		// (M9), sonst steht die Partitur auf dem Seitenhintergrund des
-		// Viewers statt auf Papier.
+		// drawPageBackground=true steht hier aus webmscore-Zeiten; die
+		// scoreview-engine malt grundsaetzlich KEINEN Hintergrundpfad und
+		// ignoriert den Parameter. Das ist die richtige Form: der Viewer
+		// schaltete den webmscore-Hintergrund ohnehin per path[class=""]
+		// auf fill:none (der Cursor liegt HINTER dem SVG), das Papierweiss
+		// kommt aus dem CSS der Seite (ScorePage.vue).
 		pages.push(await score.saveSvg(i, true))
 	}
 

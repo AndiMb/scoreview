@@ -25,7 +25,7 @@ eine Referenz.
 | Pfad | Inhalt |
 |---|---|
 | `scoreview/` | Die Nextcloud-App (PHP in `lib/`, Vue 3 in `src/`) |
-| `scoreview/converter/` | Lokaler Konvertierungsweg: Node + MuseScore als WebAssembly (webmscore) |
+| `scoreview/converter/` | Lokaler Konvertierungsweg: Node + MuseScore als WebAssembly (scoreview-engine) |
 | `sidecar/` | Docker-Container mit MuseScore 4 + Flask-HTTP-API (Paket `scoreview_sidecar`, hinter gunicorn) |
 | `docs/` | Die gepflegte Dokumentation |
 
@@ -73,7 +73,7 @@ eines Durchlaufs gegen die Testinstanz.
 Lokaler Konverter, aus `scoreview/converter/`:
 
 ```sh
-npm ci                       # laedt webmscore als Release-Tarball (~11 MB)
+npm ci                       # laedt die scoreview-engine als Release-Tarball (~9 MB)
 node convert.mjs --selftest  # echte Konvertierung, prueft M2/M4/M7
 ```
 

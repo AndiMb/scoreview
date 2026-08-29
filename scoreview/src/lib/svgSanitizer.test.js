@@ -7,9 +7,18 @@
 import { describe, expect, it } from 'vitest'
 import { sanitizeSvg } from './svgSanitizer.js'
 
-/** Enthaelt das Ergebnis noch einen ausfuehrbaren/nachladenden Vektor? */
+/**
+ * Enthaelt das Ergebnis noch einen ausfuehrbaren/nachladenden Vektor?
+ *
+ * `<use>` und `href` sind seit der Browser-Konvertierung nicht mehr pauschal
+ * verdaechtig: die scoreview-engine schreibt Text als Glyph-Outlines mit
+ * `<use xlink:href="#gN">` auf lokale `<defs>` (siehe svgSanitizer.js).
+ * Gefaehrlich bleibt jedes href, dessen Wert NICHT ein lokales
+ * "#fragment" ist - genau das prueft das zweite Muster.
+ */
 function isDangerous(svg) {
-	return /<script|\son[a-z]+\s*=|javascript:|<foreignObject|<iframe|attributeName|<use|<style|href\s*=/i.test(svg)
+	return /<script|\son[a-z]+\s*=|javascript:|<foreignObject|<iframe|attributeName|<style/i.test(svg)
+		|| /href\s*=\s*["'](?!#)/i.test(svg)
 }
 
 describe('sanitizeSvg - Umgehungsmuster, die die alte Regex-Fassung durchliess', () => {
@@ -84,5 +93,20 @@ describe('sanitizeSvg - das echte Notenbild darf nicht kaputtgehen', () => {
 		expect(out).toMatch(/transform="translate\(10,20\)"/)
 		expect(out).toMatch(/Sopran/)
 		expect(out).toMatch(/font-size="20"/)
+	})
+
+	it('behaelt Glyph-Referenzen der scoreview-engine (<use> auf lokale defs)', () => {
+		// Browser-Backend: Text steht als <path id="gN"> in <defs> und wird
+		// per <use xlink:href="#gN"> referenziert. Fliegt die Referenz raus,
+		// ist jede Notenseite ohne sichtbaren Text.
+		const svg = '<svg><defs><path id="g6" d="M1 2"/></defs><g class="VibratoSegment"><use xlink:href="#g6" transform="translate(0 0)"/></g></svg>'
+		const out = sanitizeSvg(svg)
+		expect(out).toMatch(/<use[^>]*href="#g6"/)
+		expect(out).toMatch(/id="g6"/)
+	})
+
+	it('entfernt use-Referenzen, die KEIN lokales Fragment sind', () => {
+		const out = sanitizeSvg('<svg><use xlink:href="http://evil/x.svg#a"/><use href="//evil/y#b"/></svg>')
+		expect(out).not.toMatch(/href\s*=/i)
 	})
 })

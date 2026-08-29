@@ -81,21 +81,21 @@ aber von Nextcloud aus nicht erreichbar.
 Aus `scoreview/converter/`:
 
 ```sh
-npm ci                       # laedt rund 11 MB webmscore als Release-Tarball
+npm ci                       # laedt rund 9 MB scoreview-engine als Release-Tarball
 node convert.mjs --selftest  # echte Konvertierung, prueft M2/M4/M7
 node convert.mjs partitur.mscz /tmp/out   # schreibt die Artefakte einzeln
 ```
 
 Die reine Umformungslogik liegt in `lib/artifacts.mjs` und ist ohne Wasm
 testbar; ihre Tests laufen in `npm test` der App mit (vitest sammelt das
-Verzeichnis mit ein). Alles, was webmscore selbst braucht, deckt der Selbsttest
+Verzeichnis mit ein). Alles, was die Engine selbst braucht, deckt der Selbsttest
 ab – lokal wie in CI.
 
-Welches webmscore installiert wird, steht als **Release-Tarball-URL** in
-`converter/package.json`. Eine neue MuseScore-Version heißt: im Fork
-[AndiMb/webmscore](https://github.com/AndiMb/webmscore) bauen, ein Release
-setzen, hier die URL hochziehen, `npm install` laufen lassen und den Selbsttest
-prüfen. Die Datei `converter/selftest-score.mscz` ist eine Kopie von
+Welche Engine installiert wird, steht als **Release-Tarball-URL** in
+`converter/package.json`. Eine neue MuseScore-Version heißt: in
+[AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) das
+Submodul heben, das Korpus-Gate bestehen, ein Release setzen, hier die URL
+hochziehen, `npm install` laufen lassen und den Selbsttest prüfen. Die Datei `converter/selftest-score.mscz` ist eine Kopie von
 `sidecar/testdata/repeat-test.mscz` – dieselbe Partitur, die auch der Sidecar
 für seinen Selbsttest benutzt; sie enthält Wiederholung, Volta und D.C., damit
 M7 überhaupt prüfbar ist.
@@ -105,7 +105,7 @@ M7 überhaupt prüfbar ist.
 `.github/workflows/ci.yml` fährt alle Sprachen des Repos: Frontend (Build,
 vitest, ESLint, Stylelint, l10n-Vollständigkeit), Backend (Syntaxprüfung,
 Codingstandard, PHPUnit über mehrere PHP-Versionen), lokaler Konverter (echte
-Konvertierung mit webmscore, auf Node 18 und 22) und Sidecar (pytest über
+Konvertierung mit der scoreview-engine, auf Node 18 und 22) und Sidecar (pytest über
 mehrere Python-Versionen). Was lokal grün ist, ist es dort in aller Regel auch.
 
 Dazu ein eigener Job, der `appinfo/info.xml` gegen das Schema des App Stores
@@ -115,8 +115,8 @@ nach dem Tag, wenn die Version schon vergeben ist.
 `.github/dependabot.yml` hält die Abhängigkeiten wöchentlich aktuell, in vier
 getrennten Bäumen (App, lokaler Konverter, PHP-Dev-Pakete, Sidecar) plus den
 GitHub Actions; jeder dieser Pull Requests läuft durch dieselbe CI. Für
-`webmscore4` greift das nicht – die Abhängigkeit hängt an einer Release-URL,
-und die kennt keine Registry. Dieser Sprung bleibt Handarbeit.
+`scoreview-engine` greift das nicht – die Abhängigkeit hängt an einer
+Release-URL, und die kennt keine Registry. Dieser Sprung bleibt Handarbeit.
 
 ## Übersetzungen
 
@@ -177,14 +177,14 @@ Ausgangsindex mitführen, sonst misst er nur den Effektbus und meldet fälschlic
 
 Ein Tag `v*` löst `.github/workflows/release.yml` aus. Die Action baut das
 Frontend, installiert die PHP-Abhängigkeiten ohne Dev-Pakete **und den lokalen
-Konverter samt webmscore**, stellt daraus den Auslieferungsbaum zusammen,
+Konverter samt Engine**, stellt daraus den Auslieferungsbaum zusammen,
 signiert ihn, packt ihn und hängt ihn an das GitHub-Release.
 
 Der Umweg über die Action ist notwendig, nicht bequem: `scoreview/js/` ist
 gitignored, ein direkt aus dem Repo gepacktes `scoreview/` enthielte also **kein
 einziges Frontend-Bundle** und wäre unbrauchbar. Der Tarball muss aus einem
 echten Build entstehen, nicht aus einem Checkout. Dasselbe gilt für den
-Konverter: Eine Instanz ohne Container hat kein npm, mit dem sie webmscore
+Konverter: Eine Instanz ohne Container hat kein npm, mit dem sie die Engine
 nachholen könnte.
 
 **Vorgeschaltet ist die komplette CI**: `release.yml` ruft `ci.yml` per
@@ -211,11 +211,10 @@ drei Posten, die zur Laufzeit niemand braucht:
 
 | Posten | Größe | Warum entbehrlich |
 |---|---|---|
-| `webmscore.lib.symbols` | 6,1 MB | Symboltabelle, nur zum Debuggen des Wasm-Moduls |
-| Browser-Bundles von webmscore | 1,0 MB | Der Konverter läuft unter Node, nicht im Browser |
+| Browser-Bundles der Engine | 0,4 MB | Der Konverter läuft unter Node, nicht im Browser |
 | `@librescore/fonts` | 4,2 MB | Nur für chinesische, japanische und koreanische Liedtexte; nachrüstbar über `cjk_font_dir` (siehe [Grenzwerte](limits.md#bekannte-lücken)) |
 
-Das Paket liegt damit bei rund 14 statt 18 MB. Die Action bricht ab, wenn der
+Das Paket bleibt damit unter den 20 MB. Die Action bricht ab, wenn der
 Tarball die 20 MB überschreitet – lieber dort auffallen als nach dem Hochladen.
 
 ## Veröffentlichung im App Store

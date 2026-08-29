@@ -102,20 +102,21 @@ jobs:
 
   # Der lokale Konvertierungsweg (docs/architecture.md E3). Die reine
   # Umformungslogik deckt schon `npm test` im Frontend-Job ab; hier laeuft
-  # der Weg EINMAL vollstaendig - mit echtem webmscore-Wasm, echter Partitur
-  # und den Zusagen aus M2/M4/M7 als Pruefung. Genau das faengt ab, was ein
-  # webmscore-Versionswechsel still kaputtmachen wuerde.
+  # der Weg EINMAL vollstaendig - mit echtem Engine-Wasm (scoreview-engine),
+  # echter Partitur und den Zusagen aus M2/M4/M7 als Pruefung. Genau das
+  # faengt ab, was ein Engine-Versionswechsel still kaputtmachen wuerde.
   konverter:
-    name: Lokaler Konverter (webmscore, Node ${{ matrix.node }})
+    name: Lokaler Konverter (scoreview-engine, Node ${{ matrix.node }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         # Unter- und Obergrenze der zugesagten Node-Spanne (siehe "engines" in
-        # converter/package.json). Die Untergrenze ist keine Formalie: Das
-        # globale `navigator` gibt es erst ab Node 21, und MuseScores Qt-Schicht
-        # liest es beim Start - ein webmscore-Build, der das nicht selbst
-        # abfaengt, faellt genau hier auf und nirgends sonst.
+        # converter/package.json). Die Untergrenze bleibt geprueft, obwohl ihr
+        # Ausloeser von damals (Qt-webmscore las `navigator`, das es global
+        # erst ab Node 21 gibt) mit der Qt-freien Engine entfallen ist -
+        # Emscripten-Glue hat je Version eigene Node-Ansprueche, und die
+        # sollen hier auffallen und nirgends sonst.
         node: ['18', '22']
     defaults:
       run:

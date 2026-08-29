@@ -93,17 +93,17 @@ jobs:
 
       # Der lokale Konvertierungsweg (docs/architecture.md E3) muss FERTIG
       # INSTALLIERT ins Paket: eine Instanz ohne Container hat kein npm, mit
-      # dem sie das nachholen koennte. Das sind rund 21 MB webmscore-Wasm im
+      # dem sie das nachholen koennte. Das sind rund 19 MB Engine-Wasm im
       # Tarball - der Preis dafuer, dass ScoreView ohne Sidecar laeuft.
-      - name: Konverter installieren (webmscore)
+      - name: Konverter installieren (scoreview-engine)
         working-directory: scoreview/converter
         run: npm ci --omit=dev
 
-      - name: Gegenprobe - webmscore liegt im Paket
+      - name: Gegenprobe - die Engine liegt im Paket
         working-directory: scoreview/converter
         run: |
-          if [ ! -f node_modules/webmscore4/webmscore.lib.wasm ]; then
-            echo "webmscore fehlt im Konverter - Release abgebrochen." >&2
+          if [ ! -f node_modules/scoreview-engine/scoreview.lib.wasm ]; then
+            echo "Die scoreview-engine fehlt im Konverter - Release abgebrochen." >&2
             exit 1
           fi
           node convert.mjs --selftest 2>/dev/null
@@ -131,12 +131,10 @@ jobs:
           fi
 
       # Was hier NICHT mitgeht und warum: Der App Store nimmt Archive nur bis
-      # 20 MB an. Der Symbol-Map und die Browser-Bundles von webmscore sind
-      # 7 MB, die nur beim Debuggen des Wasm-Moduls bzw. im Browser gebraucht
-      # werden; die CJK-Fonts sind 4,2 MB fuer chinesische, japanische und
-      # koreanische Liedtexte. Der Konverter laeuft ohne beides (nachgemessen),
-      # und das Paket bleibt bei rund 14 statt 18 MB - Luft, die ein kuenftiger
-      # MuseScore-Sprung braucht. Siehe docs/limits.md.
+      # 20 MB an. Die Browser-Bundles der Engine braucht nur, wer sie im
+      # Browser laufen laesst - hier konvertiert Node; die CJK-Fonts sind
+      # 4,2 MB fuer chinesische, japanische und koreanische Liedtexte. Der
+      # Konverter laeuft ohne beides (nachgemessen). Siehe docs/limits.md.
       - name: Auslieferungsbaum zusammenstellen
         run: |
           # pipefail ist hier keine Formalie: ohne ihn zaehlt nur der Status des
@@ -165,11 +163,8 @@ jobs:
             --exclude='scoreview/composer.lock' \
             --exclude='scoreview/converter/package-lock.json' \
             --exclude='scoreview/converter/lib/*.test.mjs' \
-            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.lib.symbols' \
-            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.js' \
-            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.mjs' \
-            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.cdn.mjs' \
-            --exclude='scoreview/converter/node_modules/webmscore4/webmscore.webpack.mjs' \
+            --exclude='scoreview/converter/node_modules/scoreview-engine/scoreview.js' \
+            --exclude='scoreview/converter/node_modules/scoreview-engine/scoreview.mjs' \
             --exclude='scoreview/converter/node_modules/@librescore' \
             scoreview | tar --extract --file - --directory dist
           du -sh dist/scoreview
@@ -190,9 +185,9 @@ jobs:
             converter/convert.mjs \
             converter/package.json \
             converter/selftest-score.mscz \
-            converter/node_modules/webmscore4/webmscore.lib.wasm \
-            converter/node_modules/webmscore4/webmscore.lib.data \
-            converter/node_modules/webmscore4/webmscore.nodejs.cjs; do
+            converter/node_modules/scoreview-engine/scoreview.lib.wasm \
+            converter/node_modules/scoreview-engine/scoreview.lib.data \
+            converter/node_modules/scoreview-engine/scoreview.nodejs.cjs; do
             if [ ! -e "dist/scoreview/$PFLICHT" ]; then
               echo "Im Paket fehlt: $PFLICHT - Release abgebrochen." >&2
               exit 1

@@ -76,9 +76,10 @@ Zahl (dort tut das eine Semaphore). Auf einem kleinen Server kann eine
 Sammel-Vorabkonvertierung (`eager_conversion`) deshalb spürbar werden.
 
 **Die MuseScore-Version des lokalen Wegs hängt an einem Fork.**
-[AndiMb/webmscore](https://github.com/AndiMb/webmscore) trägt 4.7.4; sie zieht
-nicht von selbst nach, wenn MuseScore weitergeht – ein neuer Kern heißt, den
-Fork zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
+[AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) trägt
+4.7.4 (MuseScore als gepinnter, ungepatchter Submodul-Stand, Qt-frei); sie
+zieht nicht von selbst nach, wenn MuseScore weitergeht – ein neuer Kern heißt,
+die Engine zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
 Betriebsdiagnose prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine
 neuere MuseScore-Version verfügbar wäre, meldet er nicht.
 

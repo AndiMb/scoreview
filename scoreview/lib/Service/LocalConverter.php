@@ -17,8 +17,8 @@ use Psr\Log\LoggerInterface;
  *
  * Die eigentliche Arbeit macht `converter/convert.mjs`; diese Klasse startet
  * ihn, bewacht ihn und liest die Artefakte zurueck. Sie kennt bewusst nichts
- * von webmscore: was der Konverter erzeugt, ist die Cache-Form der App und
- * damit exakt das, was auch der Sidecar liefert.
+ * vom Wasm-Modul dahinter (scoreview-engine): was der Konverter erzeugt, ist
+ * die Cache-Form der App und damit exakt das, was auch der Sidecar liefert.
  *
  * **Ein Prozess je Partitur, und das ist kein Versehen.** Die Wasm-Instanz
  * ueber mehrere Konvertierungen zu halten, hiesse einen langlebigen Dienst zu
@@ -103,7 +103,7 @@ class LocalConverter {
 	 * Ist der lokale Weg ueberhaupt lauffaehig? Beantwortet die drei Fragen
 	 * getrennt, die von aussen alle nur als "Konvertierung schlaegt fehl"
 	 * sichtbar waeren: darf PHP Prozesse starten, gibt es ein `node`, und
-	 * liegt das webmscore-Paket neben dem Konverter.
+	 * liegt das Engine-Paket (scoreview-engine) neben dem Konverter.
 	 *
 	 * @return array{available: bool, procOpen: bool, nodePath: ?string, nodeVersion: ?string, converterInstalled: bool, error: ?string}
 	 */
@@ -119,7 +119,7 @@ class LocalConverter {
 		} elseif ($nodePath === null) {
 			$error = 'Keine Node.js-Laufzeit gefunden. Pfad in den Einstellungen eintragen.';
 		} elseif (!$installed) {
-			$error = 'Das webmscore-Paket fehlt neben dem Konverter (converter/node_modules).';
+			$error = 'Das Engine-Paket (scoreview-engine) fehlt neben dem Konverter (converter/node_modules).';
 		}
 
 		return [
@@ -139,7 +139,7 @@ class LocalConverter {
 
 	private function isConverterInstalled(): bool {
 		return is_file($this->getConverterDir() . '/convert.mjs')
-			&& is_dir($this->getConverterDir() . '/node_modules/webmscore4');
+			&& is_dir($this->getConverterDir() . '/node_modules/scoreview-engine');
 	}
 
 	/**

@@ -85,7 +85,16 @@ export function svgSegments(svgText) {
 	// Nur Notenkoepfe fuer die Lageprobe: sie sitzen auf der Segmentposition.
 	// Ein Vorzeichen steht links davon, ein Hals reicht darueber hinaus -
 	// beides waeren Ausreisser ohne Aussage.
+	//
+	// Zwei Schreibweisen desselben Notenkopfs: Qt-webmscore zeichnete ihn als
+	// <path class="Note ..." d="M x ...">, die scoreview-engine als Gruppe
+	// <g class="Note ..."><g transform="matrix(1 0 0 1 x y)"><use .../></g></g>
+	// (Glyph-Referenz statt wiederholter Pfaddaten). Beide Muster lesen die
+	// x-Position des ersten gezeichneten Punkts bzw. des Glyph-Ursprungs.
 	for (const treffer of svgText.matchAll(/<path class="Note\b[^"]*\bseg-(\d+)\b[^"]*"[^>]*?\sd="M\s*(-?[\d.]+)/g)) {
+		notes.push({ id: Number(treffer[1]), x: Number(treffer[2]) })
+	}
+	for (const treffer of svgText.matchAll(/<g class="Note\b[^"]*\bseg-(\d+)\b[^"]*">\s*<g transform="matrix\((?:[-\d.]+ ){4}(-?[\d.]+) [-\d.]+\)">/g)) {
 		notes.push({ id: Number(treffer[1]), x: Number(treffer[2]) })
 	}
 
