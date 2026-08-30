@@ -64,8 +64,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Unter- und Obergrenze aus appinfo/info.xml.
-        php: ['8.1', '8.4']
+        # Unter- und Obergrenze aus appinfo/info.xml. Beide Enden bleiben
+        # geprueft - wie bei Node und Python: max-version ist eine Zusage an
+        # den App Store, und eine ungepruefte Zusage ist keine.
+        php: ['8.1', '8.5']
     defaults:
       run:
         working-directory: scoreview
@@ -83,7 +85,7 @@ jobs:
       # zieht auch einen composer.lock hoch, der nicht mehr zur composer.json
       # passt. Nur auf einer Version - die Datei ist nicht versionsabhaengig.
       - name: composer.json und composer.lock pruefen
-        if: matrix.php == '8.4'
+        if: matrix.php == '8.1'
         run: composer validate --strict --no-check-publish
 
       - run: composer install --no-interaction --no-progress
@@ -92,9 +94,13 @@ jobs:
         run: find lib templates appinfo -name '*.php' -print0 | xargs -0 -n1 php -l
 
       # Nur auf einer Version pruefen - der Codingstandard ist nicht
-      # versionsabhaengig, und zwei identische Diffs helfen niemandem.
+      # versionsabhaengig, und zwei identische Diffs helfen niemandem. Auf der
+      # UNTERgrenze, nicht der oberen: php-cs-fixer lehnt eine PHP-Version ab,
+      # die es noch nicht kennt, und das waere ein rotes CI ueber das Werkzeug
+      # statt ueber den Code. Die Obergrenze traegt dafuer Syntaxpruefung und
+      # Unit-Tests - das, was an ihr wirklich neu ist.
       - name: Codingstandard (nextcloud/coding-standard)
-        if: matrix.php == '8.4'
+        if: matrix.php == '8.1'
         run: composer run cs:check
 
       - name: Unit-Tests (PHPUnit)
