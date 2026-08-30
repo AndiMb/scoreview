@@ -33,8 +33,8 @@ Konvertiert wird über **einen von zwei Wegen** – Sidecar oder lokal –, die
 dieselben Artefakte erzeugen (E3). Die Wahl wird an genau einer Stelle
 ausgewertet (`ConvertScoreJob`); das Frontend kennt ausschließlich die HTTP-API
 der App und erfährt nie, welcher Weg gelaufen ist. Dieses Leitprinzip bitte
-nicht aufweichen – es ist der Grund, warum der zweite Weg keine Zeile im Viewer
-gekostet hat.
+nicht aufweichen – es ist der Grund, warum ein Wechsel des Konvertierungswegs
+keine Zeile im Viewer kostet.
 
 ## Befehle
 
@@ -73,7 +73,7 @@ eines Durchlaufs gegen die Testinstanz.
 Lokaler Konverter, aus `scoreview/converter/`:
 
 ```sh
-npm ci                       # laedt die scoreview-engine als Release-Tarball (~9 MB)
+npm ci                       # laedt die scoreview-engine als Release-Tarball (~7 MB)
 node convert.mjs --selftest  # echte Konvertierung, prueft M2/M4/M7
 ```
 

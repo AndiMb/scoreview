@@ -6,28 +6,31 @@ geschätzt; wo etwas Hochrechnung ist, steht es dabei.
 
 ## Gemessene Werte
 
-Drei Partituren, gemessen auf einer gewöhnlichen Arbeitsmaschine:
+Drei Partituren, gemessen auf einer gewöhnlichen Arbeitsmaschine – beide
+Konvertierungswege in derselben Sitzung, damit die Spalten vergleichbar sind:
 
-| Partitur | Seiten | Takte | `.mscz` | Sidecar | lokal | SVG gesamt | größte Seite | MIDI | Cache gesamt |
+| Partitur | Seiten | Takte | `.mscz` | Sidecar | lokal | SVG gesamt (Sidecar / lokal) | größte Seite | MIDI | Cache (Sidecar / lokal) |
 |---|---|---|---|---|---|---|---|---|---|
-| Minipartitur | 1 | 5 | 30 KB | **6,3 s** | **1,9 s** | 107 KB | 107 KB | 0,4 KB | 111 KB |
-| Chorsatz | 4 | 58 | 114 KB | **23,0 s** | **2,9 s** | 3236 KB | 1041 KB | 12,4 KB | 5038 KB |
-| Chorsatz | 5 | 63 | 98 KB | **27,7 s** | **2,5 s** | 1174 KB | 303 KB | 8,3 KB | 4623 KB |
+| Minipartitur | 1 | 5 | 30 KB | **8,1 s** | **0,8 s** | 107 / 52 KB | 107 / 52 KB | 0,4 KB | 111 / 55 KB |
+| Chorsatz | 4 | 58 | 114 KB | **25,6 s** | **1,2 s** | 3235 / 1148 KB | 1040 / 354 KB | 12,4 KB | 3291 / 1196 KB |
+| Chorsatz | 5 | 63 | 98 KB | **31,9 s** | **1,2 s** | 1173 / 813 KB | 302 / 210 KB | 8,3 KB | 1227 / 858 KB |
 
-Die Artefaktspalten gelten für beide Konvertierungswege
-([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)): die MIDI ist
-byteweise identisch, die SVG-Summen liegen innerhalb von 0,4 %.
+Die MIDI ist auf beiden Wegen byteweise identisch
+([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)). Die
+SVG-Seiten zeigen dasselbe Bild, kodieren es aber anders: Die Engine legt jede
+Glyphe einmal in `<defs>` und setzt sie mit `<use>`, MuseScore zeichnet jeden
+Umriss erneut – je nach Notendichte 35–70 % der Dateigröße.
 
 Daraus abgeleitet:
 
-- **Konvertierungsdauer über den Sidecar ≈ 5,4 s pro Seite + 1 s Grundlast**
+- **Konvertierungsdauer über den Sidecar ≈ 6 s pro Seite + 2 s Grundlast**
   (lineare Regression über die drei Messpunkte). Daran hängt der Default von
-  `MSCORE_TIMEOUT_SECONDS` (600 s, rechnerisch ~110 Seiten). Wer sehr große
-  Partituren erwartet, rechnet mit `Seitenzahl × 5,4 s + Puffer` hoch. Die Zahl
+  `MSCORE_TIMEOUT_SECONDS` (600 s, rechnerisch rund 100 Seiten). Wer sehr große
+  Partituren erwartet, rechnet mit `Seitenzahl × 6 s + Puffer` hoch. Die Zahl
   hängt spürbar von der CPU ab – Größenordnung, keine Garantie.
-- **Lokal sind rund 1,7 s davon Grundlast** – die einmalige Übersetzung des
-  Wasm-Moduls je Prozess. Die eigentliche Konvertierung dauert 0,2–1,2 s, also
-  etwa 0,25 s pro Seite. Der lokale Weg gewinnt vor allem, weil er keine
+- **Lokal sind rund 0,45 s davon Grundlast** – Prozessstart plus Instanziierung
+  des Wasm-Moduls. Die eigentliche Konvertierung dauert 0,4–0,8 s, also
+  etwa 0,1 s pro Seite. Der lokale Weg gewinnt vor allem, weil er keine
   PNG/PDF/MusicXML mitrendert, die anschließend verworfen werden
   ([M2](architecture.md#m2-schlüssel-im---score-media-json)).
 - **Die SVG-Größe schwankt stark pro Seite** (303 KB gegen 1041 KB je nach
@@ -75,7 +78,7 @@ rund 130–250 MB Speicherbedarf, und anders als beim Sidecar begrenzt nichts ih
 Zahl (dort tut das eine Semaphore). Auf einem kleinen Server kann eine
 Sammel-Vorabkonvertierung (`eager_conversion`) deshalb spürbar werden.
 
-**Die MuseScore-Version des lokalen Wegs hängt an einem Fork.**
+**Die MuseScore-Version des lokalen Wegs hängt an einem eigenen Build.**
 [AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) trägt
 4.7.4 (MuseScore als gepinnter, ungepatchter Submodul-Stand, Qt-frei); sie
 zieht nicht von selbst nach, wenn MuseScore weitergeht – ein neuer Kern heißt,
@@ -85,7 +88,7 @@ neuere MuseScore-Version verfügbar wäre, meldet er nicht.
 
 **Keine Hervorhebung auf dem Sidecar-Weg.** Der klingende Notenkopf wird nur
 eingefärbt, wo das SVG die Kennungen aus
-[M10](architecture.md#m10-der-fork-schreibt-segment-notenzeile-und-stimme-ins-svg)
+[M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)
 trägt – das tut der lokale Konvertierungsweg, nicht der Sidecar mit seinem
 Stock-AppImage. Dort bleibt es beim Cursor-Band, ohne Fehlermeldung und ohne
 Einstellung. Wirkung: dieselbe Bedienung, weniger Führung im Notenbild.
@@ -140,8 +143,8 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
   setzt MuseScore chinesische, japanische und koreanische Liedtexte deshalb als
   Ersatzkästchen; alles andere ist unberührt. Die Fonts wiegen 4,2 MB, und der
   App Store nimmt Archive nur bis 20 MB an. Wer sie braucht, legt Fontdateien
-  (`.woff2`, `.otf`, `.ttf`) in ein Verzeichnis **außerhalb der App** und trägt
-  es ein:
+  (`.woff2`, `.otf`, `.ttf`, `.ttc`) in ein Verzeichnis **außerhalb der App**
+  und trägt es ein:
 
   ```sh
   occ config:app:set scoreview cjk_font_dir --value=/srv/scoreview-fonts
@@ -149,5 +152,7 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
 
   Außerhalb der App, weil das ausgelieferte App-Verzeichnis **signiert** ist –
   jede zusätzliche Datei darin lässt Nextclouds Integritätsprüfung dauerhaft
-  Alarm schlagen. Der Sidecar-Weg hat die Systemfonts seines Images und ist von
-  alldem nicht betroffen.
+  Alarm schlagen. Auf dem Sidecar-Weg gibt es diese Möglichkeit nicht: Sein
+  Image bringt nur DejaVu und FreeFont mit (nachgesehen: 19 Fontdateien, keine
+  CJK-Schrift), und es gibt keine Einstellung, ihm Fonts nachzureichen – dort
+  hilft nur ein eigenes Image.

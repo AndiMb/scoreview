@@ -123,9 +123,9 @@ Siehe [CONTRIBUTING.md](CONTRIBUTING.md). Fehler und Wünsche gehören in die
 ScoreView steht unter AGPL-3.0-or-later, siehe [LICENSE](LICENSE).
 
 - Die Notensatz- und Konvertierungsarbeit macht **MuseScore Studio** (GPL-3.0) –
-  im Sidecar als gepinntes AppImage, auf dem lokalen Weg über
-  [webmscore](https://github.com/AndiMb/webmscore), MuseScore nach WebAssembly
-  übersetzt.
+  im Sidecar als gepinntes AppImage, auf dem lokalen Weg über die
+  [scoreview-engine](https://github.com/AndiMb/scoreview-engine), MuseScores
+  Notensatz Qt-frei nach WebAssembly übersetzt.
 - Das **SoundFont** für die Wiedergabe stammt aus der MuseScore-Installation
   (MuseScore General von S. Christian Collins, MIT) beziehungsweise aus der
   Quelle, die der Betreiber hinterlegt.

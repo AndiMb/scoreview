@@ -38,7 +38,7 @@ class ConversionBackendTest extends TestCase {
 	}
 
 	public function testFaelltBeiUnbekanntemWertAufDenSidecarZurueck(): void {
-		$this->assertSame(ConversionBackend::SIDECAR, $this->backendMitWert('webmscore')->current());
+		$this->assertSame(ConversionBackend::SIDECAR, $this->backendMitWert('irgendwas')->current());
 		$this->assertSame(ConversionBackend::SIDECAR, ConversionBackend::normalize('Local'));
 		$this->assertSame(ConversionBackend::LOCAL, ConversionBackend::normalize('local'));
 	}

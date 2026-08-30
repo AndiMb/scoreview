@@ -18,7 +18,7 @@ updates:
         patterns: ['*']
 
   # Der lokale Konvertierungsweg (docs/architecture.md E3). Hier kann
-  # Dependabot nur @librescore/fonts anfassen: webmscore4 haengt an einer
+  # Dependabot nur @librescore/fonts anfassen: scoreview-engine haengt an einer
   # Release-URL, und die kennt keine Registry - dieser Sprung bleibt Handarbeit
   # und ist es auch wert. Einen schlechten Bump faengt der Selbsttest im
   # konverter-Job ab, der M2/M4/M7 gegen eine echte Partitur prueft.

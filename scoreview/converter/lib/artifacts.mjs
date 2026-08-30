@@ -1,17 +1,17 @@
 /**
- * Uebersetzt webmscores Ausgabe in die Artefaktform, die
+ * Uebersetzt die Ausgabe der Engine in die Artefaktform, die
  * Service\ConversionService cached und der Viewer erwartet - dieselbe Form,
  * die der Sidecar aus `--score-media` erzeugt (sidecar/scoreview_sidecar/
  * musescore.py, parse_pos_xml). Beide Konvertierungswege muessen sie
  * treffen, sonst zerfaellt das Cache-Format in zwei Varianten.
  *
- * Bewusst ohne webmscore-Import: reine Umformung, ohne Wasm testbar
+ * Bewusst ohne Engine-Import: reine Umformung, ohne Wasm testbar
  * (artifacts.test.mjs laeuft in `npm test` mit).
  */
 
 /**
  * Der Sidecar rechnet spos/mpos-Koordinaten durch 12 (M4) und rundet auf
- * zwei Stellen. webmscores `savePositions` liefert sie bereits in
+ * zwei Stellen. `savePositions` der Engine liefert sie bereits in
  * SVG-Einheiten - die Division entfaellt hier, die Rundung bleibt, damit
  * beide Wege gleich grosse Dateien mit gleich vielen Nachkommastellen
  * schreiben.
@@ -86,11 +86,13 @@ export function svgSegments(svgText) {
 	// Ein Vorzeichen steht links davon, ein Hals reicht darueber hinaus -
 	// beides waeren Ausreisser ohne Aussage.
 	//
-	// Zwei Schreibweisen desselben Notenkopfs: Qt-webmscore zeichnete ihn als
-	// <path class="Note ..." d="M x ...">, die scoreview-engine als Gruppe
+	// Zwei Schreibweisen desselben Notenkopfs. Die Engine schreibt ihn als
+	// Glyph-Referenz
 	// <g class="Note ..."><g transform="matrix(1 0 0 1 x y)"><use .../></g></g>
-	// (Glyph-Referenz statt wiederholter Pfaddaten). Beide Muster lesen die
-	// x-Position des ersten gezeichneten Punkts bzw. des Glyph-Ursprungs.
+	// - jede Glyphe steht einmal in <defs>, statt ihre Pfaddaten zu
+	// wiederholen. Ein direkt gezeichneter <path class="Note ..." d="M x ...">
+	// wird ebenso gelesen. Beide Muster nehmen die x-Position des ersten
+	// gezeichneten Punkts bzw. des Glyph-Ursprungs.
 	for (const treffer of svgText.matchAll(/<path class="Note\b[^"]*\bseg-(\d+)\b[^"]*"[^>]*?\sd="M\s*(-?[\d.]+)/g)) {
 		notes.push({ id: Number(treffer[1]), x: Number(treffer[2]) })
 	}
@@ -157,9 +159,9 @@ export function checkPromises({ pages, timing, midi, meta, svgs = [] }) {
 
 	// M10: Das SVG traegt die Segmentkennung, die spos vergibt - sonst kann
 	// der Viewer den klingenden Notenkopf nicht faerben und faellt auf das
-	// Band zurueck. Die Zusage gilt nur fuer diesen Weg: der Sidecar faehrt
-	// Stock-MuseScore ohne den Patch, und sein eigener Selbsttest kennt M10
-	// deshalb nicht (siehe docs/architecture.md E3).
+	// Band zurueck. Die Zusage gilt nur fuer diesen Weg: MuseScore selbst
+	// schreibt diese Kennungen nicht, und der Selbsttest des Sidecars kennt
+	// M10 deshalb nicht (siehe docs/architecture.md E3).
 	let markiert = 0
 	let unbekannt = 0
 	let verrutscht = 0

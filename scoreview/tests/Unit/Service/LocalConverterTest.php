@@ -15,13 +15,13 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Der lokale Weg scheitert auf einer fremden Instanz an drei Dingen, die
- * alle nichts mit Partituren zu tun haben: kein node, kein proc_open, kein
- * mitgeliefertes webmscore. Von aussen sieht jedes davon gleich aus - "die
+ * alle nichts mit Partituren zu tun haben: kein node, kein proc_open, keine
+ * mitgelieferte Engine. Von aussen sieht jedes davon gleich aus - "die
  * Konvertierung geht nicht" -, weshalb sie hier getrennt beantwortet werden
  * muessen und nicht als ein gemeinsames "fehlgeschlagen".
  *
- * Bewusst OHNE echte Konvertierung: die braeuchte das 20-MB-Wasm und
- * liefe Sekunden. Der Durchstich mit echtem webmscore ist der Selbsttest
+ * Bewusst OHNE echte Konvertierung: die braeuchte das Engine-Wasm und
+ * liefe Sekunden. Der Durchstich mit echter Engine ist der Selbsttest
  * der Admin-Seite (LocalConverter::runSelfTest()) und
  * converter/lib/artifacts.test.mjs.
  */

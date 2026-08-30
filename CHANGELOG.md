@@ -9,13 +9,12 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 ### Hinzugefügt
 
 - **Der klingende Notenkopf wird eingefärbt**, statt nur von einem Band
-  überdeckt zu werden. Möglich wurde das durch webmscore
-  `v4.7.4-scoreview.7`: MuseScores SVG-Export schreibt jetzt zu jedem
+  überdeckt zu werden. Der SVG-Export der scoreview-engine schreibt zu jedem
   gezeichneten Element, zu welchem Segment, welcher Notenzeile und welcher
   Stimme es gehört – und die Segmentnummer ist dieselbe, die `timing.json`
   vergibt (M10). Das Band tritt dafür zurück, sobald Notenköpfe leuchten –
-  zwei Anzeigen derselben Stelle sind eine zu viel. Auf dem Sidecar-Weg
-  (Stock-MuseScore ohne den Patch) bleibt es unverändert beim Band.
+  zwei Anzeigen derselben Stelle sind eine zu viel. Auf dem Sidecar-Weg bleibt
+  es unverändert beim Band: MuseScore selbst schreibt diese Kennungen nicht.
 - Ein zweiter Einstieg in den Viewer: eine Dateiaktion auf der Endung `.mscz`,
   die eine Partitur in einem eigenen Vollbildfenster öffnet. Sie greift genau
   dann, wenn Nextclouds Viewer es nicht tut – wenn der Mimetype nicht
@@ -26,26 +25,22 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 - **Der lokale Konvertierungsweg läuft jetzt auf der
   [scoreview-engine](https://github.com/AndiMb/scoreview-engine)**
-  (`v4.7.4-engine.2`) statt auf dem Qt-webmscore-Fork: derselbe
-  MuseScore-Kern 4.7.4, aber Qt-frei gebaut (MuseScore als ungepatchtes,
-  gepinntes Submodul). Halber Wasm-Fußabdruck (9 statt 17,5 MB), rund
-  dreimal schnellere Konvertierung, und die `duration` in den Metadaten
-  entspricht jetzt der von Desktop-MuseScore (webmscore meldete sie aus
-  einem veralteten Zwischenstand). Die Engine ist korpus-geprüft: 569
-  Testpartituren gegen das Qt-webmscore-Release und gegen
-  Desktop-MuseScore 4.7.4, jede Abweichung einzeln begründet. Text steht
-  im SVG jetzt als referenzierte Glyph-Umrisse (`<defs>`/`<use>`, etwa
-  halbe Dateigröße); der SVG-Sanitizer des Viewers lässt genau diese
+  (`v4.7.4-engine.2`): derselbe MuseScore-Kern 4.7.4, aber Qt-frei gebaut
+  (MuseScore als ungepatchtes, gepinntes Submodul). Halber Wasm-Fußabdruck
+  (9 statt 17,5 MB), rund dreimal schnellere Konvertierung, und die
+  `duration` in den Metadaten entspricht jetzt der von Desktop-MuseScore –
+  bisher stammte sie aus einem veralteten Zwischenstand. Die Engine ist
+  korpus-geprüft: 569 Testpartituren gegen die bisherige Ausgabe, jede
+  Abweichung gegen Desktop-MuseScore 4.7.4 geprüft und einzeln begründet.
+  Text steht im SVG jetzt als referenzierte Glyph-Umrisse (`<defs>`/`<use>`,
+  etwa halbe Dateigröße); der SVG-Sanitizer des Viewers lässt genau diese
   lokale Referenzform zu – Nebenbefund dabei: seine Allowlists waren
   wegen `USE_PROFILES` bisher wirkungslos, jetzt gelten sie wirklich.
   Die Notenkopf-Lageprobe des Selbsttests liest beide Glyph-Formen.
-- Der lokale Konvertierungsweg läuft auf webmscore `v4.7.4-scoreview.6`:
-  derselbe MuseScore-Kern 4.7.4, aber gegen Qt 6.10.2 mit Emscripten 4.0.7
-  gebaut statt gegen Qt 6.4.3 mit Emscripten 3.1.14. Am Ergebnis ändert sich
-  nichts – der Selbsttest über M2/M4/M7 bleibt grün, auf Node 18, 20 und 22.
-- Der Konverter legt unter Node 18 und 20 ein `navigator` mit `languages` an:
-  Das globale `navigator` bringt Node erst ab Version 21 mit, und MuseScores
-  Qt-Schicht liest es beim Start. Ohne das startet das Wasm-Modul dort nicht.
+- Das App-Paket wird rund 5 MB kleiner, und die Zusatzfonts für CJK-Liedtexte
+  werden wieder gelesen: Die Engine (`v4.7.4-engine.3`) bringt einen
+  Brotli-Decoder mit, liefert ihre eigenen Schriften als woff2 aus (4,8 statt
+  9,3 MB) und nimmt `.woff2` auch aus `cjk_font_dir` entgegen.
 
 ## [1.0.0] – 2026-08-26
 

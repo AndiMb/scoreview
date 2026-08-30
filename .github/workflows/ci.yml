@@ -112,11 +112,9 @@ jobs:
       fail-fast: false
       matrix:
         # Unter- und Obergrenze der zugesagten Node-Spanne (siehe "engines" in
-        # converter/package.json). Die Untergrenze bleibt geprueft, obwohl ihr
-        # Ausloeser von damals (Qt-webmscore las `navigator`, das es global
-        # erst ab Node 21 gibt) mit der Qt-freien Engine entfallen ist -
-        # Emscripten-Glue hat je Version eigene Node-Ansprueche, und die
-        # sollen hier auffallen und nirgends sonst.
+        # converter/package.json). Beide Enden bleiben geprueft, weil der
+        # Emscripten-Glue je Version eigene Node-Ansprueche hat - die sollen
+        # hier auffallen und nirgends sonst.
         node: ['18', '22']
     defaults:
       run:

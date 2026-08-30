@@ -15,9 +15,9 @@ use OCP\IAppConfig;
  * gelaufen ist. Genau deshalb ist die Wahl eine einzelne
  * Admin-Einstellung und keine Verzweigung, die sich durch die App zieht.
  *
- * Voreinstellung ist der Sidecar: er war bis hierher die einzige
- * Moeglichkeit, und eine Bestandsinstallation soll sich durch ein Update
- * nicht umstellen.
+ * Voreinstellung ist der Sidecar: Er kommt ohne Voraussetzungen auf dem
+ * Nextcloud-Server aus, und ein Update darf eine laufende Installation nicht
+ * stillschweigend auf den anderen Weg umstellen.
  */
 class ConversionBackend {
 	public const SIDECAR = 'sidecar';

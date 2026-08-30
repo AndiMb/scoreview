@@ -24,9 +24,9 @@ use Psr\Log\LoggerInterface;
  * ueber mehrere Konvertierungen zu halten, hiesse einen langlebigen Dienst zu
  * betreiben - genau das ist der Sidecar, und PHP hat dafuer keinen Ort: jeder
  * Lauf von ConvertScoreJob ist ein eigener Prozess. Der Prozessabbau raeumt
- * die rund 105 MB der Instanz vollstaendig ab und braucht keinen Zustand;
- * bezahlt wird das mit rund 1 s Anlauf je Partitur (gemessen, Wasm-
- * Instanziierung samt Audio-Engine).
+ * die Instanz vollstaendig ab und braucht keinen Zustand; bezahlt wird das
+ * mit dem Anlauf je Partitur - Wasm-Instanziierung samt vorgeladenem
+ * Ressourcenpaket (Schriften, SMuFL-Metadaten).
  */
 class LocalConverter {
 	/**

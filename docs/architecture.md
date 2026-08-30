@@ -13,7 +13,7 @@ ScoreView besteht aus diesen Teilen:
 | Nextcloud-App | `scoreview/lib/` (PHP) | Konvertierung anstoßen, Ergebnis cachen, Artefakte ausliefern, Notizen verwalten |
 | Viewer | `scoreview/src/` (Vue 3) | Notenseiten anzeigen, MIDI im Browser synthetisieren, Cursor führen |
 | Sidecar | `sidecar/` (Python + MuseScore 4) | `.mscz` übersetzen – im eigenen Container |
-| Lokaler Konverter | `scoreview/converter/` (Node + MuseScore als WebAssembly) | dasselbe, ohne Container |
+| Lokaler Konverter | `scoreview/converter/` (Node + scoreview-engine: MuseScore als WebAssembly) | dasselbe, ohne Container |
 
 Konvertiert wird über **einen von zwei Wegen**, wahlweise über den Sidecar oder
 lokal auf dem Server; beide erzeugen dieselben Artefakte (siehe
@@ -34,7 +34,7 @@ Konvertierung - einer von zwei Wegen, gleiche Artefakte (E3)
    |  Sidecar: ein mscore-Aufruf --score-media
    |     -> svgs[] · midi · sposXML · mposXML · metadata
    |     (pngs/pdf/mxml werden verworfen)
-   |  Lokal:   ein node-Prozess mit MuseScore als WebAssembly
+   |  Lokal:   ein node-Prozess mit der scoreview-engine (MuseScore als Wasm)
    |     -> saveSvg() · saveMidi() · savePositions() · metadata()
    v
 IAppData-Cache  scoreview/<fileId>/<etag>/
@@ -156,7 +156,7 @@ Cursor, Autoscroll, Loop und Metronom; SVG-Seiten werden beim Wegscrollen wieder
 aus dem DOM genommen.
 
 Der klingende Notenkopf wird eingefärbt, wo das SVG die Kennungen aus
-[M10](#m10-der-fork-schreibt-segment-notenzeile-und-stimme-ins-svg) trägt.
+[M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg) trägt.
 `svgIndex.js` baut dafür **einmal je geladener Seite** eine Karte `elid` →
 Knoten; ein Wiedergabeschritt hängt danach nur noch eine CSS-Klasse um, statt
 das Dokument zu durchsuchen.
@@ -213,15 +213,15 @@ Voreinstellung `sidecar`) und wird an genau einer Stelle im Code ausgewertet
 | MuseScore | echtes MuseScore 4 aus gepinntem AppImage | MuseScore 4.7.4 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) |
 | Läuft als | eigener Container, HTTP-API | Kindprozess der Node-Laufzeit des Servers |
 | Voraussetzung beim Betreiber | Docker o. ä. | Node.js ≥ 18, `proc_open` erlaubt |
-| Im App-Paket | nichts | rund 19 MB Wasm (`converter/`) |
+| Im App-Paket | nichts | rund 14 MB Wasm + Ressourcen (`converter/`) |
 | SoundFont | bringt das Image mit | Download-URL in den Einstellungen |
 | Vorab-Konvertierung, Selbsttest | ja | ja |
 
 **Warum es den Sidecar weiterhin gibt.** Er bringt echtes, aktuelles MuseScore 4
 mit: eine Abhängigkeit, die ein Versionswechsel aktualisiert, und keine, die
-jemand portieren und pflegen muss. Wo ohnehin Container laufen, ist das der
-robustere Weg – und der einzige, dessen MuseScore-Version sich unabhängig von
-einem Fork nachziehen lässt.
+jemand bauen und pflegen muss. Wo ohnehin Container laufen, ist das der
+robustere Weg – und der einzige, dessen MuseScore-Version sich ohne einen
+eigenen Build nachziehen lässt.
 
 **Warum es den lokalen Weg gibt.** Der Sidecar setzt voraus, dass der Betreiber
 einen zweiten Container betreiben kann. Das schließt Instanzen ohne Docker aus –
@@ -234,22 +234,28 @@ Gemessen an denselben drei Partituren wie in
 
 | Partitur | Sidecar | Lokal |
 |---|---|---|
-| Minipartitur, 1 Seite | 6,3 s | **1,9 s** |
-| Chorsatz, 4 Seiten | 23,0 s | **2,9 s** |
-| Chorsatz, 5 Seiten | 27,7 s | **2,5 s** |
+| Minipartitur, 1 Seite | 8,1 s | **0,8 s** |
+| Chorsatz, 4 Seiten | 25,6 s | **1,2 s** |
+| Chorsatz, 5 Seiten | 31,9 s | **1,2 s** |
+
+Gemessen als Wanduhrzeit, wie die App sie sieht: beim Sidecar einschließlich
+HTTP und Statusabfrage, lokal einschließlich Prozessstart.
 
 Der Abstand kommt nicht von schnellerem Code, sondern von weniger Arbeit: Der
 Sidecar startet je Konvertierung einen MuseScore-Prozess unter Xvfb und rendert
 PNG, PDF und MusicXML mit, die anschließend verworfen werden
 ([M2](#m2-schlüssel-im---score-media-json)). Von den lokalen Zeiten sind rund
-1,7 s die einmalige Übersetzung des Wasm-Moduls; die eigentliche Konvertierung
-dauert 0,2–1,2 s.
+0,45 s Grundlast – Node-Start plus Instanziierung des Wasm-Moduls (0,3 s
+gemessen); die eigentliche Konvertierung dauert 0,4–0,8 s.
 
-**Die Artefakte sind deckungsgleich, nicht nur ähnlich.** Gegen den laufenden
-Sidecar Datei für Datei verglichen: MIDI **byteweise identisch**, SVG-Seiten
-innerhalb von 0,4 %, gleiche Zahl an spos-Events mit identischer elid-Folge und
-identischen Zeiten (24/315/357), gleiche Seitenzuordnung, größte
-Koordinatenabweichung 1,5 SVG-Einheiten auf einer 13200 Einheiten hohen Seite.
+**Die Artefakte sind gleichwertig.** Gegen den laufenden Sidecar Datei für
+Datei verglichen: MIDI **byteweise identisch**, gleiche Zahl an spos-Events mit
+identischer elid-Folge und identischen Zeiten (24/315/357), gleiche
+Seitenzuordnung, größte Koordinatenabweichung 1,5 SVG-Einheiten auf einer 13200
+Einheiten hohen Seite. Die SVG-Seiten zeigen dasselbe Bild, kodieren es aber
+anders: Die Engine legt jede Glyphe einmal in `<defs>` und setzt sie mit
+`<use>`, MuseScore zeichnet jeden Umriss erneut – rund die halbe Dateigröße bei
+gleichem Seitenbild, pixelweise geprüft (`tools/svg-spotcheck.py` der Engine).
 Auch die Formatgrundlagen halten: Element 0 der fünfseitigen Partitur liegt bei
 `y=2148` ([M4](#m4-koordinaten-passen-mit-faktor-12-auf-das-svg)), `repeat-test`
 zeigt vier doppelte `elid`
@@ -259,19 +265,18 @@ Metronomspur (M6). In `meta.json` ist `parts[].instrumentName` lokal *gefüllt*
 und beim Sidecar `null` – der einzige gefundene Unterschied, und keiner, den der
 Viewer liest.
 
-**Eine Ausnahme gibt es seit M10:** Auf dem lokalen Weg tragen die SVG-Elemente
-ihre Segment-, Notenzeilen- und Stimmenkennung, auf dem Sidecar-Weg nicht – der
-Sidecar fährt ein gepinntes Stock-AppImage, das den Patch des Forks nicht
-kennt. Die Artefakte bleiben damit **gleichwertig**, aber nicht mehr in jedem
-Feld deckungsgleich. Der Viewer erkennt das Fehlen beim Aufbau seines Index und
-bleibt dann beim Cursor-Band; es gibt keinen Schalter und keine Einstellung
-dafür. Wer die Hervorhebung auch im Container will, müsste das Image aus dem
-Fork bauen – und gäbe damit das beste Argument des Sidecars auf, nämlich
-echtes, per Versionswechsel aktualisierbares MuseScore.
+**Ein Unterschied bleibt (M10):** Auf dem lokalen Weg tragen die SVG-Elemente
+ihre Segment-, Notenzeilen- und Stimmenkennung, auf dem Sidecar-Weg nicht – die
+schreibt der SVG-Writer der Engine, und MuseScore selbst kennt sie nicht. Der
+Viewer erkennt das Fehlen beim Aufbau seines Index und bleibt dann beim
+Cursor-Band; es gibt keinen Schalter und keine Einstellung dafür. Wer die
+Hervorhebung auch im Container will, müsste dort die Engine statt MuseScore
+konvertieren lassen – und gäbe damit das beste Argument des Sidecars auf,
+nämlich echtes, per Versionswechsel aktualisierbares MuseScore.
 
-Der Grund für die Deckungsgleichheit im Übrigen ist, dass es dieselbe Software
-ist: nur
-einmal als AppImage und einmal nach WebAssembly übersetzt. `savePositions`
+Dass die Ergebnisse im Übrigen zusammenpassen, liegt am gemeinsamen Kern: Es
+ist derselbe MuseScore 4.7.4, einmal als AppImage und einmal Qt-frei nach
+WebAssembly übersetzt (MuseScore als ungepatchtes Submodul). `savePositions`
 liefert die Koordinaten dort bereits in SVG-Einheiten, die Division durch 12
 entfällt (`converter/lib/artifacts.mjs`).
 
@@ -279,7 +284,8 @@ entfällt (`converter/lib/artifacts.mjs`).
 
 - **Eine Node-Laufzeit auf dem Server.** Das offizielle Nextcloud-Docker-Image
   bringt keine mit; auf verwaltetem Hosting ist sie meist nicht nachrüstbar.
-- **Rund 21 MB mehr im App-Paket** (17 MB Wasm, 4 MB Wasm-Daten). Das Paket
+- **Rund 14 MB mehr im App-Paket** (9,3 MB Wasm-Code, 4,8 MB vorgeladene
+  Ressourcen: Notenschrift, Textschriften, SMuFL-Metadaten als woff2). Das Paket
   muss sie fertig installiert enthalten – eine Instanz ohne Container hat kein
   npm, mit dem sie das nachholen könnte (siehe `release.yml`). Die CJK-Fonts
   bleiben deshalb draußen, siehe [Grenzwerte](limits.md#bekannte-lücken).
@@ -296,17 +302,16 @@ entfällt (`converter/lib/artifacts.mjs`).
   rund 1 s Anlauf je Partitur.
 - **Die Engine will gepflegt werden.** Die MuseScore-Version zieht nicht
   von selbst nach: ein neuer Kern heißt bauen, Release setzen, Tarball-URL in
-  `converter/package.json` hochziehen. Seit dem Wechsel von Qt-webmscore auf die
-  Qt-freie [scoreview-engine](https://github.com/AndiMb/scoreview-engine) ist
-  das deutlich leichter: MuseScore als ungepatchtes Submodul, kein Qt in der
-  Toolchain, und ein Korpus-Gate über 569 Partituren prüft jeden Sprung gegen
-  die vorige Ausgabe. Der Selbsttest der Betriebsdiagnose
-  prüft deshalb für beide Wege dieselben Zusagen aus M2/M4/M7.
+  `converter/package.json` hochziehen. Der Aufwand dafür ist überschaubar –
+  die [scoreview-engine](https://github.com/AndiMb/scoreview-engine) führt
+  MuseScore als ungepatchtes Submodul, hat kein Qt in der Toolchain, und ein
+  Korpus-Gate über 569 Partituren prüft jeden Sprung gegen die vorige Ausgabe.
+  Der Selbsttest der Betriebsdiagnose prüft für beide Wege dieselben Zusagen
+  aus M2/M4/M7.
 
-Zwei Vorkehrungen trifft der Konverter selbst: Er hält einen
-`navigator`-Shim bereit (den brauchte der Qt-webmscore-Vorgänger unter
-Node 18/20 zwingend; die Qt-freie Engine liest `navigator` nicht mehr, der
-Shim kostet nichts und hält die Umgebung über Node-Versionen gleich). Und
+Zwei Vorkehrungen trifft der Konverter selbst: Er legt unter Node 18/20 ein
+`navigator`-Objekt an, damit die Umgebung über alle Node-Versionen dieselbe
+ist (die Engine selbst liest es nicht). Und
 stdout wird nach stderr umgeleitet (dasselbe Bild wie
 [M3](#m3-stdout-ist-nicht-sauber)), damit Engine- oder Emscripten-Meldungen
 nie das JSON-Ergebnis verschmutzen.
@@ -320,7 +325,9 @@ seine Importe aus der JavaScript-Laufzeit von Emscripten bezieht und keinen
 einzigen WASI-Import trägt. Eine PHP-Wasm-Erweiterung (wasmer, wasmtime, extism) müsste
 diese Laufzeit vollständig nachbauen – und wäre ihrerseits eine
 PECL/FFI-Erweiterung, die auf verwaltetem Hosting nicht installierbar ist. Ein
-WASI-Build scheidet aus, weil Qt für WebAssembly nur Emscripten kennt.
+WASI-Build wäre ein eigenes Portierungsvorhaben: Die Engine liest ihre
+Schriften und Metadaten aus Emscriptens virtuellem Dateisystem, in das sie als
+vorgeladenes Paket eingebettet sind – nicht über WASI-Systemaufrufe.
 
 Für diesen Fall bliebe nur, im Browser zu konvertieren und die Artefakte zum
 Server hochzuladen. Das ist keine Umverdrahtung, sondern eine neue
@@ -525,8 +532,8 @@ Im gesamten Dokument steht kein einziges `id="…"`-Attribut. Adressierbar ist n
 über `class` (`Note`, `BarLine`, `StaffLines`, `Clef`, …) – eine Kategorie, kein
 Bezug zu einer einzelnen Note. Eine Hervorhebung des klingenden Notenkopfs ist
 damit nicht möglich; es bleibt beim Overlay. **Das gilt weiterhin für den
-Sidecar-Weg**; was der Fork daran ändert, steht in
-[M10](#m10-der-fork-schreibt-segment-notenzeile-und-stimme-ins-svg).
+Sidecar-Weg**; was die Engine daran ändert, steht in
+[M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg).
 
 Für die Overlay-Umsetzung wichtig: Das allererste Element im Dokument ist ein
 deckendes weißes Hintergrundrechteck über die volle `viewBox` – als einziges
@@ -534,14 +541,14 @@ Element mit leerem `class`-Attribut zuverlässig über `path[class=""]`
 adressierbar, ohne von der Dokumentreihenfolge abzuhängen. Ein Cursor-Overlay
 hinter dem SVG bliebe ohne diese Regel unsichtbar.
 
-### M10: Der Fork schreibt Segment, Notenzeile und Stimme ins SVG
+### M10: Die Engine schreibt Segment, Notenzeile und Stimme ins SVG
 
 Auf dem lokalen Weg trägt jedes gezeichnete Element zusätzlich zu seinem Typ
 drei Kennungen: `class="Note seg-42 st-1 vc-0"`.
 
 - **`seg-N`** ist genau die `elid` aus `timing.json` – dieselbe laufende Nummer
   über die ChordRest-Segmente. Beide Exporte zählen sie an einer Stelle
-  (`src/engraving/dom/segmentindex.h` im Fork), statt getrennt zu zählen und
+  (`src/positions/segmentindex.h` in der Engine), statt getrennt zu zählen und
   zufällig übereinzustimmen.
 - **`st-N`** ist die Notenzeile, **`vc-N`** die Stimme innerhalb der Zeile.
   Beide fehlen bei Elementen ohne Track (Titel, Seitenzahlen).
@@ -550,10 +557,10 @@ Damit ist die Umkehrung von [M4](#m4-koordinaten-passen-mit-faktor-12-auf-das-sv
 nicht mehr nur geometrisch möglich: Zu einem Zeitpunkt liefert `timing.json` die
 `elid`, und die zeigt direkt auf die Knoten, die dafür gezeichnet wurden.
 
-An der Selbsttest-Partitur gegen `v4.7.4-scoreview.7` gemessen: 20 Segmente, 44
+An der Selbsttest-Partitur gemessen (`v4.7.4-engine.2`): 20 Segmente, 44
 Elemente mit Kennung, **jede Kennung hat ein Element in `spos`, und kein
 `spos`-Element bleibt ungezeichnet**. Der größte Abstand zwischen einem
-Notenkopf und der x-Position seines Segments beträgt **0,93 SVG-Einheiten** bei
+Notenkopf und der x-Position seines Segments beträgt **0,98 SVG-Einheiten** bei
 107–162 Einheiten Segmentbreite – eine um eins verschobene Nummerierung läge
 ein ganzes Segment daneben und fiele sofort auf. Genau das prüft der Selbsttest
 (`converter/lib/artifacts.mjs`), und zwar in beide Richtungen.

@@ -81,7 +81,7 @@ aber von Nextcloud aus nicht erreichbar.
 Aus `scoreview/converter/`:
 
 ```sh
-npm ci                       # laedt rund 9 MB scoreview-engine als Release-Tarball
+npm ci                       # laedt rund 7 MB scoreview-engine als Release-Tarball
 node convert.mjs --selftest  # echte Konvertierung, prueft M2/M4/M7
 node convert.mjs partitur.mscz /tmp/out   # schreibt die Artefakte einzeln
 ```
@@ -207,7 +207,7 @@ Integritätsprüfung auf jeder Instanz fehlende Dateien.
 ### Was nicht mit ins Paket geht
 
 Der App Store nimmt Archive nur **bis 20 MB** an. Ausgeschlossen sind deshalb
-drei Posten, die zur Laufzeit niemand braucht:
+zwei Posten, die zur Laufzeit niemand braucht:
 
 | Posten | Größe | Warum entbehrlich |
 |---|---|---|
