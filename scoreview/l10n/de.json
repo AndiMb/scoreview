@@ -1,6 +1,7 @@
 { "translations": {
     "ScoreView" : "ScoreView",
     "File not found or no access." : "Datei nicht gefunden oder kein Zugriff.",
+    "Not allowed to convert this score again." : "Diese Partitur darf nicht neu konvertiert werden.",
     "Note must not be empty." : "Notiz darf nicht leer sein.",
     "Note not found or no access." : "Notiz nicht gefunden oder kein Zugriff.",
     "You do not have permission to create shared notes for this file." : "Du hast keine Berechtigung, geteilte Notizen für diese Datei anzulegen.",

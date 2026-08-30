@@ -76,6 +76,7 @@ zeigt. Warum es beide braucht, steht in
 |---|---|
 | `GET /api/scores/{fileId}/status` | Konvertierungsstatus, Seitenzahl, Metadaten |
 | `GET /api/scores/{fileId}/artifact/{name}` | Ein Artefakt aus dem Cache (`page-N`, `midi`, `timing`, `measures`, `meta`) |
+| `POST /api/scores/{fileId}/reconvert` | Verwirft die gespeicherte Konvertierung und lässt sie neu erzeugen (nur mit Schreibrecht auf die Datei) |
 | `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe |
 | `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen |
 | `POST /api/preferences` | Anzeigeeinstellungen der Nutzerin (nur schreibend – gelesen aus dem Anfangszustand der Files-Seite) |
@@ -102,11 +103,28 @@ Der Cache-Schlüssel ist `(fileId, etag)`: Eine geänderte Datei bekommt ein neu
 Die Artefakte selbst sind unveränderlich und werden mit `ETag` und
 `Cache-Control: immutable` ausgeliefert.
 
+`immutable` verspricht dem Browser, dass sich unter **dieser URL** nie etwas
+ändert. Der Cache-Schlüssel muss deshalb in der URL stehen und nicht nur im
+serverseitigen Pfad: Die Artefakt-Links tragen `?v=<etag>-<Zeitstempel der
+Konvertierung>`. Beide Teile sind nötig, weil es zwei verschiedene Änderungen
+gibt – der `etag` benennt die Fassung der Partitur, der Zeitstempel die
+Konvertierung dieser Fassung. Der Server wertet den Parameter nicht aus; er
+löst den `etag` ohnehin aus der Datei auf.
+
 Die Spalte `format_version` in `scoreview_conversions` hält fest, mit welchem
 Cache-Format ein Eintrag geschrieben wurde. Ein Eintrag mit älterer Version –
 oder mit fehlender Cache-Datei – gilt automatisch als „nicht fertig" und stößt
 eine Neukonvertierung an. Ein Formatwechsel braucht deshalb **keinen**
 Migrationspfad und kein manuelles Löschen von Zeilen.
+
+Das deckt den Formatwechsel ab, nicht aber den häufigeren Fall, dass eine
+neuere Fassung der App dieselbe Partitur **besser** setzt: Ein fertiger
+Eintrag bleibt liegen, solange niemand die Datei anfasst. Dafür gibt es
+`POST …/reconvert` – der Knopf „Neu konvertieren" im Viewer, unter der Angabe
+der Herkunft. Er verwirft Statuszeile und Cache-Ordner der Datei und reiht die
+Konvertierung neu ein; nur mit Schreibrecht, denn der Cache hängt an der Datei
+und gilt für alle, die sie öffnen. Für **alle** Partituren einer Instanz auf
+einmal bleibt das Hochzählen von `CURRENT_FORMAT_VERSION` der Hebel.
 
 ### Datenbank
 

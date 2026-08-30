@@ -29,13 +29,20 @@ use OCP\IURLGenerator;
  * die Nutzerin tatsaechlich Zugriff hat.
  *
  * Alle Auslieferungsrouten (page/midi/timing/measures/meta) sind
- * unveraenderlich (der etag steckt bereits im IAppData-Cache-Pfad, siehe
- * ConversionService) - ETag/Last-Modified/Cache-Control:immutable setzen,
+ * unveraenderlich - ETag/Last-Modified/Cache-Control:immutable setzen,
  * damit ein zweites Oeffnen derselben Datei 304 statt einer erneuten
  * Uebertragung bekommt (vorher wurde bei jedem Oeffnen alles neu
  * uebertragen). Die eigentliche 304-Antwort baut Nextclouds
  * NotModifiedMiddleware anhand von setETag()/setLastModified() automatisch,
  * hier wird nur gesetzt.
+ *
+ * `immutable` verspricht dem Browser, dass sich unter DIESER URL nie etwas
+ * aendert - deshalb muss der Cache-Schluessel in der URL stehen und nicht
+ * nur im IAppData-Pfad (siehe cacheBuster()). Ohne den Parameter zeigte
+ * eine neu konvertierte Partitur unter unveraenderter URL weiter die alten
+ * Seiten: Chrome revalidiert Unterressourcen beim Neuladen nicht, und
+ * `immutable` verbietet es ausdruecklich - sichtbar wurde die neue Fassung
+ * erst nach hartem Neuladen oder in einem frischen Profil.
  */
 class ConversionController extends Controller {
 	private const IMMUTABLE_CACHE_SECONDS = 31536000;
@@ -109,7 +116,7 @@ class ConversionController extends Controller {
 				return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 			}
 			try {
-				$body['files'] = $this->buildFileUrls($fileId, $etag);
+				$body['files'] = $this->buildFileUrls($fileId, $conversion);
 			} catch (NotFoundException) {
 				// Cache-Datei fehlt trotz status=ready (z.B. Ordner ausserhalb der
 				// App geloescht) - wie "nicht fertig" behandeln statt eines 500ers,
@@ -129,8 +136,56 @@ class ConversionController extends Controller {
 			// "keiner von beiden". Die MuseScore-Version steht in meta.json,
 			// die der Viewer ohnehin laedt - sie wird hier nicht verdoppelt.
 			$body['renderer'] = ['backend' => $conversion->getBackend()];
+			// Ob „Neu konvertieren" ueberhaupt angeboten werden darf - dieselbe
+			// Bedingung, die reconvert() dann noch einmal selbst prueft (die
+			// Antwort hier ist eine Anzeigehilfe, keine Absicherung). Ohne sie
+			// stuende der Knopf auch an einer nur geliehenen Partitur und
+			// endete jedes Mal in einem 403.
+			$body['canReconvert'] = $node->isUpdateable();
 		}
 		return new JSONResponse($body);
+	}
+
+	/**
+	 * Verwirft die gespeicherte Konvertierung dieser Datei und laesst sie neu
+	 * erzeugen - der Weg, eine Partitur von einer neueren Fassung der App
+	 * noch einmal setzen zu lassen, ohne sie anzufassen. Ohne ihn half nur,
+	 * `ConversionService::CURRENT_FORMAT_VERSION` zu erhoehen, was jede
+	 * Partitur der Instanz trifft statt der einen, um die es geht.
+	 *
+	 * Verwerfen statt „Job noch einmal einreihen": ConvertScoreJob
+	 * ueberspringt einen Datensatz, der `ready` UND aktuellen Formats ist -
+	 * ein blosses jobList->add() taete hier also gar nichts. Ueber
+	 * deleteAllForFile() geht mit den Statuszeilen auch der Cache-Ordner weg;
+	 * so kann keine Mischung aus alten und neuen Artefakten stehenbleiben.
+	 *
+	 * Nur mit Schreibrecht: Wer die Datei ohnehin neu speichern duerfte,
+	 * loeste dieselbe Neukonvertierung auch dadurch aus (der etag aendert
+	 * sich). Wer sie nur lesen darf, soll die Darstellung nicht fuer alle
+	 * anderen verwerfen koennen - der Cache haengt an der fileId, nicht an
+	 * der Nutzerin.
+	 */
+	#[NoAdminRequired]
+	public function reconvert(int $fileId): JSONResponse {
+		$node = $this->fileResolver->resolveOwnNode($fileId);
+		if ($node === null) {
+			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+		}
+		if (!$node->isUpdateable()) {
+			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('Not allowed to convert this score again.')], Http::STATUS_FORBIDDEN);
+		}
+
+		$conversion = $this->conversionService->find($fileId, $node->getEtag());
+		if ($conversion !== null && in_array($conversion->getStatus(), [ScoreConversion::STATUS_PENDING, ScoreConversion::STATUS_PROCESSING], true)) {
+			// Laeuft ohnehin gerade - nichts verwerfen, sonst schriebe der
+			// laufende Job sein Ergebnis auf eine geloeschte Zeile und die
+			// Konvertierung liefe ein zweites Mal.
+			return new JSONResponse(['status' => $conversion->getStatus()]);
+		}
+
+		$this->conversionService->deleteAllForFile($fileId);
+		$this->retryConversion($fileId);
+		return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 	}
 
 	/** Reiht eine (Neu-)Konvertierung ein - Idempotenz/Ueberspringen bereits laufender Jobs regelt ConvertScoreJob selbst. */
@@ -206,10 +261,29 @@ class ConversionController extends Controller {
 		return $this->urlGenerator->linkToRoute(Application::APP_ID . '.sound_font.get');
 	}
 
-	private function buildFileUrls(int $fileId, string $etag): array {
+	/**
+	 * Was die Artefakt-URL einer Konvertierung von der einer anderen
+	 * unterscheidet. Der Server wertet den Parameter nicht aus (er loest den
+	 * etag ohnehin aus der Datei auf) - er existiert allein als
+	 * Cache-Schluessel des Browsers, damit `immutable` oben die Wahrheit
+	 * sagt.
+	 *
+	 * Beides zusammen, weil es zwei verschiedene Aenderungen gibt: der etag
+	 * benennt die Fassung der PARTITUR (Bearbeitung, Re-Upload), der
+	 * Zeitstempel die KONVERTIERUNG dieser Fassung - ein Format-Upgrade oder
+	 * ein manuelles „Neu konvertieren" laesst den etag unberuehrt und
+	 * bliebe sonst unsichtbar.
+	 */
+	private function cacheBuster(ScoreConversion $conversion): string {
+		return $conversion->getEtag() . '-' . $conversion->getUpdatedAt()->getTimestamp();
+	}
+
+	private function buildFileUrls(int $fileId, ScoreConversion $conversion): array {
+		$etag = $conversion->getEtag();
 		$pageCount = $this->conversionService->getPageCount($fileId, $etag);
+		$version = $this->cacheBuster($conversion);
 		$artifact = fn (string $name) => $this->urlGenerator->linkToRoute(
-			Application::APP_ID . '.conversion.artifact', ['fileId' => $fileId, 'name' => $name]);
+			Application::APP_ID . '.conversion.artifact', ['fileId' => $fileId, 'name' => $name, 'v' => $version]);
 		$pages = [];
 		for ($n = 1; $n <= $pageCount; $n++) {
 			$pages[] = $artifact("page-{$n}");

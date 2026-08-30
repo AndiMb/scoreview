@@ -8,6 +8,16 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 ### Hinzugefügt
 
+- **„Neu konvertieren" im Viewer** – im Aufklapper der Anzeigeeinstellungen,
+  direkt unter der Angabe, womit die Seiten gesetzt wurden. Eine einmal fertige
+  Konvertierung bleibt sonst liegen, solange niemand die Datei anfasst: Eine
+  App-Fassung, die besser setzt, erreichte bestehende Partituren bisher nur
+  über ein Hochzählen der Cache-Formatversion – das trifft jede Partitur der
+  Instanz statt der einen, um die es geht. Der Knopf verwirft die gespeicherte
+  Konvertierung samt Cache-Ordner und lässt sie neu erzeugen; er erscheint nur
+  dort, wo Schreibrecht auf die Datei besteht, denn der Cache hängt an der
+  Datei und gilt für alle, die sie öffnen.
+
 - **Die Hervorhebung der klingenden Stelle lässt sich einstellen** – Form und
   Farbe, je Nutzerin gespeichert und damit auf jedem Gerät dieselbe. Zur Wahl
   stehen die eingefärbten Notenköpfe oder ein Band an der klingenden Stelle,
@@ -37,6 +47,16 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 ### Behoben
 
+- **Eine neu konvertierte Partitur blieb im Browser die alte.** Die
+  Auslieferungsrouten der Artefakte versprachen `immutable` – dass sich unter
+  dieser URL nie etwas ändert –, trugen den Cache-Schlüssel aber gar nicht in
+  der URL: der etag stand nur im serverseitigen Cache-Pfad. Nach einer
+  Neukonvertierung, und ebenso nach einer Bearbeitung der `.mscz`, zeigte der
+  Browser deshalb weiter die alten Seiten; Neuladen half nicht, weil Chrome
+  Unterressourcen dabei nicht revalidiert und `immutable` es ausdrücklich
+  verbietet. Sichtbar wurde die neue Fassung erst nach hartem Neuladen oder in
+  einem frischen Profil. Die URLs tragen jetzt etag und Zeitstempel der
+  Konvertierung.
 - **Auf dem lokalen Konvertierungsweg war die Hervorhebung unsichtbar.** Zwei
   Ursachen, beide seit der Umstellung auf die scoreview-engine: Die Engine
   hängt die Segmentkennung an eine Gruppe statt an das gezeichnete Element, und

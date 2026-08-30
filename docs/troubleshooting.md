@@ -126,6 +126,25 @@ daneben. Die Fehlercodes:
 | `local_unavailable` | Lokaler Weg gewählt, aber nicht lauffähig | siehe [oben](#der-lokale-konvertierungsweg-läuft-nicht) |
 | `unknown` | Alles andere | `nextcloud.log` auf die Exception prüfen |
 
+## Der Viewer zeigt eine veraltete Fassung der Partitur
+
+Zwei Ursachen, die sich ähnlich anfühlen und getrennt zu behandeln sind.
+
+**Serverseitig** bleibt eine fertige Konvertierung liegen, solange niemand die
+Datei anfasst – auch wenn eine neuere Fassung der App sie besser setzen würde
+oder die Herkunft noch „unbekannt" meldet. Der Knopf **„Neu konvertieren"** im
+Aufklapper der Anzeigeeinstellungen verwirft sie und lässt sie neu erzeugen; er
+erscheint nur mit Schreibrecht auf die Datei. Für alle Partituren einer Instanz
+auf einmal ist `CURRENT_FORMAT_VERSION` der Hebel (siehe
+[Architektur](architecture.md#konvertierung-und-cache)).
+
+**Im Browser** kann eine ältere Fassung der App nachwirken: Vor 1.4.0 trugen
+die Artefakt-Links keinen Cache-Schlüssel, wurden aber als `immutable`
+ausgeliefert. Solche Einträge liegen weiterhin im Browsercache, und Neuladen
+räumt sie nicht weg – Chrome revalidiert Unterressourcen dabei nicht. Einmal
+hart neu laden (`Strg`+`Umschalt`+`R`) genügt; danach zeigen die Links den
+Zeitstempel der Konvertierung und lösen sich von selbst ab.
+
 ## Der Viewer meldet HTTP 500
 
 Ein Cache-Formatwechsel ist **kein** möglicher Grund mehr: Die Spalte

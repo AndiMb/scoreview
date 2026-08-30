@@ -100,6 +100,29 @@ export function useConversionStatus({ fileId, onReady }) {
 		}
 	}
 
+	/**
+	 * Verwirft die gespeicherte Konvertierung serverseitig und wartet auf die
+	 * neue. Der Grund, warum es diesen Weg ueberhaupt gibt: Ein einmal
+	 * fertiges Ergebnis bleibt liegen, solange niemand die Datei anfasst -
+	 * eine App-Fassung, die besser setzt, erreicht bestehende Partituren
+	 * sonst nie.
+	 *
+	 * `reset()` VOR dem POST, nicht danach: der Server verwirft die
+	 * Artefakte, auf die der Viewer gerade noch zeigt, sofort.
+	 */
+	async function reconvert() {
+		reset()
+		try {
+			await axios.post(generateUrl('/apps/scoreview/api/scores/{fileId}/reconvert', { fileId: fileId() }))
+		} catch (err) {
+			state.value = 'error'
+			errorMessage.value = err.message
+			errorCode.value = ''
+			return
+		}
+		await poll()
+	}
+
 	function stop() {
 		if (pollTimer) {
 			clearTimeout(pollTimer)
@@ -115,5 +138,5 @@ export function useConversionStatus({ fileId, onReady }) {
 		autoRetried = false
 	}
 
-	return { state, errorMessage, errorCode, errorText, poll, stop, reset }
+	return { state, errorMessage, errorCode, errorText, poll, reconvert, stop, reset }
 }

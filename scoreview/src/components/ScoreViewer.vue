@@ -293,6 +293,23 @@
 									{{ t('Score written with MuseScore {version}', { version: mscoreVersion }) }}
 								</span>
 							</p>
+							<!--
+								Genau hier, direkt unter der Herkunft: Das ist die
+								Stelle, an der auffaellt, dass eine Partitur noch von
+								einer aelteren Fassung gesetzt wurde. Nur mit
+								Schreibrecht (canReconvert) - siehe
+								ConversionController::reconvert().
+							-->
+							<NcButton
+								v-if="canReconvert"
+								class="scoreview-origin-action"
+								:title="t('Discards the stored conversion and renders the score again with the current version of the app.')"
+								@click="reconvertScore">
+								<template #icon>
+									<Refresh :size="20" />
+								</template>
+								{{ t('Convert again') }}
+							</NcButton>
 						</div>
 					</template>
 				</NcPopover>
@@ -483,6 +500,7 @@ import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
 import Palette from 'vue-material-design-icons/Palette.vue'
 import Pause from 'vue-material-design-icons/Pause.vue'
 import Play from 'vue-material-design-icons/Play.vue'
+import Refresh from 'vue-material-design-icons/Refresh.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import Tune from 'vue-material-design-icons/Tune.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
@@ -542,6 +560,7 @@ export default {
 		CrosshairsGps,
 		Magnify,
 		Palette,
+		Refresh,
 	},
 
 	props: {
@@ -720,6 +739,7 @@ export default {
 			errorCode: conversion.errorCode,
 			errorText: conversion.errorText,
 			pollStatus: conversion.poll,
+			requestReconvert: conversion.reconvert,
 			stopPolling: conversion.stop,
 			resetConversion: conversion.reset,
 			timeline,
@@ -786,6 +806,10 @@ export default {
 			// nichts im Viewer verzweigt danach (E3).
 			rendererBackend: null,
 			mscoreVersion: null,
+			// Ob diese Nutzerin die Partitur neu konvertieren lassen darf -
+			// kommt aus dem Statusendpunkt, nicht aus einer eigenen Annahme
+			// ueber Freigaben.
+			canReconvert: false,
 		}
 	},
 
@@ -1015,6 +1039,18 @@ export default {
 			return Object.values(this.measuresTimeline.elements).filter((rect) => rect.page === pageIndex)
 		},
 
+		/**
+		 * „Neu konvertieren": erst den eigenen Zustand abbauen, dann den Server
+		 * die gespeicherte Konvertierung verwerfen lassen. Die Reihenfolge ist
+		 * nicht beliebig - ohne den eigenen reset() liefe die Wiedergabe auf
+		 * Artefakten weiter, die es serverseitig im naechsten Moment nicht
+		 * mehr gibt.
+		 */
+		async reconvertScore() {
+			this.reset()
+			await this.requestReconvert()
+		},
+
 		reset() {
 			this.cleanup()
 			this.resetConversion()
@@ -1040,6 +1076,7 @@ export default {
 			this.currentElid = null
 			this.rendererBackend = null
 			this.mscoreVersion = null
+			this.canReconvert = false
 			this.resetMetronome()
 		},
 
@@ -1055,7 +1092,7 @@ export default {
 			this.stopZoomObserver()
 		},
 
-		async loadScore({ files, soundFontUrl, renderer }) {
+		async loadScore({ files, soundFontUrl, renderer, canReconvert }) {
 			try {
 				const [timingRes, measuresRes, metaRes] = await Promise.all([
 					axios.get(files.timingJson),
@@ -1078,6 +1115,7 @@ export default {
 				// die Partitur GESCHRIEBEN wurde - siehe rendererText().
 				this.rendererBackend = renderer?.backend ?? null
 				this.mscoreVersion = metaRes.data.mscoreVersion ?? null
+				this.canReconvert = canReconvert === true
 				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
 				this.loadAnnotations()
 				// Startzoom "Seitenbreite" statt fester Faktor 1: die Seite hat
@@ -1477,6 +1515,10 @@ export default {
 .scoreview-origin-note {
 	display: block;
 	padding-block-start: 4px;
+}
+
+.scoreview-origin-action {
+	margin-block-start: 8px;
 }
 
 .scoreview-body {

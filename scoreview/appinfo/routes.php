@@ -15,6 +15,11 @@ return [
 		// bzw. getArtifact() - hier bewusst nur die Zeichenklasse, damit ein
 		// unbekannter Name als 404 aus dem Controller kommt und nicht als
 		// Routing-Fehler.
+		// Verwirft die gespeicherte Konvertierung und laesst sie neu erzeugen
+		// (Controller\ConversionController::reconvert). POST, weil es der
+		// einzige schreibende Eingriff in den Konvertierungs-Cache ist, den
+		// eine Nutzerin ausloesen kann.
+		['name' => 'conversion#reconvert', 'url' => '/api/scores/{fileId}/reconvert', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'conversion#artifact', 'url' => '/api/scores/{fileId}/artifact/{name}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+', 'name' => '[a-z0-9\-]+']],
 
 		// SoundFont fuer die Browser-Wiedergabe (siehe docs/architecture.md

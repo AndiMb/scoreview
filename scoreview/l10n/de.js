@@ -128,6 +128,8 @@ OC.L10N.register(
     "scoreview-engine on this server (MuseScore as WebAssembly)" : "scoreview-engine auf diesem Server (MuseScore als WebAssembly)",
     "Sidecar container (MuseScore 4)" : "Sidecar-Container (MuseScore 4)",
     "Score written with MuseScore {version}" : "Partitur geschrieben mit MuseScore {version}",
-    "Unknown – converted by an earlier version of the app." : "Unbekannt – von einer früheren Fassung der App konvertiert."
+    "Unknown – converted by an earlier version of the app." : "Unbekannt – von einer früheren Fassung der App konvertiert.",
+    "Convert again" : "Neu konvertieren",
+    "Discards the stored conversion and renders the score again with the current version of the app." : "Verwirft die gespeicherte Konvertierung und setzt die Partitur mit der aktuellen Fassung der App neu."
 },
 "nplurals=2; plural=(n != 1);");
