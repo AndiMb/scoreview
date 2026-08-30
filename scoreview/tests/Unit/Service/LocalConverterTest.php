@@ -79,6 +79,25 @@ class LocalConverterTest extends TestCase {
 		}
 	}
 
+	public function testNimmtDieMeldungAusDemStacktraceStattEinesFrames(): void {
+		// Ueber Reflection, weil die Methode privat ist und der einzige Weg
+		// dorthin ein echter Konverterlauf mit Wasm waere. Der Fall ist
+		// wortwoertlich der gemessene: Qt-Meldung, dann die Ursache, dann die
+		// Frames. Frueher stand die letzte Zeile in der Oberflaeche.
+		$stderr = "12:00:00 | ERROR | main_thread | DefaultStyle::doLoadStyle | failed load style\n"
+			. "RuntimeError: null function or function signature mismatch\n"
+			. "    at wasm://wasm/02366562:wasm-function[5328]:0x479d80\n"
+			. "    at async file:///app/converter/convert.mjs:240:2\n";
+
+		$methode = new \ReflectionMethod(LocalConverter::class, 'lastLine');
+		$methode->setAccessible(true);
+
+		$this->assertSame(
+			'RuntimeError: null function or function signature mismatch',
+			$methode->invoke($this->converter(), $stderr),
+		);
+	}
+
 	public function testSelbsttestScheitertLesbarStattZuWerfen(): void {
 		// Der Selbsttest ist eine Diagnose - er muss auch dann antworten,
 		// wenn der Weg gar nicht lauffaehig ist, sonst steht in der

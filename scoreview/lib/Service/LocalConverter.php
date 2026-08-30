@@ -374,9 +374,23 @@ class LocalConverter {
 		return $content;
 	}
 
-	/** Die letzte nicht leere Zeile - bei einem Node-Stacktrace die Ursache. */
+	/**
+	 * Die Meldungszeile aus der Fehlerausgabe des Konverters.
+	 *
+	 * Node schreibt zuerst `Fehlerklasse: Meldung` und darunter die Frames
+	 * (`    at ...`). Hier stand frueher die LETZTE nicht leere Zeile - das
+	 * ist bei einem Stacktrace immer ein Frame, und in der Oberflaeche stand
+	 * entsprechend `at async file:///.../convert.mjs:240:2` statt der
+	 * Ursache. Gesucht ist die letzte Zeile, die KEIN Frame ist: MuseScore
+	 * schreibt seine Qt-Meldungen vorher nach stderr, die Ursache steht also
+	 * hinter ihnen, aber vor den Frames.
+	 */
 	private function lastLine(string $text): string {
 		$lines = array_values(array_filter(array_map('trim', explode("\n", $text)), static fn (string $line) => $line !== ''));
+		$meldungen = array_values(array_filter($lines, static fn (string $line) => !str_starts_with($line, 'at ')));
+		if ($meldungen !== []) {
+			return end($meldungen);
+		}
 		return $lines === [] ? 'keine Fehlerausgabe' : end($lines);
 	}
 }

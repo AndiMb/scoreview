@@ -55,6 +55,7 @@ OC.L10N.register(
     "Unknown error." : "Unbekannter Fehler.",
     "The conversion service could not be reached." : "Der Konvertierungsdienst konnte nicht erreicht werden.",
     "The conversion service rejected the file." : "Der Konvertierungsdienst hat die Datei abgelehnt.",
+    "This server is set up to convert scores itself, but cannot. The administration settings say what is missing." : "Dieser Server soll Partituren selbst konvertieren, kann es aber nicht. Die Verwaltungseinstellungen sagen, was fehlt.",
     "The score could not be converted." : "Die Partitur konnte nicht konvertiert werden.",
     "The conversion did not finish in time." : "Die Konvertierung wurde nicht rechtzeitig abgeschlossen.",
     "The score contains no pages that could be converted." : "Die Partitur enthält keine Seiten, die konvertiert werden konnten.",

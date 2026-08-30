@@ -75,6 +75,13 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   freigegeben war. Die Kennungen werden jetzt beim Einbetten je Seite eindeutig
   gemacht. Betroffen war nur der lokale Weg; der Sidecar schreibt gar keine
   Kennungen.
+- **Fehlermeldungen des lokalen Konverters nannten einen Stack-Frame statt der
+  Ursache.** Gesucht wurde die letzte nicht leere Zeile der Fehlerausgabe – bei
+  einem Node-Stacktrace ist das immer ein `at …`-Frame, die Meldung steht
+  darüber. Jetzt steht die Ursache in der Oberfläche.
+- **Ein Fehlerzustand blieb unübersetzt.** `local_unavailable` – der lokale
+  Weg ist eingestellt, aber nicht lauffähig – hatte im Viewer keinen eigenen
+  Satz und erschien als „unbekannter Fehler".
 
 ### Geändert
 

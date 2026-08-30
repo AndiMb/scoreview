@@ -30,9 +30,9 @@ export function useConversionStatus({ fileId, onReady }) {
 	// loading | converting | ready | error
 	const state = ref('loading')
 	const errorMessage = ref('')
-	// sidecar_unreachable | sidecar_rejected | conversion_failed | timeout |
-	// no_pages | too_large | unknown | '' (kein Fehler bzw. Fehler kam nicht
-	// vom Server, sondern vom Abruf selbst)
+	// sidecar_unreachable | sidecar_rejected | local_unavailable |
+	// conversion_failed | timeout | no_pages | too_large | unknown | ''
+	// (kein Fehler bzw. Fehler kam nicht vom Server, sondern vom Abruf selbst)
 	const errorCode = ref('')
 
 	let pollTimer = null
@@ -49,6 +49,7 @@ export function useConversionStatus({ fileId, onReady }) {
 		const messages = {
 			sidecar_unreachable: t('The conversion service could not be reached.'),
 			sidecar_rejected: t('The conversion service rejected the file.'),
+			local_unavailable: t('This server is set up to convert scores itself, but cannot. The administration settings say what is missing.'),
 			conversion_failed: t('The score could not be converted.'),
 			timeout: t('The conversion did not finish in time.'),
 			no_pages: t('The score contains no pages that could be converted.'),

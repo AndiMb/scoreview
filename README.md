@@ -50,9 +50,11 @@ Oberfläche auf Deutsch und Englisch.
 
 Eine hochgeladene `.mscz`-Datei wird **einmalig** serverseitig zu Notenseiten
 (SVG), MIDI und Timing-Daten konvertiert und das Ergebnis gecacht. Erneutes
-Öffnen rendert nicht neu; erst eine Änderung an der Datei stößt eine neue
-Konvertierung an. Die Audiowiedergabe passiert clientseitig im Browser, mit
-einem SoundFont, das die App selbst ausliefert.
+Öffnen rendert nicht neu; eine neue Konvertierung stößt eine Änderung an der
+Datei an – oder der Knopf „Neu konvertieren" im Viewer, wenn eine neuere Fassung
+der App dieselbe Partitur besser setzt. Daneben steht, über welchen der beiden
+Wege unten die angezeigten Seiten gesetzt wurden. Die Audiowiedergabe passiert
+clientseitig im Browser, mit einem SoundFont, das die App selbst ausliefert.
 
 Für die Konvertierung gibt es **zwei gleichwertige Wege**, die dasselbe
 Ergebnis liefern und sich nur darin unterscheiden, was der Server dafür braucht:
