@@ -88,6 +88,17 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   freigegeben war. Die Kennungen werden jetzt beim Einbetten je Seite eindeutig
   gemacht. Betroffen war nur der lokale Weg; der Sidecar schreibt gar keine
   Kennungen.
+- **Partituren aus MuseScore 1 bis 3 wurden mit den Stilvorgaben von
+  MuseScore 4 gesetzt.** Die scoreview-engine lieferte die Vorgaben nicht mit,
+  die MuseScore für ältere Dateien lädt – im Log stand `failed load style:
+  legacy-style-defaults-v2.mss`, im Notenbild ein Satz, der nicht der seiner
+  Zeit war. Gegen echtes MuseScore 4 geprüft: Eine MuseScore-2-Datei wird dort
+  6 Seiten und wurde hier 5; jetzt sind es auf beiden Seiten 6. Ein
+  MuseScore-3-Export derselben Partitur behält seine vier Seiten, setzt sie
+  aber anders – und trifft damit MuseScores Bild. Die Vorgaben liegen jetzt im
+  Ressourcenpaket der Engine. Eine Ersatzschrift bleibt – siehe
+  [Grenzwerte](docs/limits.md#bekannte-lücken). Bereits konvertierte alte
+  Partituren behalten ihr Bild, bis sie neu konvertiert werden.
 - **Fehlermeldungen des lokalen Konverters nannten einen Stack-Frame statt der
   Ursache.** Gesucht wurde die letzte nicht leere Zeile der Fehlerausgabe – bei
   einem Node-Stacktrace ist das immer ein `at …`-Frame, die Meldung steht

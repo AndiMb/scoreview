@@ -91,6 +91,15 @@ die Engine zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
 Betriebsdiagnose prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine
 neuere MuseScore-Version verfügbar wäre, meldet er nicht.
 
+**Alte Partituren bekommen lokal eine Ersatz-Notenschrift.** Für Dateien aus
+MuseScore 1 bis 3 gelten die Stilvorgaben ihrer Zeit, und die nennen als
+Notenschrift Emmentaler bzw. MScore Text. Die bringt der lokale Weg nicht mit –
+er trägt Bravura und Leland, und jede weitere Schrift würde das
+Auslieferungspaket vergrößern. Gezeichnet wird deshalb mit Bravura. Betroffen
+sind nur die Glyphenformen: Der Stilwert bleibt „Emmentaler“, also greifen die
+Satzregeln, die daran hängen, genauso wie in MuseScore – Seitenaufteilung und
+Abstände stimmen. Der Sidecar hat die Originalschrift.
+
 **Zwei Bildformate zeigt nur der Sidecar.** In die Partitur eingebettete
 Bilder setzen beide Wege ins Notenbild. Der lokale Weg reicht sie unverändert
 ins SVG durch und kennt dafür PNG, JPEG, GIF und BMP – die vier Formate, die
