@@ -110,3 +110,33 @@ describe('sanitizeSvg - das echte Notenbild darf nicht kaputtgehen', () => {
 		expect(out).not.toMatch(/href\s*=/i)
 	})
 })
+
+// Der Fehlerfall dahinter: zwei gleichzeitig geladene Seiten, beide mit einer
+// Glyphe `g0`. `<use href="#g0">` der zweiten Seite fand die der ersten, und
+// das Notenbild zeigte Buchstaben und Ziffern statt Noten.
+describe('sanitizeSvg - Kennungen je Seite eindeutig machen', () => {
+	const seite = '<svg><defs><path id="g0" d="M1 2"/></defs><use xlink:href="#g0"/><use href="#g0"/></svg>'
+
+	it('stellt jeder id und jeder use-Referenz den Praefix voran', () => {
+		const out = sanitizeSvg(seite, 'p1-')
+		expect(out).toMatch(/id="p1-g0"/)
+		expect(out.match(/href="#p1-g0"/g)).toHaveLength(2)
+		expect(out).not.toMatch(/"#g0"/)
+	})
+
+	it('macht dieselbe Kennung auf zwei Seiten unterscheidbar', () => {
+		expect(sanitizeSvg(seite, 'p0-')).not.toBe(sanitizeSvg(seite, 'p1-'))
+	})
+
+	it('zieht url(#…)-Verweise mit, egal in welchem Attribut', () => {
+		const svg = '<svg><defs><linearGradient id="v"><stop offset="0"/></linearGradient></defs>'
+			+ '<rect fill="url(#v)" clip-path="url(#v)" style="stroke:url(#v)"/></svg>'
+		const out = sanitizeSvg(svg, 'p2-')
+		expect(out).toMatch(/id="p2-v"/)
+		expect(out.match(/url\(#p2-v\)/g)).toHaveLength(3)
+	})
+
+	it('laesst ohne Praefix alles wie bisher', () => {
+		expect(sanitizeSvg(seite)).toMatch(/id="g0"/)
+	})
+})

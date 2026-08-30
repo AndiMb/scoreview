@@ -524,7 +524,10 @@ export default {
 				const res = await axios.get(this.svgUrl, { responseType: 'text' })
 				this.viewBox = parseViewBox(res.data)
 				this.sizeMm = parseSvgSizeMm(res.data)
-				this.svgMarkup = sanitizeSvg(res.data)
+				// Der Praefix macht die Glyph-Kennungen dieser Seite im Dokument
+				// eindeutig - ohne ihn greift die zweite Seite auf die Glyphen der
+				// ersten zu, solange beide geladen sind (siehe namespaceIds()).
+				this.svgMarkup = sanitizeSvg(res.data, `p${this.pageIndex}-`)
 				// Für die Zoom-Presets ("Seitenbreite/ganze Seite/100%") -
 				// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
 				// jeweils geladene ScorePage.

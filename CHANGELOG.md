@@ -64,6 +64,17 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   blieben schwarz. Zugleich malt sie einen weißen Hintergrundpfad ohne
   `class`-Attribut, den die bisherige Regel nicht erwischte; er deckte das Band
   vollständig zu. Beides ist jetzt für beide Konvertierungswege geregelt.
+- **Beim Blättern zeigte die folgende Seite Buchstaben und Ziffern statt
+  Noten.** Die scoreview-engine legt jede Glyphe einmal als `<path id="g0">`
+  ab und verweist rund 1200-mal je Seite darauf – die Nummerierung beginnt aber
+  auf jeder Seite wieder bei Null. Solche Verweise löst der Browser im ganzen
+  Dokument auf, nicht innerhalb der eigenen Seite, und der Viewer hält beim
+  Scrollen mehrere Seiten gleichzeitig geladen: Die neue Seite griff deshalb
+  auf die gleichnamigen Glyphen der vorherigen zu. Der Satz reparierte sich
+  scheinbar von selbst, sobald die vorherige Seite weit genug entfernt und
+  freigegeben war. Die Kennungen werden jetzt beim Einbetten je Seite eindeutig
+  gemacht. Betroffen war nur der lokale Weg; der Sidecar schreibt gar keine
+  Kennungen.
 
 ### Geändert
 

@@ -74,6 +74,46 @@ const ALLOWED_ATTR = [
 /* eslint-enable @stylistic/exp-list-style */
 
 /**
+ * Stellt jeder `id` und jeder Referenz darauf `prefix` voran.
+ *
+ * Warum das noetig ist: `<use xlink:href="#g0">` wird im DOKUMENT aufgeloest,
+ * nicht innerhalb des umgebenden `<svg>` - es gewinnt das erste Element mit
+ * dieser Kennung, egal auf welcher Seite es steht. Der Viewer haelt aber
+ * mehrere Seiten gleichzeitig im DOM (ScorePage.vue laedt 600 px vor dem
+ * Sichtbarwerden und gibt erst 2400 px dahinter wieder frei), und die
+ * scoreview-engine faengt auf JEDER Seite wieder bei `g0` an. Ohne Praefix
+ * zeigen die rund 1200 `<use>` der zweiten Seite deshalb auf die
+ * gleichnamigen Glyphen der ersten: statt Noten stehen dort Buchstaben und
+ * Ziffern, und das Bild "repariert sich" scheinbar von selbst, sobald die
+ * erste Seite entladen ist. Genau dieses Fehlerbild.
+ *
+ * Umbenannt wird ueber die Attribute statt ueber `setAttribute()`: `xlink:href`
+ * liegt in einem eigenen Namensraum, und ein Wert am `Attr`-Knoten trifft ihn
+ * ohne Ruecksicht darauf. Neben `<use>` werden auch `url(#…)`-Verweise
+ * mitgezogen (Verlaeufe, `clip-path`, `mask`) - die stehen zwar in keinem der
+ * heute ausgelieferten SVGs, kollidieren aber genauso, sobald sie auftauchen.
+ *
+ * Der Sidecar-Weg vergibt ueberhaupt keine Kennungen (nachgesehen: null `id`,
+ * null `<use>` je Seite) - dort laeuft die Schleife ins Leere.
+ *
+ * @param {DocumentFragment} fragment
+ * @param {string} prefix
+ */
+function namespaceIds(fragment, prefix) {
+	for (const el of fragment.querySelectorAll('*')) {
+		for (const attr of el.attributes) {
+			if (attr.name === 'id') {
+				attr.value = prefix + attr.value
+			} else if ((attr.name === 'href' || attr.name === 'xlink:href') && attr.value.startsWith('#')) {
+				attr.value = '#' + prefix + attr.value.slice(1)
+			} else if (attr.value.includes('url(#')) {
+				attr.value = attr.value.replace(/url\(#([^)]*)\)/g, (_, id) => `url(#${prefix}${id})`)
+			}
+		}
+	}
+}
+
+/**
  * Bereinigt SVG-Text für das direkte Einbetten ins DOM.
  *
  * Härter als eine reine Tag-/Attribut-Allowlist: `href`/`xlink:href` sind
@@ -86,10 +126,16 @@ const ALLOWED_ATTR = [
  * steckt in `path`/`polyline`/`text` bzw. `defs`/`use`.
  *
  * @param {string} svgText
+ * @param {string} idPrefix Vorangestellt vor jede `id` und jede Referenz
+ *   darauf - siehe `namespaceIds()`. Leer laesst die Kennungen unveraendert.
  * @return {string}
  */
-export function sanitizeSvg(svgText) {
-	return DOMPurify.sanitize(svgText, {
+export function sanitizeSvg(svgText, idPrefix = '') {
+	// RETURN_DOM_FRAGMENT statt der Zeichenkette: `namespaceIds()` braucht das
+	// geparste Ergebnis, und ein zweiter Parserlauf ueber ein halbes Megabyte
+	// SVG je Seite waere dafuer verschenkt. Serialisiert wird unten von Hand -
+	// zeichengleich mit dem, was DOMPurify sonst selbst zurueckgibt.
+	const fragment = DOMPurify.sanitize(svgText, {
 		// KEIN USE_PROFILES mehr: sind Profile gesetzt, gewinnen deren
 		// eingebaute Listen und ALLOWED_TAGS/ALLOWED_ATTR waren wirkungslos
 		// (nachgemessen: <use> flog trotz Allowlist raus, href blieb trotz
@@ -107,5 +153,12 @@ export function sanitizeSvg(svgText) {
 		// Datenattribute bringen hier keinen Nutzen, koennen aber Payloads tragen.
 		ALLOW_DATA_ATTR: false,
 		ALLOW_ARIA_ATTR: false,
+		RETURN_DOM_FRAGMENT: true,
 	})
+	if (idPrefix) {
+		namespaceIds(fragment, idPrefix)
+	}
+	const container = document.createElement('div')
+	container.appendChild(fragment)
+	return container.innerHTML
 }

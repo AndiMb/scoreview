@@ -315,6 +315,10 @@ Einheiten hohen Seite. Die SVG-Seiten zeigen dasselbe Bild, kodieren es aber
 anders: Die Engine legt jede Glyphe einmal in `<defs>` und setzt sie mit
 `<use>`, MuseScore zeichnet jeden Umriss erneut – rund die halbe Dateigröße bei
 gleichem Seitenbild, pixelweise geprüft (`tools/svg-spotcheck.py` der Engine).
+Weil die Engine diese Kennungen auf jeder Seite wieder bei `g0` beginnt, ein
+`<use>` aber im ganzen Dokument aufgelöst wird und der Viewer mehrere Seiten
+gleichzeitig geladen hält, stellt der Sanitizer beim Einbetten jeder Kennung
+die Seitennummer voran (`svgSanitizer.js`).
 Auch die Formatgrundlagen halten: Element 0 der fünfseitigen Partitur liegt bei
 `y=2148` ([M4](#m4-koordinaten-passen-mit-faktor-12-auf-das-svg)), `repeat-test`
 zeigt vier doppelte `elid`
