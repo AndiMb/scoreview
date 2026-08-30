@@ -27,7 +27,7 @@
 		"dompurify": "^3.4.14",
 		"spessasynth_lib": "^4.3.14",
 		"stb-vorbis": "^0.0.6",
-		"vue": "^3.5.18",
+		"vue": "^3.5.42",
 		"vue-material-design-icons": "^5.3.1"
 	},
 	"devDependencies": {
