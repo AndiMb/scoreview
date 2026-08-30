@@ -12,13 +12,15 @@ import { sanitizeSvg } from './svgSanitizer.js'
  *
  * `<use>` und `href` sind seit der Browser-Konvertierung nicht mehr pauschal
  * verdaechtig: die scoreview-engine schreibt Text als Glyph-Outlines mit
- * `<use xlink:href="#gN">` auf lokale `<defs>` (siehe svgSanitizer.js).
- * Gefaehrlich bleibt jedes href, dessen Wert NICHT ein lokales
- * "#fragment" ist - genau das prueft das zweite Muster.
+ * `<use xlink:href="#gN">` auf lokale `<defs>`, und eingebettete Bilder
+ * stehen als `<image xlink:href="data:image/png;base64,…">` (siehe
+ * svgSanitizer.js). Gefaehrlich bleibt jedes href, dessen Wert WEDER ein
+ * lokales "#fragment" NOCH ein solcher Bild-Daten-URI ist - genau das prueft
+ * das zweite Muster.
  */
 function isDangerous(svg) {
 	return /<script|\son[a-z]+\s*=|javascript:|<foreignObject|<iframe|attributeName|<style/i.test(svg)
-		|| /href\s*=\s*["'](?!#)/i.test(svg)
+		|| /href\s*=\s*["'](?!#|data:image\/(?:png|jpeg|gif|bmp);base64,)/i.test(svg)
 }
 
 describe('sanitizeSvg - Umgehungsmuster, die die alte Regex-Fassung durchliess', () => {
@@ -109,6 +111,40 @@ describe('sanitizeSvg - das echte Notenbild darf nicht kaputtgehen', () => {
 		const out = sanitizeSvg('<svg><use xlink:href="http://evil/x.svg#a"/><use href="//evil/y#b"/></svg>')
 		expect(out).not.toMatch(/href\s*=/i)
 	})
+
+	it('behaelt in die Partitur eingebettete Bilder als Daten-URI', () => {
+		// Ohne diese Ausnahme bleibt das <image> zwar stehen, verliert aber
+		// seine Quelle - eine Partitur mit Bild zeigt dann eine Luecke.
+		const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg=='
+		const out = sanitizeSvg(`<svg><image x="0" y="0" width="4" height="4" xlink:href="${png}"/></svg>`)
+		expect(out).toMatch(/<image[^>]*href="data:image\/png;base64,/)
+	})
+
+	it('behaelt einen umbrochenen Base64-Block', () => {
+		// Ein Serializer darf den Block umbrechen; der Wert bleibt derselbe.
+		const out = sanitizeSvg('<svg><image xlink:href="data:image/jpeg;base64,/9j/4AAQ\n  SkZJRg=="/></svg>')
+		expect(out).toMatch(/href="data:image\/jpeg;base64,/)
+	})
+})
+
+// Die Ausnahme fuer <image> ist eng gefasst: sie gilt genau fuer Base64 in
+// einem der vier Bildtypen, die ein Browser als Bild dekodiert.
+describe('sanitizeSvg - was am Bild-Daten-URI NICHT durchgeht', () => {
+	const abgelehnt = [
+		['externe Adresse', '<svg><image xlink:href="http://evil/x.png"/></svg>'],
+		['protokollrelative Adresse', '<svg><image xlink:href="//evil/x.png"/></svg>'],
+		['javascript:', '<svg><image xlink:href="javascript:x()"/></svg>'],
+		['SVG als Daten-URI', '<svg><image xlink:href="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="/></svg>'],
+		['Daten-URI ohne Base64', '<svg><image xlink:href="data:image/png,%89PNG"/></svg>'],
+		['fremder Medientyp', '<svg><image xlink:href="data:text/html;base64,PGh0bWw+"/></svg>'],
+		['dasselbe auf einem anderen Element', '<svg><use xlink:href="data:image/png;base64,iVBORw0KGgo="/></svg>'],
+	]
+
+	for (const [name, input] of abgelehnt) {
+		it(`entfernt: ${name}`, () => {
+			expect(sanitizeSvg(input)).not.toMatch(/href\s*=/i)
+		})
+	}
 })
 
 // Der Fehlerfall dahinter: zwei gleichzeitig geladene Seiten, beide mit einer

@@ -29,10 +29,29 @@ import DOMPurify from 'dompurify'
 // denen die alte Regex-Fassung scheiterte).
 const LOCAL_FRAGMENT = /^#[A-Za-z0-9_.:-]+$/
 
+// In die Partitur eingebettete Bilder: beide Konvertierungswege legen sie als
+// Daten-URI in `<image xlink:href>` ab (die scoreview-engine im
+// Originalformat, MuseScores Qt-Serializer im Sidecar stets als PNG). Erlaubt
+// ist ausschliesslich diese Form - Base64 in einem der vier Bildtypen, die
+// ein Browser auch anzeigt. Nicht dabei: `image/svg+xml`, das wieder ein
+// Dokument waere statt eines Bildes; und keine externe Adresse, sonst
+// verriete eine praeparierte Partitur beim Anzeigen den Aufruf. Leerraum
+// steht im Zeichenvorrat, weil ein Serializer den Base64-Block umbrechen
+// darf - schmuggeln laesst sich damit nichts, der Ausdruck deckt den GANZEN
+// Wert ab.
+//
+// Was bleibt, ist die Angriffsflaeche des Bilddecoders im Browser - dieselbe,
+// die jedes `<img>` in Nextcloud hat.
+const IMAGE_DATA_URI = /^data:image\/(?:png|jpeg|gif|bmp);base64,[A-Za-z0-9+/=\s]+$/
+
 DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
-	if ((data.attrName === 'href' || data.attrName === 'xlink:href')
-		&& node.tagName?.toLowerCase() === 'use'
-		&& LOCAL_FRAGMENT.test(data.attrValue)) {
+	if (data.attrName !== 'href' && data.attrName !== 'xlink:href') {
+		return
+	}
+	const tag = node.tagName?.toLowerCase()
+	if (tag === 'use' && LOCAL_FRAGMENT.test(data.attrValue)) {
+		data.forceKeepAttr = true
+	} else if (tag === 'image' && IMAGE_DATA_URI.test(data.attrValue)) {
 		data.forceKeepAttr = true
 	}
 })
@@ -117,9 +136,10 @@ function namespaceIds(fragment, prefix) {
  * Bereinigt SVG-Text für das direkte Einbetten ins DOM.
  *
  * Härter als eine reine Tag-/Attribut-Allowlist: `href`/`xlink:href` sind
- * nur als lokale `#fragment`-Referenz auf `<use>` erlaubt (der Hook oben -
- * kein `javascript:`, kein Nachladen von einer fremden Adresse über `<use>`
- * oder `<image>`), `<foreignObject>` ist nicht erlaubt (dort lebt sonst
+ * nur als lokale `#fragment`-Referenz auf `<use>` erlaubt oder als
+ * Bild-Daten-URI auf `<image>` (der Hook oben - kein `javascript:`, kein
+ * Nachladen von einer fremden Adresse über `<use>` oder `<image>`),
+ * `<foreignObject>` ist nicht erlaubt (dort lebt sonst
  * beliebiges HTML), und `<style>` ist nicht erlaubt (sonst könnte `url(...)`
  * externe Ressourcen ziehen und damit den Aufruf einer fremden Adresse
  * verraten). Ein MuseScore-Notenbild braucht nichts davon - alle Grafik

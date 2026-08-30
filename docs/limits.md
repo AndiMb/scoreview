@@ -36,6 +36,11 @@ Daraus abgeleitet:
 - **Die SVG-Größe schwankt stark pro Seite** (303 KB gegen 1041 KB je nach
   Notendichte, Faktor ~3,4). Eine Hochrechnung „Seitenzahl × Durchschnitt" ist
   deshalb grob. Für 30 Seiten dichten Satzes sind ~30 MB SVG im Cache plausibel.
+- **Eingebettete Bilder wiegen schwer.** Sie stecken als Daten-URI in der
+  Seite, die sie trägt, und Base64 kostet ein Drittel Aufschlag: Die Titelseite
+  der Aequale-Partitur (zwei PNG, zusammen 562 KB) wiegt damit 773 KB statt
+  23 KB. Betroffen ist nur diese eine Seite – die übrigen bleiben, was sie
+  waren. Der Sidecar ist an dieser Stelle nicht gegengemessen.
 - **MIDI bleibt vernachlässigbar** (< 15 KB), wie in
   [E1](architecture.md#e1-midi-statt-mp3-als-audioartefakt) erwartet.
 - **DOM-Last im Browser:** ~640–1370 Knoten pro gerenderter Seite. Es werden nur
@@ -85,6 +90,16 @@ zieht nicht von selbst nach, wenn MuseScore weitergeht – ein neuer Kern heißt
 die Engine zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
 Betriebsdiagnose prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine
 neuere MuseScore-Version verfügbar wäre, meldet er nicht.
+
+**Zwei Bildformate zeigt nur der Sidecar.** In die Partitur eingebettete
+Bilder setzen beide Wege ins Notenbild. Der lokale Weg reicht sie unverändert
+ins SVG durch und kennt dafür PNG, JPEG, GIF und BMP – die vier Formate, die
+ein Browser selbst anzeigt. Die beiden übrigen, die MuseScore annimmt, bleiben
+dort leer: ein SVG als Bild (dafür bräuchte die Qt-freie Engine einen eigenen
+SVG-Renderer) und TIFF (das kein Browser dekodiert). Der Sidecar rastert ein
+SVG-Bild mit; was er mit TIFF macht, hängt an den Bild-Plugins seines
+AppImage und ist ungeprüft. Wirkung: an dieser Stelle bleibt im lokalen Weg
+eine Lücke, der Rest der Seite ist unberührt.
 
 **Keine Hervorhebung der Notenköpfe auf dem Sidecar-Weg.** Der klingende
 Notenkopf wird nur eingefärbt, wo das SVG die Kennungen aus

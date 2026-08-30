@@ -8,6 +8,19 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 ### Hinzugefügt
 
+- **Partituren mit eingebetteten Bildern lassen sich auch auf dem lokalen
+  Konvertierungsweg öffnen.** Bisher lehnte die App sie dort ab, bevor die
+  Konvertierung überhaupt begann: Die scoreview-engine stürzte an so einer
+  Partitur schon beim Laden ab, und der Viewer riet auf den Sidecar-Container
+  auszuweichen. Die Engine setzt Bilder jetzt selbst – sie legt die
+  Originalbytes als Daten-URI in die Seite, die sie trägt. Erkannt werden PNG,
+  JPEG, GIF und BMP; zu den beiden Formaten, die dabei leer bleiben, siehe
+  [Grenzwerte](docs/limits.md#bekannte-lücken). Ein alter Fehlerdatensatz
+  bleibt stehen, bis die Partitur neu konvertiert wird – dafür gibt es den
+  Knopf unten. Der Absturz war als
+  [scoreview-engine#3](https://github.com/AndiMb/scoreview-engine/issues/3)
+  gemeldet.
+
 - **„Neu konvertieren" im Viewer** – im Aufklapper der Anzeigeeinstellungen,
   direkt unter der Angabe, womit die Seiten gesetzt wurden. Eine einmal fertige
   Konvertierung bleibt sonst liegen, solange niemand die Datei anfasst: Eine

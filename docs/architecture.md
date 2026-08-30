@@ -337,6 +337,12 @@ Hervorhebung auch im Container will, müsste dort die Engine statt MuseScore
 konvertieren lassen – und gäbe damit das beste Argument des Sidecars auf,
 nämlich echtes, per Versionswechsel aktualisierbares MuseScore.
 
+**Und einer bei den eingebetteten Bildern:** Beide Wege setzen sie, aber der
+lokale reicht die Originalbytes als Daten-URI durch, statt sie zu rastern –
+die Qt-freie Engine dekodiert kein einziges Pixel. Damit hängt an ihr, was
+ein Browser selbst anzeigt; die beiden Formate, die dabei ausfallen, stehen
+in [Grenzwerte](limits.md#bekannte-lücken).
+
 Dass die Ergebnisse im Übrigen zusammenpassen, liegt am gemeinsamen Kern: Es
 ist derselbe MuseScore 4.7.4, einmal als AppImage und einmal Qt-frei nach
 WebAssembly übersetzt (MuseScore als ungepatchtes Submodul). `savePositions`
