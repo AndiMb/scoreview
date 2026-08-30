@@ -82,6 +82,15 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   `img-src` griffe ohnehin) – die Allowlist gab aber eine Zusage, die sie
   nicht einhielt. `url(...)` ist im Attribut jetzt auf lokale
   `#`-Fragmente beschränkt.
+- **Der Text einer Notiz war nach oben unbegrenzt.** `content` ist das
+  einzige frei formulierte Feld der App und wird bei jedem Öffnen der
+  Partitur mit ausgeliefert; eine Notiz konnte so groß werden, wie die
+  Anfragegröße der Instanz zuließ. Jetzt gelten 10000 Zeichen, im
+  Eingabefeld und auf dem Server. Ebenfalls eingegrenzt: der musikalische
+  Anker, dessen Taktnummer ab 1 zählt und dessen Anteil im Takt zwischen 0
+  und 1 liegt – nach oben bleibt die Taktnummer bewusst frei, denn ein
+  Anker jenseits der Partitur ist ein regulärer Zustand und wird als
+  verwaist angezeigt.
 - **Eine neu konvertierte Partitur blieb im Browser die alte.** Die
   Auslieferungsrouten der Artefakte versprachen `immutable` – dass sich unter
   dieser URL nie etwas ändert –, trugen den Cache-Schlüssel aber gar nicht in

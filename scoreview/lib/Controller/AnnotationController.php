@@ -30,6 +30,17 @@ use OCP\IRequest;
  * urspruenglich angelegt hat).
  */
 class AnnotationController extends Controller {
+	/**
+	 * Obergrenze fuer den Text einer Notiz. Die Spalte ist TEXT und haette
+	 * selbst keine, aber `content` ist das einzige frei formulierte Feld der
+	 * App: ohne Grenze traegt eine einzelne Notiz so viel, wie die
+	 * Anfragegroesse der Instanz durchlaesst, und wird danach bei JEDEM
+	 * Oeffnen der Partitur mit ausgeliefert (listForFile laedt alle Notizen
+	 * einer Datei auf einmal). 10000 Zeichen sind weit jenseits einer
+	 * Probennotiz und decken auch einen langen Absatz ab.
+	 */
+	private const MAX_CONTENT_LENGTH = 10000;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -67,8 +78,9 @@ class AnnotationController extends Controller {
 		if ($node === null || $userId === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
-		if (trim($content) === '') {
-			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
+		$fehler = $this->validateContent($content);
+		if ($fehler !== null) {
+			return $fehler;
 		}
 		// Unbekannte Werte defensiv auf 'private' abbilden statt sie
 		// ungeprueft in die Spalte zu schreiben - visibility steuert
@@ -78,6 +90,20 @@ class AnnotationController extends Controller {
 		if ($visibility === Annotation::VISIBILITY_SHARED && !$this->canWriteShared($node)) {
 			return new JSONResponse(['error' => $this->l->t('You do not have permission to create shared notes for this file.')], Http::STATUS_FORBIDDEN);
 		}
+
+		// Anker in den Bereich zwingen, den die Anzeige voraussetzt: Takte
+		// zaehlen ab 1, `fraction` ist der Anteil IM Takt (0.0-1.0, siehe
+		// Migration\Version000100Date20260823130000). Der Viewer liefert das
+		// ohnehin so (scoreLayout.js klemmt beim Ausrechnen), ein anderer
+		// Aufrufer aber nicht - und ein Anker ausserhalb des Bereichs waere
+		// keine sichtbare Notiz, sondern eine unauffindbare.
+		//
+		// Nach OBEN wird bewusst nicht begrenzt: eine Taktnummer jenseits der
+		// Partitur ist ein regulaerer Zustand (ein Re-Upload kann Takte
+		// entfernt haben) und wird als `orphaned` angezeigt statt verworfen -
+		// siehe AnnotationService::serialize().
+		$measureNumber = max(1, $measureNumber);
+		$fraction = is_finite($fraction) ? min(1.0, max(0.0, $fraction)) : 0.0;
 
 		$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content, $visibility);
 		return new JSONResponse($this->annotationService->serialize($annotation, $userId), Http::STATUS_CREATED);
@@ -90,8 +116,9 @@ class AnnotationController extends Controller {
 		if ($node === null || $userId === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
-		if (trim($content) === '') {
-			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
+		$fehler = $this->validateContent($content);
+		if ($fehler !== null) {
+			return $fehler;
 		}
 
 		try {
@@ -137,6 +164,25 @@ class AnnotationController extends Controller {
 	 * Filesystem-Aufbau, und vorher lief das pro Schreibanfrage zweimal -
 	 * einmal in requireOwnAccess(), einmal hier.
 	 */
+	/**
+	 * Prueft den Text einer Notiz - leer und zu lang an EINER Stelle, weil
+	 * create() und update() dieselbe Zusage geben muessen: was angelegt
+	 * werden darf, darf auch hineingeaendert werden.
+	 *
+	 * @return ?JSONResponse null, wenn der Text in Ordnung ist
+	 */
+	private function validateContent(string $content): ?JSONResponse {
+		if (trim($content) === '') {
+			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
+		}
+		// mb_strlen, nicht strlen: gezaehlt werden Zeichen, sonst haette eine
+		// Notiz mit Umlauten weniger Platz als eine ohne.
+		if (mb_strlen($content) > self::MAX_CONTENT_LENGTH) {
+			return new JSONResponse(['error' => $this->l->t('Note is too long.')], Http::STATUS_BAD_REQUEST);
+		}
+		return null;
+	}
+
 	private function canWriteShared(Node $node): bool {
 		return ($node->getPermissions() & Constants::PERMISSION_UPDATE) !== 0;
 	}

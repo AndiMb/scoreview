@@ -25,7 +25,11 @@
 		<ul class="scoreview-annotations-list">
 			<li v-if="draft" class="scoreview-annotation scoreview-annotation-draft">
 				<span class="scoreview-annotation-anchor">{{ t('Measure {n}', { n: draft.measureNumber }) }}</span>
-				<textarea v-model="draft.content" rows="2" :placeholder="t('Note…')" />
+				<textarea
+					v-model="draft.content"
+					rows="2"
+					:maxlength="maxContentLength"
+					:placeholder="t('Note…')" />
 				<!--
 					Sichtbarkeit beim Anlegen - bewusst nicht versteckt vor
 					Nutzerinnen ohne Schreibrecht: der Server lehnt eine geteilte
@@ -74,7 +78,7 @@
 					</span>
 				</span>
 				<template v-if="editingId === a.id">
-					<textarea v-model="editContent" rows="2" />
+					<textarea v-model="editContent" rows="2" :maxlength="maxContentLength" />
 					<div class="scoreview-annotation-actions">
 						<NcButton :aria-label="t('Save')" @click="saveEdit(a)">
 							<template #icon>
@@ -125,6 +129,12 @@ import Delete from 'vue-material-design-icons/Delete.vue'
 import LockOutline from 'vue-material-design-icons/LockOutline.vue'
 import Pencil from 'vue-material-design-icons/Pencil.vue'
 import PlusCircleOutline from 'vue-material-design-icons/PlusCircleOutline.vue'
+
+// Spiegelt AnnotationController::MAX_CONTENT_LENGTH. Bewusst hier verdoppelt
+// statt uebertragen: die Zahl ist keine Aushandlung, sondern eine Anzeigehilfe -
+// durchgesetzt wird sie serverseitig, hier verhindert sie nur, dass jemand einen
+// langen Text tippt und ihn erst beim Speichern als 400 zurueckbekommt.
+const MAX_CONTENT_LENGTH = 10000
 
 /**
  * Liste + Editor für Notizen: privat und geteilt.
@@ -179,6 +189,11 @@ export default {
 	},
 
 	computed: {
+		// Modulkonstante ueber das Template erreichbar machen.
+		maxContentLength() {
+			return MAX_CONTENT_LENGTH
+		},
+
 		hasShared() {
 			return this.annotations.some((a) => a.visibility === 'shared')
 		},
