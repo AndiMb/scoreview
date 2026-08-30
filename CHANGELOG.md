@@ -60,6 +60,17 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 ### Behoben
 
+- **Eine nicht erreichbare SoundFont-Quelle endete als Serverfehler statt als
+  Hinweis.** Der Auslieferungs-Endpunkt fing die falsche Ausnahmeklasse: Er
+  fing `SidecarException`, die Beschaffung über eine konfigurierte
+  `soundfont_fetch_url` wirft aber deren Basisklasse `ConverterException`.
+  Damit lief genau der Fall ins Leere, für den es diese Einstellung überhaupt
+  gibt – erste Wiedergabe auf dem lokalen Konvertierungsweg, Quelle nicht
+  erreichbar, nichts im Cache: Statt der gemeinten 503-Antwort mit lesbarer
+  Meldung, die der Viewer anzeigt, während er ohne Ton benutzbar bleibt, kam
+  ein nackter 500, und die Warnung landete nicht einmal im Log. Der
+  Sidecar-Weg war nicht betroffen. Der Endpunkt fängt jetzt die Basisklasse,
+  wie es die Hintergrundjobs schon taten.
 - **Eine neu konvertierte Partitur blieb im Browser die alte.** Die
   Auslieferungsrouten der Artefakte versprachen `immutable` – dass sich unter
   dieser URL nie etwas ändert –, trugen den Cache-Schlüssel aber gar nicht in

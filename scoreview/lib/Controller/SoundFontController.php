@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
-use OCA\ScoreView\Service\SidecarException;
+use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\SoundFontService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -50,7 +50,16 @@ class SoundFontController extends Controller {
 	public function get(): Http\Response {
 		try {
 			$file = $this->soundFontService->getOrFetch();
-		} catch (SidecarException $e) {
+		} catch (ConverterException $e) {
+			// Die BASISKLASSE, nicht SidecarException: das SoundFont kommt aus
+			// zwei Quellen (Service\SoundFontService), und die URL-Quelle wirft
+			// ConverterException selbst. Ein catch auf die Unterklasse liess
+			// genau den Fall durch, fuer den es die Einstellung
+			// `soundfont_fetch_url` ueberhaupt gibt - erste Wiedergabe auf dem
+			// lokalen Weg, Quelle nicht erreichbar, nichts im Cache -, und aus
+			// der gemeinten 503-Meldung wurde ein 500 ohne Hinweis. Die Jobs
+			// fangen aus demselben Grund die Basisklasse
+			// (BackgroundJob\ConvertScoreJob).
 			$this->logger->warning('ScoreView: SoundFont konnte nicht bereitgestellt werden: {message}', [
 				'message' => $e->getMessage(),
 				'exception' => $e,
