@@ -71,6 +71,17 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   ein nackter 500, und die Warnung landete nicht einmal im Log. Der
   Sidecar-Weg war nicht betroffen. Der Endpunkt fängt jetzt die Basisklasse,
   wie es die Hintergrundjobs schon taten.
+- **Eine präparierte Partitur konnte über das `style`-Attribut eine fremde
+  Adresse ins Notenbild holen.** Der Sanitizer verbietet das
+  `<style`-*Element* ausdrücklich damit, dass ein `url(...)` darin externe
+  Ressourcen zieht und so den Aufruf verrät – dieselbe Schreibweise stand
+  jedoch im gleichnamigen *Attribut* offen, das die Allowlist braucht.
+  DOMPurify parst kein CSS, `style="fill:url(http://…)"` blieb also
+  wortgleich stehen. Ein tatsächlicher Abruf war dabei nicht nachweisbar
+  (Browser lösen externe SVG-Paint-Server nicht auf, und Nextclouds
+  `img-src` griffe ohnehin) – die Allowlist gab aber eine Zusage, die sie
+  nicht einhielt. `url(...)` ist im Attribut jetzt auf lokale
+  `#`-Fragmente beschränkt.
 - **Eine neu konvertierte Partitur blieb im Browser die alte.** Die
   Auslieferungsrouten der Artefakte versprachen `immutable` – dass sich unter
   dieser URL nie etwas ändert –, trugen den Cache-Schlüssel aber gar nicht in

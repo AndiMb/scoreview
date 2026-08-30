@@ -44,7 +44,36 @@ const LOCAL_FRAGMENT = /^#[A-Za-z0-9_.:-]+$/
 // die jedes `<img>` in Nextcloud hat.
 const IMAGE_DATA_URI = /^data:image\/(?:png|jpeg|gif|bmp);base64,[A-Za-z0-9+/=\s]+$/
 
+// Ein `url(...)` im style-ATTRIBUT, das nicht auf ein lokales Fragment zeigt.
+//
+// Warum das eigens geprueft wird, obwohl das <style>-ELEMENT ohnehin verboten
+// ist: Verboten ist es genau deshalb, weil `url(...)` darin eine fremde
+// Adresse laden und damit den Aufruf verraten koennte - und dieselbe
+// Schreibweise steht im style-ATTRIBUT, das die Allowlist braucht (MuseScore
+// setzt es auf Notenzeilen und Text). DOMPurify parst kein CSS, das Attribut
+// ging also unveraendert durch; nachgemessen an
+// `style="fill:url(http://…)"`, das wortgleich stehenblieb. Ohne diese Zeile
+// haette der Kommentar am <style>-Verbot eine Zusage gegeben, die die
+// Allowlist nicht einhaelt.
+//
+// Erlaubt bleibt `url(#…)`: Verlaeufe, clip-path und mask zeigen auf lokale
+// defs, und namespaceIds() zieht sie ohnehin mit. Der Lookahead prueft die
+// Anfuehrungszeichen ausdruecklich MIT, statt sie optional davorzustellen -
+// sonst wiche der Ausdruck bei `url("#g0")` auf die Lesart ohne
+// Anfuehrungszeichen aus und verwuerfe eine gueltige lokale Referenz.
+const EXTERNAL_CSS_URL = /url\(\s*(?!['"]?\s*#)/i
+
 DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+	if (data.attrName === 'style') {
+		if (EXTERNAL_CSS_URL.test(data.attrValue)) {
+			// Ganz verwerfen statt die Stelle herauszuschneiden: ein von
+			// MuseScore gesetztes style traegt nie eine fremde Adresse, ein
+			// solches Attribut stammt also nicht aus einem regulaeren Satz.
+			// Reparieren hiesse, dem Rest davon zu vertrauen.
+			data.keepAttr = false
+		}
+		return
+	}
 	if (data.attrName !== 'href' && data.attrName !== 'xlink:href') {
 		return
 	}
@@ -142,8 +171,10 @@ function namespaceIds(fragment, prefix) {
  * `<foreignObject>` ist nicht erlaubt (dort lebt sonst
  * beliebiges HTML), und `<style>` ist nicht erlaubt (sonst könnte `url(...)`
  * externe Ressourcen ziehen und damit den Aufruf einer fremden Adresse
- * verraten). Ein MuseScore-Notenbild braucht nichts davon - alle Grafik
- * steckt in `path`/`polyline`/`text` bzw. `defs`/`use`.
+ * verraten) - dieselbe Schreibweise fängt EXTERNAL_CSS_URL im
+ * style-ATTRIBUT ab, das die Allowlist braucht. Ein MuseScore-Notenbild
+ * braucht nichts davon - alle Grafik steckt in `path`/`polyline`/`text`
+ * bzw. `defs`/`use`.
  *
  * @param {string} svgText
  * @param {string} idPrefix Vorangestellt vor jede `id` und jede Referenz

@@ -21,6 +21,11 @@ import { sanitizeSvg } from './svgSanitizer.js'
 function isDangerous(svg) {
 	return /<script|\son[a-z]+\s*=|javascript:|<foreignObject|<iframe|attributeName|<style/i.test(svg)
 		|| /href\s*=\s*["'](?!#|data:image\/(?:png|jpeg|gif|bmp);base64,)/i.test(svg)
+		// Ein `url(...)`, das nicht auf ein lokales Fragment zeigt - egal in
+		// welchem Attribut. Deckt den Fall ab, den das <style>-Verbot allein
+		// offen liess: dieselbe Schreibweise im style-ATTRIBUT, das die
+		// Allowlist braucht (siehe EXTERNAL_CSS_URL in svgSanitizer.js).
+		|| /url\(\s*(?!['"]?\s*#)/i.test(svg)
 }
 
 describe('sanitizeSvg - Umgehungsmuster, die die alte Regex-Fassung durchliess', () => {
@@ -34,6 +39,12 @@ describe('sanitizeSvg - Umgehungsmuster, die die alte Regex-Fassung durchliess',
 		['set/animate Attributinjektion', '<svg><set attributeName="onload" to="x()"/></svg>'],
 		['use mit externem Verweis', '<svg><use href="http://evil/x.svg#a"/></svg>'],
 		['style mit url()', '<svg><style>*{background:url("http://evil/x")}</style></svg>'],
+		// Nicht das ELEMENT, sondern das gleichnamige ATTRIBUT: DOMPurify parst
+		// kein CSS, und `style` steht in ALLOWED_ATTR - ohne EXTERNAL_CSS_URL
+		// blieben diese drei wortgleich stehen (nachgemessen).
+		['style-Attribut mit externem url()', '<svg><rect style="fill:url(http://evil/x)"/></svg>'],
+		['style-Attribut mit url() in Anfuehrungszeichen', '<svg><rect style="mask:url(\'http://evil/m\')"/></svg>'],
+		['style-Attribut mit Daten-URI', '<svg><rect style="fill:url(data:image/svg+xml,<svg/>)"/></svg>'],
 	]
 
 	for (const [name, input] of vectors) {
