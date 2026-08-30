@@ -86,12 +86,21 @@ die Engine zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
 Betriebsdiagnose prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine
 neuere MuseScore-Version verfügbar wäre, meldet er nicht.
 
-**Keine Hervorhebung auf dem Sidecar-Weg.** Der klingende Notenkopf wird nur
-eingefärbt, wo das SVG die Kennungen aus
+**Keine Hervorhebung der Notenköpfe auf dem Sidecar-Weg.** Der klingende
+Notenkopf wird nur eingefärbt, wo das SVG die Kennungen aus
 [M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)
 trägt – das tut der lokale Konvertierungsweg, nicht der Sidecar mit seinem
-Stock-AppImage. Dort bleibt es beim Cursor-Band, ohne Fehlermeldung und ohne
-Einstellung. Wirkung: dieselbe Bedienung, weniger Führung im Notenbild.
+Stock-AppImage. Dort bleibt es beim Band, ohne Fehlermeldung: Die Einstellung
+„klingende Noten einfärben" ist dann zwar wählbar, fällt aber still auf das Band
+zurück. Wirkung: dieselbe Bedienung, weniger Führung im Notenbild.
+
+**Die Version des Konvertierers wird nicht aufgezeichnet.** Der Viewer nennt den
+Konvertierungs*weg* jeder Darstellung, aber nicht, welche MuseScore- bzw.
+Engine-Version dabei lief: Der Sidecar meldet seine Version nur im
+Job-unabhängigen `/health`, und die einzige Versionsangabe in `meta.json`
+(`mscoreVersion`) ist die der Partitur, nicht die des Konvertierers. Wirkung:
+Ein Satzunterschied ist auf den Weg zurückführbar, nicht auf eine
+Versionsnummer.
 
 **Tablet-Hardware.** Touch-Bedienung, Pinch-Zoom und Wachhalten des Bildschirms
 sind umgesetzt und im Browser verifiziert, aber nicht auf einem echten Tablet in

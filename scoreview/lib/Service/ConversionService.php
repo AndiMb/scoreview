@@ -74,9 +74,15 @@ class ConversionService {
 	}
 
 	/**
+	 * `$backend` ist Pflichtangabe und hat bewusst keinen Standardwert: Wer
+	 * Artefakte in den Cache legt, weiss, woher sie kommen - spaeter ist das
+	 * aus der Admin-Einstellung nicht mehr rekonstruierbar, die sagt nur,
+	 * was JETZT gilt.
+	 *
 	 * @param string[] $pageSvgs Seiteninhalte, 1-indiziert in Reihenfolge.
+	 * @param string $backend Welcher Weg das erzeugt hat (ConversionBackend).
 	 */
-	public function markReady(ScoreConversion $conversion, array $pageSvgs, string $midi, string $timingJson, string $measuresJson, string $metaJson): void {
+	public function markReady(ScoreConversion $conversion, array $pageSvgs, string $midi, string $timingJson, string $measuresJson, string $metaJson, string $backend): void {
 		$folder = $this->getOrCreateFolder($conversion->getFileId(), $conversion->getEtag());
 		foreach (array_values($pageSvgs) as $i => $svg) {
 			$this->writeFile($folder, $this->pageFileName($i + 1), $svg);
@@ -85,6 +91,7 @@ class ConversionService {
 		$this->writeFile($folder, self::TIMING_FILE, $timingJson);
 		$this->writeFile($folder, self::MEASURES_FILE, $measuresJson);
 		$this->writeFile($folder, self::META_FILE, $metaJson);
+		$conversion->setBackend($backend);
 		$conversion->setFormatVersion(self::CURRENT_FORMAT_VERSION);
 		$this->updateStatus($conversion, ScoreConversion::STATUS_READY);
 		$this->gcOldVersions($conversion->getFileId(), $conversion->getEtag());

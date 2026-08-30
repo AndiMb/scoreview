@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\BackgroundJob;
 
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SidecarException;
@@ -100,7 +101,9 @@ class PollConversionJob extends QueuedJob {
 			$timingJson = $this->sidecarClient->fetchFile($files['timingJson']);
 			$measuresJson = $this->sidecarClient->fetchFile($files['measuresJson']);
 			$metaJson = $this->sidecarClient->fetchFile($files['metaJson']);
-			$this->conversionService->markReady($conversion, $pageSvgs, $midi, $timingJson, $measuresJson, $metaJson);
+			// Diesen Job gibt es nur auf dem Sidecar-Weg (siehe ConvertScoreJob),
+			// die Herkunft steht hier also fest und wird nicht nachgeschlagen.
+			$this->conversionService->markReady($conversion, $pageSvgs, $midi, $timingJson, $measuresJson, $metaJson, ConversionBackend::SIDECAR);
 		} catch (\Throwable $e) {
 			$this->logger->error('ScoreView: Konvertierung fehlgeschlagen für fileId={fileId}: {message}', [
 				'fileId' => $conversion->getFileId(),

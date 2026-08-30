@@ -146,11 +146,13 @@ async function convert(msczPath, fontVerzeichnis) {
 
 	const pages = []
 	for (let i = 0; i < pageCount; i++) {
-		// Ohne Hintergrundpfad - die Engine malt grundsaetzlich keinen. Das
-		// ist die richtige Form: Der Cursor liegt HINTER dem SVG, und das
-		// Papierweiss kommt aus dem CSS der Seite (ScorePage.vue). Beim
-		// Sidecar-Weg steht der weisse Pfad im SVG (M9); der Viewer schaltet
-		// ihn per path[class=""] auf fill:none.
+		// Ohne den Parameter fuer den Hintergrund - die Engine malt trotzdem
+		// einen deckend weissen Pfad ueber die volle viewBox, wie MuseScore
+		// im Sidecar (M9), nur ohne class-Attribut. Das ist nicht schaedlich,
+		// aber auch nicht wegzuschalten: Der Cursor liegt HINTER dem SVG, und
+		// der Viewer nimmt deshalb beide Schreibweisen dieses einen Pfades auf
+		// fill:none zurueck (ScorePage.vue). Wird der Pfad hier je entbehrlich,
+		// gilt weiterhin: das Papierweiss kommt aus dem CSS der Seite.
 		pages.push(await score.saveSvg(i))
 	}
 

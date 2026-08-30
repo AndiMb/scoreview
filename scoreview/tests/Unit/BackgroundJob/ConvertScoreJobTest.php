@@ -111,8 +111,11 @@ class ConvertScoreJobTest extends TestCase {
 		$this->sidecarClient->expects($this->never())->method('submitConversion');
 		// Kein Poll-Job: es gibt nichts zu pollen, die Artefakte liegen schon vor.
 		$this->jobList->expects($this->never())->method('add');
+		// Der aufgezeichnete Weg gehoert zum Ergebnis: der Viewer zeigt ihn
+		// an, und aus der Admin-Einstellung waere er spaeter nicht mehr
+		// rekonstruierbar (sie sagt nur, was JETZT gilt).
 		$this->conversionService->expects($this->once())->method('markReady')
-			->with($this->anything(), ['<svg/>'], 'MThd', '{"events":[],"elements":{}}', '{"events":[],"elements":{}}', '{"pages":1}');
+			->with($this->anything(), ['<svg/>'], 'MThd', '{"events":[],"elements":{}}', '{"events":[],"elements":{}}', '{"pages":1}', ConversionBackend::LOCAL);
 
 		$this->jobLaufenLassen();
 	}

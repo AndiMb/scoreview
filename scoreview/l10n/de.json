@@ -6,6 +6,7 @@
     "You do not have permission to create shared notes for this file." : "Du hast keine Berechtigung, geteilte Notizen für diese Datei anzulegen.",
     "You do not have permission to change this note." : "Du hast keine Berechtigung, diese Notiz zu ändern.",
     "Conversion not finished yet." : "Konvertierung noch nicht fertig.",
-    "Requested file does not exist." : "Angeforderte Datei existiert nicht."
+    "Requested file does not exist." : "Angeforderte Datei existiert nicht.",
+    "Not logged in." : "Nicht angemeldet."
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }

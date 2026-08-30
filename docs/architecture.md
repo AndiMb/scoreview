@@ -51,11 +51,13 @@ Browser
 ```
 
 **Leitprinzip: Das Frontend kennt ausschließlich die HTTP-API der App.** Es
-erfährt an keiner Stelle, welcher Konvertierungsweg gelaufen ist – oder ob es
-überhaupt mehr als einen gibt. Genau deshalb konnte der zweite Weg
+verzweigt an keiner Stelle danach, welcher Konvertierungsweg gelaufen ist. Genau
+deshalb konnte der zweite Weg
 ([E3](#e3-zwei-konvertierungswege-hinter-einer-api)) ein reiner Backend-Austausch
 bleiben, ohne eine einzige Zeile im Viewer. Diese Trennung bitte nicht
-aufweichen.
+aufweichen. Der Statusendpunkt *nennt* den Weg inzwischen (`renderer.backend`),
+und der Viewer *zeigt* ihn an – das ist eine Angabe für Menschen, keine
+Verzweigung; was der Viewer tut, hängt weiterhin allein an den Artefakten.
 
 ## Serverseite
 
@@ -76,6 +78,7 @@ zeigt. Warum es beide braucht, steht in
 | `GET /api/scores/{fileId}/artifact/{name}` | Ein Artefakt aus dem Cache (`page-N`, `midi`, `timing`, `measures`, `meta`) |
 | `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe |
 | `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen |
+| `POST /api/preferences` | Anzeigeeinstellungen der Nutzerin (nur schreibend – gelesen aus dem Anfangszustand der Files-Seite) |
 | `POST /api/settings` | Admin-Einstellungen speichern |
 | `GET /api/health`, `POST /api/selftest` | Betriebsdiagnose, Sidecar-Selbsttest (nur Admins) |
 
@@ -109,8 +112,14 @@ Migrationspfad und kein manuelles Löschen von Zeilen.
 
 | Tabelle | Inhalt |
 |---|---|
-| `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version` |
+| `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version`, `backend` |
 | `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag` |
+
+`backend` hält fest, welcher Konvertierungsweg **diese** Darstellung erzeugt hat
+(`sidecar`, `local`, oder `NULL` für Datensätze aus der Zeit vor der Spalte).
+Nur so bleibt die Frage später beantwortbar: Die Admin-Einstellung sagt, was
+*jetzt* gilt, nicht, was beim Konvertieren dieser Datei galt. Die Spalte ist
+rein beschreibend – nichts im Server und nichts im Viewer verzweigt danach.
 
 Notizen hängen an einer **musikalischen** Position (Takt + Anteil im Takt), nicht
 an Pixelkoordinaten. Nur deshalb überstehen sie ein Neurendern und einen
@@ -148,7 +157,8 @@ Aufbau:
   damit ohne Browser testbar: `scoreLayout.js`, `mixerLayout.js`,
   `timingSync.js`, `scrollPlan.js`, `metronome.js`, `svgSanitizer.js`,
   `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`,
-  `svgIndex.js`. Neue Logik gehört hierhin, nicht in die Komponenten.
+  `svgIndex.js`, `highlightStyle.js`. Neue Logik gehört hierhin, nicht in die
+  Komponenten.
 
 Wiedergabe: `spessasynth_lib` synthetisiert das MIDI im Browser gegen das
 ausgelieferte SoundFont. Eine einzige `requestAnimationFrame`-Schleife treibt
@@ -160,6 +170,30 @@ Der klingende Notenkopf wird eingefärbt, wo das SVG die Kennungen aus
 `svgIndex.js` baut dafür **einmal je geladener Seite** eine Karte `elid` →
 Knoten; ein Wiedergabeschritt hängt danach nur noch eine CSS-Klasse um, statt
 das Dokument zu durchsuchen.
+
+**Wie die klingende Stelle aussieht, entscheidet die Nutzerin** – Form und Farbe
+(`highlightStyle.js`, `useViewerPreferences.js`):
+
+- **Form:** entweder die klingenden Notenköpfe einfärben, oder ein Band an der
+  klingenden Stelle. Beides gleichzeitig markierte dieselbe Stelle doppelt,
+  deshalb ein Umschalter und kein Nebeneinander. „Notenköpfe" bleibt der
+  Standard und fällt auf das Band zurück, wo das SVG keine Kennungen trägt.
+- **Farbe:** sechs Vorschläge plus freie Wahl. Sie steht als CSS-Variable an der
+  Wurzel des Viewers; alles Gefärbte erbt sie über die Kaskade, auch das per
+  `v-html` eingesetzte SVG. Eine Farbänderung rendert deshalb keine einzige
+  Seite neu.
+
+Beides ist **je Nutzerin serverseitig** gespeichert (`ViewerPreferences`), nicht
+im `localStorage`: Vorbereitet wird am Rechner, gelesen am Tablet auf dem
+Notenständer. Gelesen wird trotzdem ohne eigene Anfrage – der Anfangszustand
+hängt schon an der Files-Seite, auf der das Viewer-Bundle ohnehin geladen wird.
+Geschrieben wird verzögert, sonst wäre jede Bewegung im Farbwähler ein POST.
+
+Im selben Aufklapper steht, **womit die angezeigten Seiten gesetzt wurden**:
+Konvertierungsweg (aus `renderer.backend`) und, davon getrennt beschriftet, die
+MuseScore-Version, mit der die *Partitur* geschrieben wurde
+(`meta.mscoreVersion`). Die beiden werden leicht verwechselt – `mscoreVersion`
+ist die `<programVersion>` der `.mscz`, nicht die Version des Konvertierers.
 
 Nur sichtbare Seiten werden gerendert. Eingehendes SVG läuft durch einen echten
 Sanitizer (DOMPurify), nicht durch reguläre Ausdrücke.
@@ -203,10 +237,17 @@ Renderer-internen Zustands, und Wiederholungen lösen sich strukturell auf
 
 Die Konvertierung läuft wahlweise über den **Sidecar-Container** oder **lokal
 auf dem Server**. Beide erzeugen dieselben Artefakte im selben Cache und stehen
-hinter derselben HTTP-API; welcher gelaufen ist, erfährt das Frontend nie. Die
-Wahl ist eine einzelne Admin-Einstellung (`conversion_backend`,
+hinter derselben HTTP-API; nichts im Viewer verzweigt danach, welcher gelaufen
+ist. Die Wahl ist eine einzelne Admin-Einstellung (`conversion_backend`,
 Voreinstellung `sidecar`) und wird an genau einer Stelle im Code ausgewertet
 (`ConvertScoreJob`).
+
+Welcher Weg gelaufen ist, wird beim Ablegen der Artefakte **aufgezeichnet**
+(Spalte `backend`) und im Viewer angezeigt. Das ist kein Aufweichen der
+Trennung, sondern ihr Preis: Weil man dem Ergebnis nicht ansieht, woher es
+kommt, und weil eine gecachte Partitur nach einem Wechsel weiterhin vom alten
+Weg stammt, wäre die Frage „womit ist das gesetzt worden?" sonst gar nicht mehr
+zu beantworten.
 
 | | Sidecar | Lokal |
 |---|---|---|
@@ -536,10 +577,17 @@ Sidecar-Weg**; was die Engine daran ändert, steht in
 [M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg).
 
 Für die Overlay-Umsetzung wichtig: Das allererste Element im Dokument ist ein
-deckendes weißes Hintergrundrechteck über die volle `viewBox` – als einziges
-Element mit leerem `class`-Attribut zuverlässig über `path[class=""]`
-adressierbar, ohne von der Dokumentreihenfolge abzuhängen. Ein Cursor-Overlay
-hinter dem SVG bliebe ohne diese Regel unsichtbar.
+deckendes weißes Hintergrundrechteck über die volle `viewBox`. Ein Cursor-Overlay
+hinter dem SVG bleibt ohne eine Gegenregel unsichtbar – und zwar auf **beiden**
+Wegen, die es nur unterschiedlich schreiben:
+
+| | Sidecar | Engine |
+|---|---|---|
+| Markup | `<path class="">` | `<path fill="#ffffff">` ohne `class` |
+| Adressierbar über | `path[class=""]` – als einziges Element mit leerem `class`-Attribut eindeutig | `svg > path[fill="#ffffff"]` – beide Merkmale nötig: ein Bogen ist ebenfalls ein classloses `<path>`, liegt aber in einer Gruppe |
+
+Gemessen: je Seite genau ein Treffer. `ScorePage.vue` nimmt beide Formen auf
+`fill: none` zurück.
 
 ### M10: Die Engine schreibt Segment, Notenzeile und Stimme ins SVG
 
@@ -569,7 +617,24 @@ Der Viewer setzt darauf auf, ohne sich darauf zu verlassen: Findet
 `src/lib/svgIndex.js` keine Kennungen, bleibt es beim Cursor-Band. Leuchten
 dagegen die Notenköpfe, malt das Band nichts mehr – zwei Anzeigen derselben
 Stelle sind eine zu viel. Im DOM bleibt es trotzdem, denn das Autoscroll misst
-seine Bildschirmposition (`getCursorClientRect()`).
+seine Bildschirmposition (`getCursorClientRect()`). Wer lieber das Band sieht,
+stellt das um (siehe [Browserseite](#browserseite)); dann bleiben die Notenköpfe
+schwarz, obwohl die Kennungen da sind.
+
+**Wo die Kennung hängt, ist nicht überall gleich** – für das Einfärben per CSS
+der entscheidende Unterschied, an ausgelieferten Seiten beider Formen
+nachgesehen:
+
+| | Klasse sitzt an | Gezeichnet wird |
+|---|---|---|
+| Sidecar-Form | dem gezeichneten Element selbst | `<path class="Note seg-7 …">`, `<polyline class="Stem …" fill="none" stroke="#000000">` |
+| Engine-Form | einer Gruppe darum | `<g class="Note seg-7 …"><g transform><use fill="#000000"/></g></g>` |
+
+In der Engine-Form trägt eine `fill`-Regel an der Gruppe **nicht**: Das
+`fill`-Attribut am `<use>` gewinnt gegen einen geerbten Wert, und die Note bliebe
+schwarz. `ScorePage.vue` färbt deshalb zusätzlich die Nachfahren – und dort
+genau das, was überhaupt Farbe trägt, sonst würde ein Notenhals
+(`fill="none"`) als Fläche ausgemalt.
 
 ## Artefaktschema
 

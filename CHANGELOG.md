@@ -8,6 +8,20 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 
 ### Hinzugefügt
 
+- **Die Hervorhebung der klingenden Stelle lässt sich einstellen** – Form und
+  Farbe, je Nutzerin gespeichert und damit auf jedem Gerät dieselbe. Zur Wahl
+  stehen die eingefärbten Notenköpfe oder ein Band an der klingenden Stelle,
+  dazu sechs Farbvorschläge und ein freier Farbwähler. Voreingestellt ist jetzt
+  ein kräftiges Rot statt des bisherigen Blaus: Blau war aus
+  Notenständer-Entfernung kaum auszumachen, und das Band war zusätzlich so
+  blass, dass es auf hellen Bildschirmen unterging.
+- **Der Viewer sagt, womit die angezeigten Seiten gesetzt wurden** – im selben
+  Aufklapper: der Konvertierungsweg (Sidecar-Container oder scoreview-engine
+  auf dem Server) und, getrennt davon, die MuseScore-Version, mit der die
+  Partitur geschrieben wurde. Aufgezeichnet wird der Weg beim Konvertieren, denn
+  die Admin-Einstellung sagt nur, was *jetzt* gilt – eine vor einem Wechsel
+  konvertierte Partitur stammt weiterhin vom alten Weg. Vor dieser Fassung
+  konvertierte Partituren melden „unbekannt", bis sie neu konvertiert werden.
 - **Der klingende Notenkopf wird eingefärbt**, statt nur von einem Band
   überdeckt zu werden. Der SVG-Export der scoreview-engine schreibt zu jedem
   gezeichneten Element, zu welchem Segment, welcher Notenzeile und welcher
@@ -20,6 +34,16 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   dann, wenn Nextclouds Viewer es nicht tut – wenn der Mimetype nicht
   registriert ist oder eine vorhandene Datei noch nicht neu eingelesen wurde.
   Damit ist die App auch dort benutzbar, wo niemand `occ` ausführen kann.
+
+### Behoben
+
+- **Auf dem lokalen Konvertierungsweg war die Hervorhebung unsichtbar.** Zwei
+  Ursachen, beide seit der Umstellung auf die scoreview-engine: Die Engine
+  hängt die Segmentkennung an eine Gruppe statt an das gezeichnete Element, und
+  das `fill`-Attribut am Glyph gewann gegen die geerbte Farbe – die Notenköpfe
+  blieben schwarz. Zugleich malt sie einen weißen Hintergrundpfad ohne
+  `class`-Attribut, den die bisherige Regel nicht erwischte; er deckte das Band
+  vollständig zu. Beides ist jetzt für beide Konvertierungswege geregelt.
 
 ### Geändert
 

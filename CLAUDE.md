@@ -32,9 +32,11 @@ eine Referenz.
 Konvertiert wird über **einen von zwei Wegen** – Sidecar oder lokal –, die
 dieselben Artefakte erzeugen (E3). Die Wahl wird an genau einer Stelle
 ausgewertet (`ConvertScoreJob`); das Frontend kennt ausschließlich die HTTP-API
-der App und erfährt nie, welcher Weg gelaufen ist. Dieses Leitprinzip bitte
-nicht aufweichen – es ist der Grund, warum ein Wechsel des Konvertierungswegs
-keine Zeile im Viewer kostet.
+der App und **verzweigt nie** danach, welcher Weg gelaufen ist. Dieses
+Leitprinzip bitte nicht aufweichen – es ist der Grund, warum ein Wechsel des
+Konvertierungswegs keine Zeile im Viewer kostet. Dass der Statusendpunkt den
+Weg *nennt* und der Viewer ihn *anzeigt*, ist kein Verstoß dagegen: eine Angabe
+für Menschen, kein `if`.
 
 ## Befehle
 

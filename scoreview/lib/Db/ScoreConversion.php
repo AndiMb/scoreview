@@ -22,6 +22,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setErrorMessage(?string $errorMessage)
  * @method ?string getErrorCode()
  * @method void setErrorCode(?string $errorCode)
+ * @method ?string getBackend()
+ * @method void setBackend(?string $backend)
  * @method int getFormatVersion()
  * @method void setFormatVersion(int $formatVersion)
  * @method \DateTime getCreatedAt()
@@ -57,6 +59,14 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	protected $status;
 	protected $errorMessage;
 	protected $errorCode;
+	/**
+	 * Welcher Konvertierungsweg diese Darstellung erzeugt hat
+	 * (Service\ConversionBackend): `sidecar`, `local` - oder NULL fuer
+	 * Datensaetze aus der Zeit vor der Spalte. Rein beschreibend: der Viewer
+	 * zeigt es an, verzweigt aber nirgends danach (siehe
+	 * docs/architecture.md E3).
+	 */
+	protected $backend;
 	protected $formatVersion;
 	protected $createdAt;
 	protected $updatedAt;
@@ -73,6 +83,7 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 			'status' => $this->status,
 			'error' => $this->errorMessage,
 			'errorCode' => $this->errorCode,
+			'backend' => $this->backend,
 		];
 	}
 }

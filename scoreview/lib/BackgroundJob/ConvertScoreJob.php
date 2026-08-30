@@ -179,6 +179,7 @@ class ConvertScoreJob extends QueuedJob {
 				$artifacts['timing'],
 				$artifacts['measures'],
 				$artifacts['meta'],
+				ConversionBackend::LOCAL,
 			);
 		} catch (\Throwable $e) {
 			$this->logger->error('ScoreView: lokale Konvertierung fehlgeschlagen für fileId={fileId}: {message}', [

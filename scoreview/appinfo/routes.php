@@ -28,6 +28,11 @@ return [
 		['name' => 'annotation#update', 'url' => '/api/scores/{fileId}/annotations/{id}', 'verb' => 'PUT'],
 		['name' => 'annotation#destroy', 'url' => '/api/scores/{fileId}/annotations/{id}', 'verb' => 'DELETE'],
 
+		// Anzeigeeinstellungen der einzelnen Nutzerin (Hervorhebung im
+		// Notenbild). Nur schreibend - gelesen werden sie aus dem
+		// Anfangszustand der Files-Seite, siehe Controller\PreferenceController.
+		['name' => 'preference#update', 'url' => '/api/preferences', 'verb' => 'POST'],
+
 		// Admin-Einstellungen (Sidecar-URL/Secret, Eager-Konvertierung)
 		['name' => 'settings#update', 'url' => '/api/settings', 'verb' => 'POST'],
 		// Betriebsdiagnose + Sidecar-Selbsttest. health() ist lesend,

@@ -16,7 +16,9 @@ jede Stimme ist einzeln hörbar, und jeder Takt ist in einem Klick erreichbar.
 
 **Noten lesen.** MuseScores eigenes Seitenbild als Vektorgrafik – Zoom ohne
 Qualitätsverlust, Zoom-Presets, Vollbild, und ein Autoscroll, das den laufenden
-Takt im Sichtband hält.
+Takt im Sichtband hält. Wie die klingende Stelle markiert wird, entscheidet
+jede Nutzerin selbst: eingefärbte Notenköpfe oder ein Band, in einer frei
+wählbaren Farbe.
 
 **Hören, was man üben will.** Die Wiedergabe wird im Browser synthetisiert, nicht
 als fertiges MP3 abgespielt. Deshalb lässt sich pro Stimme die Lautstärke regeln,

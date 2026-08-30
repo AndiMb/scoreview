@@ -1,5 +1,13 @@
 <template>
-	<div class="scoreview-viewer">
+	<!--
+		Die Hervorhebungsfarbe haengt als CSS-Variable an der Wurzel, nicht an
+		jeder Seite: ScorePage.vue erbt sie ueber die Kaskade, auch in das per
+		v-html eingesetzte SVG hinein (Scoped-CSS greift dort nicht, geerbte
+		Custom Properties schon). Aendert die Nutzerin die Farbe, faerbt sich
+		damit alles Gefaerbte in einem Rutsch um - ohne dass eine einzige Seite
+		neu rendern muss.
+	-->
+	<div class="scoreview-viewer" :style="highlightStyle">
 		<div v-if="state === 'converting' || state === 'loading'" class="scoreview-status">
 			<NcLoadingIcon :size="32" :name="state === 'loading' ? t('Loading…') : t('Converting…')" />
 		</div>
@@ -209,6 +217,85 @@
 						</div>
 					</template>
 				</NcPopover>
+				<!--
+					Darstellung: wie die klingende Stelle markiert wird - und,
+					im selben Aufklapper, womit diese Seiten ueberhaupt gesetzt
+					wurden. Beides gehoert zusammen: Es ist der Ort fuer
+					"warum sieht das so aus".
+				-->
+				<NcPopover>
+					<template #trigger>
+						<NcButton :aria-label="t('Appearance')" :title="t('Appearance')">
+							<template #icon>
+								<Palette :size="20" />
+							</template>
+						</NcButton>
+					</template>
+					<template #default>
+						<div class="scoreview-popover">
+							<fieldset class="scoreview-popover-group">
+								<legend>{{ t('Playback highlight') }}</legend>
+								<NcCheckboxRadioSwitch
+									v-model="highlightMode"
+									type="radio"
+									value="notes"
+									name="scoreview-highlight-mode">
+									{{ t('Colour the sounding notes') }}
+								</NcCheckboxRadioSwitch>
+								<NcCheckboxRadioSwitch
+									v-model="highlightMode"
+									type="radio"
+									value="bar"
+									name="scoreview-highlight-mode">
+									{{ t('Bar at the sounding position') }}
+								</NcCheckboxRadioSwitch>
+							</fieldset>
+							<!--
+								Vorschlaege UND freie Wahl: Eine Farbe, die auf
+								weissem Papier neben schwarzer Druckfarbe wirklich
+								traegt, ist im Farbwaehler nicht in zwei Klicks
+								gefunden.
+							-->
+							<div class="scoreview-swatches" role="group" :aria-label="t('Highlight colour')">
+								<button
+									v-for="preset in highlightPresets"
+									:key="preset.id"
+									type="button"
+									class="scoreview-swatch"
+									:class="{ 'scoreview-swatch--active': preset.color === highlightColor }"
+									:style="{ background: preset.color }"
+									:aria-pressed="preset.color === highlightColor"
+									:aria-label="presetLabel(preset.id)"
+									:title="presetLabel(preset.id)"
+									@click="highlightColor = preset.color" />
+							</div>
+							<label class="scoreview-popover-label">
+								{{ t('Own colour') }}
+								<input
+									type="color"
+									class="scoreview-color-input"
+									:value="highlightColor"
+									:aria-label="t('Own colour')"
+									@input="onHighlightColorInput">
+							</label>
+							<!--
+								Die Herkunft der Darstellung (E3). Rein
+								beschreibend - der Viewer verzweigt nirgends
+								danach, er sagt nur, womit diese Seiten gesetzt
+								wurden. Das ist die Frage, die bei einem
+								Satzunterschied zwischen zwei Instanzen als
+								Erstes kommt.
+							-->
+							<p class="scoreview-origin">
+								<span class="scoreview-origin-label">{{ t('Rendered by') }}</span>
+								{{ rendererText }}
+								<span v-if="mscoreVersion" class="scoreview-origin-note">
+									{{ t('Score written with MuseScore {version}', { version: mscoreVersion }) }}
+								</span>
+							</p>
+						</div>
+					</template>
+				</NcPopover>
 				<NcButton
 					v-if="hasRealPlayer"
 					:pressed="showMixer"
@@ -315,6 +402,7 @@
 							:focusMyPart="focusMyPart"
 							:partCount="partCount"
 							:showNoteText="showNoteText"
+							:highlightMode="highlightMode"
 							@noteClick="onNoteClick"
 							@markerClick="onAnnotationJumpToById"
 							@staffMapping="onStaffMapping"
@@ -392,6 +480,7 @@ import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
 import Magnify from 'vue-material-design-icons/Magnify.vue'
 import Metronome from 'vue-material-design-icons/Metronome.vue'
 import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
+import Palette from 'vue-material-design-icons/Palette.vue'
 import Pause from 'vue-material-design-icons/Pause.vue'
 import Play from 'vue-material-design-icons/Play.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
@@ -405,7 +494,9 @@ import { useConversionStatus } from '../composables/useConversionStatus.js'
 import { useLoop } from '../composables/useLoop.js'
 import { useMetronome } from '../composables/useMetronome.js'
 import { usePlayback } from '../composables/usePlayback.js'
+import { useViewerPreferences } from '../composables/useViewerPreferences.js'
 import { useZoom } from '../composables/useZoom.js'
+import { HIGHLIGHT_PRESETS, normalizeHighlightColor } from '../lib/highlightStyle.js'
 import {
 	buildTimeline,
 	findElementAtPoint,
@@ -450,6 +541,7 @@ export default {
 		Metronome,
 		CrosshairsGps,
 		Magnify,
+		Palette,
 	},
 
 	props: {
@@ -535,6 +627,11 @@ export default {
 			play: () => clock.value?.play(),
 		})
 
+		// Anzeigeeinstellungen der Nutzerin (Farbe/Form der Hervorhebung).
+		// Kein Bezug zur Partitur - deshalb ohne Abhaengigkeiten und ohne
+		// Ruecksetzen beim Dateiwechsel.
+		const preferences = useViewerPreferences()
+
 		const loop = useLoop({
 			measuresTimeline: () => measuresTimeline.value,
 			durationMs: () => durationMs.value,
@@ -615,6 +712,9 @@ export default {
 			releaseWakeLock: playback.releaseWakeLock,
 			destroyPlayback: playback.destroy,
 			resetPlayback: playback.reset,
+			highlightColor: preferences.highlightColor,
+			highlightMode: preferences.highlightMode,
+			highlightStyle: preferences.highlightStyle,
 			state: conversion.state,
 			errorMessage: conversion.errorMessage,
 			errorCode: conversion.errorCode,
@@ -679,10 +779,49 @@ export default {
 			measureFieldFocused: false,
 			// Für Notizen: private und geteilte.
 			currentElid: null,
+			// Womit diese Darstellung erzeugt wurde: der Konvertierungsweg aus
+			// dem Statusendpunkt ('sidecar' | 'local' | null fuer aeltere
+			// Datensaetze) und - davon unabhaengig - die Version, mit der die
+			// Partitur geschrieben wurde (meta.json). Rein zum Anzeigen,
+			// nichts im Viewer verzweigt danach (E3).
+			rendererBackend: null,
+			mscoreVersion: null,
 		}
 	},
 
 	computed: {
+		/** Die Farbvorschlaege - der Name dazu wird erst hier uebersetzt (E4). */
+		highlightPresets() {
+			return HIGHLIGHT_PRESETS
+		},
+
+		/**
+		 * Womit diese Seiten gesetzt wurden, als ein Satz.
+		 *
+		 * Der aufgezeichnete Weg DIESER Konvertierung, nicht die aktuelle
+		 * Einstellung der Instanz: Nach einem Wechsel stammt eine gecachte
+		 * Partitur weiterhin vom alten Weg, und genau dann wird die Frage
+		 * gestellt. `null` heisst "vor Einfuehrung der Aufzeichnung
+		 * konvertiert" - eine ehrliche Luecke statt einer Vermutung.
+		 *
+		 * Bewusst OHNE Versionsnummer des Konvertierers: Die einzige
+		 * Versionsangabe, die hier vorliegt, ist `meta.mscoreVersion` - und
+		 * die ist die Version, mit der die PARTITUR geschrieben wurde, nicht
+		 * die des Konvertierers (nachgeprueft: sie stimmt mit
+		 * `<programVersion>` in der .mscz ueberein, nicht mit dem
+		 * Engine-Release). Sie steht deshalb als eigene Zeile daneben, mit
+		 * ihrer eigenen Beschriftung.
+		 */
+		rendererText() {
+			if (this.rendererBackend === 'local') {
+				return this.t('scoreview-engine on this server (MuseScore as WebAssembly)')
+			}
+			if (this.rendererBackend === 'sidecar') {
+				return this.t('Sidecar container (MuseScore 4)')
+			}
+			return this.t('Unknown – converted by an earlier version of the app.')
+		},
+
 		// Musikalischer Anker der aktuellen Wiedergabeposition ("+ An aktueller
 		// Stelle") - null solange measuresTimeline/durationMs noch nicht
 		// geladen sind.
@@ -811,6 +950,31 @@ export default {
 		},
 
 		/**
+		 * Der Name einer Farbvorschlags-Kachel, fuer Vorlesewerkzeuge.
+		 *
+		 * @param {string} id Kennung aus HIGHLIGHT_PRESETS
+		 * @return {string}
+		 */
+		presetLabel(id) {
+			const names = {
+				red: this.t('Red'),
+				orange: this.t('Orange'),
+				magenta: this.t('Magenta'),
+				violet: this.t('Violet'),
+				green: this.t('Green'),
+				blue: this.t('Blue'),
+			}
+			return names[id] ?? id
+		},
+
+		// Der Farbwaehler feuert waehrend des Ziehens laufend - das Speichern
+		// ist deshalb verzoegert (useViewerPreferences), die Anzeige nicht:
+		// die Partitur faerbt sich beim Ziehen mit.
+		onHighlightColorInput(event) {
+			this.highlightColor = normalizeHighlightColor(event.target.value)
+		},
+
+		/**
 		 * Die Wahl aus dem Mixer uebernehmen. Wird sie zurueckgenommen, geht
 		 * auch „nur meine Zeile" aus - sonst bliebe ein Notenbild zurueck, in
 		 * dem alle Zeilen gedaempft sind und keine hervorgehoben.
@@ -874,6 +1038,8 @@ export default {
 			this.resetAnnotations()
 			this.currentEtag = null
 			this.currentElid = null
+			this.rendererBackend = null
+			this.mscoreVersion = null
 			this.resetMetronome()
 		},
 
@@ -889,7 +1055,7 @@ export default {
 			this.stopZoomObserver()
 		},
 
-		async loadScore({ files, soundFontUrl }) {
+		async loadScore({ files, soundFontUrl, renderer }) {
 			try {
 				const [timingRes, measuresRes, metaRes] = await Promise.all([
 					axios.get(files.timingJson),
@@ -906,6 +1072,12 @@ export default {
 				// Anzahl aus meta.json, nicht aus dem Mixer - der laesst die
 				// Metronomspur weg und zaehlt damit anders (siehe mixerLayout.js).
 				this.scoreParts = metaRes.data.parts ?? []
+				// Herkunft der Darstellung (E3). Zwei verschiedene Aussagen,
+				// die leicht verwechselt werden: `renderer.backend` ist der
+				// Konvertierungsweg, `meta.mscoreVersion` die Version, mit der
+				// die Partitur GESCHRIEBEN wurde - siehe rendererText().
+				this.rendererBackend = renderer?.backend ?? null
+				this.mscoreVersion = metaRes.data.mscoreVersion ?? null
 				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
 				this.loadAnnotations()
 				// Startzoom "Seitenbreite" statt fester Faktor 1: die Seite hat
@@ -1240,6 +1412,71 @@ export default {
 .scoreview-popover-group legend {
 	color: var(--color-text-maxcontrast);
 	padding: 0 0 4px 0;
+}
+
+/*
+ * Die Farbvorschlaege als Kacheln. Gross genug fuer einen Finger auf Glas
+ * (das Tablet am Notenstaender ist der Hauptfall) und quadratisch statt rund
+ * - eine Farbflaeche liest sich als Farbprobe, ein Punkt als Schalter.
+ */
+.scoreview-swatches {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.scoreview-swatch {
+	inline-size: 34px;
+	block-size: 34px;
+	border: 2px solid transparent;
+	border-radius: 6px;
+	padding: 0;
+	cursor: pointer;
+	/* Der Rahmen der Auswahl liegt AUSSERHALB der Farbflaeche (box-shadow
+	   statt eines dickeren border): ein hineinwachsender Rahmen wuerde die
+	   Farbprobe selbst verkleinern, und ausgerechnet bei der gewaehlten
+	   Farbe. */
+	box-shadow: none;
+}
+
+.scoreview-swatch--active {
+	border-color: var(--color-main-background);
+	box-shadow: 0 0 0 2px var(--color-main-text);
+}
+
+/*
+ * Der freie Farbwaehler. Feste Hoehe, damit er neben den Kacheln nicht
+ * unterschiedlich hoch ausfaellt - Browser bemassen `input[type=color]`
+ * jeweils eigen.
+ */
+.scoreview-color-input {
+	inline-size: 100%;
+	block-size: 34px;
+	padding: 2px;
+	cursor: pointer;
+}
+
+/*
+ * Die Herkunftsangabe. Kleiner und zurueckgenommen: Sie wird einmal gelesen,
+ * wenn etwas anders aussieht als erwartet, und steht danach nur noch da.
+ */
+.scoreview-origin {
+	margin: 0;
+	padding-block-start: 8px;
+	border-block-start: 1px solid var(--color-border);
+	color: var(--color-text-maxcontrast);
+	font-size: 0.9em;
+	line-height: 1.35;
+}
+
+.scoreview-origin-label {
+	display: block;
+	font-weight: bold;
+}
+
+.scoreview-origin-note {
+	display: block;
+	padding-block-start: 4px;
 }
 
 .scoreview-body {

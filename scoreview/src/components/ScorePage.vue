@@ -220,6 +220,15 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		// Wie die klingende Stelle markiert wird: 'notes' faerbt die
+		// Notenkoepfe selbst (M10), 'bar' zeigt das Band. Siehe
+		// lib/highlightStyle.js - die Farbe kommt getrennt davon ueber
+		// CSS-Variablen, die der Viewer an seine Wurzel haengt.
+		highlightMode: {
+			type: String,
+			default: 'notes',
+		},
 	},
 
 	emits: ['noteClick', 'markerClick', 'loaded', 'staffMapping'],
@@ -440,6 +449,13 @@ export default {
 		cursorElid() {
 			this.applyHighlight()
 		},
+
+		// Umschalten waehrend der Wiedergabe: ohne das bliebe die zuletzt
+		// gefaerbte Note stehen, bis der naechste Wiedergabeschritt kommt -
+		// beim Pausieren also fuer immer.
+		highlightMode() {
+			this.applyHighlight()
+		},
 	},
 
 	created() {
@@ -555,7 +571,11 @@ export default {
 			}
 			// Nur die Seite, auf der der Cursor steht, faerbt - dieselbe elid
 			// kann bei einer Wiederholung (M7) sonst auf zwei Seiten leuchten.
-			const aktiv = this.cursorRect?.page === this.pageIndex ? this.cursorElid : null
+			// Im Band-Modus faerbt gar nichts: dann uebernimmt das Overlay,
+			// und `notesHighlighted` bleibt falsch, womit es sichtbar wird
+			// (siehe .score-page-cursor--hidden).
+			const aufDieserSeite = this.highlightMode === 'notes' && this.cursorRect?.page === this.pageIndex
+			const aktiv = aufDieserSeite ? this.cursorElid : null
 			this.highlighted = setHighlight(this.segmentIndex, aktiv, this.highlighted, 'scoreview-sounding')
 			this.notesHighlighted = this.highlighted.length > 0
 		},
@@ -741,12 +761,24 @@ export default {
  * MuseScore rendert als allererstes Element ein deckendes weißes
  * Hintergrundrechteck über die volle viewBox (siehe docs/architecture.md
  * M9) - ohne diese Regel würde es den dahinterliegenden Cursor vollständig
- * verdecken. path[class=""] ist laut M9 im ganzen Dokument eindeutig nur
- * dieses eine Element (kein id-Attribut vorhanden, das sich sonst
- * anbieten würde). :deep() aus demselben Grund wie oben (v-html, kein
+ * verdecken. :deep() aus demselben Grund wie oben (v-html, kein
  * Scoped-Attribut).
+ *
+ * Zwei Selektoren, weil die beiden Konvertierungswege es unterschiedlich
+ * schreiben (E3, beide an ausgelieferten Seiten nachgesehen):
+ *
+ * - Sidecar: `<path class="">` - laut M9 im ganzen Dokument eindeutig nur
+ *   dieses eine Element (kein id-Attribut vorhanden, das sich sonst
+ *   anbieten würde).
+ * - scoreview-engine: `<path fill="#ffffff">` ganz ohne class-Attribut,
+ *   als direktes Kind des <svg>. Beide Merkmale zusammen sind nötig: Ein
+ *   Bogen ist ebenfalls ein classloses <path>, liegt aber in einer Gruppe;
+ *   und ein weiß gefülltes Element innerhalb der Notation (etwa ein hohler
+ *   Notenkopf) dürfte nicht mit verschwinden. Gemessen: genau ein Treffer
+ *   je Seite.
  */
-.score-page-svg :deep(path[class=""]) {
+.score-page-svg :deep(path[class=""]),
+.score-page-svg :deep(svg > path[fill="#ffffff"]) {
 	fill: none;
 }
 
@@ -759,14 +791,19 @@ export default {
  */
 /*
  * Der Cursor liegt HINTER dem Notenbild (siehe .score-page-svg), faerbt also
- * den Untergrund der klingenden Noten ein, statt sie zu ueberdecken. Dezent
- * genug, dass er beim Lesen nicht traegt: eine weiche Flaeche mit leichter
- * Rundung, kein Rahmen. Der Rahmen der frueheren Fassung zog auf jeder Zeile
- * eine zweite Linie ins Bild und konkurrierte mit den Notenlinien.
+ * den Untergrund der klingenden Noten ein, statt sie zu ueberdecken. Eine
+ * weiche Flaeche mit leichter Rundung, kein Rahmen: Der Rahmen der frueheren
+ * Fassung zog auf jeder Zeile eine zweite Linie ins Bild und konkurrierte mit
+ * den Notenlinien. Weil er nichts verdeckt, darf er kraeftig sein - die
+ * fruehere Deckkraft war auf einem hellen Tabletbildschirm kaum noch zu
+ * sehen (Nutzerrueckmeldung).
  */
 .score-page-cursor {
 	position: absolute;
-	background: rgba(0, 130, 201, 0.22);
+	/* Farbe und Deckkraft kommen aus der Nutzereinstellung (siehe
+	   lib/highlightStyle.js); der Rueckfallwert traegt nur, solange die
+	   Variable noch nicht gesetzt ist. */
+	background: var(--scoreview-highlight-band, rgba(211, 47, 47, 0.32));
 	border-radius: 4px;
 	pointer-events: none;
 	transition: left 0.08s linear, top 0.08s linear, height 0.08s linear;
@@ -774,7 +811,9 @@ export default {
 
 /*
  * Leuchten die Notenkoepfe selbst (M10), malt das Band nichts mehr - eine
- * Anzeige der klingenden Stelle genuegt. Es bleibt trotzdem im DOM und
+ * Anzeige der klingenden Stelle genuegt. Genau das ist der Umschalter:
+ * `highlightMode` entscheidet, ob ueberhaupt eingefaerbt wird, und damit,
+ * welche der beiden Anzeigen uebrig bleibt. Das Band bleibt im DOM und
  * behaelt seine Groesse: Das Autoscroll misst genau dieses Element
  * (getCursorClientRect()), mit display:none oder v-if haette es keine.
  */
@@ -788,24 +827,42 @@ export default {
  * leuchtet, tritt das Cursor-Band zurueck (siehe .score-page-cursor--hidden)
  * - beides zusammen markierte dieselbe Stelle doppelt.
  *
- * Zwei Regeln statt einer, weil MuseScore zwei Maltechniken mischt
- * (nachgezaehlt an einer ausgelieferten Seite): Note, Rest und Beam sind
- * gefuellte <path> ohne fill-Attribut, Stem und LedgerLine dagegen
- * <polyline fill="none" stroke="#000000">. Eine gemeinsame fill-Regel liesse
- * die Notenhaelse schwarz.
+ * Zwei Regelbloecke mit je drei Selektoren, weil zwei Unterschiede
+ * zusammenkommen.
+ *
+ * Erstens malt MuseScore Flaechen und Striche unterschiedlich: Notenkopf,
+ * Pause und Balken sind gefuellt, Hals und Hilfslinie gestrichen. Eine
+ * gemeinsame fill-Regel liesse die Notenhaelse schwarz.
+ *
+ * Zweitens haengt die Klasse je nach Konvertierungsweg an einer anderen
+ * Stelle (E3, an ausgelieferten Seiten beider Wege nachgesehen):
+ *
+ * - Sidecar: am gezeichneten Element selbst - `<path class="Note seg-7 …">`
+ *   bzw. `<polyline class="Stem …" fill="none" stroke="#000000">`.
+ * - scoreview-engine: an einer Gruppe darum, gezeichnet wird darin -
+ *   `<g class="Note seg-7 …"><g transform><use fill="#000000"/></g></g>`,
+ *   Haelse als `<polyline fill="none" stroke="#000000">`. `fill` an der
+ *   Gruppe traegt hier nicht: Das `fill`-Attribut am `<use>` gewinnt
+ *   gegen einen geerbten Wert, und die Note bliebe schwarz.
+ *
+ * Die Nachfahren-Regeln faerben deshalb genau das um, was ueberhaupt Farbe
+ * traegt - `fill="none"`/`stroke="none"` bleiben ausgenommen, sonst wuerde
+ * ein Notenhals als Flaeche ausgemalt.
  *
  * :deep() ist zwingend: die Knoten kommen aus v-html und tragen deshalb kein
  * scoped-Attribut. Kein transition - bei acht Ereignissen je Sekunde soll die
  * Farbe stehen, nicht nachlaufen.
  */
 .score-page-svg :deep(path.scoreview-sounding),
-.score-page-svg :deep(text.scoreview-sounding) {
-	fill: #0082c9;
+.score-page-svg :deep(text.scoreview-sounding),
+.score-page-svg :deep(.scoreview-sounding [fill]:not([fill="none"])) {
+	fill: var(--scoreview-highlight, #d32f2f);
 }
 
 .score-page-svg :deep(polyline.scoreview-sounding),
-.score-page-svg :deep(line.scoreview-sounding) {
-	stroke: #0082c9;
+.score-page-svg :deep(line.scoreview-sounding),
+.score-page-svg :deep(.scoreview-sounding [stroke]:not([stroke="none"])) {
+	stroke: var(--scoreview-highlight, #d32f2f);
 }
 
 /*

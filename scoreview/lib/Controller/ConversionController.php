@@ -121,6 +121,14 @@ class ConversionController extends Controller {
 			// instanzweite Ressource (siehe docs/architecture.md E1) -
 			// deshalb hier statt in buildFileUrls() mitgegeben.
 			$body['soundFontUrl'] = $this->soundFontUrl();
+			// Womit diese Darstellung erzeugt wurde, zum ANZEIGEN im Viewer
+			// (E3). Der aufgezeichnete Weg dieses Datensatzes, nicht die
+			// aktuelle Admin-Einstellung: nach einem Wechsel des
+			// Konvertierungswegs bliebe eine gecachte Partitur die des alten.
+			// null heisst "vor Einfuehrung der Spalte konvertiert", nicht
+			// "keiner von beiden". Die MuseScore-Version steht in meta.json,
+			// die der Viewer ohnehin laedt - sie wird hier nicht verdoppelt.
+			$body['renderer'] = ['backend' => $conversion->getBackend()];
 		}
 		return new JSONResponse($body);
 	}
