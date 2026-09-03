@@ -56,6 +56,28 @@ Daraus abgeleitet:
 **Die Messreihe stammt von 1–5-seitigen Partituren.** Alles darüber ist
 Hochrechnung.
 
+### Konvertierung im Browser
+
+Dieselbe Engine im Browser statt in Node
+([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)), gemessen auf
+derselben Maschine in einem Chromium ohne Fenster:
+
+| Partitur | Seiten | `.mscz` | im Browser | davon Start der Engine |
+|---|---|---|---|---|
+| Minipartitur | 1 | 30 KB | **0,4 s** | 0,36 s |
+| Chorsatz | 5 | 98 KB | **0,7 s** | 0,57 s |
+| Chorsatz | 28 | 185 KB | **1,0 s** | 0,74 s |
+| Chorsatz | 4 | 566 KB | **0,4 s** | 0,34 s |
+
+Auf einem Rechner ist der Browser damit nicht langsamer als der Node-Weg. Dazu
+kommt einmalig der Download der Engine: 14 MB roh, rund **7,3 MB über die
+Leitung** – das Wasm wird komprimiert übertragen (9,0 → 2,6 MB), das
+Ressourcenpaket nicht (4,7 MB). Der Glue selbst wiegt 48 KB.
+
+Die Artefakte sind dieselben: `timing.json`, `measures.json` und `meta.json`
+sind Byte für Byte identisch zu `node convert.mjs` derselben Partitur, die
+SVG-Seite ist gleich lang (gemessen an der Minipartitur).
+
 ## Bekannte Lücken
 
 **D.C./D.S./Coda-Sprünge.** MuseScores `--score-media` rollt sie nicht in
@@ -68,6 +90,14 @@ Wiederholungen und Volten funktionieren gemessen korrekt.
 
 **Große Partituren.** Orchesterpartituren sind nicht gemessen. Die Zahlen oben
 stammen von Chorsätzen bis fünf Seiten.
+
+**Konvertierung im Browser auf echten Geräten.** Alle Zahlen dazu stammen von
+einem Desktop-Chromium. Wie lange ein Tablet oder Telefon braucht und ab
+welcher Partiturgröße der Tab am Speicher stirbt, ist **ungeprüft** – der
+Wasm-Heap liegt im Web Worker und ist von der Seite aus nicht messbar. Davon
+hängt der Vorgabewert von `client_max_score_bytes` ab (10 MB), der bis dahin
+geschätzt ist. In Node sind über fünf Durchläufe rund 105 MB Heap gemessen;
+mobile Browser beenden Tabs erfahrungsgemäß früher als ein Desktop.
 
 **Klangqualität.** Der Browser-Mixdown liegt rund 7 dB unter MuseScores eigenem
 Render; die Stimmentrennung stimmt. Ein pauschaler Verstärkungsfaktor ist
@@ -139,9 +169,18 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
 
 - **Kein serverseitiges Rendern auf verwaltetem Hosting.** Der lokale
   Konvertierungsweg braucht eine Node.js-Laufzeit und die Erlaubnis, Prozesse
-  zu starten; wo es beides nicht gibt, ist ScoreView nicht betreibbar. In PHP
-  allein lässt sich das Wasm-Modul nicht ausführen – die Gründe stehen in
+  zu starten; in PHP allein lässt sich das Wasm-Modul nicht ausführen – die
+  Gründe stehen in
   [E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
+  **Betreibbar ist die App dort trotzdem**, aber anders: Der Browser
+  konvertiert ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
+  Was dabei entfällt, steht dort und ist kein Kleingedrucktes – es gibt keinen
+  Cache, jedes Gerät lädt einmal rund 14 MB und rechnet jede Partitur bei jedem
+  Öffnen neu.
+- **Kein Servercache für das, was der Browser gesetzt hat.** Die Artefakte
+  aus dem Rückfall gehen nicht zum Server zurück. Ein Upload wäre eine neue
+  Vertrauensgrenze – der Server lieferte an alle Leser einer Datei aus, was ein
+  einzelner Browser erzeugt hat ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
 - **Kein Reflow.** Das Seitenbild ist MuseScores A4-Satz
   ([E2](architecture.md#e2-musescore-svg-statt-neusatz-im-browser)).
   „Bildschirmfüllend" ist eine Skalierung, kein Umbruch. Echter Umbruch bräuchte

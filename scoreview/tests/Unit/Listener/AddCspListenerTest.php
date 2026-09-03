@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Tests\Unit\Listener;
 
 use OCA\ScoreView\Listener\AddCspListener;
+use OCA\ScoreView\Service\ClientFallback;
 use OCP\AppFramework\Http\EmptyContentSecurityPolicy;
 use OCP\IAppConfig;
 use OCP\IRequest;
@@ -23,8 +24,8 @@ use PHPUnit\Framework\TestCase;
  */
 class AddCspListenerTest extends TestCase {
 	/** Gebaute Policy fuer einen Files-Seiten-Request (der Normalfall). */
-	private function policyFor(string $soundFontUrl): string {
-		$captured = $this->runListener($soundFontUrl, '/apps/files/files/42');
+	private function policyFor(string $soundFontUrl, bool $rueckfall = false): string {
+		$captured = $this->runListener($soundFontUrl, '/apps/files/files/42', $rueckfall);
 		$this->assertInstanceOf(EmptyContentSecurityPolicy::class, $captured);
 		return $captured->buildPolicy();
 	}
@@ -35,7 +36,7 @@ class AddCspListenerTest extends TestCase {
 	 * @return ?EmptyContentSecurityPolicy null, wenn der Listener gar keine
 	 *                                     Policy hinzugefuegt hat
 	 */
-	private function runListener(string $soundFontUrl, string|\Throwable $pathInfo): ?EmptyContentSecurityPolicy {
+	private function runListener(string $soundFontUrl, string|\Throwable $pathInfo, bool $rueckfall = false): ?EmptyContentSecurityPolicy {
 		$appConfig = $this->createMock(IAppConfig::class);
 		$appConfig->method('getValueString')
 			->with('scoreview', 'soundfont_url')
@@ -56,7 +57,10 @@ class AddCspListenerTest extends TestCase {
 			},
 		);
 
-		(new AddCspListener($appConfig, $request))->handle($event);
+		$clientFallback = $this->createMock(ClientFallback::class);
+		$clientFallback->method('applies')->willReturn($rueckfall);
+
+		(new AddCspListener($appConfig, $clientFallback, $request))->handle($event);
 
 		return $captured;
 	}
@@ -109,7 +113,7 @@ class AddCspListenerTest extends TestCase {
 		$appConfig = $this->createMock(IAppConfig::class);
 		$appConfig->expects($this->never())->method('getValueString');
 
-		(new AddCspListener($appConfig, $this->createMock(IRequest::class)))
+		(new AddCspListener($appConfig, $this->createMock(ClientFallback::class), $this->createMock(IRequest::class)))
 			->handle(new \OCP\EventDispatcher\Event());
 
 		$this->addToAssertionCount(1);
@@ -172,5 +176,29 @@ class AddCspListenerTest extends TestCase {
 		// getPathInfo() wirft bei einer nicht dekodierbaren URL - im Zweifel
 		// nicht lockern.
 		$this->assertNull($this->runListener('', new \Exception('kaputte URL')));
+	}
+
+	/**
+	 * Der Rueckfall im Browser braucht zwei Dinge, die Nextcloud nicht gibt:
+	 * einen Worker aus einer Blob-URL (so startet die scoreview-engine) und
+	 * das Lesen der fertigen Artefakte aus Blob-URLs (so kommen sie ohne eine
+	 * einzige Zeile Aenderung in den Viewer).
+	 */
+	public function testLockertFuerDenRueckfallWorkerUndVerbindungAufBlob(): void {
+		$policy = $this->policyFor('', rueckfall: true);
+		$this->assertStringContainsString("worker-src 'self' blob:", $policy);
+		$this->assertStringContainsString('connect-src', $policy);
+		$this->assertStringContainsString('blob:', $policy);
+	}
+
+	/**
+	 * Die wichtigere Haelfte: Wo der Server selbst konvertiert - der
+	 * Normalfall -, darf von alldem nichts uebrig bleiben. Sonst zahlte jede
+	 * gesunde Instanz fuer eine Faehigkeit, die sie nie benutzt.
+	 */
+	public function testLaesstDieCspUnberuehrtWennDerServerSelbstKonvertiert(): void {
+		$policy = $this->policyFor('', rueckfall: false);
+		$this->assertStringNotContainsString('worker-src', $policy);
+		$this->assertStringNotContainsString('blob:', $policy);
 	}
 }

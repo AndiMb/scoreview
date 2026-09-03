@@ -70,12 +70,22 @@ Der lokale Weg ist voreingestellt, weil er der einzige ist, der nach
 `app:enable` schon fertig ist. Ausführlich in
 [docs/architecture.md](docs/architecture.md).
 
+Kann der Server **keinen von beiden** ausführen – verwaltetes Hosting ohne
+Node-Laufzeit und ohne Container –, konvertiert der Browser der Nutzerin:
+dieselbe Engine, dasselbe Ergebnis, aber ohne Cache und mit rund 14 MB
+einmaligem Download je Gerät
+([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall)). Dieser
+Rückfall ist nirgends wählbar und greift nur, wo sonst gar nichts liefe.
+
 ## Voraussetzungen
 
 - Nextcloud 31–35, PHP 8.1–8.5
-- Einer der beiden Konvertierungswege oben. Verwaltetes Hosting, das weder
-  Container noch eine Node-Laufzeit erlaubt, bleibt außen vor – warum, steht
-  unter [E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
+- Einer der beiden Konvertierungswege oben – oder keiner: Wo verwaltetes
+  Hosting weder Container noch eine Node-Laufzeit erlaubt, springt der Rückfall
+  im Browser ein
+  ([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall)). Warum
+  serverseitiges Rendern dort nicht geht, steht unter
+  [E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
 
 ## Installation
 

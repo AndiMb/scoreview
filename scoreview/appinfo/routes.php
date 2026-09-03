@@ -21,11 +21,23 @@ return [
 		// eine Nutzerin ausloesen kann.
 		['name' => 'conversion#reconvert', 'url' => '/api/scores/{fileId}/reconvert', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'conversion#artifact', 'url' => '/api/scores/{fileId}/artifact/{name}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+', 'name' => '[a-z0-9\-]+']],
+		// Die Partitur selbst - nur fuer den Konvertierungsweg im Browser.
+		// Dieselbe Rechtepruefung wie oben; der Viewer hat von Nextclouds
+		// Viewer nur die fileId, keinen Pfad.
+		['name' => 'conversion#source', 'url' => '/api/scores/{fileId}/source', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
 
 		// SoundFont fuer die Browser-Wiedergabe (siehe docs/architecture.md
 		// E1). Nicht an eine fileId gebunden - eine Datei fuer die gesamte
 		// Instanz, siehe Service\SoundFontService.
 		['name' => 'sound_font#get', 'url' => '/api/soundfont', 'verb' => 'GET'],
+
+		// Die scoreview-engine fuer den Konvertierungsweg im Browser. Drei feste
+		// Dateinamen als Allowlist im Controller - hier bewusst nur die
+		// Zeichenklasse, damit ein unbekannter Name als 404 aus dem Controller
+		// kommt und nicht als Routing-Fehler (wie bei conversion#artifact).
+		// Der Zuschnitt "ein Verzeichnis, drei Geschwister" ist Bedingung: Der
+		// Glue sucht seine .wasm/.data relativ zur eigenen Script-URL.
+		['name' => 'engine#get', 'url' => '/api/engine/{name}', 'verb' => 'GET', 'requirements' => ['name' => '[a-zA-Z0-9._\-]+']],
 
 		// Private Notizen
 		['name' => 'annotation#index', 'url' => '/api/scores/{fileId}/annotations', 'verb' => 'GET'],

@@ -131,10 +131,16 @@ jobs:
           fi
 
       # Was hier NICHT mitgeht und warum: Der App Store nimmt Archive nur bis
-      # 20 MB an. Die Browser-Bundles der Engine braucht nur, wer sie im
-      # Browser laufen laesst - hier konvertiert Node; die CJK-Fonts sind
-      # 4,2 MB fuer chinesische, japanische und koreanische Liedtexte. Der
-      # Konverter laeuft ohne beides (nachgemessen). Siehe docs/limits.md.
+      # 20 MB an. `scoreview.js` ist die globale Variante des Browser-Bundles
+      # (fuer eine <script>-Einbindung), die niemand benutzt - geladen wird
+      # `scoreview.mjs` als Modul (docs/architecture.md E7). Die CJK-Fonts sind
+      # 4,2 MB fuer chinesische, japanische und koreanische Liedtexte; der
+      # Konverter laeuft ohne sie (nachgemessen). Siehe docs/limits.md.
+      #
+      # `scoreview.mjs` geht seit dem Rueckfall im Browser MIT - rund 40 KB
+      # gepackt. Wasm und Ressourcenpaket liegen ohnehin fuer den Node-Weg im
+      # Paket: Die 14 MB des Browserwegs sind eine Client-Last, keine
+      # Paketlast.
       - name: Auslieferungsbaum zusammenstellen
         run: |
           # pipefail ist hier keine Formalie: ohne ihn zaehlt nur der Status des
@@ -164,7 +170,6 @@ jobs:
             --exclude='scoreview/converter/package-lock.json' \
             --exclude='scoreview/converter/lib/*.test.mjs' \
             --exclude='scoreview/converter/node_modules/scoreview-engine/scoreview.js' \
-            --exclude='scoreview/converter/node_modules/scoreview-engine/scoreview.mjs' \
             --exclude='scoreview/converter/node_modules/@librescore' \
             scoreview | tar --extract --file - --directory dist
           du -sh dist/scoreview
@@ -187,7 +192,8 @@ jobs:
             converter/selftest-score.mscz \
             converter/node_modules/scoreview-engine/scoreview.lib.wasm \
             converter/node_modules/scoreview-engine/scoreview.lib.data \
-            converter/node_modules/scoreview-engine/scoreview.nodejs.cjs; do
+            converter/node_modules/scoreview-engine/scoreview.nodejs.cjs \
+            converter/node_modules/scoreview-engine/scoreview.mjs; do
             if [ ! -e "dist/scoreview/$PFLICHT" ]; then
               echo "Im Paket fehlt: $PFLICHT - Release abgebrochen." >&2
               exit 1

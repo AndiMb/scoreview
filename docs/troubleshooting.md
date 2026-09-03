@@ -90,6 +90,51 @@ gewählten Weg und nennt die Ursache im Klartext. Dasselbe von Hand:
 cd /var/www/html/custom_apps/scoreview/converter && node convert.mjs --selftest
 ```
 
+## Die Betriebsdiagnose zeigt eine Zeile „Rückfall"
+
+Dann konvertiert gerade der **Browser**, weil der Server es nicht kann
+([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)). Das ist kein
+Fehler, sondern die Notlösung – die Partituren sind sichtbar und spielbar.
+
+**Die rote Zeile darüber bleibt trotzdem wichtig**: Sie nennt den Grund, aus
+dem der Server nicht konvertiert (siehe die beiden Abschnitte davor). Solange
+er besteht, gilt für jede Nutzerin:
+
+- Jedes Gerät lädt beim ersten Öffnen einmal rund 14 MB Konverter.
+- Nichts wird zwischengespeichert: Jede Partitur wird bei jedem Öffnen neu
+  gesetzt, auf jedem Gerät.
+- Der Schalter „sofort konvertieren" ist wirkungslos, der Selbsttest prüft
+  weiterhin nur den Serverweg.
+
+Behoben wird das nicht am Rückfall, sondern an seiner Ursache: Node bereitstellen
+(Weg A) oder den Sidecar erreichbar machen (Weg B). Nach der Reparatur greift
+der Rückfall beim nächsten Öffnen nicht mehr – das gespeicherte Urteil gilt
+höchstens fünf Minuten und wird vom Speichern der Einstellungen und vom
+Selbsttest sofort verworfen. Bereits im Browser gesetzte Partituren tauchen
+danach ganz normal im Servercache auf, sobald sie einmal geöffnet werden.
+
+## Der Viewer meldet „Diese Partitur konnte in diesem Browser nicht gesetzt werden"
+
+Zwei Meldungen gehören zum Rückfall und stehen in keinem Serverlog, weil sie im
+Browser entstehen:
+
+- **„… ist zu groß, um in diesem Browser gesetzt zu werden"** – die Partitur
+  liegt über `client_max_score_bytes` (Vorgabe 10 MB). Geprüft wird das
+  absichtlich **vor** dem Laden des Konverters, damit nicht erst 14 MB umsonst
+  über die Leitung gehen. Die Grenze ist eine reine `occ`-Einstellung:
+  ```sh
+  occ config:app:set scoreview client_max_score_bytes --value 20971520
+  ```
+  Sie höher zu setzen ist ein Versprechen an das schwächste Gerät im Chor –
+  wie viel ein Tablet trägt, ist ungemessen (siehe [Grenzwerte](limits.md)).
+- **„… konnte in diesem Browser nicht gesetzt werden"** – der Konverter ließ
+  sich nicht laden oder nicht starten. Das technische Detail unter der Meldung
+  nennt die genaue URL. Häufigste Ursachen: der Download brach ab, oder die
+  Seite wurde geladen, **bevor** der Rückfall aktiv wurde – dann trägt genau
+  dieses Dokument noch die engere CSP, und ein Neuladen genügt. Bleibt es
+  dabei, in der Browser-Konsole nach `securitypolicyviolation` sehen: Ein
+  blockierter Web Worker meldet sich **nur** dort und sonst nirgends.
+
 ## „Kein Ton: …" über der Notenansicht
 
 Die Notenansicht funktioniert weiter, nur die Wiedergabe nicht; der Text hinter

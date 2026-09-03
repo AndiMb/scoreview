@@ -21,6 +21,11 @@ lokal auf dem Server; beide erzeugen dieselben Artefakte (siehe
 des App-Pakets, der lokale Konverter schon. Die HTTP-API des Sidecars beschreibt
 [`../sidecar/README.md`](../sidecar/README.md).
 
+Kann der Server **keinen von beiden** ausführen, springt ein Rückfall ein:
+dieselbe Engine, ausgeführt im Browser der Nutzerin
+([E7](#e7-konvertierung-im-browser-als-rückfall)). Er ist nirgends wählbar und
+greift nur, wo sonst gar nichts liefe.
+
 ## Datenfluss
 
 ```
@@ -43,6 +48,12 @@ IAppData-Cache  scoreview/<fileId>/<etag>/
 HTTP-Auslieferung, unveränderlich (ETag + Cache-Control: immutable)
    v
 Browser
+
+  ... oder, wo der Server keinen der beiden Wege ausfuehren kann (E7):
+
+.mscz -> GET /api/scores/<id>/source -> dieselbe Engine im Web Worker
+      -> dieselben Artefakte, als Blob-URLs, nur in diesem Browser
+      (kein IAppData, keine Statuszeile - der Cache entfaellt)
    |- SVG-Seiten anzeigen ............. Zoom · Vollbild · Autoscroll
    |- MIDI clientseitig synthetisieren  Tempo · Mixer · Metronom
    |- Cursor-Overlay über spos/12-Koordinaten
@@ -76,6 +87,8 @@ zeigt. Warum es beide braucht, steht in
 |---|---|
 | `GET /api/scores/{fileId}/status` | Konvertierungsstatus, Seitenzahl, Metadaten |
 | `GET /api/scores/{fileId}/artifact/{name}` | Ein Artefakt aus dem Cache (`page-N`, `midi`, `timing`, `measures`, `meta`) |
+| `GET /api/scores/{fileId}/source` | Die `.mscz` selbst – nur für die Konvertierung im Browser ([E7](#e7-konvertierung-im-browser-als-rückfall)) |
+| `GET /api/engine/{name}` | Die drei Dateien der scoreview-engine, für denselben Weg |
 | `POST /api/scores/{fileId}/reconvert` | Verwirft die gespeicherte Konvertierung und lässt sie neu erzeugen (nur mit Schreibrecht auf die Datei) |
 | `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe |
 | `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen |
@@ -97,6 +110,12 @@ lokalen Weg gibt es nichts zu pollen: Der Kindprozess läuft gemessen 0,7–2,9 
 mit harter Zeitgrenze, und der Job schreibt das Ergebnis selbst in den Cache.
 Optional lässt sich in den Admin-Einstellungen die Vorab-Konvertierung beim
 Hochladen einschalten (`eager_conversion`).
+
+Kann der Server gar nicht konvertieren, antwortet der Statusendpunkt statt mit
+Artefakten mit `status: "client"` und überlässt die Arbeit dem Browser
+([E7](#e7-konvertierung-im-browser-als-rückfall)). Dann wird **kein Job
+eingereiht und nichts gespeichert** – alles Folgende in diesem Abschnitt gilt
+für diesen Weg nicht.
 
 Der Cache-Schlüssel ist `(fileId, etag)`: Eine geänderte Datei bekommt ein neues
 `etag` und damit automatisch einen neuen Cache-Eintrag; der alte wird verworfen.
@@ -409,11 +428,12 @@ WASI-Build wäre ein eigenes Portierungsvorhaben: Die Engine liest ihre
 Schriften und Metadaten aus Emscriptens virtuellem Dateisystem, in das sie als
 vorgeladenes Paket eingebettet sind – nicht über WASI-Systemaufrufe.
 
-Für diesen Fall bliebe nur, im Browser zu konvertieren und die Artefakte zum
-Server hochzuladen. Das ist keine Umverdrahtung, sondern eine neue
-Vertrauensgrenze: Der Server lieferte dann an alle Leser einer Datei aus, was
-ein einzelner Browser erzeugt hat. Solange das nicht entschieden ist, bleibt
-SaaS außen vor.
+Für diesen Fall konvertiert der Browser
+([E7](#e7-konvertierung-im-browser-als-rückfall)) – und zwar **ohne** die
+Artefakte zum Server hochzuladen. Genau daran hing die Frage: Ein Upload wäre
+keine Umverdrahtung, sondern eine neue Vertrauensgrenze, denn der Server
+lieferte dann an alle Leser einer Datei aus, was ein einzelner Browser erzeugt
+hat. Statt diese Grenze einzuziehen, entfällt auf diesem Weg der Cache.
 
 #### Welchen Weg wählen
 
@@ -484,6 +504,84 @@ Nextcloud 34 gemessen gibt es nur noch den neuen Ort. `viewer.js` trägt sich
 deshalb im neuen ein und, wenn der fehlt, zusätzlich im alten – beide Male mit
 derselben Bedingung aus `scoreFile.js`. Fehlte der zweite Zweig, täte die
 Aktion auf älteren Ständen einfach nichts: keine Fehlermeldung, kein Eintrag.
+
+### E7: Konvertierung im Browser als Rückfall
+
+Wo der Server **nicht konvertieren kann** – keine Node-Laufzeit, `proc_open`
+gesperrt, kein erreichbarer Sidecar –, konvertiert der Browser. Dieselbe Engine
+(scoreview-engine, MuseScore 4.7.4 als WebAssembly), dieselben Artefakte, nur
+ein anderer Ort.
+
+Das ist **kein dritter Konvertierungsweg**: Er steht in keiner Einstellung zur
+Wahl, und er greift nur, wenn der eingestellte Weg nicht laufen kann. Damit
+bleibt [E3](#e3-zwei-konvertierungswege-hinter-einer-api) unberührt – die Wahl
+ist weiterhin eine zwischen zwei Serverwegen.
+
+**Warum es ihn gibt.** Ohne ihn ist ScoreView auf verwaltetem Hosting nicht
+betreibbar: Dort gibt es weder Docker noch das Recht, Prozesse zu starten, und
+[in PHP allein lässt sich das Wasm-Modul nicht ausführen](#was-auch-der-lokale-weg-nicht-löst-echtes-saas).
+
+**Wann er greift.** Entschieden wird an genau einer Stelle
+(`Service\ClientFallback`), so wie die Wahl zwischen Sidecar und lokalem Weg
+allein in `ConvertScoreJob` fällt:
+
+| Weg | Auslöser | Warum so |
+|---|---|---|
+| `local` | `LocalConverter::describe()` meldet „nicht verfügbar" | Fehlendes Node ist eine dauerhafte Eigenschaft der Instanz. Erst einen Job einzureihen, der sicher scheitert, hieße bis zu einen Cron-Takt warten, bevor überhaupt etwas passiert |
+| `sidecar` | die Lebendprüfung schlägt fehl – oder ein Lauf ist mit `sidecar_unreachable` gescheitert | Ein konfigurierter Sidecar *soll* laufen; sein Ausfall ist ein Betriebsproblem. Beide Auslöser zusammen fangen sowohl den Dauerzustand als auch den Ausfall zwischen zwei Prüfungen |
+
+Das Urteil ist gespeichert und gilt fünf Minuten – die ehrliche Antwort kostet
+einen Prozessstart oder eine HTTP-Anfrage, und der Viewer fragt den Status im
+Sekundentakt. Ein Selbsttest und jedes Speichern der Admin-Einstellungen
+verwerfen es sofort.
+
+**Ein Inhaltsfehler löst ihn nicht aus.** Wenn die Partitur kaputt ist,
+scheitert der Browser mit derselben Engine genauso – nur 14 MB später. Nur die
+beiden Infrastrukturcodes (`local_unavailable`, `sidecar_unreachable`) greifen.
+
+**Eine fertige Konvertierung schlägt den Rückfall.** Wer seine Node-Laufzeit
+verliert, behält den Zugriff auf alles, was schon im Cache liegt; gerechnet
+wird nur, wo es nichts gibt.
+
+**Was er kostet.**
+
+| | |
+|---|---|
+| Client-Last | rund 14 MB Engine je Browser, davon ~7,3 MB über die Leitung (das Wasm wird komprimiert übertragen, das Ressourcenpaket nicht). Einmal je Engine-Version, danach `immutable` im Browser-Cache |
+| Cache | **keiner.** Jedes Gerät und jedes Öffnen rechnet neu; im Browser bleibt nur ein Sitzungscache mit einem Eintrag |
+| Vorab-Konvertierung | entfällt – es gibt nichts vorzubereiten |
+| `occ`-Selbsttest | prüft weiterhin nur die Serverwege |
+| CSP | `blob:` in `worker-src` und `connect-src`, begrenzt auf `/apps/files` und nur solange der Rückfall greift (`Listener\AddCspListener`) |
+| App-Paket | rund 40 KB. Wasm und Ressourcenpaket liegen ohnehin für den Node-Weg darin – ausgeliefert wird zusätzlich nur der Browser-Glue |
+
+**Warum keine Zeile im Viewer.** Der Vertrag ist der Körper von `onReady()`,
+nicht die HTTP-Antwort, aus der er stammt: Der Rückfall baut dasselbe
+`files`-Objekt, nur mit Blob-URLs statt Serverrouten. `ScoreViewer.vue`,
+`ScorePage.vue`, `usePlayback.js` und `useAnnotations.js` sind unverändert; die
+Verzweigung sitzt an einer Stelle in `useConversionStatus.js`. Dass der Viewer
+`renderer.backend === 'client'` **anzeigt**, ist wie bei den beiden anderen
+Wegen eine Angabe für Menschen, kein `if`.
+
+**Woher die Gleichheit der Artefakte kommt.** Nicht aus Sorgfalt, sondern aus
+der Bauart: Es ist dieselbe Engine in derselben Aufrufreihenfolge, und die
+Umformung in die Cache-Form macht `converter/lib/artifacts.mjs` – dasselbe
+Modul, das auch der Node-Weg benutzt. Nachgemessen an `repeat-test.mscz`:
+`timing.json`, `measures.json` und `meta.json` sind Byte für Byte identisch zu
+`node convert.mjs`, die SVG-Seite ist gleich lang.
+
+**Grenzen.** Eine eigene, kleinere Schranke `client_max_score_bytes` (Vorgabe
+10 MB, `occ`) bricht **vor** dem Engine-Download ab – sonst lädt ein Tablet
+14 MB, um dann aufzugeben. Zwei eigene Fehlercodes stehen daneben:
+`client_too_large` und `client_engine_unavailable`. Der zweite hat einen
+Grund, der von außen nicht zu erraten ist: Ein von der CSP blockierter
+`new Worker(blob:…)` **wirft nicht**, es kommt nur eine
+`securitypolicyviolation` – ohne eigene Zeitgrenze bliebe der Viewer für immer
+auf „wird konvertiert" stehen.
+
+**Was er nicht löst.** Öffentliche Freigaben: Die Routen hängen am
+angemeldeten Nutzerkontext, und die CSP-Lockerung greift nur auf
+`/apps/files`. Der Rückfall nimmt dafür die serverseitige Hürde weg, mehr
+nicht.
 
 ## Formatgrundlagen
 

@@ -60,6 +60,15 @@
 				<NcCheckboxRadioSwitch v-model="form.eagerConversion" type="switch" class="scoreview-field">
 					{{ t('Convert new/changed scores immediately (instead of on first open)') }}
 				</NcCheckboxRadioSwitch>
+				<!--
+					Nicht ausgegraut, sondern erklaert: Der Schalter wird wieder
+					wirksam, sobald der Server konvertieren kann - ihn zu
+					sperren hiesse, eine Einstellung fuer einen Zustand
+					wegzunehmen, den der Betreiber gerade beheben will.
+				-->
+				<p v-if="fallbackActive" class="scoreview-hint">
+					{{ t('Without effect right now: scores are converted in the browser, and nothing is stored on the server that could be prepared in advance.') }}
+				</p>
 
 				<NcTextField
 					v-if="form.conversionBackend === 'local'"
@@ -226,6 +235,11 @@ export default {
 		 *
 		 * @return {Array<{label: string, detail: string, ok: boolean, type?: string}>}
 		 */
+		/** Konvertiert dieser Server gerade gar nicht selbst? */
+		fallbackActive() {
+			return this.health?.clientFallback?.active === true
+		},
+
 		healthLines() {
 			const h = this.health
 			if (!h) {
@@ -238,6 +252,17 @@ export default {
 					label: t('Conversion'),
 					...this.backendLine(h),
 				},
+				...(h.clientFallback?.active
+					? [{
+							label: t('Fallback'),
+							// Warnung, nicht Erfolg und nicht Fehler: Es
+							// funktioniert - aber jedes Geraet laedt dafuer rund
+							// 14 MB, und gecacht wird nichts.
+							type: 'warning',
+							ok: true,
+							detail: t('Scores are converted in the browser because this server cannot. Every device downloads the conversion engine once (about 14 MB), and nothing is cached on the server.'),
+						}]
+					: []),
 				{
 					label: t('SoundFont'),
 					...this.soundFontLine(h.soundFont),

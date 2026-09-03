@@ -10,6 +10,15 @@
 	<div class="scoreview-viewer" :style="highlightStyle">
 		<div v-if="state === 'converting' || state === 'loading'" class="scoreview-status">
 			<NcLoadingIcon :size="32" :name="state === 'loading' ? t('Loading…') : t('Converting…')" />
+			<!--
+				Nur beim Rueckfall im Browser gefuellt: Dort dauert das erste
+				Oeffnen laenger als sonst, weil die Engine geladen wird - ein
+				stummer Kreisel liesse das wie einen Haenger aussehen.
+				Serverseitig konvertiert bleibt die Zeile leer.
+			-->
+			<p v-if="conversionProgressText" class="scoreview-status-detail">
+				{{ conversionProgressText }}
+			</p>
 		</div>
 		<div v-else-if="state === 'error'" class="scoreview-status scoreview-error">
 			<NcEmptyContent :name="t('Error')" :description="errorText">
@@ -735,6 +744,7 @@ export default {
 			highlightMode: preferences.highlightMode,
 			highlightStyle: preferences.highlightStyle,
 			state: conversion.state,
+			clientProgress: conversion.clientProgress,
 			errorMessage: conversion.errorMessage,
 			errorCode: conversion.errorCode,
 			errorText: conversion.errorText,
@@ -843,7 +853,43 @@ export default {
 			if (this.rendererBackend === 'sidecar') {
 				return this.t('Sidecar container (MuseScore 4)')
 			}
+			if (this.rendererBackend === 'client') {
+				// Kein gespeicherter Wert wie die beiden oben, sondern eine
+				// Aussage ueber DIESE Sitzung: Auf diesem Weg wird nichts
+				// gecacht, die Darstellung ist gerade eben hier entstanden.
+				return this.t('this browser (MuseScore as WebAssembly)')
+			}
 			return this.t('Unknown – converted by an earlier version of the app.')
+		},
+
+		/**
+		 * Was gerade passiert, waehrend im Browser konvertiert wird.
+		 *
+		 * Die Engine meldet keinen echten Fortschritt - nur die Seitenschleife
+		 * ist zaehlbar. Wichtiger als eine Prozentzahl ist ohnehin die Stufe
+		 * davor: Beim ersten Oeffnen laedt der Browser rund 14 MB Engine, und
+		 * das soll dastehen, statt als Stille zu erscheinen.
+		 *
+		 * @return {string} leer, wenn serverseitig konvertiert wurde
+		 */
+		conversionProgressText() {
+			const stand = this.clientProgress
+			if (!stand) {
+				return ''
+			}
+			if (stand.phase === 'source') {
+				return this.t('Loading score…')
+			}
+			if (stand.phase === 'engine') {
+				return this.t('Loading the conversion engine (about 14 MB, once per browser)…')
+			}
+			if (stand.phase === 'layout') {
+				return this.t('Laying out the score…')
+			}
+			if (stand.phase === 'pages') {
+				return this.t('Page {n} of {total}', { n: stand.page, total: stand.of })
+			}
+			return ''
 		},
 
 		// Musikalischer Anker der aktuellen Wiedergabeposition ("+ An aktueller
@@ -1320,6 +1366,11 @@ export default {
 	padding: 3rem 1rem;
 	text-align: center;
 	color: var(--color-text-maxcontrast);
+}
+
+.scoreview-status-detail {
+	margin-top: 0.5rem;
+	font-size: 0.9em;
 }
 
 .scoreview-error {

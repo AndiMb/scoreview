@@ -17,6 +17,15 @@ Node-Laufzeit vorhanden ist, ist die App nach `occ app:enable scoreview`
 betriebsbereit; es bleiben die Schritte 4 und 5 unten, die beide Wege
 betreffen. Für Weg B rechnen Sie mit 15 Minuten.
 
+**Und wenn keins von beidem geht?** Auf verwaltetem Hosting – keine
+Node-Laufzeit, keine Container, `proc_open` gesperrt – konvertiert die App im
+Browser der Nutzerin
+([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)). Dafür ist
+nichts einzurichten: Der Rückfall greift von selbst, sobald der Server nicht
+kann, und meldet sich in der Betriebsdiagnose. Zu wissen ist nur, was er
+kostet – jedes Gerät lädt einmal rund 14 MB, und zwischengespeichert wird
+nichts. Wo der Server konvertieren kann, ist er nicht aktiv.
+
 ## Voraussetzungen
 
 - Nextcloud 31 bis 35
@@ -26,7 +35,10 @@ betreffen. Für Weg B rechnen Sie mit 15 Minuten.
 - Je nach Weg: **A** eine Node.js-Laufzeit ab Version 18 auf dem
   Nextcloud-Server, und PHP muss Prozesse starten dürfen (`proc_open` nicht per
   `disable_functions` gesperrt). **B** ein Docker-Host – dieselbe Maschine wie
-  Nextcloud oder eine andere, erreichbar über HTTP.
+  Nextcloud oder eine andere, erreichbar über HTTP. **Keins von beidem** ist
+  auch möglich: Dann konvertiert der Browser (siehe oben); vorausgesetzt wird
+  dafür ein Browser, der WebAssembly und Web Worker beherrscht – also jeder
+  aktuelle.
 - Auf Weg A einmalig ausgehendes HTTPS vom Server: Von dort holt er beim ersten
   Abspielen das SoundFont. Wo das nicht geht, tritt eine eigene Adresse an die
   Stelle der voreingestellten – siehe [SoundFont](#soundfont).
@@ -255,12 +267,15 @@ aus.
 | `local_timeout` | nur `occ` | Zeitgrenze eines lokalen Konvertierungslaufs in Sekunden (Vorgabe 120) |
 | `cjk_font_dir` | nur `occ` | Verzeichnis mit Zusatzfonts für CJK-Liedtexte, außerhalb der App (Weg A) |
 | `max_score_bytes` | nur `occ` | Obergrenze der Dateigröße (Vorgabe 100 MB) |
+| `client_max_score_bytes` | nur `occ` | Obergrenze für die Konvertierung **im Browser**, deutlich kleiner (Vorgabe 10 MB). Geprüft, bevor der Browser die Engine lädt |
 
 ## Prüfen, ob alles läuft
 
 1. **Einstellungen → Verwaltung → ScoreView** öffnen. Die Betriebsdiagnose zeigt
    den Zustand des gewählten Konvertierungswegs, den SoundFont-Zustand, das
-   Cron-Alter und die Zahl der Konvertierungen je Status.
+   Cron-Alter und die Zahl der Konvertierungen je Status. Steht dort eine Zeile
+   **Rückfall**, konvertiert gerade der Browser – die Zeile darüber nennt den
+   Grund, aus dem der Server es nicht tut.
 2. Eine `.mscz`-Datei in Files hochladen und anklicken. Beim ersten Mal läuft
    die Konvertierung sichtbar an; danach öffnet dieselbe Datei aus dem Cache.
 

@@ -137,6 +137,27 @@ class LocalConverter {
 		return dirname(__DIR__, 2) . '/converter';
 	}
 
+	/**
+	 * Welche Fassung der scoreview-engine im Paket liegt.
+	 *
+	 * Der Release-Tag aus `converter/package.json` ist dieselbe eine Stelle,
+	 * die auch bestimmt, was installiert wird - und die einzige vollstaendige
+	 * Angabe: `Engine.version()` liefert die MSCZ-DATEIFORMATversion, und das
+	 * package.json des Engine-Pakets nennt nur den MuseScore-Kern, nicht den
+	 * Build (siehe convert.mjs::museScoreVersion).
+	 *
+	 * Gebraucht wird das ausserhalb der Konvertierung: Die Auslieferung der
+	 * Engine an den Browser haengt ihre Unveraenderlichkeit daran
+	 * (Controller\EngineController, Controller\ConversionController).
+	 */
+	public function engineVersion(): string {
+		$manifest = @file_get_contents($this->getConverterDir() . '/package.json');
+		if (is_string($manifest) && preg_match('#/download/v?([^/]+)/#', $manifest, $treffer) === 1) {
+			return $treffer[1];
+		}
+		return 'unbekannt';
+	}
+
 	private function isConverterInstalled(): bool {
 		return is_file($this->getConverterDir() . '/convert.mjs')
 			&& is_dir($this->getConverterDir() . '/node_modules/scoreview-engine');

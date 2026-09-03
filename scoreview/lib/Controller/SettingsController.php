@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\HealthService;
 use OCA\ScoreView\Service\LocalConverter;
@@ -25,6 +26,7 @@ class SettingsController extends Controller {
 		private ConversionBackend $backend,
 		private SidecarClient $sidecarClient,
 		private LocalConverter $localConverter,
+		private ClientFallback $clientFallback,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -52,6 +54,11 @@ class SettingsController extends Controller {
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function selfTest(): JSONResponse {
+		// Ein Selbsttest ist die genaueste Auskunft darueber, ob der Server
+		// konvertieren kann - also das gespeicherte Urteil verwerfen und beim
+		// naechsten Mal frisch fragen, statt bis zu fuenf Minuten auf einer
+		// veralteten Antwort sitzen zu bleiben.
+		$this->clientFallback->forget();
 		$result = $this->backend->isLocal()
 			? $this->localConverter->runSelfTest()
 			: $this->sidecarClient->runSelfTest();
@@ -104,6 +111,11 @@ class SettingsController extends Controller {
 		// dessen Host muss dann per HTTP(S) erreichbar sein und CORS erlauben
 		// (und wird von Listener\AddCspListener in connect-src freigegeben).
 		$this->appConfig->setValueString(Application::APP_ID, 'soundfont_url', trim($soundFontUrl));
+		// Konvertierungsweg, node-Pfad, Sidecar-URL - jede dieser Zeilen kann
+		// aus "kann nicht" ein "kann" gemacht haben. Das gespeicherte Urteil
+		// waere sonst bis zu fuenf Minuten alt, und der Betreiber saehe seine
+		// gerade eingetragene Reparatur nicht wirken (Service\ClientFallback).
+		$this->clientFallback->forget();
 		return new JSONResponse(['status' => 'ok']);
 	}
 }

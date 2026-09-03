@@ -7,7 +7,9 @@ namespace OCA\ScoreView\Controller;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -16,6 +18,7 @@ use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\StreamResponse;
 use OCP\BackgroundJob\IJobList;
+use OCP\Files\Node;
 use OCP\Files\NotFoundException;
 use OCP\IAppConfig;
 use OCP\IL10N;
@@ -47,10 +50,21 @@ use OCP\IURLGenerator;
 class ConversionController extends Controller {
 	private const IMMUTABLE_CACHE_SECONDS = 31536000;
 
+	/**
+	 * Bis hierhin darf eine Partitur im BROWSER gesetzt werden. Viel kleiner
+	 * als die Serverschranke (`max_score_bytes`, 100 MB): Dort raeumt der
+	 * Prozessabbau auf, hier laeuft es auf einem Tablet im selben Speicher wie
+	 * die Seite. Der Wert geht in der Antwort mit, damit der Client abbrechen
+	 * kann, BEVOR er 14 MB Engine geladen hat.
+	 */
+	private const DEFAULT_CLIENT_MAX_BYTES = 10485760;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
 		private ConversionService $conversionService,
+		private ClientFallback $clientFallback,
+		private LocalConverter $localConverter,
 		private IJobList $jobList,
 		private IURLGenerator $urlGenerator,
 		private IAppConfig $appConfig,
@@ -85,8 +99,7 @@ class ConversionController extends Controller {
 			// (status !== error => überspringen) fälschlich als "läuft
 			// schon" überspringen - die Konvertierung würde für immer auf
 			// "pending" hängen bleiben.
-			$this->retryConversion($fileId);
-			return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
+			return $this->pendingOrClient($fileId, $node);
 		}
 
 		$body = ['status' => $conversion->getStatus()];
@@ -105,6 +118,14 @@ class ConversionController extends Controller {
 			// stehengebliebenen Fehler statt es einfach nochmal zu
 			// versuchen. ConvertScoreJob::run() erlaubt genau das (sein
 			// Idempotenz-Guard überspringt nur status !== error).
+			//
+			// Es sei denn, es lag gar nicht an der Partitur: Wenn die INSTANZ
+			// nicht konvertieren kann, holt ein erneuter Serverlauf denselben
+			// Fehler noch einmal - dann uebernimmt der Browser
+			// (Service\ClientFallback).
+			if ($this->clientFallback->noteConversionError($conversion->getErrorCode())) {
+				return $this->clientResponse($node, $conversion->getErrorCode());
+			}
 			$this->retryConversion($fileId);
 		} elseif ($conversion->getStatus() === ScoreConversion::STATUS_READY) {
 			if (!$this->conversionService->isCurrentFormat($conversion)) {
@@ -112,8 +133,7 @@ class ConversionController extends Controller {
 				// statt Cache-Dateien auszuliefern, die nicht mehr zum aktuellen
 				// Controller/Sidecar-Format passen, und eine Neukonvertierung
 				// anstossen statt manuellem Eingriff in der DB.
-				$this->retryConversion($fileId);
-				return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
+				return $this->pendingOrClient($fileId, $node);
 			}
 			try {
 				$body['files'] = $this->buildFileUrls($fileId, $conversion);
@@ -121,8 +141,7 @@ class ConversionController extends Controller {
 				// Cache-Datei fehlt trotz status=ready (z.B. Ordner ausserhalb der
 				// App geloescht) - wie "nicht fertig" behandeln statt eines 500ers,
 				// analog zur format_version-Pruefung oben.
-				$this->retryConversion($fileId);
-				return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
+				return $this->pendingOrClient($fileId, $node);
 			}
 			// Kein Cache-Artefakt einer bestimmten Partitur, sondern eine
 			// instanzweite Ressource (siehe docs/architecture.md E1) -
@@ -207,6 +226,101 @@ class ConversionController extends Controller {
 	#[NoCSRFRequired]
 	public function artifact(int $fileId, string $name): Http\Response {
 		return $this->serveCachedFile($fileId, $name);
+	}
+
+	/**
+	 * Die `.mscz` selbst - fuer die Konvertierung im Browser.
+	 *
+	 * Warum eine eigene Route und nicht WebDAV: Der Viewer bekommt von
+	 * Nextclouds Viewer nur die `fileId` (siehe src/viewer.js), keinen Pfad.
+	 * Ueber diese Route gilt dieselbe Rechtepruefung wie fuer jedes Artefakt
+	 * (UserFileResolver), an genau einer Stelle statt an zweien.
+	 *
+	 * `immutable` ist auch hier ehrlich, weil der Etag als `v` in der URL
+	 * steht (siehe cacheBuster()): Aendert sich die Datei, aendert sich die
+	 * URL.
+	 */
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	public function source(int $fileId): Http\Response {
+		$node = $this->fileResolver->resolveOwnNode($fileId);
+		if ($node === null) {
+			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+		}
+
+		try {
+			$handle = $node->fopen('rb');
+		} catch (\Throwable) {
+			$handle = false;
+		}
+		if ($handle === false) {
+			return new JSONResponse(['error' => $this->l->t('Requested file does not exist.')], Http::STATUS_NOT_FOUND);
+		}
+
+		$response = new StreamResponse($handle);
+		// Der Mimetype der Partitur - derselbe, an dem Nextclouds Viewer die
+		// Datei ueberhaupt erkennt (siehe docs/architecture.md E6). Nicht aus
+		// dem Node gelesen: Dort steht auf einer Instanz ohne
+		// Mimetype-Registrierung `application/octet-stream`, und der Browser
+		// soll nicht von der Serverkonfiguration abhaengen.
+		$response->addHeader('Content-Type', 'application/x-musescore');
+		$response->addHeader('Content-Length', (string)$node->getSize());
+		$response->setETag($node->getEtag());
+		$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
+		return $response;
+	}
+
+	/**
+	 * Es gibt (noch) nichts Fertiges - und jetzt entscheidet sich, wer weiter
+	 * arbeitet. Kann der Server konvertieren, wird wie bisher ein Job
+	 * eingereiht und der Viewer wartet. Kann er es nicht, waere das Warten
+	 * endlos: Dann uebernimmt der Browser (Service\ClientFallback).
+	 */
+	private function pendingOrClient(int $fileId, Node $node): JSONResponse {
+		$grund = $this->clientFallback->reason();
+		if ($grund !== null) {
+			return $this->clientResponse($node, $grund);
+		}
+		$this->retryConversion($fileId);
+		return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
+	}
+
+	/**
+	 * „Ich kann diese Partitur nicht setzen; hier ist alles, um es selbst zu
+	 * tun." Kein Fehler - ein Fehler ist ein Ende, dies ist eine
+	 * Weiterleitung.
+	 *
+	 * Bewusst dieselbe Form wie die `ready`-Antwort, soweit sie sich deckt
+	 * (`etag`, `soundFontUrl`, `canReconvert`): Was der Viewer daraus baut,
+	 * ist derselbe onReady-Koerper - nur dass die Artefakt-URLs erst im
+	 * Browser entstehen. Es gibt hier nichts zu cachen und nichts zu
+	 * speichern; auf einer Instanz, die so laeuft, bleibt die Statustabelle
+	 * leer.
+	 */
+	private function clientResponse(Node $node, ?string $grund): JSONResponse {
+		$etag = $node->getEtag();
+		return new JSONResponse([
+			'status' => ClientFallback::STATUS_CLIENT,
+			// Als CODE, nicht als Satz - uebersetzt wird im Browser (E4).
+			'reason' => $grund ?? ScoreConversion::ERROR_UNKNOWN,
+			'sourceUrl' => $this->urlGenerator->linkToRoute(
+				Application::APP_ID . '.conversion.source', ['fileId' => $node->getId(), 'v' => $etag]),
+			// Die Engine-Version als Cache-Schluessel: Ein Wechsel des
+			// Engine-Pakets muss beim Client ankommen, obwohl die Auslieferung
+			// `immutable` ist.
+			'engineUrl' => $this->urlGenerator->linkToRoute(
+				Application::APP_ID . '.engine.get',
+				['name' => 'scoreview.mjs', 'v' => $this->localConverter->engineVersion()]),
+			'maxBytes' => $this->appConfig->getValueInt(
+				Application::APP_ID, 'client_max_score_bytes', self::DEFAULT_CLIENT_MAX_BYTES),
+			'soundFontUrl' => $this->soundFontUrl(),
+			'etag' => $etag,
+			// Anders als bei einer gecachten Konvertierung ohne Rechtepruefung:
+			// Hier verwirft „neu konvertieren" nichts Gemeinsames, sondern
+			// laesst denselben Browser noch einmal rechnen. Wer die Partitur
+			// sehen darf, darf das.
+			'canReconvert' => true,
+		]);
 	}
 
 	private function serveCachedFile(int $fileId, string $name): Http\Response {

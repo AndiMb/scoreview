@@ -26,6 +26,7 @@ class HealthService {
 	public function __construct(
 		private SidecarClient $sidecarClient,
 		private LocalConverter $localConverter,
+		private ClientFallback $clientFallback,
 		private ConversionBackend $backend,
 		private SoundFontService $soundFontService,
 		private IAppConfig $appConfig,
@@ -41,6 +42,15 @@ class HealthService {
 			'backend' => $this->backend->current(),
 			'sidecar' => $this->sidecarStatus(),
 			'local' => $this->localConverter->describe(),
+			// Ob der Rueckfall im Browser gerade greift - und warum. Die Zeile
+			// darueber bleibt rot: Der Grund, aus dem der Server nicht
+			// konvertiert, soll nicht dadurch verschwinden, dass die App
+			// trotzdem laeuft. Was hier dazukommt, ist die Antwort auf
+			// "warum sehen die Nutzerinnen dann Partituren?".
+			'clientFallback' => [
+				'active' => $this->clientFallback->applies(),
+				'reason' => $this->clientFallback->reason(),
+			],
 			'soundFont' => $this->soundFontStatus(),
 			'cron' => $this->cronStatus(),
 			'conversions' => $this->conversionStats(),

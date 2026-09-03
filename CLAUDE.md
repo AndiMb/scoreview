@@ -8,7 +8,7 @@ nicht offensichtlich ist – **die fachliche Wahrheit steht in `docs/`**.
 
 | Frage | Dokument |
 |---|---|
-| Warum ist das so gebaut? | `docs/architecture.md` – Aufbau, Entscheidungen E1–E6, Formatgrundlagen M1–M10 |
+| Warum ist das so gebaut? | `docs/architecture.md` – Aufbau, Entscheidungen E1–E7, Formatgrundlagen M1–M10 |
 | Was ist gemessen, was ist offen? | `docs/limits.md` |
 | Wie baue/teste ich? | `docs/development.md` |
 | Wie wird das installiert? | `docs/installation.md` |
@@ -32,7 +32,11 @@ eine Referenz.
 Konvertiert wird über **einen von zwei Wegen** – Sidecar oder lokal –, die
 dieselben Artefakte erzeugen (E3). Die Wahl wird an genau einer Stelle
 ausgewertet (`ConvertScoreJob`); das Frontend kennt ausschließlich die HTTP-API
-der App und **verzweigt nie** danach, welcher Weg gelaufen ist. Dieses
+der App und **verzweigt nie** danach, welcher Weg gelaufen ist. Kann der Server
+keinen von beiden ausführen, konvertiert der Browser (E7) – ein Rückfall, keine
+dritte Wahl; auch er wird an genau einer Stelle entschieden
+(`Service\ClientFallback`), und im Viewer sitzt die Verzweigung in einem
+einzigen `if` in `useConversionStatus.js`. Dieses
 Leitprinzip bitte nicht aufweichen – es ist der Grund, warum ein Wechsel des
 Konvertierungswegs keine Zeile im Viewer kostet. Dass der Statusendpunkt den
 Weg *nennt* und der Viewer ihn *anzeigt*, ist kein Verstoß dagegen: eine Angabe
@@ -151,7 +155,7 @@ misst er nur den Effektbus und meldet fälschlich „kein Ton".
   Entscheidungen, die von außen falsch aussehen. Der Bestand ist so
   geschrieben; bitte in dieser Dichte weiterführen statt sie zu verwässern.
   **Keine Prozess-Chronik im Code**: nicht „Phase 17 hat gemessen, dass …",
-  sondern „gemessen: …". Referenzen auf `E1`–`E6`/`M1`–`M10` sind erwünscht,
+  sondern „gemessen: …". Referenzen auf `E1`–`E7`/`M1`–`M10` sind erwünscht,
   sie zeigen auf `docs/architecture.md`.
 - Commit-Messages beschreiben Ursache und Wirkung, nicht nur den Fix. Kurze
   Betreffzeile, dann ein Fließtext-Body.

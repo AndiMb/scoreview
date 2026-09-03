@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Listener;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
+use OCA\ScoreView\Service\ClientFallback;
 use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -43,6 +44,7 @@ class ScoreFileListener implements IEventListener {
 	public function __construct(
 		private IJobList $jobList,
 		private IAppConfig $appConfig,
+		private ClientFallback $clientFallback,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -59,6 +61,18 @@ class ScoreFileListener implements IEventListener {
 		if (!str_ends_with(strtolower($node->getName()), '.mscz')) {
 			return;
 		}
+		// Erst hier gefragt, nicht weiter oben: Das Urteil kann einen
+		// Prozessstart oder eine HTTP-Anfrage kosten (Service\ClientFallback),
+		// und dieser Listener haengt an JEDEM Schreibvorgang der Instanz. Ab
+		// hier steht fest, dass es um eine .mscz geht und dass
+		// Vorab-Konvertierung ueberhaupt gewuenscht ist.
+		if ($this->clientFallback->applies()) {
+			// Wo der Server nicht konvertieren kann, haette der Job nichts zu
+			// tun als zu scheitern - und vorab gibt es nichts zu waermen, weil
+			// auf diesem Weg ohnehin nichts gespeichert wird.
+			return;
+		}
+
 		$owner = $node->getOwner();
 		if ($owner === null) {
 			$this->logger->warning('ScoreView: .mscz-Datei ohne ermittelbaren Owner, Eager-Konvertierung übersprungen: {name}', [

@@ -4,6 +4,52 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.7.0] – 2026-09-03
+
+### Hinzugefügt
+
+- **ScoreView läuft jetzt auch dort, wo der Server gar nicht konvertieren
+  kann.** Bisher brauchte die App entweder eine Node.js-Laufzeit auf dem Server
+  oder einen Sidecar-Container; auf verwaltetem Hosting gibt es beides nicht,
+  und die App war dort nicht betreibbar. Fehlt beides, konvertiert nun der
+  **Browser der Nutzerin** – dieselbe Engine (MuseScore als WebAssembly), die
+  sonst auf dem Server läuft, und dieselben Artefakte: `timing.json`,
+  `measures.json` und `meta.json` sind Byte für Byte identisch zum
+  Serverergebnis. Der Viewer sieht keinen Unterschied; angezeigt wird die
+  Herkunft trotzdem („Gesetzt von diesem Browser").
+
+  Das ist ausdrücklich ein **Rückfall**, kein dritter Konvertierungsweg: Er
+  steht nirgends zur Wahl und greift nur, wenn der eingestellte Weg nicht
+  laufen kann. Wo der Server konvertieren kann, ändert sich nichts – kein
+  zusätzlicher Download, keine zusätzliche Anfrage, unveränderte CSP. Eine
+  bereits fertige Konvertierung wird auch dann ausgeliefert, wenn der Server
+  seine Node-Laufzeit inzwischen verloren hat; gerechnet wird nur, wo es nichts
+  gibt.
+
+  Was er kostet, steht in
+  [E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall) und ist
+  kein Kleingedrucktes: Jedes Gerät lädt einmal rund 14 MB Konverter (7,3 MB
+  über die Leitung), **zwischengespeichert wird nichts**, und jede Partitur
+  wird bei jedem Öffnen neu gesetzt. Deshalb bricht eine eigene, kleinere
+  Größenschranke (`client_max_score_bytes`, Vorgabe 10 MB) ab, *bevor* der
+  Konverter geladen wird.
+
+- **Die Betriebsdiagnose sagt, wenn der Rückfall greift** – als eigene Zeile
+  neben der weiterhin roten Zeile mit der Ursache. Dass die App trotzdem läuft,
+  soll nicht verbergen, warum der Server nicht konvertiert. Der Schalter
+  „sofort konvertieren" weist in diesem Zustand darauf hin, dass er wirkungslos
+  ist.
+
+- **Fortschritt während der Konvertierung im Browser** – „Konverter wird
+  geladen (rund 14 MB, einmal je Browser) …", danach seitenweise. Ohne diese
+  Angabe stünde beim ersten Öffnen minutenlang ein stummer Kreisel.
+
+### Geändert
+
+- Die Antwort des Statusendpunkts kennt einen fünften Wert (`client`). Ältere,
+  nicht neu gebaute Frontends warten darauf vergeblich – nach einem Update also
+  einmal neu laden.
+
 ## [1.6.0] – 2026-09-03
 
 ### Hinzugefügt
