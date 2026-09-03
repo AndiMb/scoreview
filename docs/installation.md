@@ -27,6 +27,9 @@ betreffen. Für Weg B rechnen Sie mit 15 Minuten.
   Nextcloud-Server, und PHP muss Prozesse starten dürfen (`proc_open` nicht per
   `disable_functions` gesperrt). **B** ein Docker-Host – dieselbe Maschine wie
   Nextcloud oder eine andere, erreichbar über HTTP.
+- Auf Weg A einmalig ausgehendes HTTPS vom Server: Von dort holt er beim ersten
+  Abspielen das SoundFont. Wo das nicht geht, tritt eine eigene Adresse an die
+  Stelle der voreingestellten – siehe [SoundFont](#soundfont).
 
 Die `occ`-Befehle unten stehen so, wie sie auf einer nativen Installation
 laufen. In einer Container-Installation davor `docker exec -u www-data
