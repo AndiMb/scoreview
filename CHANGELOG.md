@@ -4,7 +4,7 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [1.6.0] – 2026-09-03
 
 ### Hinzugefügt
 
@@ -137,9 +137,42 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 - **Ein Fehlerzustand blieb unübersetzt.** `local_unavailable` – der lokale
   Weg ist eingestellt, aber nicht lauffähig – hatte im Viewer keinen eigenen
   Satz und erschien als „unbekannter Fehler".
+- **Nach einem SoundFont-Wechsel blieb die Wiedergabe stumm.** Beim Schreiben
+  in die bestehende Cache-Datei übernahm Nextclouds Dateicache die neue Größe
+  nicht – dort stand weiter die der Vorgängerin, und der
+  Auslieferungs-Endpunkt schickt genau diese Zahl als `Content-Length`. Der
+  Browser wartete damit auf Bytes, die nie kamen; ein Fehler stand nirgends.
+  Gemessen an einem Wechsel von 40 auf 23,7 MB: angekündigt wurden 39.978.561
+  Bytes, geliefert 23.712.790. Betroffen war jeder Wechsel der SoundFont-Quelle
+  (anderes Sidecar-Image, andere Download-URL); bei gleichbleibender Datei
+  stimmte die alte Zahl. Die Datei wird jetzt neu angelegt statt überschrieben.
 
 ### Geändert
 
+- **Voreingestellt ist jetzt der lokale Konvertierungsweg statt des Sidecars.**
+  Er ist der einzige, der nach `occ app:enable scoreview` schon fertig ist:
+  Alles, was er braucht, liegt im App-Paket, und die Node-Laufzeit findet er
+  selbst. Der Sidecar setzt einen zweiten Container *und* eine eingetragene
+  Adresse voraus – als Voreinstellung hieß er „nach der Installation passiert
+  erst einmal gar nichts", ohne dass der Oberfläche anzusehen wäre, warum.
+  **Bestehende Installationen bleiben, wo sie sind:** Wo eine Sidecar-Adresse
+  eingetragen ist, schreibt eine einmalige Migration den bis dahin nur
+  impliziten Wert ausdrücklich fest, bevor die neue Voreinstellung greifen
+  könnte.
+- **Das SoundFont hat auf dem lokalen Weg eine voreingestellte Adresse.** Ohne
+  Sidecar gibt es kein Image, aus dem sich eines nehmen ließe, und mitliefern
+  lässt es sich nicht – der App Store nimmt nur Archive bis 20 MB, die
+  MuseScore-WebAssembly belegt davon den Großteil. Bisher blieb die App
+  deshalb stumm, bis jemand eine Adresse eintrug, und „kein Ton" war von außen
+  nicht als fehlende Einstellung zu erkennen. Der Server holt jetzt beim ersten
+  Abspielen `FluidR3Mono_GM.sf3` (~23 MB, MIT-lizenziert, dasselbe SoundFont,
+  das auch MuseScore mitbringt) aus einem Release-Asset dieses Projekts; das
+  Feld **SoundFont-Download-URL** überschreibt die Adresse weiterhin. Auf dem
+  Sidecar-Weg ändert sich nichts – dort kommt es wie bisher aus dem Container,
+  nichts wird aus dem Netz geladen.
+- Die Betriebsdiagnose meldet „SoundFont noch nicht geholt" nicht mehr rot,
+  sondern als Hinweis. Direkt nach der Installation ist das der Normalzustand
+  und kein Fehler: Geholt wird beim ersten Abspielen.
 - **Der lokale Konvertierungsweg läuft jetzt auf der
   [scoreview-engine](https://github.com/AndiMb/scoreview-engine)**
   (`v4.7.4-engine.2`): derselbe MuseScore-Kern 4.7.4, aber Qt-frei gebaut

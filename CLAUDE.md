@@ -95,10 +95,11 @@ Alles davon läuft zusätzlich in CI (`.github/workflows/ci.yml`).
 ## Testumgebung
 
 Zwei Docker-Container, `nextcloud-test` (Port 8080) und `scoreview-sidecar`.
-Fuer den lokalen Konvertierungsweg braucht `nextcloud-test` zusaetzlich eine
-Node-Laufzeit (`apt-get install -y nodejs`, das Image bringt keine mit);
-umgestellt wird mit
-`occ config:app:set scoreview conversion_backend --value local`.
+Der lokale Konvertierungsweg ist die Voreinstellung und braucht in
+`nextcloud-test` eine Node-Laufzeit (`apt-get install -y nodejs`, das Image
+bringt keine mit) – ohne die läuft dort gar nichts, auch wenn nichts
+umgestellt wurde. Auf den Sidecar wechselt
+`occ config:app:set scoreview conversion_backend --value sidecar`.
 Aufsetzen wie in `docs/installation.md`; die Besonderheiten der lokalen
 Testinstanz stehen in `docs/development.md#testumgebung`.
 

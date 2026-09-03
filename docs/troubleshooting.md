@@ -102,13 +102,16 @@ dem Doppelpunkt nennt die Ursache.
   curl -s -H "X-ScoreView-Secret: <secret>" http://scoreview-sidecar:8765/soundfont/info
   ```
 - **Stumm auf dem lokalen Konvertierungsweg** – dort gibt es kein Image, das ein
-  SoundFont mitbrächte. Ohne die Einstellung **SoundFont-Download-URL** bleibt
-  die Wiedergabe stumm; siehe [Installation](installation.md#soundfont).
+  SoundFont mitbrächte; der Server holt es beim ersten Abspielen aus dem Netz.
+  Kommt er dort nicht hin (kein ausgehendes HTTPS, Proxy, Firewall), bleibt die
+  Wiedergabe stumm. Abhilfe: die Datei selbst irgendwo ablegen und die Adresse
+  unter **SoundFont-Download-URL** eintragen; siehe
+  [Installation](installation.md#soundfont).
 - **HTTP-Fehler bei einer selbst eingetragenen SoundFont-URL** – bei der
   **SoundFont-URL** muss die Adresse vom **Browser** aus erreichbar sein, nicht
   nur vom Server, und CORS erlauben. Bei der **SoundFont-Download-URL** genügt
-  Erreichbarkeit vom Server. Ein leeres Feld verwendet das mitgelieferte
-  SoundFont.
+  Erreichbarkeit vom Server; ein leeres Feld bedeutet dort die voreingestellte
+  Adresse, nicht „kein SoundFont".
 
 ## Die Konvertierung schlägt fehl
 

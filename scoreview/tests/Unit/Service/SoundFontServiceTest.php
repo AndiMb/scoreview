@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Tests\Unit\Service;
 
+use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SidecarException;
@@ -29,6 +30,7 @@ use PHPUnit\Framework\TestCase;
 class SoundFontServiceTest extends TestCase {
 	private IAppData&MockObject $appData;
 	private SidecarClient&MockObject $sidecar;
+	private ConversionBackend&MockObject $backend;
 	private IAppConfig&MockObject $appConfig;
 	private ITempManager&MockObject $tempManager;
 	private IClientService&MockObject $clientService;
@@ -36,13 +38,25 @@ class SoundFontServiceTest extends TestCase {
 	protected function setUp(): void {
 		$this->appData = $this->createMock(IAppData::class);
 		$this->sidecar = $this->createMock(SidecarClient::class);
+		// Vorbelegung Sidecar, weil die Mehrzahl der Tests hier dessen
+		// Rueckfallpfade prueft. Auf dem lokalen Weg greift stattdessen
+		// DEFAULT_FETCH_URL - das haben die beiden Tests ganz unten.
+		$this->backend = $this->createMock(ConversionBackend::class);
+		$this->backend->method('isLocal')->willReturn(false);
 		$this->appConfig = $this->createMock(IAppConfig::class);
 		$this->tempManager = $this->createMock(ITempManager::class);
 		$this->clientService = $this->createMock(IClientService::class);
 	}
 
 	private function service(): SoundFontService {
-		return new SoundFontService($this->appData, $this->sidecar, $this->appConfig, $this->tempManager, $this->clientService);
+		return new SoundFontService($this->appData, $this->sidecar, $this->backend, $this->appConfig, $this->tempManager, $this->clientService);
+	}
+
+	/** Dasselbe, aber auf dem lokalen Konvertierungsweg. */
+	private function lokalerDienst(): SoundFontService {
+		$backend = $this->createMock(ConversionBackend::class);
+		$backend->method('isLocal')->willReturn(true);
+		return new SoundFontService($this->appData, $this->sidecar, $backend, $this->appConfig, $this->tempManager, $this->clientService);
 	}
 
 	/** Legt einen IAppData-Ordner an, der die Cache-Datei mit der gegebenen Groesse enthaelt. */
@@ -204,5 +218,27 @@ class SoundFontServiceTest extends TestCase {
 
 		$this->expectException(SidecarException::class);
 		$this->service()->getOrFetch();
+	}
+
+	public function testHatAufDemLokalenWegEineVorbelegung(): void {
+		// Die Zusage der Voreinstellung (Service\ConversionBackend): eine
+		// frisch installierte App spielt ab, ohne dass jemand eine Adresse
+		// eintraegt. Sichtbar ist das nur hier - im Betrieb waere der
+		// Unterschied "es kommt Ton" gegen "es kommt keiner".
+		$this->withConfig([]);
+		$this->assertSame(SoundFontService::DEFAULT_FETCH_URL, $this->lokalerDienst()->getFetchUrl());
+	}
+
+	public function testDieVorbelegungGiltNichtBeimSidecar(): void {
+		// Sonst zoege eine Instanz mit Sidecar 23 MB aus dem Netz, die zwei
+		// Container weiter schon liegen - getOrFetch() fragt ihn bei nicht
+		// leerer Fetch-URL gar nicht erst.
+		$this->withConfig([]);
+		$this->assertSame('', $this->service()->getFetchUrl());
+	}
+
+	public function testEineEingetrageneAdresseSchlaegtDieVorbelegung(): void {
+		$this->withConfig(['soundfont_fetch_url' => 'https://example.invalid/eigenes.sf3']);
+		$this->assertSame('https://example.invalid/eigenes.sf3', $this->lokalerDienst()->getFetchUrl());
 	}
 }

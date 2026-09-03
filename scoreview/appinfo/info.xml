@@ -24,9 +24,11 @@ Datei rendert nicht neu, sondern bedient sich aus dem Cache. Erst eine Änderung
 der Datei stößt eine erneute Konvertierung an.
 
 Für die Konvertierung gibt es zwei gleichwertige Wege, die dasselbe Ergebnis
-liefern: einen MuseScore-Container neben Nextcloud, oder - ganz ohne Container -
-MuseScore als WebAssembly, ausgeführt von der Node.js-Laufzeit des Servers. Ein
-SoundFont für die Wiedergabe muss im ersten Fall nicht konfiguriert werden.
+liefern. Voreingestellt und ohne Einstellung betriebsbereit ist der Weg ohne
+Container: MuseScore als WebAssembly, ausgeführt von der Node.js-Laufzeit des
+Servers - alles Nötige liegt im App-Paket, und das SoundFont für die Wiedergabe
+holt der Server selbst. Wahlweise übernimmt ein MuseScore-Container neben
+Nextcloud die Konvertierung.
 
 Funktionsumfang: Zoom-Presets, Vollbild und Autoscroll im Takt der Wiedergabe;
 frei wählbare Hervorhebung der klingenden Stelle (Notenköpfe oder Band, eigene
@@ -51,10 +53,12 @@ MIDI and timing data, then cached: opening the same file again does not
 re-render, it is served from the cache. Only a change to the file triggers a
 new conversion.
 
-There are two equivalent conversion paths that produce the same result: a
-MuseScore container next to Nextcloud, or - with no container at all -
-MuseScore as WebAssembly, executed by the server's Node.js runtime. In the
-first case no SoundFont needs to be configured for playback.
+There are two equivalent conversion paths that produce the same result. The
+default one needs no configuration at all and no container: MuseScore as
+WebAssembly, executed by the server's Node.js runtime - everything it needs
+ships with the app, and the server fetches the SoundFont for playback on its
+own. Alternatively a MuseScore container next to Nextcloud does the
+converting.
 
 Feature set: zoom presets, fullscreen and auto-scrolling in time with playback;
 a freely configurable playback highlight (sounding notes or a bar, in a colour
@@ -65,7 +69,7 @@ preset, tempo in BPM and a metronome; annotations anchored to musical
 position (private or shared, surviving a re-upload); touch controls with
 pinch-zoom for a tablet on the music stand.
 	]]></description>
-	<version>1.5.1</version>
+	<version>1.6.0</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>

@@ -59,13 +59,16 @@ clientseitig im Browser, mit einem SoundFont, das die App selbst ausliefert.
 Für die Konvertierung gibt es **zwei gleichwertige Wege**, die dasselbe
 Ergebnis liefern und sich nur darin unterscheiden, was der Server dafür braucht:
 
-| | **Sidecar** | **Lokal** |
+| | **Lokal** (Voreinstellung) | **Sidecar** |
 |---|---|---|
-| Braucht | einen Docker-Host | Node.js ≥ 18 auf dem Nextcloud-Server |
-| MuseScore | echtes MuseScore 4 im Container | MuseScore 4.7.4 als WebAssembly, im App-Paket |
-| Empfohlen, wenn | ohnehin Container laufen | keine laufen |
+| Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
+| MuseScore | MuseScore 4.7.4 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
+| Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
+| Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
 
-Ausführlich in [docs/architecture.md](docs/architecture.md).
+Der lokale Weg ist voreingestellt, weil er der einzige ist, der nach
+`app:enable` schon fertig ist. Ausführlich in
+[docs/architecture.md](docs/architecture.md).
 
 ## Voraussetzungen
 
@@ -76,31 +79,32 @@ Ausführlich in [docs/architecture.md](docs/architecture.md).
 
 ## Installation
 
-Mit Container:
+```sh
+occ app:enable scoreview
+```
+
+Mehr ist für die Konvertierung nicht nötig: Voreingestellt ist der lokale Weg,
+und was er braucht, liegt im App-Paket. Das SoundFont holt der Server beim
+ersten Abspielen selbst (~23 MB, FluidR3Mono_GM) – auch dafür ist nichts
+einzutragen.
+
+Wer stattdessen den Sidecar fahren will, startet ihn zusätzlich und wählt ihn
+unter **Einstellungen → Verwaltung → ScoreView** aus:
 
 ```sh
-# 1. Konvertierungsdienst bauen und starten
 docker build -t scoreview-musescore-cli sidecar/
 docker network create scoreview-net
 docker network connect scoreview-net <nextcloud-container>
 docker run -d --name scoreview-sidecar --network scoreview-net \
   -e SCOREVIEW_SIDECAR_SECRET="$(openssl rand -hex 32)" \
   --memory=2g --pids-limit=512 scoreview-musescore-cli
-
-# 2. App aktivieren
-occ app:enable scoreview
 ```
-
-Danach unter **Einstellungen → Verwaltung → ScoreView** die Sidecar-Adresse und
-das Secret eintragen.
 
 ![Verwaltungseinstellungen mit Wegwahl und Betriebsdiagnose](docs/img/admin.png)
 
-Ohne Container entfällt Schritt 1; stattdessen in denselben Einstellungen den
-lokalen Weg wählen und eine SoundFont-Download-URL hinterlegen. So oder so
-fehlt noch ein einmaliger Schritt: Background-Jobs im Modus `cron`. Die
-Mimetype-Registrierung für `.mscz` ist empfohlen, aber nicht nötig – ohne sie
-öffnet die Dateiaktion „In ScoreView öffnen" die Partitur:
+So oder so fehlt noch ein einmaliger Schritt: Background-Jobs im Modus `cron`.
+Die Mimetype-Registrierung für `.mscz` ist empfohlen, aber nicht nötig – ohne
+sie öffnet die Dateiaktion „In ScoreView öffnen" die Partitur:
 **[vollständige Anleitung](docs/installation.md)**.
 
 ## Dokumentation

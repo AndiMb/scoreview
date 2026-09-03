@@ -28,6 +28,7 @@ use OCP\ITempManager;
  *    Datei einmalig holt. Das ist die Quelle fuer den lokalen
  *    Konvertierungsweg (E3): ohne Sidecar gibt es kein Image, aus dem sich
  *    ein SoundFont nehmen liesse, und ohne SoundFont bleibt die App stumm.
+ *    Bleibt die Einstellung leer, gilt dort `DEFAULT_FETCH_URL`.
  * 2. **Der Sidecar**, wo einer laeuft: er enthaelt bereits ein
  *    General-MIDI-SoundFont - MuseScore kann ohne eines gar kein Audio
  *    rendern -, also muss der Betreiber dafuer nichts weiter tun.
@@ -53,9 +54,31 @@ class SoundFontService {
 	/** Einstellung: URL, von der der Server das SoundFont einmalig holt. */
 	public const FETCH_URL_KEY = 'soundfont_fetch_url';
 
+	/**
+	 * Woher das SoundFont auf dem lokalen Weg kommt, solange niemand etwas
+	 * anderes eintraegt: FluidR3Mono_GM.sf3 (~23 MB), die General-MIDI-Bank,
+	 * die auch MuseScore mitbringt - MIT-lizenziert und damit weitergebbar.
+	 *
+	 * Warum ueberhaupt eine Vorbelegung: Ohne sie ist eine frisch
+	 * installierte App auf dem lokalen Weg zwar sofort betriebsbereit, aber
+	 * stumm - und "kein Ton" ist von aussen nicht als fehlende Einstellung
+	 * zu erkennen, sondern sieht aus wie ein Fehler. Mitliefern laesst sich
+	 * die Datei nicht: Der App Store nimmt nur Archive bis 20 MB, davon
+	 * belegt das Engine-Wasm bereits den Grossteil (siehe release.yml).
+	 *
+	 * Warum ein Release-Asset dieses Repos und keine fremde Adresse: Eine
+	 * Voreinstellung ueberlebt die App-Fassung, in der sie steht. Ein Link,
+	 * ueber den hier niemand bestimmt, waere eine Zusage auf fremde Rechnung.
+	 * Der Tag ist eigens fuer diesen Zweck gesetzt und wird nicht bewegt -
+	 * die Datei hinter dieser Adresse aendert sich also nie (worauf sich
+	 * getOrFetchFromUrl() verlaesst: die Version ist der Hash der URL).
+	 */
+	public const DEFAULT_FETCH_URL = 'https://github.com/AndiMb/scoreview/releases/download/soundfont-1/FluidR3Mono_GM.sf3';
+
 	public function __construct(
 		private IAppData $appData,
 		private SidecarClient $sidecarClient,
+		private ConversionBackend $backend,
 		private IAppConfig $appConfig,
 		private ITempManager $tempManager,
 		private IClientService $clientService,
@@ -123,8 +146,26 @@ class SoundFontService {
 		return $file->getSize() > 0 ? $file : null;
 	}
 
+	/**
+	 * Die URL, von der der Server holt - Einstellung, sonst Vorbelegung.
+	 *
+	 * Die Vorbelegung gilt **nur auf dem lokalen Weg**. Beim Sidecar waere
+	 * sie schaedlich: Er bringt sein SoundFont selbst mit, ein nicht leerer
+	 * Rueckgabewert liesse getOrFetch() ihn aber gar nicht erst fragen - und
+	 * die Instanz laedt 23 MB aus dem Netz, die zwei Container weiter schon
+	 * liegen.
+	 *
+	 * Wer den lokalen Weg fahren und trotzdem nichts holen will, traegt
+	 * unter `soundfont_url` eine Adresse ein, von der der BROWSER laedt:
+	 * Die uebersteuert diesen Weg vollstaendig (Controller\SoundFontController
+	 * wird dann gar nicht mehr befragt).
+	 */
 	public function getFetchUrl(): string {
-		return trim($this->appConfig->getValueString(Application::APP_ID, self::FETCH_URL_KEY));
+		$configured = trim($this->appConfig->getValueString(Application::APP_ID, self::FETCH_URL_KEY));
+		if ($configured !== '') {
+			return $configured;
+		}
+		return $this->backend->isLocal() ? self::DEFAULT_FETCH_URL : '';
 	}
 
 	/**
@@ -174,20 +215,35 @@ class SoundFontService {
 		}
 
 		$folder = $this->getOrCreateFolder();
-		$file = $folder->fileExists(self::FILE)
-			? $folder->getFile(self::FILE)
-			: $folder->newFile(self::FILE);
+		// Neu anlegen statt ueberschreiben, und das ist keine Geschmacksfrage:
+		// Beim Schreiben ueber ISimpleFile::write() in eine BESTEHENDE
+		// appdata-Datei uebernimmt Nextclouds Dateicache die neue Groesse
+		// nicht - gemessen blieb dort die Groesse der vorherigen Datei
+		// stehen, auch in spaeteren Prozessen. SoundFontController schickt
+		// genau diese Zahl als Content-Length; der Browser wartet dann auf
+		// Bytes, die nie kommen, und es gibt keinen Ton, ohne dass irgendwo
+		// ein Fehler stuende. Sichtbar wird das erst beim WECHSEL des
+		// SoundFonts (anderes Sidecar-Image, andere Download-URL) - bei
+		// gleichbleibender Datei stimmt die alte Zahl ja.
+		//
+		// newFile() mit dem Quellstream geht durch View::file_put_contents(),
+		// das die Groesse mitschreibt. Die Datei zuvor zu loeschen ist der
+		// Preis dafuer: Scheitert das Schreiben danach, ist auch die alte
+		// Kopie weg. Der Download ist zu diesem Zeitpunkt aber schon
+		// vollstaendig und geprueft, und die Versionsangabe wird weiterhin
+		// erst danach gesetzt - der naechste Aufruf holt es also erneut.
+		if ($folder->fileExists(self::FILE)) {
+			$folder->getFile(self::FILE)->delete();
+		}
 
-		// Stream-Kopie statt file_get_contents()/putContent(): der Inhalt
-		// soll nie komplett als PHP-String im Speicher liegen (~40 MB).
+		// Der Stream statt des Inhalts: ein SF3 soll nie komplett als
+		// PHP-String im Speicher liegen (~24-40 MB).
 		$source = fopen($tempPath, 'rb');
-		$target = $file->write();
 		try {
-			stream_copy_to_stream($source, $target);
+			$file = $folder->newFile(self::FILE, $source);
 		} finally {
-			fclose($source);
-			if (is_resource($target)) {
-				fclose($target);
+			if (is_resource($source)) {
+				fclose($source);
 			}
 			unlink($tempPath);
 		}
@@ -197,7 +253,11 @@ class SoundFontService {
 		// versucht es erneut, statt eine halbe Datei als "aktuell" zu fuehren.
 		$this->appConfig->setValueString(Application::APP_ID, self::VERSION_KEY, $version);
 
-		return $folder->getFile(self::FILE);
+		// Die eben geschriebene Datei zurueckgeben und sie NICHT noch einmal
+		// ueber den Ordner holen: Der kennt die geloeschte Vorgaengerin noch
+		// und liefert deren Groesse - im Request, der gerade geholt hat,
+		// stuende sie als Content-Length in der Antwort.
+		return $file;
 	}
 
 	private function getOrCreateFolder(): ISimpleFolder {

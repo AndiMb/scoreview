@@ -41,6 +41,10 @@ class AdminSettings implements ISettings {
 			'conversionBackend' => $this->backend->current(),
 			'nodePath' => $this->appConfig->getValueString(Application::APP_ID, 'node_path'),
 			'soundFontFetchUrl' => $this->appConfig->getValueString(Application::APP_ID, SoundFontService::FETCH_URL_KEY),
+			// Roh aus der Konfiguration oben, die Vorbelegung getrennt daneben:
+			// Als Platzhalter zeigt sie, was ein leeres Feld bedeutet, ohne
+			// sich beim Speichern als eingetragener Wert auszugeben.
+			'soundFontFetchUrlDefault' => SoundFontService::DEFAULT_FETCH_URL,
 			'sidecarUrl' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'),
 			'sidecarSecretSet' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_secret') !== '',
 			'eagerConversion' => $this->appConfig->getValueBool(Application::APP_ID, 'eager_conversion'),

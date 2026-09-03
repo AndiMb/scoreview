@@ -257,7 +257,7 @@ Die Konvertierung läuft wahlweise über den **Sidecar-Container** oder **lokal
 auf dem Server**. Beide erzeugen dieselben Artefakte im selben Cache und stehen
 hinter derselben HTTP-API; nichts im Viewer verzweigt danach, welcher gelaufen
 ist. Die Wahl ist eine einzelne Admin-Einstellung (`conversion_backend`,
-Voreinstellung `sidecar`) und wird an genau einer Stelle im Code ausgewertet
+Voreinstellung `local`) und wird an genau einer Stelle im Code ausgewertet
 (`ConvertScoreJob`).
 
 Welcher Weg gelaufen ist, wird beim Ablegen der Artefakte **aufgezeichnet**
@@ -267,13 +267,13 @@ kommt, und weil eine gecachte Partitur nach einem Wechsel weiterhin vom alten
 Weg stammt, wäre die Frage „womit ist das gesetzt worden?" sonst gar nicht mehr
 zu beantworten.
 
-| | Sidecar | Lokal |
+| | Lokal (Voreinstellung) | Sidecar |
 |---|---|---|
-| MuseScore | echtes MuseScore 4 aus gepinntem AppImage | MuseScore 4.7.4 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) |
-| Läuft als | eigener Container, HTTP-API | Kindprozess der Node-Laufzeit des Servers |
-| Voraussetzung beim Betreiber | Docker o. ä. | Node.js ≥ 18, `proc_open` erlaubt |
-| Im App-Paket | nichts | rund 14 MB Wasm + Ressourcen (`converter/`) |
-| SoundFont | bringt das Image mit | Download-URL in den Einstellungen |
+| MuseScore | MuseScore 4.7.4 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) | echtes MuseScore 4 aus gepinntem AppImage |
+| Läuft als | Kindprozess der Node-Laufzeit des Servers | eigener Container, HTTP-API |
+| Voraussetzung beim Betreiber | Node.js ≥ 18, `proc_open` erlaubt | Docker o. ä. |
+| Im App-Paket | rund 14 MB Wasm + Ressourcen (`converter/`) | nichts |
+| SoundFont | holt der Server von einer voreingestellten Adresse | bringt das Image mit |
 | Vorab-Konvertierung, Selbsttest | ja | ja |
 
 **Warum es den Sidecar weiterhin gibt.** Er bringt echtes, aktuelles MuseScore 4
@@ -285,6 +285,17 @@ eigenen Build nachziehen lässt.
 **Warum es den lokalen Weg gibt.** Der Sidecar setzt voraus, dass der Betreiber
 einen zweiten Container betreiben kann. Das schließt Instanzen ohne Docker aus –
 und war der Grund, warum ScoreView auf verwalteten Instanzen gar nicht lief.
+
+**Warum er die Voreinstellung ist.** Er ist der einzige, der nach `app:enable`
+schon fertig ist: Was er braucht, liegt im App-Paket, die Node-Laufzeit findet
+er selbst, und das SoundFont holt der Server von einer voreingestellten Adresse
+(`SoundFontService::DEFAULT_FETCH_URL`). Der Sidecar braucht dagegen einen
+zweiten Container *und* eine eingetragene URL – als Voreinstellung hieße er
+„nach der Installation passiert erst einmal gar nichts", ohne dass der
+Oberfläche anzusehen wäre, warum. Dass ein Update trotzdem keine laufende
+Installation umstellt, sorgt eine einmalige Migration: Wo eine `sidecar_url`
+eingetragen ist, wird der bis dahin nur implizite Wert ausdrücklich
+festgeschrieben.
 
 #### Was der lokale Weg leistet
 

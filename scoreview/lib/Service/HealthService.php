@@ -86,13 +86,10 @@ class HealthService {
 			}
 		}
 		$cached = $cachedVersion !== '';
-		if (!$cached && $override === '' && $fetchUrl !== '') {
-			// Noch nie geholt: das ist der Zustand, in dem die App stumm ist,
-			// obwohl alles konfiguriert aussieht. Der Abruf passiert beim
-			// ersten GET /api/soundfont, nicht hier - diese Diagnose bleibt
-			// bewusst ohne Seiteneffekt.
-			$error = 'SoundFont noch nicht geholt - beim ersten Abspielen wird es von der angegebenen URL geladen.';
-		}
+		// Ob "noch nichts im Cache, aber eine Quelle steht fest" ein Problem
+		// ist, entscheidet die Oberflaeche: Direkt nach der Installation ist
+		// es der Normalzustand - geholt wird beim ersten GET /api/soundfont.
+		// Diese Diagnose bleibt bewusst ohne Seiteneffekt und holt nichts.
 		return [
 			'overrideUrl' => $override,
 			'fetchUrl' => $fetchUrl,

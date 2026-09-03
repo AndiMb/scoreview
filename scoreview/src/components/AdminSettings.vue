@@ -13,17 +13,17 @@
 					v-model="form.conversionBackend"
 					type="radio"
 					name="conversion-backend"
-					value="sidecar"
+					value="local"
 					class="scoreview-field">
-					{{ t('Sidecar container (MuseScore 4 in its own container)') }}
+					{{ t('On this server, without a container (MuseScore as WebAssembly, needs Node.js) – default') }}
 				</NcCheckboxRadioSwitch>
 				<NcCheckboxRadioSwitch
 					v-model="form.conversionBackend"
 					type="radio"
 					name="conversion-backend"
-					value="local"
+					value="sidecar"
 					class="scoreview-field">
-					{{ t('On this server, without a container (MuseScore as WebAssembly, needs Node.js)') }}
+					{{ t('Sidecar container (MuseScore 4 in its own container)') }}
 				</NcCheckboxRadioSwitch>
 
 				<template v-if="form.conversionBackend === 'sidecar'">
@@ -65,9 +65,9 @@
 					v-if="form.conversionBackend === 'local'"
 					v-model="form.soundFontFetchUrl"
 					class="scoreview-field"
-					:label="t('SoundFont download URL (SF2/SF3)')"
-					placeholder="https://…/FluidR3Mono_GM.sf3"
-					:helperText="t('Without a sidecar there is no SoundFont on the server, and playback stays silent. The server downloads this file once and then delivers it itself - so the address only needs to be reachable from the server, and needs no CORS.')" />
+					:label="t('SoundFont download URL (SF2/SF3, optional)')"
+					:placeholder="initial.soundFontFetchUrlDefault"
+					:helperText="t('Leave empty for the default (FluidR3Mono_GM, about 23 MB). Without a sidecar there is no SoundFont on the server, so the server downloads this file once and then delivers it itself - the address only needs to be reachable from the server, and needs no CORS.')" />
 
 				<NcTextField
 					v-model="form.soundFontUrl"
@@ -109,7 +109,7 @@
 				{{ t('Error: {message}', { message: healthError }) }}
 			</NcNoteCard>
 			<template v-else-if="health">
-				<NcNoteCard v-for="line in healthLines" :key="line.label" :type="line.ok ? 'success' : 'error'">
+				<NcNoteCard v-for="line in healthLines" :key="line.label" :type="line.type || (line.ok ? 'success' : 'error')">
 					<strong>{{ line.label }}</strong>{{ line.detail ? ` – ${line.detail}` : '' }}
 				</NcNoteCard>
 			</template>
@@ -224,7 +224,7 @@ export default {
 		 * zusammengebaut, damit die Beschriftungen bei einem Sprachwechsel
 		 * mitgehen und die Abruffunktion nur Daten holt.
 		 *
-		 * @return {Array<{label: string, detail: string, ok: boolean}>}
+		 * @return {Array<{label: string, detail: string, ok: boolean, type?: string}>}
 		 */
 		healthLines() {
 			const h = this.health
@@ -305,20 +305,30 @@ export default {
 		 * widerspricht.
 		 *
 		 * @param {object} sf h.soundFont aus dem Health-Endpunkt
-		 * @return {{ok: boolean, detail: string}}
+		 * @return {{ok: boolean, detail: string, type?: string}}
 		 */
 		soundFontLine(sf) {
-			const ok = !!(sf.cached || sf.availableInSidecar || sf.overrideUrl)
 			if (sf.overrideUrl) {
-				return { ok, detail: t('custom URL configured') }
+				return { ok: true, detail: t('custom URL configured') }
 			}
 			if (sf.cached) {
-				return { ok, detail: sf.name || t('cached copy in use') }
+				return { ok: true, detail: sf.name || t('cached copy in use') }
 			}
 			if (sf.availableInSidecar) {
-				return { ok, detail: sf.name || '' }
+				return { ok: true, detail: sf.name || '' }
 			}
-			return { ok, detail: sf.error || t('no SoundFont available') }
+			if (sf.fetchUrl) {
+				// Nichts im Cache, aber die Quelle steht fest: der Zustand
+				// direkt nach der Installation. Rot waere hier ein Fehlalarm
+				// - es ist noch nichts schiefgegangen, es hat nur noch
+				// niemand abgespielt.
+				return {
+					ok: false,
+					type: 'warning',
+					detail: t('not fetched yet – the server downloads it on first playback ({url})', { url: sf.fetchUrl }),
+				}
+			}
+			return { ok: false, detail: sf.error || t('no SoundFont available') }
 		},
 
 		/**

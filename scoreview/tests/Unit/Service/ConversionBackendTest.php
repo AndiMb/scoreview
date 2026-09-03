@@ -22,24 +22,30 @@ class ConversionBackendTest extends TestCase {
 		return new ConversionBackend($appConfig);
 	}
 
-	public function testIstOhneEinstellungDerSidecar(): void {
-		// Voreinstellung: eine Bestandsinstallation darf sich durch ein
-		// Update nicht umstellen.
+	private function backendOhneEinstellung(): ConversionBackend {
 		$appConfig = $this->createMock(IAppConfig::class);
 		$appConfig->method('getValueString')
 			->willReturnCallback(static fn (string $app, string $key, string $default = '') => $default);
-
-		$this->assertSame(ConversionBackend::SIDECAR, (new ConversionBackend($appConfig))->current());
-		$this->assertFalse((new ConversionBackend($appConfig))->isLocal());
+		return new ConversionBackend($appConfig);
 	}
 
-	public function testErkenntDenLokalenWeg(): void {
-		$this->assertTrue($this->backendMitWert('local')->isLocal());
+	public function testIstOhneEinstellungDerLokaleWeg(): void {
+		// Voreinstellung: der einzige Weg, der nach `app:enable` schon
+		// fertig ist. Bestandsinstallationen mit Sidecar schuetzt
+		// Migration\Version000100Date20260903120000, nicht diese Zeile.
+		$this->assertSame(ConversionBackend::LOCAL, $this->backendOhneEinstellung()->current());
+		$this->assertTrue($this->backendOhneEinstellung()->isLocal());
 	}
 
-	public function testFaelltBeiUnbekanntemWertAufDenSidecarZurueck(): void {
-		$this->assertSame(ConversionBackend::SIDECAR, $this->backendMitWert('irgendwas')->current());
-		$this->assertSame(ConversionBackend::SIDECAR, ConversionBackend::normalize('Local'));
+	public function testErkenntDenSidecar(): void {
+		$this->assertSame(ConversionBackend::SIDECAR, $this->backendMitWert('sidecar')->current());
+		$this->assertFalse($this->backendMitWert('sidecar')->isLocal());
+	}
+
+	public function testFaelltBeiUnbekanntemWertAufDenLokalenWegZurueck(): void {
+		$this->assertSame(ConversionBackend::LOCAL, $this->backendMitWert('irgendwas')->current());
+		$this->assertSame(ConversionBackend::LOCAL, ConversionBackend::normalize('Sidecar'));
+		$this->assertSame(ConversionBackend::SIDECAR, ConversionBackend::normalize('sidecar'));
 		$this->assertSame(ConversionBackend::LOCAL, ConversionBackend::normalize('local'));
 	}
 }

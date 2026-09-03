@@ -4,15 +4,18 @@ ScoreView besteht aus der Nextcloud-App und einem Konvertierungsweg. Davon gibt
 es **zwei zur Wahl**, und sie liefern dasselbe Ergebnis
 ([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)):
 
-| | **Weg A: Sidecar** | **Weg B: Lokal** |
+| | **Weg A: Lokal** (Voreinstellung) | **Weg B: Sidecar** |
 |---|---|---|
-| Braucht | einen Docker-Host | Node.js ≥ 18 auf dem Nextcloud-Server |
-| MuseScore | echtes MuseScore 4 im Container | MuseScore 4.7.4 als WebAssembly, im App-Paket |
-| SoundFont | bringt der Container mit | einmalig von einer URL zu holen |
-| Empfohlen, wenn | ohnehin Container laufen | keine laufen |
+| Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
+| MuseScore | MuseScore 4.7.4 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
+| SoundFont | holt der Server selbst, Adresse voreingestellt | bringt der Container mit |
+| Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
+| Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
 
-Eines von beiden muss eingerichtet sein, sonst zeigt die App nur eine
-Fehlermeldung. Rechnen Sie mit 15 Minuten.
+**Weg A ist voreingestellt und braucht keine Einstellung.** Wo eine
+Node-Laufzeit vorhanden ist, ist die App nach `occ app:enable scoreview`
+betriebsbereit; es bleiben die Schritte 4 und 5 unten, die beide Wege
+betreffen. Für Weg B rechnen Sie mit 15 Minuten.
 
 ## Voraussetzungen
 
@@ -20,16 +23,39 @@ Fehlermeldung. Rechnen Sie mit 15 Minuten.
 - PHP 8.1 bis 8.5
 - SQLite, MySQL/MariaDB oder PostgreSQL
 - Background-Jobs im Modus `cron` (Schritt 5)
-- Je nach Weg: **A** ein Docker-Host – dieselbe Maschine wie Nextcloud oder eine
-  andere, erreichbar über HTTP. **B** eine Node.js-Laufzeit ab Version 18 auf
-  dem Nextcloud-Server, und PHP muss Prozesse starten dürfen (`proc_open` nicht
-  per `disable_functions` gesperrt).
+- Je nach Weg: **A** eine Node.js-Laufzeit ab Version 18 auf dem
+  Nextcloud-Server, und PHP muss Prozesse starten dürfen (`proc_open` nicht per
+  `disable_functions` gesperrt). **B** ein Docker-Host – dieselbe Maschine wie
+  Nextcloud oder eine andere, erreichbar über HTTP.
 
 Die `occ`-Befehle unten stehen so, wie sie auf einer nativen Installation
 laufen. In einer Container-Installation davor `docker exec -u www-data
 <container> php` setzen.
 
-## 1a. Weg A: Sidecar starten
+## 1a. Weg A: Node.js bereitstellen
+
+Für den lokalen Weg ist nichts zu bauen und nichts zu starten – der Konverter
+liegt fertig im App-Paket (`scoreview/converter/`, rund 21 MB). Nötig ist nur
+eine Node.js-Laufzeit, die der Nextcloud-Prozess starten darf:
+
+```sh
+node --version   # muss v18 oder neuer melden
+```
+
+**Das offizielle Nextcloud-Docker-Image bringt keine mit.** Dort nachrüsten:
+
+```sh
+docker exec <container> sh -c 'apt-get update && apt-get install -y nodejs'
+```
+
+Bei einer nativen Installation über die Paketverwaltung der Distribution. Damit
+das ein Image-Update übersteht, gehört die Zeile in ein eigenes Dockerfile
+`FROM nextcloud:…` statt in den laufenden Container.
+
+Der Konverter selbst ist reines JavaScript und WebAssembly, also unabhängig von
+Betriebssystem und Prozessorarchitektur – es gibt nichts zu kompilieren.
+
+## 1b. Weg B: Sidecar starten
 
 Das Image bauen (enthält eine gepinnte MuseScore-Studio-Version):
 
@@ -69,29 +95,6 @@ Wer den Sidecar auf einer anderen Maschine oder ohne Docker betreiben will,
 findet die Wege unter
 [Bereitstellung](../sidecar/README.md#bereitstellung).
 
-## 1b. Weg B: Node.js bereitstellen
-
-Für den lokalen Weg ist nichts zu bauen und nichts zu starten – der Konverter
-liegt fertig im App-Paket (`scoreview/converter/`, rund 21 MB). Nötig ist nur
-eine Node.js-Laufzeit, die der Nextcloud-Prozess starten darf:
-
-```sh
-node --version   # muss v18 oder neuer melden
-```
-
-**Das offizielle Nextcloud-Docker-Image bringt keine mit.** Dort nachrüsten:
-
-```sh
-docker exec <container> sh -c 'apt-get update && apt-get install -y nodejs'
-```
-
-Bei einer nativen Installation über die Paketverwaltung der Distribution. Damit
-das ein Image-Update übersteht, gehört die Zeile in ein eigenes Dockerfile
-`FROM nextcloud:…` statt in den laufenden Container.
-
-Der Konverter selbst ist reines JavaScript und WebAssembly, also unabhängig von
-Betriebssystem und Prozessorarchitektur – es gibt nichts zu kompilieren.
-
 ## 2. App installieren
 
 Über den Nextcloud App Store, oder das Verzeichnis `scoreview/` als
@@ -106,15 +109,26 @@ occ upgrade
 
 Unter **Einstellungen → Verwaltung → ScoreView** steht die Wahl ganz oben; sie
 schaltet darunter frei, was jeweils einzutragen ist. Voreingestellt ist der
-Sidecar.
+lokale Weg.
 
-### Weg A: Sidecar
+### Weg A: Lokal
 
-Die Sidecar-URL (z. B.
-`http://scoreview-sidecar:8765`) und das Secret aus Schritt 1 eintragen.
-Alternativ auf der Kommandozeile:
+**Hier ist nichts einzustellen.** Liegt `node` an einer der üblichen Stellen,
+findet die App es selbst; das SoundFont holt der Server beim ersten Abspielen
+von einer voreingestellten Adresse (siehe [SoundFont](#soundfont)). Nur wenn
+`node` woanders liegt, braucht es eine Angabe:
 
 ```sh
+occ config:app:set scoreview node_path --value=/usr/bin/node   # nur falls nötig
+```
+
+### Weg B: Sidecar
+
+Den Sidecar auswählen, seine URL (z. B. `http://scoreview-sidecar:8765`) und das
+Secret aus Schritt 1b eintragen. Alternativ auf der Kommandozeile:
+
+```sh
+occ config:app:set scoreview conversion_backend --value=sidecar
 occ config:app:set scoreview sidecar_url --value="http://scoreview-sidecar:8765"
 occ config:app:set scoreview sidecar_secret --value="<secret>" --sensitive
 ```
@@ -126,23 +140,6 @@ Collabora- und OnlyOffice-Integrationen:
 
 ```sh
 occ config:system:set allow_local_remote_servers --value=true --type=boolean
-```
-
-### Weg B: Lokal
-
-Den lokalen Weg auswählen und – falls `node` nicht an einer der üblichen Stellen
-liegt – den Pfad eintragen. Auf der Kommandozeile:
-
-```sh
-occ config:app:set scoreview conversion_backend --value=local
-occ config:app:set scoreview node_path --value=/usr/bin/node   # nur falls nötig
-```
-
-Dazu eine **SoundFont-Download-URL**, sonst bleibt die Wiedergabe stumm (siehe
-[SoundFont](#soundfont)):
-
-```sh
-occ config:app:set scoreview soundfont_fetch_url --value="https://…/FluidR3Mono_GM.sf3"
 ```
 
 ### Prüfen
@@ -212,21 +209,25 @@ Die Wiedergabe synthetisiert im Browser
 ([E1](architecture.md#e1-midi-statt-mp3-als-audioartefakt)) und braucht dafür ein
 SoundFont. Woher es kommt, hängt vom gewählten Weg ab.
 
-**Weg A: Hier ist nichts zu tun.** Die App holt es einmalig vom Sidecar, der
-durch die MuseScore-Installation bereits eines mitbringt, legt es in ihrem
-IAppData-Cache ab und liefert es selbst aus. Der Browser spricht nie mit dem
-Sidecar.
+**In beiden Fällen ist nichts zu tun** – die Wege dorthin sind nur verschieden.
 
-**Weg B: Eine Download-URL eintragen.** Ohne Sidecar gibt es kein Image, aus dem
-sich ein SoundFont nehmen ließe – ohne diese Einstellung bleibt die App stumm.
-Das Feld **SoundFont-Download-URL** nennt eine Adresse, von der der **Server**
-die Datei einmalig holt; danach liefert er sie selbst aus. Sie muss also nur vom
-Server aus erreichbar sein und braucht kein CORS. Ein brauchbares, frei
-lizenziertes General-MIDI-SoundFont ist `FluidR3Mono_GM.sf3` (~24 MB), das
-MuseScore selbst mitbringt.
+**Weg A: von einer Adresse, die voreingestellt ist.** Ohne Sidecar gibt es kein
+Image, aus dem sich ein SoundFont nehmen ließe, und mitliefern lässt es sich
+nicht: Der App Store nimmt nur Archive bis 20 MB, die MuseScore-WebAssembly
+belegt davon den Großteil. Der **Server** holt die Datei deshalb einmalig aus
+dem Netz und liefert sie danach selbst aus; voreingestellt ist
+`FluidR3Mono_GM.sf3` (~23 MB, MIT-lizenziert, dasselbe SoundFont, das auch
+MuseScore mitbringt) als Release-Asset dieses Projekts.
 
-Geholt wird einmal je URL. Wer dieselbe Adresse später mit einer anderen Datei
-belegt, speichert die Einstellung einmal neu.
+Das Feld **SoundFont-Download-URL** überschreibt diese Adresse. Sie muss nur vom
+Server aus erreichbar sein und braucht kein CORS. Geholt wird einmal je URL –
+wer dieselbe Adresse später mit einer anderen Datei belegt, speichert die
+Einstellung einmal neu.
+
+**Weg B: aus dem Container.** Läuft ein Sidecar, holt die App das SoundFont von
+dort, denn dessen MuseScore-Installation bringt bereits eines mit – nichts wird
+aus dem Netz geladen. Der Browser spricht dabei nie mit dem Sidecar; die App legt
+die Datei in ihrem IAppData-Cache ab und liefert sie selbst aus.
 
 In beiden Fällen überträgt der erste Abruf nach einer Neuinstallation ~40 MB zum
 Browser. Danach greifen der serverseitige Cache und `Cache-Control: immutable`.
@@ -241,15 +242,15 @@ aus.
 
 | Schlüssel | Wo | Bedeutung |
 |---|---|---|
-| `conversion_backend` | Verwaltung | `sidecar` (Voreinstellung) oder `local` |
-| `sidecar_url` | Verwaltung | Adresse des Konvertierungsdienstes (Weg A) |
-| `sidecar_secret` | Verwaltung | Shared Secret, als sensibel geführt und in `occ config:list` ausgeblendet (Weg A) |
-| `node_path` | Verwaltung | Pfad zu `node`; leer = übliche Orte durchsuchen (Weg B) |
-| `soundfont_fetch_url` | Verwaltung | Adresse, von der der Server das SoundFont einmalig holt (Weg B) |
+| `conversion_backend` | Verwaltung | `local` (Voreinstellung) oder `sidecar` |
+| `node_path` | Verwaltung | Pfad zu `node`; leer = übliche Orte durchsuchen (Weg A) |
+| `soundfont_fetch_url` | Verwaltung | Adresse, von der der Server das SoundFont einmalig holt; leer = voreingestellte Adresse (Weg A) |
+| `sidecar_url` | Verwaltung | Adresse des Konvertierungsdienstes (Weg B) |
+| `sidecar_secret` | Verwaltung | Shared Secret, als sensibel geführt und in `occ config:list` ausgeblendet (Weg B) |
 | `soundfont_url` | Verwaltung | Übersteuerung: Der Browser lädt direkt von dieser Adresse |
 | `eager_conversion` | Verwaltung | Beim Hochladen sofort konvertieren statt beim ersten Öffnen |
 | `local_timeout` | nur `occ` | Zeitgrenze eines lokalen Konvertierungslaufs in Sekunden (Vorgabe 120) |
-| `cjk_font_dir` | nur `occ` | Verzeichnis mit Zusatzfonts für CJK-Liedtexte, außerhalb der App (Weg B) |
+| `cjk_font_dir` | nur `occ` | Verzeichnis mit Zusatzfonts für CJK-Liedtexte, außerhalb der App (Weg A) |
 | `max_score_bytes` | nur `occ` | Obergrenze der Dateigröße (Vorgabe 100 MB) |
 
 ## Prüfen, ob alles läuft
