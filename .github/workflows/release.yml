@@ -249,7 +249,6 @@ jobs:
             -e NEXTCLOUD_ADMIN_USER=admin \
             -e NEXTCLOUD_ADMIN_PASSWORD="$(openssl rand -hex 24)" \
             -v "$PWD/dist/scoreview:/signing/scoreview" \
-            -v /tmp/cert:/tmp/cert:ro \
             nextcloud:31
           BEREIT=nein
           for i in $(seq 1 60); do
@@ -265,9 +264,23 @@ jobs:
             exit 1
           fi
 
+          # Schluessel und Zertifikat IN den Container kopieren statt sie
+          # hineinzumounten: `occ` laeuft als www-data (uid 33), das
+          # Schluesselverzeichnis auf dem Runner gehoert aber dem
+          # Runner-Nutzer und ist 0700. www-data kommt dort nicht hinein, und
+          # Nextcloud meldet das nicht als Rechteproblem, sondern als
+          # `Private key "..." does not exists.` - es prueft mit
+          # file_exists(), und das ist ohne Leserecht am Verzeichnis false.
+          # Die Modi auf dem Runner zu lockern waere der falsche Ausweg: Der
+          # unverschluesselte private Schluessel laege dort fuer jeden Prozess
+          # offen. Die Kopie lebt nur im Container und geht mit ihm (trap).
+          docker cp /tmp/cert/scoreview.key nc-sign:/tmp/scoreview.key
+          docker cp /tmp/cert/scoreview.crt nc-sign:/tmp/scoreview.crt
+          docker exec -u root nc-sign sh -c 'chown www-data:www-data /tmp/scoreview.key /tmp/scoreview.crt && chmod 600 /tmp/scoreview.key && chmod 644 /tmp/scoreview.crt'
+
           docker exec -u www-data nc-sign php occ integrity:sign-app \
-            --privateKey=/tmp/cert/scoreview.key \
-            --certificate=/tmp/cert/scoreview.crt \
+            --privateKey=/tmp/scoreview.key \
+            --certificate=/tmp/scoreview.crt \
             --path=/signing/scoreview
           test -s dist/scoreview/appinfo/signature.json
           chmod 755 dist/scoreview/appinfo
