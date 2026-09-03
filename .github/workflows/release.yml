@@ -234,11 +234,21 @@ jobs:
           # weltbeschreibbaren PHP-Code im Webroot.
           chmod 777 dist/scoreview/appinfo
 
+          # Der Baum haengt unter /signing und AUSDRUECKLICH NICHT unter
+          # /var/www/html: Im Image ist der Webroot leer, der Entrypoint
+          # befuellt ihn erst beim Start aus /usr/src/nextcloud - und nur
+          # dann, wenn er ihn leer vorfindet. Ein Bind-Mount irgendwo darunter
+          # legt seine Elternverzeichnisse vorab an, der Webroot ist damit
+          # nicht mehr leer, `apps/` entsteht nie, und die Installation
+          # bricht in einer Endlosschleife mit "Cannot write into apps
+          # directory" ab (nachgestellt: schon ein leeres Verzeichnis
+          # genuegt). Zum Signieren muss die App ohnehin nicht installiert
+          # sein - `integrity:sign-app` liest den Pfad, den es bekommt.
           docker run -d --name nc-sign \
             -e SQLITE_DATABASE=nc.db \
             -e NEXTCLOUD_ADMIN_USER=admin \
             -e NEXTCLOUD_ADMIN_PASSWORD="$(openssl rand -hex 24)" \
-            -v "$PWD/dist/scoreview:/var/www/html/custom_apps/scoreview" \
+            -v "$PWD/dist/scoreview:/signing/scoreview" \
             -v /tmp/cert:/tmp/cert:ro \
             nextcloud:31
           BEREIT=nein
@@ -258,7 +268,7 @@ jobs:
           docker exec -u www-data nc-sign php occ integrity:sign-app \
             --privateKey=/tmp/cert/scoreview.key \
             --certificate=/tmp/cert/scoreview.crt \
-            --path=/var/www/html/custom_apps/scoreview
+            --path=/signing/scoreview
           test -s dist/scoreview/appinfo/signature.json
           chmod 755 dist/scoreview/appinfo
 
