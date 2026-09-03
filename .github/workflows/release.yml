@@ -325,6 +325,33 @@ jobs:
         with:
           files: scoreview.tar.gz
 
+      # Der App Store nimmt ein Release nur zu einer angemeldeten App an -
+      # sonst: "App scoreview does not exist, you need to register it first".
+      # Anmelden heisst: das Zertifikat vorlegen, dessen CN die App-ID ist,
+      # und die ID mit dem zugehoerigen Schluessel signieren. Beides liegt
+      # hier ohnehin; ein eigener Weg dafuer waere ein zweiter Ort fuer
+      # dasselbe Geheimnis.
+      #
+      # Bewusst OHNE eigene Fehlerauswertung: Ab dem zweiten Release ist die
+      # App laengst angemeldet, und der Store antwortet dann mit einem
+      # Fehler, der keiner ist. Ob die Anmeldung stand, entscheidet der
+      # Schritt darunter - er ist die eigentliche Zusage und schlaegt fehl,
+      # wenn hier etwas gefehlt haette.
+      - name: App-ID beim App Store anmelden
+        if: startsWith(github.ref, 'refs/tags/v') && env.APPSTORE_TOKEN != '' && env.APP_PRIVATE_KEY != '' && env.APP_CERTIFICATE != ''
+        run: |
+          printf '%s' "$APP_PRIVATE_KEY" > /tmp/anmeldung.key
+          # Ohne Zeilenumbruch: signiert wird die App-ID selbst, und der Store
+          # prueft die Signatur gegen genau diese Bytes.
+          SIGNATUR=$(printf '%s' 'scoreview' | openssl dgst -sha512 -sign /tmp/anmeldung.key | openssl base64 -A)
+          rm -f /tmp/anmeldung.key
+          ANTWORT=$(curl -sS -w '\n%{http_code}' -X POST https://apps.nextcloud.com/api/v1/apps \
+            -H "Authorization: Token ${APPSTORE_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg c "$APP_CERTIFICATE" --arg s "$SIGNATUR" '{certificate: $c, signature: $s}')")
+          echo "Antwort des App Stores auf die Anmeldung:"
+          echo "$ANTWORT"
+
       # Erst jetzt, weil der App Store das Archiv selbst herunterlaedt: die
       # Release-Datei muss oeffentlich liegen, bevor er davon erfaehrt.
       - name: Beim App Store anmelden
