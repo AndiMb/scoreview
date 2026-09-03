@@ -282,6 +282,18 @@ jobs:
             --privateKey=/tmp/scoreview.key \
             --certificate=/tmp/scoreview.crt \
             --path=/signing/scoreview
+
+          # Den Baum zurueckgeben, solange der Container noch da ist: Die
+          # signature.json ist drinnen als www-data (uid 33) entstanden und
+          # gehoert auf dem Host entsprechend niemandem, der hier etwas darf.
+          # Der naechste Schritt vereinheitlicht die Modi ueber den ganzen
+          # Baum und scheiterte daran mit "chmod: changing permissions of
+          # 'dist/scoreview/appinfo/signature.json': Operation not permitted".
+          # Bewusst -R statt nur der einen Datei: Was occ sonst noch anlegt,
+          # soll dasselbe Schicksal haben, ohne dass es hier aufgezaehlt
+          # werden muss.
+          docker exec -u root nc-sign chown -R "$(id -u):$(id -g)" /signing/scoreview
+
           test -s dist/scoreview/appinfo/signature.json
           chmod 755 dist/scoreview/appinfo
 
