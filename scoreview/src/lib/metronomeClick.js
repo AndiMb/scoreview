@@ -7,15 +7,38 @@
 // eigentlichen Wiedergabestart, wenn player.js ggf. noch gar nicht läuft.
 // Ungetestet wie player.js/silentClock.js - braucht einen echten
 // AudioContext, siehe CLAUDE.md zu reiner Logik vs. DOM/Audio-Code.
+//
+// Der Klick braucht aber nur DANN einen eigenen AudioContext, wenn es keinen
+// gibt - nicht einen ZWEITEN, wenn die Wiedergabe schon einen hat. Auf
+// Android sind zwei Contexts zwei Ausgabe-Streams, die das System unabhängig
+// puffert; über Bluetooth liegen sie um zig Millisekunden auseinander, und
+// der Versatz ist nicht stabil. Klick und Musik gingen dann hörbar
+// auseinander. Deshalb `getSharedContext`: Wo die Wiedergabe läuft, klickt es
+// durch deren Kette mit - und der Latenzausgleich (playbackTime.js) gilt für
+// beide gleichzeitig.
 
-export function createMetronomeClick() {
-	let context = null
+/**
+ * @param {?() => ?AudioContext} [getSharedContext] liefert den AudioContext
+ *   der Wiedergabe, solange es einen gibt (siehe player.js)
+ */
+export function createMetronomeClick(getSharedContext = null) {
+	let ownContext = null
 
 	function ensureContext() {
-		if (!context) {
-			context = new AudioContext()
+		const shared = getSharedContext?.() ?? null
+		if (shared) {
+			// Ein früher angelegter eigener Context wird nicht mehr gebraucht,
+			// sobald die Wiedergabe steht (Reihenfolge beim Einzähler vor dem
+			// ersten Start). Offen ließe er einen zweiten Ausgabe-Stream
+			// zurück, der genau das Problem oben wieder aufmacht.
+			ownContext?.close()
+			ownContext = null
+			return shared
 		}
-		return context
+		if (!ownContext) {
+			ownContext = new AudioContext()
+		}
+		return ownContext
 	}
 
 	/**
@@ -43,9 +66,11 @@ export function createMetronomeClick() {
 		osc.stop(at + 0.06)
 	}
 
+	// Nur der eigene wird geschlossen - der geteilte gehört der Wiedergabe
+	// und wird von dort abgeräumt (player.js, destroy()).
 	function destroy() {
-		context?.close()
-		context = null
+		ownContext?.close()
+		ownContext = null
 	}
 
 	return { click, destroy }

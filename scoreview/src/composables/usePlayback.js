@@ -1,11 +1,28 @@
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import { computed, ref, shallowRef } from 'vue'
+import { createDropoutCounter, createFrameRateMeter } from '../lib/audioHealth.js'
 import { resolveMixerChannels } from '../lib/mixerLayout.js'
+import {
+	createLatencySmoother,
+	createTimeSmoother,
+	MAX_MANUAL_OFFSET_MS,
+	MIN_MANUAL_OFFSET_MS,
+	resolveLatencyMs,
+	toDisplayTimeMs,
+} from '../lib/playbackTime.js'
 import { createPlayer } from '../lib/player.js'
 import { createSilentClock } from '../lib/silentClock.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
+
+// Der Wert von Hand fuer den Bild/Ton-Abgleich - GERAETEWEISE gespeichert,
+// bewusst anders als Farbe und Form der Hervorhebung (useViewerPreferences.js,
+// die liegen serverseitig am Nutzerkonto). Deren Begruendung ("am Rechner
+// vorbereitet, am Tablet gelesen") kehrt sich hier um: Der richtige Wert ist
+// am Desktop 0 und am Telefon mit Bluetooth-Kopfhoerern 250. Am Konto
+// gespeichert waere er auf dem jeweils anderen Geraet garantiert falsch.
+const AUDIO_OFFSET_STORAGE_KEY = 'scoreview:audio-offset-ms'
 
 // Näherung für die Transport-Gesamtdauer im stummen Platzhalter-Modus -
 // letztes Timing-Event plus Puffer für den Ausklang der letzten Note. Mit
@@ -41,7 +58,14 @@ const MAX_TEMPO_FACTOR = 1.5
  *   Tempoangabe (M8: `metadata.tempo` kann 0 sein)
  */
 export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
+	// Die ROHE Zeit der Audiouhr. Bezugsgroesse fuer alles, was gegen
+	// dieselbe Uhr terminiert oder springt (Metronom, Loop, seek).
 	const currentTimeMs = ref(0)
+	// Was gerade zu HOEREN ist - um die Ausgabelatenz zurueckgerechnet und
+	// geglaettet. Fuer Cursor, Autoscroll, Taktanzeige, Suchlauf. Warum
+	// beides getrennt sein muss, steht im Kopfkommentar von
+	// lib/playbackTime.js.
+	const displayTimeMs = ref(0)
 	const isPlaying = ref(false)
 	const hasRealPlayer = ref(false)
 	// Warum es keinen Ton gibt, im Klartext für die Nutzerin - vorher stand
@@ -62,9 +86,26 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	const soundFontLoading = ref(false)
 	const soundFontLoadPercent = ref(0)
 
+	// Der Bild/Ton-Abgleich. `latencyMs` ist der tatsaechlich angewandte
+	// Gesamtwert (Automatik + Hand), `manualOffsetMs` nur der Anteil von Hand.
+	const latencyMs = ref(0)
+	const manualOffsetMs = ref(leseGespeichertenVersatz())
+	const automaticLatencyMs = ref(0)
+	// Woher die Automatik ihren Wert hat - fuer die Betriebsdiagnose, damit
+	// "0 ms" von "der Browser sagt nichts" unterscheidbar bleibt.
+	const audioInfo = ref(null)
+	const frameRate = ref(0)
+	const dropoutCount = ref(0)
+	const dropoutLostMs = ref(0)
+
 	const effectiveTempoBpm = computed(() => Math.round(baseTempoBpm.value * tempo.value))
 	const minTempoBpm = computed(() => Math.round(baseTempoBpm.value * MIN_TEMPO_FACTOR))
 	const maxTempoBpm = computed(() => Math.round(baseTempoBpm.value * MAX_TEMPO_FACTOR))
+
+	const latencySmoother = createLatencySmoother()
+	const timeSmoother = createTimeSmoother()
+	const dropouts = createDropoutCounter()
+	const frameMeter = createFrameRateMeter()
 
 	let abortController = null
 	let wakeLockSentinel = null
@@ -205,7 +246,20 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 			return
 		}
 		if (clock.value.isPlaying()) {
+			const renderTimeMs = clock.value.getCurrentTimeMs()
 			clock.value.pause()
+			// Auf die zuletzt GEHOERTE Stelle zurueckstellen, nicht auf die
+			// zuletzt gerenderte: Was beim Anhalten noch im Ausgabepuffer
+			// stand, wird verworfen - es hat nie geklungen, gaelte aber als
+			// gespielt. Ueber Bluetooth sind das bis zu 300 ms, bei
+			// Viertel = 120 fast ein Achtel. In der Probe ist das der
+			// Unterschied zwischen "noch mal von hier" und einem Neustart
+			// hinter der Stelle.
+			const gehoertMs = toDisplayTimeMs(renderTimeMs, latencyMs.value, tempo.value)
+			if (gehoertMs < renderTimeMs) {
+				clock.value.seek(gehoertMs)
+			}
+			timeSmoother.reset()
 		} else {
 			await clock.value.play()
 		}
@@ -213,6 +267,9 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 
 	function seek(timeMs) {
 		clock.value?.seek(timeMs)
+		// Nach einem Sprung ist jede Vorhersage aus der alten Position
+		// wertlos; ohne das Zuruecksetzen zoege der Cursor sichtbar nach.
+		timeSmoother.reset()
 	}
 
 	function onSeekInput(event) {
@@ -241,13 +298,88 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		clock.value?.setProgram?.(channel, program)
 	}
 
-	/** Aktuelle Transportwerte aus der Zeitquelle ziehen - pro Frame gerufen. */
+	/**
+	 * Aktuelle Transportwerte aus der Zeitquelle ziehen - pro Frame gerufen,
+	 * und zwar genau einmal (der Glaetter schreibt seinen Zustand fort).
+	 *
+	 * Hier entstehen die beiden Zeiten: `currentTimeMs` roh von der Audiouhr,
+	 * `displayTimeMs` um die Ausgabelatenz zurueckgerechnet und geglaettet.
+	 * Nebenher laufen die beiden Zaehler der Betriebsdiagnose mit - sie
+	 * brauchen dieselben Werte im selben Takt und wuerden als zweite Schleife
+	 * nur denselben Zustand ein zweites Mal abfragen.
+	 */
 	function sampleTime() {
 		if (!clock.value) {
 			return
 		}
-		currentTimeMs.value = clock.value.getCurrentTimeMs()
+		const nowMs = performance.now()
+		const renderTimeMs = clock.value.getCurrentTimeMs()
+		currentTimeMs.value = renderTimeMs
 		isPlaying.value = clock.value.isPlaying()
+
+		updateLatency()
+		// Bei angehaltener Wiedergabe klingt nichts - dann steht der Cursor
+		// genau dort, wo es beim Fortsetzen weitergeht (siehe toggle()), und
+		// jede Korrektur waere ein Versatz ohne Gegenstueck.
+		const rohe = isPlaying.value
+			? toDisplayTimeMs(renderTimeMs, latencyMs.value, tempo.value)
+			: renderTimeMs
+		displayTimeMs.value = isPlaying.value
+			? timeSmoother.update(rohe, nowMs, tempo.value)
+			: rohe
+		if (!isPlaying.value) {
+			timeSmoother.reset()
+		}
+
+		// Bewusst mit der ROHEN Zeit: Die geglaettete versteckt genau das
+		// Stocken, das hier gesucht wird.
+		dropouts.update(renderTimeMs, nowMs, isPlaying.value, tempo.value)
+		frameMeter.update(nowMs)
+		frameRate.value = frameMeter.fps()
+		dropoutCount.value = dropouts.count()
+		dropoutLostMs.value = dropouts.lostMs()
+	}
+
+	/**
+	 * Die anzuwendende Ausgabelatenz nachfuehren. Jeden Frame, nicht einmalig:
+	 * Der Wert aendert sich, wenn mitten im Betrieb auf Bluetooth-Kopfhoerer
+	 * umgeschaltet wird - und genau dann faellt der Versatz auf.
+	 */
+	function updateLatency() {
+		const report = clock.value?.getLatencyReport?.() ?? null
+		if (report) {
+			audioInfo.value = report
+			automaticLatencyMs.value = latencySmoother.update(resolveLatencyMs({ measuredMs: report.measuredMs, reportedMs: report.reportedMs }))
+		} else {
+			// Stummer Platzhalter (silentClock.js): keine Audioausgabe, also
+			// auch keine Ausgabelatenz. Der Wert von Hand bleibt trotzdem
+			// wirksam - dort steckt nichts Geraetespezifisches drin.
+			audioInfo.value = null
+			automaticLatencyMs.value = 0
+		}
+		latencyMs.value = automaticLatencyMs.value + manualOffsetMs.value
+	}
+
+	/**
+	 * Der Bild/Ton-Abgleich von Hand. Wirkt sofort und wird geraeteweise
+	 * gemerkt (siehe AUDIO_OFFSET_STORAGE_KEY).
+	 *
+	 * @param {number} valueMs
+	 */
+	function setManualOffsetMs(valueMs) {
+		const begrenzt = Math.min(MAX_MANUAL_OFFSET_MS, Math.max(MIN_MANUAL_OFFSET_MS, Math.round(valueMs) || 0))
+		manualOffsetMs.value = begrenzt
+		try {
+			window.localStorage?.setItem(AUDIO_OFFSET_STORAGE_KEY, String(begrenzt))
+		} catch {
+			// Privates Fenster oder gesperrter Speicher - der Wert wirkt in
+			// dieser Sitzung trotzdem, er ueberlebt sie nur nicht. Das ist
+			// kein Grund fuer eine Meldung ueber der Partitur.
+		}
+	}
+
+	function onManualOffsetInput(event) {
+		setManualOffsetMs(Number(event.target.value))
 	}
 
 	// --- Wake Lock --------------------------------------------------------
@@ -284,6 +416,43 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		wakeLockSentinel = null
 	}
 
+	/**
+	 * Der AudioContext der Wiedergabe, solange es einen gibt - fuer den
+	 * Metronomklick (lib/metronomeClick.js) und fuer die Betriebsdiagnose.
+	 *
+	 * @return {?AudioContext}
+	 */
+	function getAudioContext() {
+		return clock.value?.getAudioContext?.() ?? null
+	}
+
+	/**
+	 * Was auf DIESEM Geraet gemessen wurde - ablesbar im Viewer selbst.
+	 *
+	 * Ohne diese Anzeige ist jede Aussage ueber ein fremdes Telefon geraten:
+	 * "die Spuren synchronisieren nicht sauber" kann heissen, dass die Anzeige
+	 * dem Ton vorauslaeuft (dann steht hier eine Latenz, die die Automatik
+	 * nicht kennt) oder dass der Ton aussetzt (dann zaehlt hier etwas). Rein
+	 * beschreibend - nichts im Viewer verzweigt danach.
+	 */
+	const audioDiagnostics = computed(() => {
+		const context = clock.value?.getAudioContext?.() ?? null
+		const report = audioInfo.value
+		return {
+			hasAudio: context !== null,
+			contextState: context?.state ?? null,
+			sampleRate: context?.sampleRate ?? null,
+			measuredLatencyMs: report?.measuredMs ?? null,
+			reportedLatencyMs: report?.reportedMs ?? null,
+			automaticLatencyMs: Math.round(automaticLatencyMs.value),
+			manualOffsetMs: manualOffsetMs.value,
+			appliedLatencyMs: Math.round(latencyMs.value),
+			frameRate: frameRate.value,
+			dropoutCount: dropoutCount.value,
+			dropoutLostMs: dropoutLostMs.value,
+		}
+	})
+
 	function destroy() {
 		abortController?.abort()
 		abortController = null
@@ -296,9 +465,23 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 
 	function reset() {
 		currentTimeMs.value = 0
+		displayTimeMs.value = 0
 		durationMs.value = 0
 		isPlaying.value = false
 		tempo.value = 1
+		// Der Wert von Hand bleibt bewusst stehen: Er gehoert zum GERAET
+		// (Ausgabelatenz der Kopfhoerer), nicht zur Partitur. Zurueckgesetzt
+		// wird nur, was aus der laufenden Wiedergabe stammt.
+		latencyMs.value = manualOffsetMs.value
+		automaticLatencyMs.value = 0
+		audioInfo.value = null
+		frameRate.value = 0
+		dropoutCount.value = 0
+		dropoutLostMs.value = 0
+		latencySmoother.reset()
+		timeSmoother.reset()
+		dropouts.reset()
+		frameMeter.reset()
 		hasRealPlayer.value = false
 		playbackError.value = ''
 		mixerChannels.value = []
@@ -313,6 +496,14 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 
 	return {
 		currentTimeMs,
+		displayTimeMs,
+		latencyMs,
+		manualOffsetMs,
+		automaticLatencyMs,
+		audioDiagnostics,
+		setManualOffsetMs,
+		onManualOffsetInput,
+		getAudioContext,
 		isPlaying,
 		hasRealPlayer,
 		playbackError,
@@ -342,5 +533,27 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		releaseWakeLock,
 		destroy,
 		reset,
+	}
+}
+
+/**
+ * Der zuletzt eingestellte Bild/Ton-Versatz dieses Geraets.
+ *
+ * Durchweg defensiv: `localStorage` wirft in privaten Fenstern und bei
+ * gesperrtem Speicher schon beim LESEN. Ohne den Wert startet der Abgleich
+ * bei 0 - die App bleibt exakt so nutzbar, nur muss er neu eingestellt
+ * werden.
+ *
+ * @return {number} ms, 0 wenn nichts Brauchbares gespeichert ist
+ */
+function leseGespeichertenVersatz() {
+	try {
+		const roh = Number(window.localStorage?.getItem(AUDIO_OFFSET_STORAGE_KEY))
+		if (!Number.isFinite(roh)) {
+			return 0
+		}
+		return Math.min(MAX_MANUAL_OFFSET_MS, Math.max(MIN_MANUAL_OFFSET_MS, Math.round(roh)))
+	} catch {
+		return 0
 	}
 }

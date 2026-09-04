@@ -31,6 +31,9 @@ const LOOKAHEAD_MS = 60
  * @param {() => number} deps.tempoFactor Faktor auf playbackRate
  * @param {() => boolean} deps.isPlaying
  * @param {() => void} deps.play startet die Wiedergabe nach dem Einzähler
+ * @param {() => ?AudioContext} deps.audioContext der AudioContext der
+ *   Wiedergabe, solange es einen gibt - der Klick geht dann durch dieselbe
+ *   Pufferkette wie die Musik (siehe lib/metronomeClick.js)
  */
 export function useMetronome({
 	measuresTimeline,
@@ -40,6 +43,7 @@ export function useMetronome({
 	tempoFactor,
 	isPlaying,
 	play,
+	audioContext,
 }) {
 	const enabled = ref(false)
 	// 'all' = jeder Schlag (Voreinstellung), 'downbeat' = nur der
@@ -60,7 +64,7 @@ export function useMetronome({
 
 	function ensureClick() {
 		if (!click) {
-			click = createMetronomeClick()
+			click = createMetronomeClick(audioContext)
 		}
 		return click
 	}

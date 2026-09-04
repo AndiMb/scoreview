@@ -2,14 +2,14 @@ import { planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from '
 
 // Pausendauer für das Nachführen nach manuellem Scrollen (siehe
 // scrollPlan.js) - lang genug, um in Ruhe zu lesen, kurz genug, um nicht wie
-// ein Hänger zu wirken.
+// ein Hänger zu wirken. Sie läuft ab dem ENDE der Geste.
 const MANUAL_SCROLL_RESUME_MS = 2500
 
-// Wie lange nach einem selbst ausgelösten scrollTo() eingehende scroll-Events
-// als "programmatisch" gelten, nicht als manuelles Scrollen (siehe
-// onUserScroll) - großzügig über der CSS-smooth-scroll-Dauer, damit kein
-// Nachzittern fälschlich als Nutzereingriff gilt.
-const PROGRAMMATIC_SCROLL_WINDOW_MS = 700
+// Ab dieser Strecke (in Vielfachen der Viewporthöhe) wird gesprungen statt
+// weich gescrollt. Ein weiches Scrollen über mehrere Bildschirmhöhen ist auf
+// einem Telefon weder schön noch billig - und es war die Strecke, an der die
+// frühere Zeitfenster-Heuristik zerbrach.
+const BIG_JUMP_VIEWPORTS = 1.5
 
 /**
  * Führt das Notenbild der Wiedergabe nach und hält sich zurück, solange
@@ -30,11 +30,10 @@ const PROGRAMMATIC_SCROLL_WINDOW_MS = 700
 export function useAutoScroll({ scrollEl }) {
 	// Referenzen auf die ScorePage-Komponenten, je Seitenindex.
 	const pageRefs = []
-	// Zeitstempel (Date.now()) des letzten erkannten MANUELLEN Scrollens.
+	// Zeitstempel (Date.now()) des Endes der letzten Nutzergeste.
 	let lastManualScrollAt = null
-	// Bis zu diesem Zeitpunkt gelten scroll-Events als von uns selbst
-	// ausgelöst, nicht als Nutzereingriff.
-	let ignoreScrollUntil = 0
+	// Ob gerade ein Finger auf dem Glas liegt bzw. die Maustaste unten ist.
+	let gestureActive = false
 
 	function setPageRef(el, index) {
 		if (el) {
@@ -50,18 +49,23 @@ export function useAutoScroll({ scrollEl }) {
 			return
 		}
 		const clamp = (value, max) => Math.min(Math.max(0, value), Math.max(0, max))
-		const options = { behavior: 'smooth' }
-		if (targetScrollTop !== null) {
-			options.top = clamp(targetScrollTop, el.scrollHeight - el.clientHeight)
+		const top = targetScrollTop === null ? null : clamp(targetScrollTop, el.scrollHeight - el.clientHeight)
+		const left = targetScrollLeft === null ? null : clamp(targetScrollLeft, el.scrollWidth - el.clientWidth)
+		const distance = Math.max(
+			top === null ? 0 : Math.abs(top - el.scrollTop),
+			left === null ? 0 : Math.abs(left - el.scrollLeft),
+		)
+		const options = {
+			// Weit springen statt weit gleiten: Ein Seitenwechsel ist keine
+			// Bewegung, der man mit den Augen folgt.
+			behavior: distance > el.clientHeight * BIG_JUMP_VIEWPORTS ? 'auto' : 'smooth',
 		}
-		if (targetScrollLeft !== null) {
-			options.left = clamp(targetScrollLeft, el.scrollWidth - el.clientWidth)
+		if (top !== null) {
+			options.top = top
 		}
-		// Markiert die eigenen, dadurch ausgelösten scroll-Events als
-		// "programmatisch" (siehe onUserScroll) - sonst würde unser eigenes
-		// Nachführen sich selbst als manuellen Scroll auslegen und sofort
-		// wieder pausieren.
-		ignoreScrollUntil = Date.now() + PROGRAMMATIC_SCROLL_WINDOW_MS
+		if (left !== null) {
+			options.left = left
+		}
 		el.scrollTo(options)
 	}
 
@@ -79,7 +83,7 @@ export function useAutoScroll({ scrollEl }) {
 		if (!rect || !el) {
 			return
 		}
-		if (!force && shouldSuppressAutoScroll(lastManualScrollAt, Date.now(), MANUAL_SCROLL_RESUME_MS)) {
+		if (!force && (gestureActive || shouldSuppressAutoScroll(lastManualScrollAt, Date.now(), MANUAL_SCROLL_RESUME_MS))) {
 			return
 		}
 		const pageEl = pageRefs[rect.page]
@@ -127,24 +131,52 @@ export function useAutoScroll({ scrollEl }) {
 		}
 	}
 
+	// --- Manuelles Scrollen erkennen ----------------------------------------
+	//
+	// An der GESTE, nicht an scroll-Ereignissen. Vorher galt jedes
+	// scroll-Ereignis außerhalb eines 700-ms-Fensters nach dem eigenen
+	// scrollTo() als Nutzereingriff - eine Vermutung über die Dauer eines
+	// weichen Scrollens, die auf dem Telefon aus zwei Gründen gleichzeitig
+	// bricht: Die Strecken sind dort länger als 700 ms (eine A4-Seite steht
+	// bei „Seitenbreite" mehrere Bildschirmhöhen hoch), und mobile Browser
+	// blenden ihre Adress-/Aktionsleiste beim Scrollen ein und aus, was die
+	// Viewporthöhe ändert und weitere scroll-Ereignisse erzeugt, die von
+	// keinem Finger stammen. Die App deutete daraufhin ihr eigenes Nachführen
+	// als Nutzereingriff, setzte 2,5 s aus, lief aus dem Bild, holte weiter
+	// nach - und stieß sich damit erneut selbst an.
+	//
+	// Ob ein Finger auf dem Glas liegt, meldet der Browser aber. Also wird es
+	// gefragt statt erschlossen.
+
+	/** Finger aufgesetzt / Maustaste unten (auch auf dem Scrollbalken). */
+	function onUserGestureStart() {
+		gestureActive = true
+		lastManualScrollAt = Date.now()
+	}
+
 	/**
-	 * Erkennt manuelles Scrollen ("bei manuellem Scrollen aussetzen und nach
-	 * kurzer Zeit wieder übernehmen") - jedes scroll-Event, das nicht
-	 * innerhalb des Ignorierfensters eines eigenen scrollTo() liegt, gilt als
-	 * Nutzereingriff.
+	 * Finger gehoben. Die Nachlauffrist beginnt hier - das Trägheitsscrollen
+	 * danach verlängert sie über `scrollend`, wo der Browser das Ereignis
+	 * kennt (sonst läuft die Frist ab dem Loslassen, wie zuvor).
 	 */
-	function onUserScroll() {
-		if (Date.now() < ignoreScrollUntil) {
-			return
-		}
+	function onUserGestureEnd() {
+		gestureActive = false
+		lastManualScrollAt = Date.now()
+	}
+
+	/**
+	 * Ein Nutzereingriff ohne Anfang und Ende: Mausrad, Trägheitsscrollen
+	 * (`scrollend`), Tastatur (Bild auf/ab).
+	 */
+	function noteManualScroll() {
 		lastManualScrollAt = Date.now()
 	}
 
 	function reset() {
 		pageRefs.length = 0
 		lastManualScrollAt = null
-		ignoreScrollUntil = 0
+		gestureActive = false
 	}
 
-	return { setPageRef, update, onUserScroll, reset }
+	return { setPageRef, update, onUserGestureStart, onUserGestureEnd, noteManualScroll, reset }
 }

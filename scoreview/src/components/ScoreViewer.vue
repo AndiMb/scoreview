@@ -33,356 +33,503 @@
 		</div>
 		<template v-else>
 			<!--
+				Eingefahrene Leiste: Im Vollbild zieht sie sich waehrend der
+				Wiedergabe auf eine Fortschrittslinie zusammen (siehe
+				scheduleBarCollapse) - auf dem Notenstaender zaehlt jede Zeile
+				Noten. Bewusst NICHT ganz ausgeblendet mit "Tippen holt sie
+				zurueck": Ein Tipp auf die Partitur springt bereits an die
+				getippte Note (onNoteClick), zwei Bedeutungen fuer dieselbe
+				Geste waeren ein Fehler. Die Linie ist eindeutig anzutippen und
+				verraet weiter die Position.
+			-->
+			<button
+				v-if="barCollapsed"
+				type="button"
+				class="scoreview-bar-line"
+				:aria-label="t('Show playback controls')"
+				:title="t('Show playback controls')"
+				@click="showBar">
+				<span class="scoreview-bar-line-fill" :style="{ inlineSize: playbackPercent + '%' }" />
+			</button>
+			<!--
 				EINE Leiste, und zwar ausserhalb des Scroll-Bereichs. Als
 				Geschwister eines eigenen Scroll-Elements ist "wegscrollen"
 				strukturell unmoeglich - und der z-index-Wettlauf gegen die
 				SVG-Seiten entfaellt.
+
+				Zwei Streifen statt einer Knopfreihe: Auf Telefonbreite
+				brauchte die volle Reihe rechnerisch ~780px (14 Bedienelemente
+				bei 44px Touch-Zielgroesse) und brach damit auf drei Zeilen um -
+				dauerhaft rund 18% der Bildschirmhoehe, auch im Vollbild.
+				Draussen bleibt jetzt nur, was waehrend des Singens gebraucht
+				wird; die Werkzeuge kommen auf Abruf. Auf breiten Schirmen
+				stehen beide Streifen nebeneinander, dort aendert sich nichts.
 			-->
-			<div class="scoreview-bar">
-				<NcButton
-					class="scoreview-play"
-					variant="primary"
-					:aria-label="isPlaying ? t('Pause') : t('Play')"
-					:title="isPlaying ? t('Pause') : t('Play')"
-					@click="togglePlay">
-					<template #icon>
-						<Pause v-if="isPlaying" :size="20" />
-						<Play v-else :size="20" />
-					</template>
-				</NcButton>
-				<input
-					type="range"
-					class="scoreview-seek"
-					min="0"
-					:max="durationMs"
-					:value="currentTimeMs"
-					:aria-label="t('Playback position')"
-					@input="onSeekInput">
-				<span class="scoreview-time">{{ formatTime(currentTimeMs) }} / {{ formatTime(durationMs) }}</span>
-				<!--
+			<div
+				v-else
+				class="scoreview-bar"
+				:class="{ 'scoreview-bar--compact': compactBar }"
+				@pointerdown="scheduleBarCollapse">
+				<div class="scoreview-bar-transport">
+					<NcButton
+						class="scoreview-play"
+						variant="primary"
+						:aria-label="isPlaying ? t('Pause') : t('Play')"
+						:title="isPlaying ? t('Pause') : t('Play')"
+						@click="togglePlay">
+						<template #icon>
+							<Pause v-if="isPlaying" :size="20" />
+							<Play v-else :size="20" />
+						</template>
+					</NcButton>
+					<input
+						type="range"
+						class="scoreview-seek"
+						min="0"
+						:max="durationMs"
+						:value="displayTimeMs"
+						:aria-label="t('Playback position')"
+						@input="onSeekInput">
+					<span class="scoreview-time">{{ formatTime(displayTimeMs) }} / {{ formatTime(durationMs) }}</span>
+					<!--
 					Taktanzeige und Sprungfeld sind DASSELBE Feld: getrennt zeigten
 					sie dieselbe Zahl an zwei Stellen und kosteten zusammen fast eine
 					halbe Leiste. Solange das Feld den Fokus hat, laeuft die Anzeige
 					nicht mit - sonst wuerde die Wiedergabe die gerade getippte Zahl
 					ueberschreiben.
 				-->
-				<span class="scoreview-measure">
-					<!-- Die feste Breite sitzt am Wrapper, nicht an NcTextField
-						selbst - Begründung im CSS unten. -->
-					<span class="scoreview-measure-field">
-						<NcTextField
-							v-model.number="measureInput"
-							type="number"
-							min="1"
-							:label="t('Measure')"
-							:title="t('Measure – enter a number and press Enter to jump there')"
-							labelOutside
-							@focus="measureFieldFocused = true"
-							@blur="onMeasureFieldBlur"
-							@keyup.enter="jumpToMeasure(measureInput)" />
+					<span class="scoreview-measure">
+						<!-- Die feste Breite sitzt am Wrapper, nicht an NcTextField
+							selbst - Begründung im CSS unten. -->
+						<span class="scoreview-measure-field">
+							<NcTextField
+								v-model.number="measureInput"
+								type="number"
+								min="1"
+								:label="t('Measure')"
+								:title="t('Measure – enter a number and press Enter to jump there')"
+								labelOutside
+								@focus="measureFieldFocused = true"
+								@blur="onMeasureFieldBlur"
+								@keyup.enter="jumpToMeasure(measureInput)" />
+						</span>
+						<span class="scoreview-measure-total">/ {{ totalMeasures || '–' }}</span>
 					</span>
-					<span class="scoreview-measure-total">/ {{ totalMeasures || '–' }}</span>
-				</span>
-				<NcPopover>
-					<template #trigger>
-						<NcButton :pressed="loopActive" :aria-label="t('Loop')" :title="loopActive ? t('Loop on') : t('Loop off')">
-							<template #icon>
-								<Repeat :size="20" />
-							</template>
-						</NcButton>
-					</template>
-					<template #default>
-						<div class="scoreview-popover">
-							<div class="scoreview-popover-row">
-								<NcTextField
-									v-model.number="loopFromMeasure"
-									type="number"
-									min="1"
-									:label="t('From measure')" />
-								<NcTextField
-									v-model.number="loopToMeasure"
-									type="number"
-									min="1"
-									:label="t('To measure')" />
-							</div>
-							<NcButton wide :aria-label="t('Loop from current measure')" @click="setLoopFromMeasure(currentAnchor?.measureNumber)">
-								<template #icon>
-									<CrosshairsGps :size="20" />
-								</template>
-								{{ t('Loop from current measure') }}
-							</NcButton>
-							<NcButton
-								wide
-								:pressed="loopActive"
-								:aria-label="loopActive ? t('Loop on') : t('Loop off')"
-								@click="toggleLoop">
+					<!--
+						Der Zugang zu den Werkzeugen auf schmalen Schirmen. Der
+						Punkt daran ist nicht Zierde: Laeuft das Metronom oder
+						ist ein Loop aktiv, muss das sichtbar bleiben, ohne das
+						Menue zu oeffnen - sonst sucht jemand mitten in der
+						Probe nach einem Klick, den er nicht abstellen kann.
+					-->
+					<NcButton
+						v-if="compactBar"
+						class="scoreview-more"
+						:pressed="toolsOpen"
+						:aria-label="t('Tools')"
+						:title="t('Tools')"
+						@click="toolsOpen = !toolsOpen">
+						<template #icon>
+							<span class="scoreview-more-icon">
+								<DotsHorizontal :size="20" />
+								<span v-if="anyToolActive && !toolsOpen" class="scoreview-more-dot" />
+							</span>
+						</template>
+					</NcButton>
+				</div>
+				<div v-if="!compactBar || toolsOpen" class="scoreview-bar-tools">
+					<NcPopover>
+						<template #trigger>
+							<NcButton :pressed="loopActive" :aria-label="t('Loop')" :title="loopActive ? t('Loop on') : t('Loop off')">
 								<template #icon>
 									<Repeat :size="20" />
 								</template>
-								{{ loopActive ? t('Loop on') : t('Loop off') }}
 							</NcButton>
-						</div>
-					</template>
-				</NcPopover>
-				<!--
-					BPM statt Prozent (auf Basis von docs/architecture.md M8:
-					metadata.tempo ist Viertel-BPM) - der Notensymbol-Text "♩ 80"
-					statt "100%" ist die Einheit, die eine Chorleitung tatsaechlich
-					ansagt. tempoGuessed markiert Partituren ohne eigene Tempoangabe
-					(M8: tempo kann 0 sein) sichtbar als geschaetzt, statt eine
-					Genauigkeit vorzutaeuschen, die nicht da ist. Der Regler dazu
-					liegt im Popover - er wird einmal eingestellt, nicht dauernd.
-				-->
-				<NcPopover>
-					<template #trigger>
-						<NcButton
-							class="scoreview-tempo-button"
-							:aria-label="t('Tempo and metronome')"
-							:title="tempoGuessed ? t('No tempo marking in the score – 120 BPM assumed.') : t('Tempo and metronome')">
-							♩ {{ effectiveTempoBpm }}{{ tempoGuessed ? '*' : '' }}
-						</NcButton>
-					</template>
-					<template #default>
-						<div class="scoreview-popover">
-							<label v-if="hasRealPlayer" class="scoreview-popover-label">
-								{{ t('Tempo (BPM)') }}: ♩ = {{ effectiveTempoBpm }}
-								<input
-									type="range"
-									:min="minTempoBpm"
-									:max="maxTempoBpm"
-									step="1"
-									:value="effectiveTempoBpm"
-									:aria-label="t('Tempo (BPM)')"
-									@input="onTempoBpmInput">
-							</label>
-							<fieldset class="scoreview-popover-group">
-								<legend>{{ t('Metronome') }}</legend>
-								<NcCheckboxRadioSwitch
-									v-model="metronomeBeats"
-									type="radio"
-									value="all"
-									name="scoreview-metronome-beats">
-									{{ t('Every beat') }}
-								</NcCheckboxRadioSwitch>
-								<NcCheckboxRadioSwitch
-									v-model="metronomeBeats"
-									type="radio"
-									value="downbeat"
-									name="scoreview-metronome-beats">
-									{{ t('Downbeat only') }}
-								</NcCheckboxRadioSwitch>
-							</fieldset>
-						</div>
-					</template>
-				</NcPopover>
-				<NcButton
-					:pressed="metronomeEnabled"
-					:aria-label="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
-					:title="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
-					@click="metronomeEnabled = !metronomeEnabled">
-					<template #icon>
-						<Metronome :size="20" />
-					</template>
-				</NcButton>
-				<NcPopover>
-					<template #trigger>
-						<NcButton :aria-label="t('Zoom')" :title="t('Zoom')">
-							<template #icon>
-								<Magnify :size="20" />
-							</template>
-						</NcButton>
-					</template>
-					<template #default>
-						<div class="scoreview-popover">
-							<label class="scoreview-popover-label">
-								{{ t('Zoom') }}: {{ zoomPercent }}%
-								<input
-									type="range"
-									:min="minZoom"
-									:max="maxZoom"
-									step="0.05"
-									:value="zoom"
-									:aria-label="t('Zoom')"
-									@input="onZoomInput">
-							</label>
-							<NcButton wide @click="applyZoomPreset('width')">
-								<template #icon>
-									<ArrowExpandHorizontal :size="20" />
-								</template>
-								{{ t('Fit page width') }}
+						</template>
+						<template #default>
+							<div class="scoreview-popover">
+								<div class="scoreview-popover-row">
+									<NcTextField
+										v-model.number="loopFromMeasure"
+										type="number"
+										min="1"
+										:label="t('From measure')" />
+									<NcTextField
+										v-model.number="loopToMeasure"
+										type="number"
+										min="1"
+										:label="t('To measure')" />
+								</div>
+								<NcButton wide :aria-label="t('Loop from current measure')" @click="setLoopFromMeasure(currentAnchor?.measureNumber)">
+									<template #icon>
+										<CrosshairsGps :size="20" />
+									</template>
+									{{ t('Loop from current measure') }}
+								</NcButton>
+								<NcButton
+									wide
+									:pressed="loopActive"
+									:aria-label="loopActive ? t('Loop on') : t('Loop off')"
+									@click="toggleLoop">
+									<template #icon>
+										<Repeat :size="20" />
+									</template>
+									{{ loopActive ? t('Loop on') : t('Loop off') }}
+								</NcButton>
+							</div>
+						</template>
+					</NcPopover>
+					<!--
+						BPM statt Prozent (auf Basis von docs/architecture.md M8:
+						metadata.tempo ist Viertel-BPM) - der Notensymbol-Text "♩ 80"
+						statt "100%" ist die Einheit, die eine Chorleitung tatsaechlich
+						ansagt. tempoGuessed markiert Partituren ohne eigene Tempoangabe
+						(M8: tempo kann 0 sein) sichtbar als geschaetzt, statt eine
+						Genauigkeit vorzutaeuschen, die nicht da ist. Der Regler dazu
+						liegt im Popover - er wird einmal eingestellt, nicht dauernd.
+					-->
+					<NcPopover>
+						<template #trigger>
+							<NcButton
+								class="scoreview-tempo-button"
+								:aria-label="t('Tempo and metronome')"
+								:title="tempoGuessed ? t('No tempo marking in the score – 120 BPM assumed.') : t('Tempo and metronome')">
+								♩ {{ effectiveTempoBpm }}{{ tempoGuessed ? '*' : '' }}
 							</NcButton>
-							<NcButton wide @click="applyZoomPreset('page')">
-								<template #icon>
-									<FitToPage :size="20" />
-								</template>
-								{{ t('Fit whole page') }}
-							</NcButton>
-							<NcButton wide @click="applyZoomPreset('actual')">
+						</template>
+						<template #default>
+							<div class="scoreview-popover">
+								<label v-if="hasRealPlayer" class="scoreview-popover-label">
+									{{ t('Tempo (BPM)') }}: ♩ = {{ effectiveTempoBpm }}
+									<input
+										type="range"
+										:min="minTempoBpm"
+										:max="maxTempoBpm"
+										step="1"
+										:value="effectiveTempoBpm"
+										:aria-label="t('Tempo (BPM)')"
+										@input="onTempoBpmInput">
+								</label>
+								<fieldset class="scoreview-popover-group">
+									<legend>{{ t('Metronome') }}</legend>
+									<NcCheckboxRadioSwitch
+										v-model="metronomeBeats"
+										type="radio"
+										value="all"
+										name="scoreview-metronome-beats">
+										{{ t('Every beat') }}
+									</NcCheckboxRadioSwitch>
+									<NcCheckboxRadioSwitch
+										v-model="metronomeBeats"
+										type="radio"
+										value="downbeat"
+										name="scoreview-metronome-beats">
+										{{ t('Downbeat only') }}
+									</NcCheckboxRadioSwitch>
+								</fieldset>
+								<!--
+									Bild und Ton abgleichen. Der Cursor stuende sonst
+									dort, wo die Musik erst noch hinkommt: Die Audiouhr
+									meldet, was an das Ausgabegeraet UEBERGEBEN wurde,
+									hoerbar wird es erst nach der Ausgabelatenz - ueber
+									Bluetooth 150-300 ms, bei Viertel = 120 eine
+									Achtelnote. Automatisch ausgeglichen wird, was der
+									Browser meldet (lib/playbackTime.js); dieser Regler
+									traegt den Rest, denn ob der Bluetooth-Anteil
+									ueberhaupt gemeldet wird, haengt am Kopfhoerer.
+									Geraeteweise gemerkt, nicht am Konto - Begruendung
+									in usePlayback.js.
+								-->
+								<label v-if="hasRealPlayer" class="scoreview-popover-label">
+									{{ t('Sync picture and sound') }}: {{ audioOffsetMs }} ms
+									<input
+										type="range"
+										:min="minAudioOffsetMs"
+										:max="maxAudioOffsetMs"
+										step="10"
+										:value="audioOffsetMs"
+										:aria-label="t('Sync picture and sound')"
+										@input="onAudioOffsetInput">
+									<span class="scoreview-popover-hint">
+										{{ t('Adjust while playing, until the highlighted note matches what you hear. Detected automatically: {ms} ms.', { ms: automaticLatencyRounded }) }}
+									</span>
+								</label>
+							</div>
+						</template>
+					</NcPopover>
+					<NcButton
+						:pressed="metronomeEnabled"
+						:aria-label="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
+						:title="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
+						@click="metronomeEnabled = !metronomeEnabled">
+						<template #icon>
+							<Metronome :size="20" />
+						</template>
+					</NcButton>
+					<NcPopover>
+						<template #trigger>
+							<NcButton :aria-label="t('Zoom')" :title="t('Zoom')">
 								<template #icon>
 									<Magnify :size="20" />
 								</template>
-								{{ t('Actual size') }}
 							</NcButton>
-						</div>
-					</template>
-				</NcPopover>
-				<!--
-					Darstellung: wie die klingende Stelle markiert wird - und,
-					im selben Aufklapper, womit diese Seiten ueberhaupt gesetzt
-					wurden. Beides gehoert zusammen: Es ist der Ort fuer
-					"warum sieht das so aus".
-				-->
-				<NcPopover>
-					<template #trigger>
-						<NcButton :aria-label="t('Appearance')" :title="t('Appearance')">
-							<template #icon>
-								<Palette :size="20" />
-							</template>
-						</NcButton>
-					</template>
-					<template #default>
-						<div class="scoreview-popover">
-							<fieldset class="scoreview-popover-group">
-								<legend>{{ t('Playback highlight') }}</legend>
-								<NcCheckboxRadioSwitch
-									v-model="highlightMode"
-									type="radio"
-									value="notes"
-									name="scoreview-highlight-mode">
-									{{ t('Colour the sounding notes') }}
-								</NcCheckboxRadioSwitch>
-								<NcCheckboxRadioSwitch
-									v-model="highlightMode"
-									type="radio"
-									value="bar"
-									name="scoreview-highlight-mode">
-									{{ t('Bar at the sounding position') }}
-								</NcCheckboxRadioSwitch>
-							</fieldset>
-							<!--
-								Vorschlaege UND freie Wahl: Eine Farbe, die auf
-								weissem Papier neben schwarzer Druckfarbe wirklich
-								traegt, ist im Farbwaehler nicht in zwei Klicks
-								gefunden.
-							-->
-							<div class="scoreview-swatches" role="group" :aria-label="t('Highlight colour')">
-								<button
-									v-for="preset in highlightPresets"
-									:key="preset.id"
-									type="button"
-									class="scoreview-swatch"
-									:class="{ 'scoreview-swatch--active': preset.color === highlightColor }"
-									:style="{ background: preset.color }"
-									:aria-pressed="preset.color === highlightColor"
-									:aria-label="presetLabel(preset.id)"
-									:title="presetLabel(preset.id)"
-									@click="highlightColor = preset.color" />
+						</template>
+						<template #default>
+							<div class="scoreview-popover">
+								<label class="scoreview-popover-label">
+									{{ t('Zoom') }}: {{ zoomPercent }}%
+									<input
+										type="range"
+										:min="minZoom"
+										:max="maxZoom"
+										step="0.05"
+										:value="zoom"
+										:aria-label="t('Zoom')"
+										@input="onZoomInput">
+								</label>
+								<NcButton wide @click="applyZoomPreset('width')">
+									<template #icon>
+										<ArrowExpandHorizontal :size="20" />
+									</template>
+									{{ t('Fit page width') }}
+								</NcButton>
+								<NcButton wide @click="applyZoomPreset('page')">
+									<template #icon>
+										<FitToPage :size="20" />
+									</template>
+									{{ t('Fit whole page') }}
+								</NcButton>
+								<NcButton wide @click="applyZoomPreset('actual')">
+									<template #icon>
+										<Magnify :size="20" />
+									</template>
+									{{ t('Actual size') }}
+								</NcButton>
 							</div>
-							<label class="scoreview-popover-label">
-								{{ t('Own colour') }}
-								<input
-									type="color"
-									class="scoreview-color-input"
-									:value="highlightColor"
-									:aria-label="t('Own colour')"
-									@input="onHighlightColorInput">
-							</label>
-							<!--
-								Die Herkunft der Darstellung (E3). Rein
-								beschreibend - der Viewer verzweigt nirgends
-								danach, er sagt nur, womit diese Seiten gesetzt
-								wurden. Das ist die Frage, die bei einem
-								Satzunterschied zwischen zwei Instanzen als
-								Erstes kommt.
-							-->
-							<p class="scoreview-origin">
-								<span class="scoreview-origin-label">{{ t('Rendered by') }}</span>
-								{{ rendererText }}
-								<span v-if="mscoreVersion" class="scoreview-origin-note">
-									{{ t('Score written with MuseScore {version}', { version: mscoreVersion }) }}
-								</span>
-							</p>
-							<!--
-								Genau hier, direkt unter der Herkunft: Das ist die
-								Stelle, an der auffaellt, dass eine Partitur noch von
-								einer aelteren Fassung gesetzt wurde. Nur mit
-								Schreibrecht (canReconvert) - siehe
-								ConversionController::reconvert().
-							-->
-							<NcButton
-								v-if="canReconvert"
-								class="scoreview-origin-action"
-								:title="t('Discards the stored conversion and renders the score again with the current version of the app.')"
-								@click="reconvertScore">
+						</template>
+					</NcPopover>
+					<!--
+						Darstellung: wie die klingende Stelle markiert wird - und,
+						im selben Aufklapper, womit diese Seiten ueberhaupt gesetzt
+						wurden. Beides gehoert zusammen: Es ist der Ort fuer
+						"warum sieht das so aus".
+					-->
+					<NcPopover>
+						<template #trigger>
+							<NcButton :aria-label="t('Appearance')" :title="t('Appearance')">
 								<template #icon>
-									<Refresh :size="20" />
+									<Palette :size="20" />
 								</template>
-								{{ t('Convert again') }}
 							</NcButton>
-						</div>
-					</template>
-				</NcPopover>
-				<NcButton
-					v-if="hasRealPlayer"
-					:pressed="showMixer"
-					:aria-label="t('Mixer')"
-					:title="t('Mixer')"
-					@click="showMixer = !showMixer">
-					<template #icon>
-						<Tune :size="20" />
-					</template>
-				</NcButton>
-				<!--
-					Erscheint nur, wenn eine Stimme als „meine" gewaehlt ist UND
-					sich die Notenzeilen den Stimmen ueberhaupt zuordnen lassen -
-					sonst waere es ein Schalter, der nichts tut oder, schlimmer,
-					die falsche Zeile markiert (siehe lib/staffBands.js).
-				-->
-				<NcButton
-					v-if="canFocusMyPart"
-					:pressed="focusMyPart"
-					:aria-label="t('Show only my part')"
-					:title="t('Show only my part')"
-					@click="focusMyPart = !focusMyPart">
-					<template #icon>
-						<FormatAlignMiddle :size="20" />
-					</template>
-				</NcButton>
-				<NcButton
-					:pressed="showNoteText"
-					:aria-label="t('Show notes in the score')"
-					:title="t('Show notes in the score')"
-					@click="showNoteText = !showNoteText">
-					<template #icon>
-						<CommentTextOutline :size="20" />
-					</template>
-				</NcButton>
-				<NcButton
-					:pressed="showAnnotations"
-					:aria-label="t('Notes')"
-					:title="t('Notes')"
-					@click="showAnnotations = !showAnnotations">
-					<template #icon>
-						<NotebookOutline :size="20" />
-					</template>
-				</NcButton>
-				<NcButton
-					:pressed="isFullscreen"
-					:aria-label="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
-					:title="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
-					@click="toggleFullscreen">
-					<template #icon>
-						<FullscreenExit v-if="isFullscreen" :size="20" />
-						<Fullscreen v-else :size="20" />
-					</template>
-				</NcButton>
+						</template>
+						<template #default>
+							<div class="scoreview-popover">
+								<fieldset class="scoreview-popover-group">
+									<legend>{{ t('Playback highlight') }}</legend>
+									<NcCheckboxRadioSwitch
+										v-model="highlightMode"
+										type="radio"
+										value="notes"
+										name="scoreview-highlight-mode">
+										{{ t('Colour the sounding notes') }}
+									</NcCheckboxRadioSwitch>
+									<NcCheckboxRadioSwitch
+										v-model="highlightMode"
+										type="radio"
+										value="bar"
+										name="scoreview-highlight-mode">
+										{{ t('Bar at the sounding position') }}
+									</NcCheckboxRadioSwitch>
+								</fieldset>
+								<!--
+									Vorschlaege UND freie Wahl: Eine Farbe, die auf
+									weissem Papier neben schwarzer Druckfarbe wirklich
+									traegt, ist im Farbwaehler nicht in zwei Klicks
+									gefunden.
+								-->
+								<div class="scoreview-swatches" role="group" :aria-label="t('Highlight colour')">
+									<button
+										v-for="preset in highlightPresets"
+										:key="preset.id"
+										type="button"
+										class="scoreview-swatch"
+										:class="{ 'scoreview-swatch--active': preset.color === highlightColor }"
+										:style="{ background: preset.color }"
+										:aria-pressed="preset.color === highlightColor"
+										:aria-label="presetLabel(preset.id)"
+										:title="presetLabel(preset.id)"
+										@click="highlightColor = preset.color" />
+								</div>
+								<label class="scoreview-popover-label">
+									{{ t('Own colour') }}
+									<input
+										type="color"
+										class="scoreview-color-input"
+										:value="highlightColor"
+										:aria-label="t('Own colour')"
+										@input="onHighlightColorInput">
+								</label>
+								<!--
+									Die Herkunft der Darstellung (E3). Rein
+									beschreibend - der Viewer verzweigt nirgends
+									danach, er sagt nur, womit diese Seiten gesetzt
+									wurden. Das ist die Frage, die bei einem
+									Satzunterschied zwischen zwei Instanzen als
+									Erstes kommt.
+								-->
+								<p class="scoreview-origin">
+									<span class="scoreview-origin-label">{{ t('Rendered by') }}</span>
+									{{ rendererText }}
+									<span v-if="mscoreVersion" class="scoreview-origin-note">
+										{{ t('Score written with MuseScore {version}', { version: mscoreVersion }) }}
+									</span>
+								</p>
+								<!--
+									Genau hier, direkt unter der Herkunft: Das ist die
+									Stelle, an der auffaellt, dass eine Partitur noch von
+									einer aelteren Fassung gesetzt wurde. Nur mit
+									Schreibrecht (canReconvert) - siehe
+									ConversionController::reconvert().
+								-->
+								<NcButton
+									v-if="canReconvert"
+									class="scoreview-origin-action"
+									:title="t('Discards the stored conversion and renders the score again with the current version of the app.')"
+									@click="reconvertScore">
+									<template #icon>
+										<Refresh :size="20" />
+									</template>
+									{{ t('Convert again') }}
+								</NcButton>
+								<!--
+									Was auf DIESEM Geraet gemessen wurde. Steht hier,
+									weil es dieselbe Frage beantwortet wie die
+									Herkunft darueber: "warum ist das so, wie es
+									ist". Rein beschreibend, nichts verzweigt danach.
+
+									Der Grund fuer die Anzeige: "die Wiedergabe
+									synchronisiert nicht sauber" hat zwei ganz
+									verschiedene Ursachen, die sich gleich anfuehlen -
+									die Anzeige laeuft dem Ton voraus (dann steht hier
+									eine Latenz), oder der Ton setzt aus, weil die
+									Synthese auf dem Geraet nicht mitkommt (dann
+									zaehlt hier etwas). Aus der Ferne ist das nicht zu
+									unterscheiden, auf dem Geraet mit einem Blick.
+								-->
+								<details class="scoreview-diagnostics">
+									<summary>{{ t('Playback diagnostics') }}</summary>
+									<dl class="scoreview-diagnostics-list">
+										<div v-if="audioDiagnostics.hasAudio">
+											<dt>{{ t('Output latency') }}</dt>
+											<dd>
+												{{ audioDiagnostics.appliedLatencyMs }} ms
+												<span class="scoreview-diagnostics-note">
+													{{ t('measured {measured}, reported {reported}, by hand {manual}', {
+														measured: formatMs(audioDiagnostics.measuredLatencyMs),
+														reported: formatMs(audioDiagnostics.reportedLatencyMs),
+														manual: audioDiagnostics.manualOffsetMs + ' ms',
+													}) }}
+												</span>
+											</dd>
+											<dt>{{ t('Audio output') }}</dt>
+											<dd>{{ audioDiagnostics.sampleRate }} Hz, {{ audioDiagnostics.contextState }}</dd>
+											<dt>{{ t('Dropouts') }}</dt>
+											<dd>{{ audioDiagnostics.dropoutCount }} ({{ audioDiagnostics.dropoutLostMs }} ms)</dd>
+										</div>
+										<div v-else>
+											<dt>{{ t('Audio output') }}</dt>
+											<dd>{{ t('none – the score cursor runs without sound') }}</dd>
+										</div>
+										<div>
+											<dt>{{ t('Frame rate') }}</dt>
+											<dd>{{ audioDiagnostics.frameRate }} fps</dd>
+										</div>
+									</dl>
+								</details>
+							</div>
+						</template>
+					</NcPopover>
+					<NcButton
+						v-if="hasRealPlayer"
+						:pressed="showMixer"
+						:aria-label="t('Mixer')"
+						:title="t('Mixer')"
+						@click="showMixer = !showMixer">
+						<template #icon>
+							<Tune :size="20" />
+						</template>
+					</NcButton>
+					<!--
+						Erscheint nur, wenn eine Stimme als „meine" gewaehlt ist UND
+						sich die Notenzeilen den Stimmen ueberhaupt zuordnen lassen -
+						sonst waere es ein Schalter, der nichts tut oder, schlimmer,
+						die falsche Zeile markiert (siehe lib/staffBands.js).
+					-->
+					<NcButton
+						v-if="canFocusMyPart"
+						:pressed="focusMyPart"
+						:aria-label="t('Show only my part')"
+						:title="t('Show only my part')"
+						@click="focusMyPart = !focusMyPart">
+						<template #icon>
+							<FormatAlignMiddle :size="20" />
+						</template>
+					</NcButton>
+					<NcButton
+						:pressed="showNoteText"
+						:aria-label="t('Show notes in the score')"
+						:title="t('Show notes in the score')"
+						@click="showNoteText = !showNoteText">
+						<template #icon>
+							<CommentTextOutline :size="20" />
+						</template>
+					</NcButton>
+					<NcButton
+						:pressed="showAnnotations"
+						:aria-label="t('Notes')"
+						:title="t('Notes')"
+						@click="showAnnotations = !showAnnotations">
+						<template #icon>
+							<NotebookOutline :size="20" />
+						</template>
+					</NcButton>
+					<NcButton
+						:pressed="isFullscreen"
+						:aria-label="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
+						:title="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
+						@click="toggleFullscreen">
+						<template #icon>
+							<FullscreenExit v-if="isFullscreen" :size="20" />
+							<Fullscreen v-else :size="20" />
+						</template>
+					</NcButton>
+				</div>
 			</div>
 			<div class="scoreview-body">
+				<!--
+					Manuelles Scrollen wird an der GESTE erkannt, nicht an
+					scroll-Ereignissen (Begruendung ausfuehrlich in
+					useAutoScroll.js): Mobile Browser blenden ihre
+					Adressleiste beim Scrollen ein und aus und erzeugen dabei
+					scroll-Ereignisse, die von keinem Finger stammen - die
+					fruehere Zeitfenster-Heuristik deutete daraufhin das
+					eigene Nachfuehren als Nutzereingriff. Pointer- UND
+					Touch-Ereignisse, weil eine Pinch-Geste (die
+					preventDefault ruft) den Pointer-Strom abbrechen kann.
+					`scrollend` kennt nicht jeder Browser; wo es fehlt, feuert
+					es nie und die Frist laeuft wie zuvor ab dem Loslassen.
+				-->
 				<div
 					ref="scroll"
 					class="scoreview-scroll"
-					@scroll.passive="onViewerScroll"
-					@wheel="onWheel">
+					@pointerdown.passive="onScrollGestureStart"
+					@pointerup.passive="onScrollGestureEnd"
+					@pointercancel.passive="onScrollGestureEnd"
+					@touchstart.passive="onScrollGestureStart"
+					@touchend.passive="onScrollGestureEnd"
+					@touchcancel.passive="onScrollGestureEnd"
+					@scrollend.passive="noteManualScroll"
+					@wheel="onViewerWheel">
 					<NcNoteCard v-if="soundFontLoading" type="info" class="scoreview-hint">
 						{{ t('Loading sound ({percent}%)…', { percent: soundFontLoadPercent }) }}
 						<NcButton @click="skipSoundFontLoad">
@@ -499,6 +646,7 @@ import ArrowExpandHorizontal from 'vue-material-design-icons/ArrowExpandHorizont
 import Close from 'vue-material-design-icons/Close.vue'
 import CommentTextOutline from 'vue-material-design-icons/CommentTextOutline.vue'
 import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
+import DotsHorizontal from 'vue-material-design-icons/DotsHorizontal.vue'
 import FitToPage from 'vue-material-design-icons/FitToPage.vue'
 import FormatAlignMiddle from 'vue-material-design-icons/FormatAlignMiddle.vue'
 import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
@@ -524,6 +672,7 @@ import { usePlayback } from '../composables/usePlayback.js'
 import { useViewerPreferences } from '../composables/useViewerPreferences.js'
 import { useZoom } from '../composables/useZoom.js'
 import { HIGHLIGHT_PRESETS, normalizeHighlightColor } from '../lib/highlightStyle.js'
+import { MAX_MANUAL_OFFSET_MS, MIN_MANUAL_OFFSET_MS } from '../lib/playbackTime.js'
 import {
 	buildTimeline,
 	findElementAtPoint,
@@ -537,6 +686,24 @@ import { createScoreSync } from '../lib/scoreSync.js'
 // M8: metadata.tempo kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als
 // Bezugswert für die BPM-Anzeige/-Eingabe, gekennzeichnet über tempoGuessed.
 const DEFAULT_TEMPO_BPM = 120
+
+// Ab dieser Breite (px) passen Transport UND Werkzeuge nebeneinander.
+// Gerechnet, nicht geraten: 9 Icon-Knoepfe zu 44px (Touch-Zielgroesse, siehe
+// das Override von --default-clickable-area im CSS) plus Wiedergabe,
+// Tempoanzeige, Taktfeld, Suchlauf und Zwischenraeume ergeben rund 780px.
+// Darunter braeche die Reihe um - auf einem Telefon (360-412px) auf drei
+// Zeilen, rund 18% der Bildschirmhoehe.
+const COMPACT_BAR_WIDTH_PX = 700
+
+// Wie lange die Leiste im Vollbild stehen bleibt, bevor sie sich waehrend der
+// Wiedergabe zur Fortschrittslinie zusammenzieht.
+const BAR_IDLE_MS = 3000
+
+// Tasten, die die Seite scrollen, ohne dass der Browser eine Zeigergeste
+// meldet. Pfeil hoch/runter fehlen bewusst: Links/rechts sind bereits mit dem
+// Taktsprung belegt, und hoch/runter blieben als einziges Paar uebrig, das
+// ohne Sonderfall scrollt.
+const SCROLL_KEYS = new Set(['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown'])
 
 export default {
 	name: 'ScoreViewer',
@@ -567,6 +734,7 @@ export default {
 		FullscreenExit,
 		Metronome,
 		CrosshairsGps,
+		DotsHorizontal,
 		Magnify,
 		Palette,
 		Refresh,
@@ -653,6 +821,10 @@ export default {
 			tempoFactor: () => playback.tempo.value,
 			isPlaying: () => playback.isPlaying.value,
 			play: () => clock.value?.play(),
+			// Der Klick geht durch dieselbe Pufferkette wie die Musik, wo es
+			// eine gibt - sonst waeren es auf Android zwei unabhaengig
+			// gepufferte Ausgabe-Streams (siehe lib/metronomeClick.js).
+			audioContext: playback.getAudioContext,
 		})
 
 		// Anzeigeeinstellungen der Nutzerin (Farbe/Form der Hervorhebung).
@@ -694,7 +866,9 @@ export default {
 			resetZoom: zoomApi.reset,
 			setPageRef: autoScroll.setPageRef,
 			updateAutoScroll: autoScroll.update,
-			onViewerScroll: autoScroll.onUserScroll,
+			onScrollGestureStart: autoScroll.onUserGestureStart,
+			onScrollGestureEnd: autoScroll.onUserGestureEnd,
+			noteManualScroll: autoScroll.noteManualScroll,
 			resetAutoScroll: autoScroll.reset,
 			metronomeEnabled: metronome.enabled,
 			metronomeBeats: metronome.beats,
@@ -712,6 +886,13 @@ export default {
 			setLoopFromMeasure: loop.setFromCurrentMeasure,
 			resetLoop: loop.reset,
 			currentTimeMs: playback.currentTimeMs,
+			displayTimeMs: playback.displayTimeMs,
+			audioLatencyMs: playback.latencyMs,
+			audioOffsetMs: playback.manualOffsetMs,
+			automaticLatencyMs: playback.automaticLatencyMs,
+			audioDiagnostics: playback.audioDiagnostics,
+			setAudioOffsetMs: playback.setManualOffsetMs,
+			onAudioOffsetInput: playback.onManualOffsetInput,
 			isPlaying: playback.isPlaying,
 			hasRealPlayer: playback.hasRealPlayer,
 			playbackError: playback.playbackError,
@@ -820,6 +1001,17 @@ export default {
 			// kommt aus dem Statusendpunkt, nicht aus einer eigenen Annahme
 			// ueber Freigaben.
 			canReconvert: false,
+			// Die Leiste. `compactBar` haengt an der GEMESSENEN Breite, nicht
+			// an einer Media Query: Der Viewer sitzt mal in Nextclouds Viewer,
+			// mal im eigenen Modal, mal im Vollbild - massgeblich ist die
+			// Breite, die er tatsaechlich hat, nicht die des Fensters. Und die
+			// Umschaltung ist strukturell (Popovers in einem eigenen Streifen
+			// statt daneben), das kann CSS allein nicht leisten.
+			compactBar: false,
+			toolsOpen: false,
+			barCollapsed: false,
+			barIdleHandle: null,
+			barObserver: null,
 		}
 	},
 
@@ -895,11 +1087,14 @@ export default {
 		// Musikalischer Anker der aktuellen Wiedergabeposition ("+ An aktueller
 		// Stelle") - null solange measuresTimeline/durationMs noch nicht
 		// geladen sind.
+		// Auf der Anzeigezeit, nicht der rohen: Die Taktnummer, die hier
+		// herauskommt, steht in der Leiste und ist der Anker einer neuen
+		// Notiz - beides bezieht sich auf die Stelle, die gerade klingt.
 		currentAnchor() {
 			if (!this.measuresTimeline) {
 				return null
 			}
-			const position = resolveMeasurePosition(this.measuresTimeline, this.currentTimeMs, this.durationMs)
+			const position = resolveMeasurePosition(this.measuresTimeline, this.displayTimeMs, this.durationMs)
 			if (!position) {
 				return null
 			}
@@ -943,6 +1138,42 @@ export default {
 			return this.hasRealPlayer && this.showMixer && this.mixerChannels.length > 0
 		},
 
+		// --- Leiste ---------------------------------------------------------
+
+		/**
+		 * Ob irgendein Werkzeug aktiv ist - der Punkt am „Mehr"-Knopf.
+		 * Ohne ihn verschwaende ein laufendes Metronom hinter einem
+		 * geschlossenen Menue, und niemand faende den Schalter dafuer wieder.
+		 */
+		anyToolActive() {
+			return this.metronomeEnabled
+				|| this.loopActive
+				|| this.focusMyPart
+				|| this.showNoteText
+				|| this.showAnnotations
+				|| this.showMixer
+		},
+
+		/** Fuer die eingefahrene Leiste, die nur noch die Position zeigt. */
+		playbackPercent() {
+			if (!(this.durationMs > 0)) {
+				return 0
+			}
+			return Math.min(100, (this.displayTimeMs / this.durationMs) * 100)
+		},
+
+		minAudioOffsetMs() {
+			return MIN_MANUAL_OFFSET_MS
+		},
+
+		maxAudioOffsetMs() {
+			return MAX_MANUAL_OFFSET_MS
+		},
+
+		automaticLatencyRounded() {
+			return Math.round(this.automaticLatencyMs)
+		},
+
 	},
 
 	watch: {
@@ -969,8 +1200,22 @@ export default {
 		isPlaying(playing) {
 			if (playing) {
 				this.requestWakeLock()
+				this.scheduleBarCollapse()
 			} else {
 				this.releaseWakeLock()
+				// Angehalten wird bedient - dann gehoert die Leiste hin.
+				this.showBar()
+			}
+		},
+
+		// Die eingefahrene Leiste gibt es nur im Vollbild: Nur dort ist der
+		// Platz das eigentliche Thema, und nur dort gibt es keine
+		// Nextcloud-Umgebung drumherum, in der ein leerer Streifen irritierte.
+		isFullscreen(fullscreen) {
+			if (fullscreen) {
+				this.scheduleBarCollapse()
+			} else {
+				this.showBar()
 			}
 		},
 
@@ -1002,12 +1247,18 @@ export default {
 		// die tatsächlich behandelten Tasten, alles andere bleibt unangetastet,
 		// insbesondere Nextclouds eigene Kürzel).
 		this.$el.addEventListener('keydown', this.onKeydown)
+		this.observeBarWidth()
 	},
 
 	beforeUnmount() {
 		this.cleanup()
 		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
 		this.$el.removeEventListener('keydown', this.onKeydown)
+		this.stopBarObserver()
+		if (this.barIdleHandle) {
+			clearTimeout(this.barIdleHandle)
+			this.barIdleHandle = null
+		}
 	},
 
 	methods: {
@@ -1200,7 +1451,16 @@ export default {
 		 *
 		 * Reihenfolge ist nicht beliebig: erst die Zeit abgreifen, dann Cursor
 		 * und Notiz-Anker daraus ableiten, dann Loop und Metronom - die
-		 * späteren Schritte lesen `currentTimeMs`.
+		 * späteren Schritte lesen die Zeitwerte.
+		 *
+		 * **Zwei Zeiten, und hier fällt die Zuordnung.** `samplePlaybackTime()`
+		 * legt beide an (usePlayback.js): `currentTimeMs` ist die rohe Zeit der
+		 * Audiouhr, `displayTimeMs` das, was gerade zu HÖREN ist - um die
+		 * Ausgabelatenz zurückgerechnet, über Bluetooth bis zu 300 ms. Der
+		 * Cursor bekommt die Anzeigezeit; Loop und Metronom bekommen die rohe,
+		 * weil beide gegen dieselbe Audiouhr terminieren bzw. springen. Ein
+		 * pauschaler Abzug schon in der Zeitquelle wäre deshalb falsch - die
+		 * ausführliche Begründung steht in lib/playbackTime.js.
 		 */
 		pumpTimeDisplay() {
 			const step = () => {
@@ -1209,16 +1469,27 @@ export default {
 					// Eine Auflösung für beides: der Cursor braucht das Rechteck,
 					// eine Notiz das elid (currentAnchor) - so wird nicht zweimal
 					// nach demselben elid gesucht.
-					this.currentElid = this.sync?.update(this.currentTimeMs) ?? null
+					this.currentElid = this.sync?.update(this.displayTimeMs) ?? null
 					// Loop (Kernfunktion für Probenarbeit): sobald das Ende
 					// erreicht/überschritten ist, zurück zum Anfang - hier statt in
 					// silentClock.js/player.js geprüft, weil beide Zeitquellen
 					// dieselbe kleine seek()-Schnittstelle erfüllen und Looping keine
 					// Eigenschaft der Zeitquelle selbst ist.
+					//
+					// Mit der ROHEN Zeit: So springt der Ton rechtzeitig, und der
+					// Cursor springt (auf der Anzeigezeit) genau dann, wenn der
+					// Sprung hörbar wird. Mit der Anzeigezeit käme der Rücksprung
+					// um die Ausgabelatenz zu spät - man hörte über das
+					// Loop-Ende hinaus.
 					const loopTarget = this.loopRestartTarget(this.currentTimeMs)
 					if (loopTarget !== null) {
 						this.clock.seek(loopTarget)
 					}
+					// Ebenfalls die rohe Zeit: Der Klick wird über die Uhr des
+					// AudioContext terminiert (metronomeClick.js) und geht damit
+					// durch dieselbe Ausgabelatenz wie die Musik. Mit der
+					// Anzeigezeit käme er um genau diese Latenz zu spät - der
+					// Fehler wäre verdoppelt statt behoben.
 					this.updateMetronome(this.currentTimeMs)
 				}
 				this.timeDisplayHandle = requestAnimationFrame(step)
@@ -1276,6 +1547,13 @@ export default {
 				// folgend, wie beim Öffnen.
 				event.preventDefault()
 				this.applyZoomPreset('width')
+			} else if (SCROLL_KEYS.has(event.key)) {
+				// Bewusst OHNE preventDefault: Diese Tasten sollen weiter
+				// scrollen. Gemeldet wird nur, DASS gescrollt wird - der
+				// Browser meldet für Tastatur-Scrollen keine Geste, und ohne
+				// diesen Hinweis führte die App der Wiedergabe sofort wieder
+				// nach (siehe useAutoScroll.js).
+				this.noteManualScroll()
 			}
 		},
 
@@ -1299,7 +1577,9 @@ export default {
 			if (elid === null) {
 				return
 			}
-			const timeMs = findNearestOccurrenceTimeMs(this.timeline.events, elid, this.currentTimeMs)
+			// Bezugspunkt ist die gehörte Stelle: Getippt wird auf das, was
+			// gerade klingt, nicht auf das, was schon im Ausgabepuffer steht.
+			const timeMs = findNearestOccurrenceTimeMs(this.timeline.events, elid, this.displayTimeMs)
 			if (timeMs !== null) {
 				this.clock.seek(timeMs)
 			}
@@ -1310,6 +1590,82 @@ export default {
 			const minutes = Math.floor(totalSeconds / 60)
 			const seconds = totalSeconds % 60
 			return `${minutes}:${String(seconds).padStart(2, '0')}`
+		},
+
+		/**
+		 * Eine Millisekundenangabe der Betriebsdiagnose - `null` heisst
+		 * "der Browser sagt dazu nichts" und ist etwas anderes als 0.
+		 *
+		 * @param {?number} ms
+		 * @return {string}
+		 */
+		formatMs(ms) {
+			return ms === null || !Number.isFinite(ms) ? '–' : `${Math.round(ms)} ms`
+		},
+
+		// --- Leiste -----------------------------------------------------------
+
+		/**
+		 * Das Mausrad hat zwei Bedeutungen: mit Strg zoomt es (useZoom), ohne
+		 * ist es gewoehnliches Scrollen - und damit ein Nutzereingriff, der
+		 * das automatische Nachfuehren pausieren muss.
+		 *
+		 * @param {WheelEvent} event
+		 */
+		onViewerWheel(event) {
+			if (!event.ctrlKey) {
+				this.noteManualScroll()
+			}
+			this.onWheel(event)
+		},
+
+		/**
+		 * Die Leiste ausfahren und die Ruhefrist neu starten.
+		 */
+		showBar() {
+			this.barCollapsed = false
+			this.scheduleBarCollapse()
+		},
+
+		/**
+		 * Die Leiste nach einer Ruhefrist einfahren - aber nur im Vollbild und
+		 * nur waehrend der Wiedergabe. Ausserhalb davon wird bedient, und eine
+		 * Leiste, die dabei verschwindet, waere eine Zumutung.
+		 */
+		scheduleBarCollapse() {
+			if (this.barIdleHandle) {
+				clearTimeout(this.barIdleHandle)
+				this.barIdleHandle = null
+			}
+			if (!this.isFullscreen || !this.isPlaying) {
+				return
+			}
+			this.barIdleHandle = setTimeout(() => {
+				this.barIdleHandle = null
+				this.barCollapsed = true
+				this.toolsOpen = false
+			}, BAR_IDLE_MS)
+		},
+
+		/**
+		 * Die Leistenbreite beobachten (siehe `compactBar` in data()).
+		 * Beobachtet wird das Wurzelelement, nicht die Leiste selbst: Deren
+		 * Breite haengt an ihrem Inhalt, das waere ein Kreisverkehr.
+		 */
+		observeBarWidth() {
+			this.stopBarObserver()
+			if (typeof ResizeObserver === 'undefined') {
+				return
+			}
+			this.barObserver = new ResizeObserver(([entry]) => {
+				this.compactBar = entry.contentRect.width < COMPACT_BAR_WIDTH_PX
+			})
+			this.barObserver.observe(this.$el)
+		},
+
+		stopBarObserver() {
+			this.barObserver?.disconnect()
+			this.barObserver = null
 		},
 
 	},
@@ -1393,21 +1749,98 @@ export default {
 	margin-bottom: 8px;
 }
 
+/*
+ * Zwei Streifen: Transport (immer) und Werkzeuge (auf schmalen Schirmen nur
+ * auf Abruf). Auf breiten Schirmen stehen beide nebeneinander und ergeben
+ * dieselbe eine Zeile wie zuvor.
+ */
 .scoreview-bar {
 	flex: 0 0 auto;
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	/* Auf schmalen Bildschirmen darf sie umbrechen statt Knöpfe abzuschneiden -
-	   das ist selten und kostet dort eine Zeile, nicht dauerhaft Fläche. */
-	flex-wrap: wrap;
 	padding: 4px 8px;
 	border-bottom: 1px solid var(--color-border);
 	background: var(--color-main-background);
 }
 
+.scoreview-bar-transport,
+.scoreview-bar-tools {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+/* Der Transport bekommt den Platz, den der Suchlauf braucht; die Werkzeuge
+   sind so breit, wie sie sind. */
+.scoreview-bar-transport {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.scoreview-bar-tools {
+	flex: 0 0 auto;
+}
+
+/*
+ * Schmal: die Werkzeuge unter den Transport, und nur, wenn sie geholt wurden.
+ * Sie duerfen dann umbrechen - im aufgeklappten Zustand ist Hoehe kein
+ * Problem, dauerhaft war sie es.
+ */
+.scoreview-bar--compact {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.scoreview-bar--compact .scoreview-bar-tools {
+	flex-wrap: wrap;
+	justify-content: flex-start;
+	padding-block-start: 4px;
+	border-block-start: 1px solid var(--color-border);
+}
+
 .scoreview-play {
 	flex: 0 0 auto;
+}
+
+/* Der Punkt am „Mehr"-Knopf: ein aktives Werkzeug muss sichtbar bleiben,
+   auch wenn sein Schalter im Menue steckt. */
+.scoreview-more-icon {
+	position: relative;
+	display: inline-flex;
+}
+
+.scoreview-more-dot {
+	position: absolute;
+	inset-block-start: -2px;
+	inset-inline-end: -2px;
+	inline-size: 8px;
+	block-size: 8px;
+	border-radius: 50%;
+	background: var(--color-primary-element);
+}
+
+/*
+ * Die eingefahrene Leiste im Vollbild. Bewusst als Knopf und nicht als reine
+ * Linie: Sie ist anzutippen, und Vorlesewerkzeuge sollen das auch so
+ * ankuendigen.
+ */
+.scoreview-bar-line {
+	flex: 0 0 auto;
+	display: block;
+	inline-size: 100%;
+	block-size: 8px;
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: var(--color-background-dark);
+	cursor: pointer;
+}
+
+.scoreview-bar-line-fill {
+	display: block;
+	block-size: 100%;
+	background: var(--color-primary-element);
 }
 
 .scoreview-seek {
@@ -1423,11 +1856,11 @@ export default {
 
 /* Auf Telefonbreite zählt jeder Millimeter: die Laufzeitanzeige ist die
    entbehrlichste Angabe der Leiste (der Suchlauf daneben zeigt die Position
-   ohnehin), die Taktangabe dagegen die wichtigste. */
-@media (max-width: 600px) {
-	.scoreview-time {
-		display: none;
-	}
+   ohnehin), die Taktangabe dagegen die wichtigste. An `--compact` statt an
+   einer Media Query, damit es dieselbe Schwelle ist wie für den Umbau der
+   Leiste - zwei Schwellen wären zwei Zustände zu viel. */
+.scoreview-bar--compact .scoreview-time {
+	display: none;
 }
 
 .scoreview-measure {
@@ -1501,6 +1934,50 @@ export default {
 .scoreview-popover-group legend {
 	color: var(--color-text-maxcontrast);
 	padding: 0 0 4px 0;
+}
+
+/* Erklaerung unter einem Regler - sie wird einmal gelesen, wenn unklar ist,
+   was der Regler tut, und steht danach nur noch da. */
+.scoreview-popover-hint {
+	color: var(--color-text-maxcontrast);
+	font-size: 0.85em;
+	line-height: 1.3;
+}
+
+/*
+ * Die Betriebsdiagnose. Zugeklappt, weil sie nur gebraucht wird, wenn etwas
+ * nicht stimmt - und dann vollstaendig, nicht haeppchenweise.
+ */
+.scoreview-diagnostics {
+	color: var(--color-text-maxcontrast);
+	font-size: 0.85em;
+	line-height: 1.35;
+}
+
+.scoreview-diagnostics summary {
+	cursor: pointer;
+	padding-block: 4px;
+}
+
+.scoreview-diagnostics-list {
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.scoreview-diagnostics-list dt {
+	font-weight: bold;
+}
+
+.scoreview-diagnostics-list dd {
+	margin: 0 0 4px 0;
+	font-variant-numeric: tabular-nums;
+}
+
+.scoreview-diagnostics-note {
+	display: block;
+	opacity: 0.8;
 }
 
 /*

@@ -142,6 +142,17 @@ OC.L10N.register(
     "Score written with MuseScore {version}" : "Partitur geschrieben mit MuseScore {version}",
     "Unknown – converted by an earlier version of the app." : "Unbekannt – von einer früheren Fassung der App konvertiert.",
     "Convert again" : "Neu konvertieren",
-    "Discards the stored conversion and renders the score again with the current version of the app." : "Verwirft die gespeicherte Konvertierung und setzt die Partitur mit der aktuellen Fassung der App neu."
+    "Discards the stored conversion and renders the score again with the current version of the app." : "Verwirft die gespeicherte Konvertierung und setzt die Partitur mit der aktuellen Fassung der App neu.",
+    "Show playback controls" : "Abspielsteuerung einblenden",
+    "Tools" : "Werkzeuge",
+    "Sync picture and sound" : "Bild und Ton abgleichen",
+    "Adjust while playing, until the highlighted note matches what you hear. Detected automatically: {ms} ms." : "Bei laufender Wiedergabe verschieben, bis die hervorgehobene Note zum Gehörten passt. Automatisch erkannt: {ms} ms.",
+    "Playback diagnostics" : "Diagnose der Wiedergabe",
+    "Output latency" : "Ausgabelatenz",
+    "measured {measured}, reported {reported}, by hand {manual}" : "gemessen {measured}, gemeldet {reported}, von Hand {manual}",
+    "Audio output" : "Tonausgabe",
+    "Dropouts" : "Aussetzer",
+    "none – the score cursor runs without sound" : "keine – der Notencursor läuft ohne Ton",
+    "Frame rate" : "Bildrate"
 },
 "nplurals=2; plural=(n != 1);");

@@ -156,9 +156,27 @@ Job-unabhängigen `/health`, und die einzige Versionsangabe in `meta.json`
 Ein Satzunterschied ist auf den Weg zurückführbar, nicht auf eine
 Versionsnummer.
 
-**Tablet-Hardware.** Touch-Bedienung, Pinch-Zoom und Wachhalten des Bildschirms
-sind umgesetzt und im Browser verifiziert, aber nicht auf einem echten Tablet in
-einer Probe erprobt.
+**Tablet- und Telefon-Hardware.** Touch-Bedienung, Pinch-Zoom und Wachhalten des
+Bildschirms sind umgesetzt und im Browser verifiziert. Eine erste Erprobung auf
+einem Android-Telefon (Chrome und Opera, Ton über Bluetooth-Kopfhörer) hat drei
+Dinge gefunden, die auf dem Desktop unsichtbar bleiben – sie sind behoben, aber
+**die Wirkung der Behebung ist auf echter Hardware noch nicht gegengemessen**:
+
+- Der Cursor lief dem Ton um die Ausgabelatenz voraus (Bluetooth). Ausgeglichen
+  wird jetzt, was der Browser meldet, plus ein Wert von Hand – **ob Chrome auf
+  Android den Bluetooth-Anteil überhaupt meldet, ist ungeprüft.** Schnelle
+  Gegenprobe auf dem Gerät: Ist ein YouTube-Video mit denselben Kopfhörern
+  lippensynchron, kennt der Audio-Stack die Latenz und die Automatik trägt sie;
+  ist es das nicht, trägt sie der Wert von Hand.
+- Das automatische Nachführen setzte auf dem Telefon aus und holte ruckweise
+  nach, weil die ein- und ausfahrende Browserleiste als manuelles Scrollen galt.
+- Die Transportleiste brach auf Telefonbreite auf drei Zeilen um (~18 % der
+  Bildschirmhöhe, auch im Vollbild).
+
+Die Zahlen zur Ausgabelatenz oben sind **Größenordnungen aus der Literatur**,
+nicht an dieser Installation gemessen; was das jeweilige Gerät meldet, steht in
+der Diagnose im Aufklapper „Darstellung". Eine ganze Probe am Notenständer ist
+weiterhin nicht erprobt.
 
 **Offlinebetrieb.** Im Probenraum ist WLAN oft schlecht oder gar nicht vorhanden.
 Die Artefakte sind unveränderlich und aggressiv cachebar, was günstig ist – aber

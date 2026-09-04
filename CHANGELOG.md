@@ -4,6 +4,68 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.8.0] – 2026-09-04
+
+Eine erste Erprobung auf einem Android-Telefon – mit Bluetooth-Kopfhörern, wie
+es in einer Probe zugeht – hat drei Dinge zutage gefördert, die auf dem Desktop
+unsichtbar bleiben. Alle drei sind hier behoben.
+
+### Behoben
+
+- **Der Cursor lief dem Ton voraus.** Die Audiouhr meldet, was an das
+  Ausgabegerät *übergeben* wurde; hörbar wird es erst nach der Ausgabelatenz –
+  am Desktop 10–30 ms, über Bluetooth 150–300 ms, bei ♩ = 120 also bis zu einer
+  Achtelnote. Der Notencursor rechnet diese Latenz jetzt heraus und zeigt, was
+  gerade zu *hören* ist. Metronom und Loop laufen bewusst weiter auf der
+  ungerechneten Zeit, weil sie gegen dieselbe Audiouhr terminieren. Neu ist
+  außerdem ein Regler **„Bild und Ton abgleichen"** (bei Tempo und Metronom):
+  Ob der Browser den Bluetooth-Anteil überhaupt meldet, hängt am Kopfhörer –
+  was er nicht meldet, lässt sich dort von Hand nachstellen. Der Wert wird pro
+  Gerät gemerkt, nicht am Nutzerkonto: Er gehört zum Kopfhörer, nicht zur
+  Person.
+- **Das Anhalten sprang über die letzten Millisekunden hinweg.** Was beim
+  Pausieren noch im Ausgabepuffer stand, wurde verworfen, galt aber als
+  gespielt – beim Fortsetzen fehlte es. Jetzt hält die Wiedergabe an der
+  zuletzt gehörten Stelle an.
+- **Das automatische Nachführen setzte auf dem Telefon aus und holte ruckweise
+  nach.** Manuelles Scrollen wurde bisher aus `scroll`-Ereignissen erschlossen;
+  mobile Browser blenden ihre Adressleiste beim Scrollen aber ein und aus und
+  erzeugen dabei Ereignisse, die von keinem Finger stammen. Die App deutete
+  daraufhin ihr eigenes Nachführen als Eingriff und pausierte sich selbst.
+  Erkannt wird jetzt die Geste – ob ein Finger auf dem Glas liegt, meldet der
+  Browser. Weite Sprünge (Seitenwechsel) springen außerdem, statt über mehrere
+  Bildschirmhöhen zu gleiten.
+- **Metronomklick und Musik konnten auseinandergehen.** Der Klick hatte einen
+  eigenen AudioContext; auf Android sind das zwei unabhängig gepufferte
+  Ausgabe-Streams. Er benutzt jetzt den der Wiedergabe, wo es einen gibt.
+- **Der Cursor zitterte auf schwacher Hardware**, weil manche Android-Builds
+  die Audiouhr in groben Schritten fortschreiben. Die Anzeige wird zwischen
+  zwei Fortschreibungen vorausberechnet.
+
+### Geändert
+
+- **Die Abspielsteuerung bleibt einzeilig.** Auf Telefonbreite brauchte sie
+  rechnerisch rund 780 px und brach damit auf drei Zeilen um – dauerhaft etwa
+  18 % der Bildschirmhöhe, auch im Vollbild. Draußen bleibt jetzt nur, was
+  während des Singens gebraucht wird (Wiedergabe, Suchlauf, Takt); die
+  Werkzeuge kommen über einen „Mehr"-Knopf auf Abruf. Ein aktives Werkzeug –
+  ein laufendes Metronom, ein gesetzter Loop – bleibt als Punkt am Knopf
+  sichtbar. Auf breiten Schirmen ändert sich nichts.
+- **Im Vollbild zieht sich die Leiste während der Wiedergabe zusammen.** Nach
+  drei Sekunden ohne Berührung bleibt eine Fortschrittslinie stehen, die sich
+  antippen lässt. Bewusst keine vollständige Ausblendung: Ein Tipp auf die
+  Partitur springt bereits an die getippte Note.
+
+### Hinzugefügt
+
+- **Diagnose der Wiedergabe** im Aufklapper „Darstellung", neben der Herkunft:
+  Ausgabelatenz (gemessen, gemeldet und von Hand getrennt ausgewiesen),
+  Tonausgabe, Aussetzer und Bildrate. Der Anlass ist, dass „die Wiedergabe
+  synchronisiert nicht sauber" zwei ganz verschiedene Ursachen hat, die sich
+  gleich anfühlen: Die Anzeige läuft dem Ton voraus, oder der Ton setzt aus,
+  weil die Synthese auf dem Gerät nicht mitkommt. Aus der Ferne ist das nicht
+  zu unterscheiden, auf dem Gerät mit einem Blick.
+
 ## [1.7.0] – 2026-09-03
 
 ### Hinzugefügt

@@ -45,8 +45,61 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 
 	const seekedListeners = new Set()
 
+	// Bewusst die ROHE Zeit der Audiouhr, ohne Latenzausgleich: Sie ist die
+	// Bezugsgroesse fuer alles, was gegen dieselbe Uhr terminiert (Metronom)
+	// oder springt (Loop, seek). Der Ausgleich fuer die Anzeige passiert eine
+	// Ebene hoeher, in usePlayback.js - warum das so getrennt sein MUSS, steht
+	// im Kopfkommentar von lib/playbackTime.js.
 	function getCurrentTimeMs() {
 		return sequencer.currentTime * 1000
+	}
+
+	/**
+	 * Wie weit das, was man hoert, hinter dem zurueckliegt, was die Audiouhr
+	 * sagt - in ms.
+	 *
+	 * `getOutputTimestamp().contextTime` ist die Position des Stroms, den das
+	 * Ausgabegeraet GERADE AUSGIBT, `currentTime` die des zuletzt gerenderten.
+	 * Die Differenz ist die Ausgabelatenz, gemessen statt deklariert - und es
+	 * ist dieselbe Groesse, mit der die Media-Pipeline des Browsers ein
+	 * `<video>` an den Ton haengt (weshalb ein YouTube-Video ueber
+	 * Bluetooth-Kopfhoerer lippensynchron bleibt und diese App es bis dahin
+	 * nicht war).
+	 *
+	 * Beide Werte zurueckgeben statt nur den besseren: `getOutputTimestamp()`
+	 * ist nicht ueberall implementiert und liefert dann konstant 0 - die
+	 * Entscheidung, welcher Wert taugt, faellt in playbackTime.js, wo sie
+	 * ohne AudioContext testbar ist.
+	 *
+	 * @return {{measuredMs: ?number, reportedMs: number}}
+	 */
+	function getLatencyReport() {
+		let measuredMs = null
+		try {
+			const timestamp = context.getOutputTimestamp?.()
+			if (timestamp && Number.isFinite(timestamp.contextTime)) {
+				measuredMs = (context.currentTime - timestamp.contextTime) * 1000
+			}
+		} catch {
+			// Manche Implementierungen werfen, solange der Context noch nicht
+			// laeuft. Kein Grund, die Wiedergabe zu stoeren - dann gilt der
+			// gemeldete Wert.
+			measuredMs = null
+		}
+		return {
+			measuredMs,
+			reportedMs: ((context.baseLatency ?? 0) + (context.outputLatency ?? 0)) * 1000,
+		}
+	}
+
+	/**
+	 * Der AudioContext der Wiedergabe - fuer den Metronomklick, damit Klick
+	 * und Musik durch DIESELBE Pufferkette gehen (siehe lib/metronomeClick.js).
+	 *
+	 * @return {AudioContext}
+	 */
+	function getAudioContext() {
+		return context
 	}
 
 	function isPlaying() {
@@ -139,6 +192,8 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 
 	return {
 		getCurrentTimeMs,
+		getLatencyReport,
+		getAudioContext,
 		isPlaying,
 		play,
 		pause,

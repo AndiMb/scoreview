@@ -194,6 +194,7 @@ Aufbau:
   damit ohne Browser testbar: `scoreLayout.js`, `mixerLayout.js`,
   `timingSync.js`, `scrollPlan.js`, `metronome.js`, `svgSanitizer.js`,
   `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`,
+  `playbackTime.js`, `audioHealth.js`,
   `svgIndex.js`, `highlightStyle.js`. Neue Logik gehört hierhin, nicht in die
   Komponenten.
 
@@ -201,6 +202,51 @@ Wiedergabe: `spessasynth_lib` synthetisiert das MIDI im Browser gegen das
 ausgelieferte SoundFont. Eine einzige `requestAnimationFrame`-Schleife treibt
 Cursor, Autoscroll, Loop und Metronom; SVG-Seiten werden beim Wegscrollen wieder
 aus dem DOM genommen.
+
+**Zwei Zeiten, nicht eine.** `AudioContext.currentTime` – und damit
+`sequencer.currentTime` – ist die Zeit des Audios, das gerade an das
+Ausgabegerät *übergeben* wurde, nicht die des Audios, das gerade an einem Ohr
+ankommt. Dazwischen liegt die Ausgabelatenz: am Desktop 10–30 ms, über
+Bluetooth A2DP 150–300 ms, bei ♩ = 120 also bis zu einer Achtelnote. Ein
+Videoplayer löst dasselbe Problem seit jeher andersherum, als man zuerst denkt –
+nicht der Ton kommt früher, das *Bild* wird später gezeigt. Genauso hier
+(`playbackTime.js`):
+
+- Die **Renderzeit** (`currentTimeMs`) bekommt alles, was gegen dieselbe
+  Audiouhr *terminiert* oder springt: die Metronomklicks, der Loop-Rücksprung,
+  jedes `seek()`.
+- Die **Anzeigezeit** (`displayTimeMs`, = Renderzeit − Latenz × Tempofaktor)
+  bekommt alles, was zeigt, was gerade zu *hören* ist: Cursor, Autoscroll,
+  Taktanzeige, Notiz-Anker, Suchlaufposition.
+
+Ein pauschaler Abzug schon in der Zeitquelle wäre deshalb falsch – er verschöbe
+die Metronom-Terminierung gleich mit, und der Klick käme um die Latenz zu spät.
+Die Zuordnung fällt an genau einer Stelle, in der rAF-Schleife in
+`ScoreViewer.vue`. Aus demselben Grund hält `pause()` nicht an der Renderzeit
+an, sondern stellt auf die zuletzt *gehörte* Stelle zurück: Was beim Anhalten
+noch im Ausgabepuffer stand, wird verworfen und hat nie geklungen.
+
+Woher die Latenz kommt: `getOutputTimestamp().contextTime` gegen
+`currentTime` – dieselbe Größe, mit der die Media-Pipeline des Browsers ein
+`<video>` an den Ton hängt –, ersatzweise `baseLatency + outputLatency`. Beide
+sagen aber nur, was das *System* weiß; ob der Bluetooth-Anteil darin steckt,
+hängt daran, ob der Kopfhörer seine Verzögerung meldet. Deshalb daneben ein
+Wert von Hand („Bild und Ton abgleichen"), und der liegt als einzige
+Viewer-Einstellung im `localStorage` statt am Nutzerkonto: Er gehört zum Gerät,
+nicht zur Person – am Desktop 0, am Telefon mit Kopfhörern 250.
+
+**Manuelles Scrollen wird an der Geste erkannt**, nicht an `scroll`-Ereignissen
+(`useAutoScroll.js`): Mobile Browser blenden ihre Adressleiste beim Scrollen ein
+und aus und erzeugen dabei Ereignisse, die von keinem Finger stammen. Ob einer
+auf dem Glas liegt, meldet der Browser aber – es wird gefragt statt erschlossen.
+
+Was auf dem Gerät gemessen wurde, steht im Aufklapper „Darstellung" neben der
+Herkunft: Ausgabelatenz, Tonausgabe, Aussetzer und Bildrate (`audioHealth.js`).
+Rein beschreibend. Der Grund dafür ist, dass „die Wiedergabe synchronisiert
+nicht sauber" zwei ganz verschiedene Ursachen hat, die sich gleich anfühlen –
+die Anzeige läuft dem Ton voraus, oder der Ton setzt aus, weil die Synthese auf
+dem Gerät nicht mitkommt. Aus der Ferne ist das nicht zu unterscheiden, auf dem
+Gerät mit einem Blick.
 
 Der klingende Notenkopf wird eingefärbt, wo das SVG die Kennungen aus
 [M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg) trägt.

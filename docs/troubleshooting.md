@@ -158,6 +158,42 @@ dem Doppelpunkt nennt die Ursache.
   Erreichbarkeit vom Server; ein leeres Feld bedeutet dort die voreingestellte
   Adresse, nicht „kein SoundFont".
 
+## Der Ton hinkt dem Notencursor hinterher (oder umgekehrt)
+
+Fast immer die **Ausgabelatenz** – am stärksten über Bluetooth-Kopfhörer, wo
+Codec-Puffer und Funkstrecke 150–300 ms ausmachen; bei ♩ = 120 ist das eine
+Achtelnote. Die App rechnet heraus, was der Browser meldet, aber ob der
+Bluetooth-Anteil überhaupt gemeldet wird, hängt am Kopfhörer.
+
+Abhilfe: **Tempo/Metronom → „Bild und Ton abgleichen"**. Den Regler bei
+laufender Wiedergabe verschieben, bis die hervorgehobene Note zum Gehörten
+passt. Der Wert wird pro Gerät gemerkt – am Telefon mit Kopfhörern also ein
+anderer als am Rechner.
+
+Ob der Browser die Latenz von sich aus kennt, lässt sich in 30 Sekunden
+prüfen: ein YouTube-Video mit sprechendem Gesicht auf demselben Gerät, mit
+denselben Kopfhörern. Ist es lippensynchron, kennt der Audio-Stack die Latenz,
+und der Regler braucht nur Feinschliff; ist es das nicht, weiß der Browser es
+selbst nicht und der Regler trägt die Hauptlast.
+
+**Darstellung → Diagnose der Wiedergabe** zeigt die Zahlen dazu: „gemessen"
+stammt aus `getOutputTimestamp()`, „gemeldet" aus `baseLatency + outputLatency`,
+„von Hand" ist der Regler. Ein Strich statt einer Zahl heißt, dass der Browser
+dazu nichts sagt.
+
+## Der Ton knackt oder setzt aus, die Stimmen klingen unsauber zusammen
+
+Etwas anderes als der Fall darüber, auch wenn es sich ähnlich anfühlt: Hier
+stimmt die Zeitrechnung, aber die Synthese kommt auf dem Gerät nicht mit. Zu
+sehen unter **Darstellung → Diagnose der Wiedergabe** an der Zeile
+**„Aussetzer"** – steht dort eine wachsende Zahl, ist es die Rechenlast; bleibt
+sie bei 0, liegt es an der Latenz und der Abschnitt darüber gilt.
+
+Bei Aussetzern hilft, die Last zu senken: andere Tabs schließen, das Notenbild
+kleiner zoomen (weniger DOM je Seite), oder die Partitur ohne Ton lesen
+(„Weiter ohne Ton" beim Laden). Eine kleinere SoundFont-Datei senkt die Last
+ebenfalls, siehe [Installation](installation.md#soundfont).
+
 ## Die Konvertierung schlägt fehl
 
 Der Viewer zeigt eine verständliche Meldung, das technische Detail steht
