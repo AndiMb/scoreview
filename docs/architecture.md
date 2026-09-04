@@ -206,8 +206,10 @@ aus dem DOM genommen.
 **Zwei Zeiten, nicht eine.** `AudioContext.currentTime` – und damit
 `sequencer.currentTime` – ist die Zeit des Audios, das gerade an das
 Ausgabegerät *übergeben* wurde, nicht die des Audios, das gerade an einem Ohr
-ankommt. Dazwischen liegt die Ausgabelatenz: am Desktop 10–30 ms, über
-Bluetooth A2DP 150–300 ms, bei ♩ = 120 also bis zu einer Achtelnote. Ein
+ankommt. Dazwischen liegt die Ausgabelatenz – gemessen 51 ms an einer
+Arbeitsmaschine und 232 ms an einem Android-Telefon mit Bluetooth-Kopfhörern
+([Grenzwerte](limits.md#bekannte-lücken)), bei ♩ = 120 also fast eine
+Achtelnote. Ein
 Videoplayer löst dasselbe Problem seit jeher andersherum, als man zuerst denkt –
 nicht der Ton kommt früher, das *Bild* wird später gezeigt. Genauso hier
 (`playbackTime.js`):

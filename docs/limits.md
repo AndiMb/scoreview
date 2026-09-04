@@ -159,24 +159,37 @@ Versionsnummer.
 **Tablet- und Telefon-Hardware.** Touch-Bedienung, Pinch-Zoom und Wachhalten des
 Bildschirms sind umgesetzt und im Browser verifiziert. Eine erste Erprobung auf
 einem Android-Telefon (Chrome und Opera, Ton über Bluetooth-Kopfhörer) hat drei
-Dinge gefunden, die auf dem Desktop unsichtbar bleiben – sie sind behoben, aber
-**die Wirkung der Behebung ist auf echter Hardware noch nicht gegengemessen**:
+Dinge gefunden, die auf dem Desktop unsichtbar bleiben. Alle drei sind behoben:
 
-- Der Cursor lief dem Ton um die Ausgabelatenz voraus (Bluetooth). Ausgeglichen
-  wird jetzt, was der Browser meldet, plus ein Wert von Hand – **ob Chrome auf
-  Android den Bluetooth-Anteil überhaupt meldet, ist ungeprüft.** Schnelle
-  Gegenprobe auf dem Gerät: Ist ein YouTube-Video mit denselben Kopfhörern
-  lippensynchron, kennt der Audio-Stack die Latenz und die Automatik trägt sie;
-  ist es das nicht, trägt sie der Wert von Hand.
+- Der Cursor lief dem Ton um die Ausgabelatenz voraus (Bluetooth). Sie wird
+  jetzt ausgeglichen.
 - Das automatische Nachführen setzte auf dem Telefon aus und holte ruckweise
   nach, weil die ein- und ausfahrende Browserleiste als manuelles Scrollen galt.
 - Die Transportleiste brach auf Telefonbreite auf drei Zeilen um (~18 % der
   Bildschirmhöhe, auch im Vollbild).
 
-Die Zahlen zur Ausgabelatenz oben sind **Größenordnungen aus der Literatur**,
-nicht an dieser Installation gemessen; was das jeweilige Gerät meldet, steht in
-der Diagnose im Aufklapper „Darstellung". Eine ganze Probe am Notenständer ist
-weiterhin nicht erprobt.
+**Gemessene Ausgabelatenz**, abgelesen an der Diagnose im Aufklapper
+„Darstellung":
+
+| Gerät | Ausgabe | Ausgeglichen |
+|---|---|---|
+| Android-Telefon | Bluetooth-Kopfhörer | **232 ms** |
+| Arbeitsmaschine | eingebaut | **51 ms** |
+
+Beide Werte stammen aus der **Automatik**, bei unangetastetem Regler. Damit ist
+die Frage beantwortet, für die es zunächst nur eine Vermutung gab: **Chrome auf
+Android meldet den Bluetooth-Anteil der Ausgabelatenz**, die App trägt ihn ohne
+Zutun. Bild und Ton passen auf beiden Geräten zusammen.
+
+Der Regler „Bild und Ton abgleichen" bleibt für den Fall, dass ein Kopfhörer
+seine Verzögerung nicht selbst nennt – dann fehlt der Automatik genau dieser
+Anteil, und er ist nirgends ablesbar außer am eigenen Ohr. **Wie viele
+Kopfhörer das betrifft, ist ungeprüft**; gemessen ist ein einziges Paar an
+einem einzigen Telefon.
+
+Nicht erprobt ist weiterhin **eine ganze Probe am Notenständer**, und
+gegengeprüft ist die Wirkung nur in Chrome – **ob Operas hakendes Scrollen
+tatsächlich an der früheren Zeitfenster-Heuristik lag, steht aus.**
 
 **Offlinebetrieb.** Im Probenraum ist WLAN oft schlecht oder gar nicht vorhanden.
 Die Artefakte sind unveränderlich und aggressiv cachebar, was günstig ist – aber

@@ -161,19 +161,23 @@ dem Doppelpunkt nennt die Ursache.
 ## Der Ton hinkt dem Notencursor hinterher (oder umgekehrt)
 
 Fast immer die **Ausgabelatenz** – am stärksten über Bluetooth-Kopfhörer, wo
-Codec-Puffer und Funkstrecke 150–300 ms ausmachen; bei ♩ = 120 ist das eine
-Achtelnote. Die App rechnet heraus, was der Browser meldet, aber ob der
-Bluetooth-Anteil überhaupt gemeldet wird, hängt am Kopfhörer.
+Codec-Puffer und Funkstrecke den Ausschlag geben (gemessen: 232 ms an einem
+Android-Telefon gegen 51 ms an einer Arbeitsmaschine); bei ♩ = 120 ist das fast
+eine Achtelnote. Die App gleicht sie **von selbst** aus, soweit der Browser sie
+meldet – auf Android mit Bluetooth-Kopfhörern tut er das (die 232 ms oben kamen
+aus der Automatik, bei unangetastetem Regler).
 
-Abhilfe: **Tempo/Metronom → „Bild und Ton abgleichen"**. Den Regler bei
-laufender Wiedergabe verschieben, bis die hervorgehobene Note zum Gehörten
-passt. Der Wert wird pro Gerät gemerkt – am Telefon mit Kopfhörern also ein
-anderer als am Rechner.
+Bleibt trotzdem ein Versatz, nennt der Kopfhörer seine Verzögerung nicht
+selbst, und genau dieser Anteil fehlt der Automatik. Abhilfe:
+**Tempo/Metronom → „Bild und Ton abgleichen"**. Den Regler bei laufender
+Wiedergabe verschieben, bis die hervorgehobene Note zum Gehörten passt. Der
+Wert wird pro Gerät gemerkt – am Telefon mit Kopfhörern also ein anderer als am
+Rechner.
 
-Ob der Browser die Latenz von sich aus kennt, lässt sich in 30 Sekunden
-prüfen: ein YouTube-Video mit sprechendem Gesicht auf demselben Gerät, mit
-denselben Kopfhörern. Ist es lippensynchron, kennt der Audio-Stack die Latenz,
-und der Regler braucht nur Feinschliff; ist es das nicht, weiß der Browser es
+Ob der Browser die Latenz von sich aus kennt, lässt sich auch ohne die App in
+30 Sekunden prüfen: ein YouTube-Video mit sprechendem Gesicht auf demselben
+Gerät, mit denselben Kopfhörern. Ist es lippensynchron, kennt der Audio-Stack
+die Latenz und die Automatik trägt sie; ist es das nicht, weiß der Browser es
 selbst nicht und der Regler trägt die Hauptlast.
 
 **Darstellung → Diagnose der Wiedergabe** zeigt die Zahlen dazu: „gemessen"
