@@ -4,6 +4,17 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.8.1] – 2026-09-04
+
+### Behoben
+
+- **Das Schließkreuz lag auf dem letzten Knopf der Bedienleiste.** Betroffen war
+  der Einstieg über die eigene Dateiaktion (dort, wo `.mscz` nicht als Mimetype
+  registriert ist): Das Modal setzte sein Kreuz in die rechte obere Ecke des
+  Inhalts – genau auf den Vollbildknopf, beide Zeichen übereinander. Das Kreuz
+  sitzt jetzt in der Kopfzeile neben dem Dateinamen, also dort, wo es der
+  reguläre Weg über Nextclouds Viewer ohnehin hat.
+
 ## [1.8.0] – 2026-09-04
 
 Eine erste Erprobung auf einem Android-Telefon – mit Bluetooth-Kopfhörern, wie

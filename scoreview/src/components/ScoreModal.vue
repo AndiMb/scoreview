@@ -12,9 +12,20 @@
 	über eine Dateiaktion auf der Dateiendung (siehe viewer.js).
 -->
 <template>
+	<!--
+		`closeButtonOutside` ist hier kein Geschmack, sondern die Reparatur einer
+		Überdeckung: Ohne das Attribut setzt NcModal sein Schließkreuz absolut in
+		die rechte obere Ecke des INHALTS – und genau dort steht der letzte Knopf
+		der Bedienleiste (gemessen: beide auf demselben Fleck, Kreuz und
+		Vollbildzeichen übereinandergezeichnet). Draußen sitzt es in der
+		Kopfzeile neben dem Dateinamen, also dort, wo Nextclouds Viewer-App es
+		auf dem regulären Weg ohnehin hat – beide Einstiege sehen damit gleich
+		aus.
+	-->
 	<NcModal
 		size="full"
 		:name="name"
+		closeButtonOutside
 		@close="$emit('close')">
 		<div class="scoreview-modal">
 			<ScoreViewer :fileid="fileid" />
