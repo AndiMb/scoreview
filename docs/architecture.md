@@ -427,6 +427,22 @@ WebAssembly übersetzt (MuseScore als ungepatchtes Submodul). `savePositions`
 liefert die Koordinaten dort bereits in SVG-Einheiten, die Division durch 12
 entfällt (`converter/lib/artifacts.mjs`).
 
+Dieses „derselbe" ist eine Zusage, keine Beobachtung: Die eine Version steht als
+Release-URL in `converter/package.json`, die andere als `ARG MUSESCORE_VERSION`
+in `sidecar/Dockerfile`, und nichts zwang sie bisher zusammen. Laufen sie
+auseinander, legt dieselbe Partitur je nach Weg ein anderes Layout hin, ohne
+dass ein Test anschlägt. Der Job `versionen` in `ci.yml` vergleicht beide
+Angaben deshalb bei jedem Lauf, und `engine-release.yml` hebt sie nur gemeinsam:
+Der Wächter sieht täglich nach, ob
+[scoreview-engine](https://github.com/AndiMb/scoreview-engine) ein neues Release
+hat, und macht daraus einen Pull Request, der den Engine-Pin und – falls das
+Release eine neue MuseScore-Version mitbringt – die beiden Dockerfile-ARGs in
+einem Zug hebt. Dependabot kann das nicht übernehmen, weil eine Release-URL
+keiner Registry gehört (siehe `.github/dependabot.yml`). Auf der anderen Seite
+hängt daran eine zweite Automatik: Im Engine-Repo bereitet
+`musescore-release.yml` den MuseScore-Sprung als Entwurf vor, sobald upstream
+veröffentlicht.
+
 #### Was der lokale Weg kostet
 
 - **Eine Node-Laufzeit auf dem Server.** Das offizielle Nextcloud-Docker-Image
