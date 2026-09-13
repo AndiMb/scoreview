@@ -14,6 +14,10 @@ on:
   # Der Release-Workflow ruft genau diese Pruefungen als Pflicht-Vorstufe auf
   # (siehe release.yml). Was hier rot ist, wird nicht veroeffentlicht.
   workflow_call:
+  # Fuer engine-release.yml: ein mit GITHUB_TOKEN gepushter Branch loest
+  # keinen Lauf aus, workflow_dispatch ist von dieser Bremse ausgenommen.
+  # Ohne das haette der Pin-PR des Bots kein Gate.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -190,3 +194,49 @@ jobs:
         run: |
           curl -fsSL https://apps.nextcloud.com/schema/apps/info.xsd -o /tmp/info.xsd
           xmllint --noout --schema /tmp/info.xsd scoreview/appinfo/info.xml
+
+  # Beide Konvertierungswege muessen dieselbe MuseScore-Version fahren. Genau
+  # das behauptet docs/architecture.md ("derselbe MuseScore 4.7.4, einmal als
+  # AppImage und einmal Qt-frei"), und genau das hat bisher niemand geprueft:
+  # der eine Pin steht als Release-URL in converter/package.json, der andere
+  # als ARG im Dockerfile, und nichts verbindet sie. Laufen sie auseinander,
+  # legt dieselbe Partitur je nach Weg ein anderes Layout hin - lautlos.
+  # Eigener Job, weil das reine Textpruefung ist und weder Node noch Python
+  # noch Docker braucht.
+  versionen:
+    name: Gleiche MuseScore-Version auf beiden Wegen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Engine-Pin gegen Sidecar-Pin
+        run: |
+          PIN='https://github.com/AndiMb/scoreview-engine/releases/download/'
+          URL=$(grep -o "${PIN}[^ ]*tgz" scoreview/converter/package.json)
+          if [ -z "$URL" ]; then
+            echo "Kein scoreview-engine-Pin in converter/package.json gefunden" >&2
+            exit 1
+          fi
+          # Der Dateiname des Release-Pakets traegt die MuseScore-Version:
+          # scoreview-engine-4.7.4.tgz
+          ENGINE=$(basename "$URL" .tgz)
+          ENGINE=${ENGINE#scoreview-engine-}
+          SIDECAR=$(grep -m1 '^ARG MUSESCORE_VERSION=' sidecar/Dockerfile | cut -d= -f2)
+          BUILD=$(grep -m1 '^ARG MUSESCORE_BUILD=' sidecar/Dockerfile | cut -d= -f2)
+          echo "Engine (wasm):    $ENGINE"
+          echo "Sidecar (AppImage): $SIDECAR (Build $BUILD)"
+
+          if [ "$ENGINE" != "$SIDECAR" ]; then
+            echo "Die beiden Konvertierungswege fahren verschiedene MuseScore-Versionen." >&2
+            echo "  wasm:     $ENGINE   (scoreview/converter/package.json)" >&2
+            echo "  AppImage: $SIDECAR  (sidecar/Dockerfile)" >&2
+            echo "  -> beide zusammen heben, siehe docs/architecture.md" >&2
+            exit 1
+          fi
+
+          case "$BUILD" in
+            "$SIDECAR".*) ;;
+            *)
+              echo "MUSESCORE_BUILD ($BUILD) gehoert nicht zu MUSESCORE_VERSION ($SIDECAR)" >&2
+              exit 1 ;;
+          esac

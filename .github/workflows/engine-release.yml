@@ -1,0 +1,206 @@
+name: Engine-Release
+
+# Taeglicher Blick auf scoreview-engine, und ein Pull Request, wenn sich dort
+# etwas getan hat.
+#
+# Dependabot kann das nicht: der Pin in scoreview/converter/package.json ist
+# eine Release-URL, und die kennt keine Registry (siehe dependabot.yml). Genau
+# deshalb hing der Pin auf v4.7.4-engine.5, waehrend die Engine schon bei .6
+# war, und niemandem ist es aufgefallen.
+#
+# Der PR hebt bis zu zwei Pins zugleich, und das ist Absicht. Bringt das
+# Engine-Release eine neue MuseScore-Version mit, muss der Sidecar dieselbe
+# fahren - docs/architecture.md sagt zu, dass beide Konvertierungswege
+# denselben MuseScore benutzen, und der Job "versionen" in ci.yml macht die
+# Zusage seit Neuestem pruefbar. Zwei getrennte PRs wuerden die Zusage
+# zwischenzeitlich brechen.
+#
+# Kein Secret. Ein mit GITHUB_TOKEN gepushter Branch loest keinen CI-Lauf aus
+# (GitHubs Rekursionsbremse), workflow_dispatch ist davon ausgenommen - also
+# stoesst der letzte Schritt ci.yml selbst an. Ohne das haette dieser PR kein
+# Gate, und das Gate ist hier der ganze Nutzen: der konverter-Job konvertiert
+# eine echte Partitur gegen die Zusagen M2/M4/M7.
+
+on:
+  schedule:
+    - cron: '41 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  pin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Neuestes Engine-Release lesen
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=$(gh api repos/AndiMb/scoreview-engine/releases/latest --jq '.tag_name')
+          # Die URL wird abgelesen, nicht gebaut: der Dateiname traegt die
+          # MuseScore-Version (scoreview-engine-4.7.5.tgz), die sich mit dem
+          # Tag v4.7.5-engine.1 gleichzeitig aendert. Aus dem alten String
+          # laesst sich das nicht fortschreiben.
+          URL=$(gh api repos/AndiMb/scoreview-engine/releases/latest \
+                  --jq '.assets[] | select(.name | startswith("scoreview-engine-")) | select(.name | endswith(".tgz")) | .browser_download_url')
+          if [ -z "$URL" ]; then
+            echo "Release $TAG hat kein scoreview-engine-*.tgz angehaengt" >&2
+            exit 1
+          fi
+          MSV=$(basename "$URL" .tgz)
+          MSV=${MSV#scoreview-engine-}
+
+          PIN='https://github.com/AndiMb/scoreview-engine/releases/download/'
+          ALT=$(grep -o "${PIN}[^ ]*tgz" scoreview/converter/package.json)
+
+          echo "im Baum:  $ALT"
+          echo "aktuell:  $URL"
+          {
+            echo "tag=$TAG"
+            echo "url=$URL"
+            echo "musescore=$MSV"
+            echo "branch=engine/$TAG"
+            if [ "$ALT" = "$URL" ]; then echo "neu=nein"; else echo "neu=ja"; fi
+          } >> "$GITHUB_OUTPUT"
+
+      # Der Lauf ist taeglich, das Release bleibt neu, bis der PR gemergt ist.
+      # Ohne diese Bremse entstuende jeden Morgen ein zweiter. Auch der PR
+      # wird geprueft, nicht nur der Branch: einen Vorschlag ungemergt zu
+      # schliessen ist eine Antwort, und der Bot soll ihr nicht taeglich
+      # widersprechen.
+      - name: Schon vorgeschlagen?
+        id: tor
+        if: steps.release.outputs.neu == 'ja'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="${{ steps.release.outputs.branch }}"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "Branch $BRANCH existiert bereits"
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          elif [ -n "$(gh pr list --head "$BRANCH" --state all --json number --jq '.[0].number // empty')" ]; then
+            echo "Zu $BRANCH gibt es schon einen Pull Request"
+            echo "los=nein" >> "$GITHUB_OUTPUT"
+          else
+            echo "los=ja" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v7
+        if: steps.tor.outputs.los == 'ja'
+        with:
+          node-version: '22'
+
+      - name: Pins heben
+        id: bump
+        if: steps.tor.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ steps.release.outputs.url }}
+          MSV: ${{ steps.release.outputs.musescore }}
+        run: |
+          # npm statt Textersetzung: der Lock fuehrt einen integrity-Hash
+          # ueber den Tarball, und den kann nur npm neu berechnen.
+          ( cd scoreview/converter && npm install "$URL" )
+
+          SIDECAR=$(grep -m1 '^ARG MUSESCORE_VERSION=' sidecar/Dockerfile | cut -d= -f2)
+          if [ "$SIDECAR" = "$MSV" ]; then
+            echo "Sidecar steht schon auf $MSV"
+            echo "sidecar=unveraendert" >> "$GITHUB_OUTPUT"
+          else
+            # Die Build-Nummer steht nur im Namen des AppImage-Assets:
+            # MuseScore-Studio-4.7.5.260831071-x86_64.AppImage
+            BUILD=$(gh api "repos/musescore/MuseScore/releases/tags/v$MSV" --jq '.assets[].name' \
+                      | grep -o 'MuseScore-Studio-[0-9.]*-x86_64.AppImage' \
+                      | head -1 | sed 's|MuseScore-Studio-||; s|-x86_64.AppImage||')
+            if [ -z "$BUILD" ]; then
+              echo "Kein x86_64-AppImage im MuseScore-Release v$MSV gefunden" >&2
+              exit 1
+            fi
+            sed -i "s|^ARG MUSESCORE_VERSION=.*|ARG MUSESCORE_VERSION=$MSV|" sidecar/Dockerfile
+            sed -i "s|^ARG MUSESCORE_BUILD=.*|ARG MUSESCORE_BUILD=$BUILD|" sidecar/Dockerfile
+            echo "Sidecar $SIDECAR -> $MSV (Build $BUILD)"
+            echo "sidecar=$SIDECAR -> $MSV" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Dieselbe Grenze wie im Engine-Repo: der Bot hebt Pins, sonst
+          # nichts. Die Prosa-Stellen, die eine MuseScore-Version nennen,
+          # stehen als Checkliste im PR - darunter sind Messangaben wie
+          # "An der Selbsttest-Partitur gemessen (v4.7.4-engine.2): 20
+          # Segmente", und eine automatisch hochgezaehlte Zahl an einer
+          # Messung, die niemand nachgemessen hat, waere eine Falschaussage
+          # mit Bestand.
+          ERLAUBT="scoreview/converter/package.json
+          scoreview/converter/package-lock.json
+          sidecar/Dockerfile"
+          FEHLER=0
+          for DATEI in $(git diff --name-only); do
+            if ! printf '%s\n' "$ERLAUBT" | grep -qxF "$DATEI"; then
+              echo "Der Bot darf $DATEI nicht anfassen" >&2
+              FEHLER=1
+            fi
+          done
+          [ "$FEHLER" = 0 ]
+
+      - name: PR aufmachen und CI anstossen
+        if: steps.tor.outputs.los == 'ja'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          MSV: ${{ steps.release.outputs.musescore }}
+          BRANCH: ${{ steps.release.outputs.branch }}
+          SIDECAR: ${{ steps.bump.outputs.sidecar }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git commit -am "Engine-Pin auf $TAG heben"
+          git push origin "$BRANCH"
+
+          cat > pr.md <<EOF
+          Angelegt von \`.github/workflows/engine-release.yml\`.
+
+          | | |
+          |---|---|
+          | Engine-Release | \`$TAG\` |
+          | MuseScore darin | $MSV |
+          | Sidecar-AppImage | $SIDECAR |
+
+          Gehoben wurden \`scoreview/converter/package.json\` samt Lock und,
+          falls die MuseScore-Version mitgesprungen ist, die beiden ARGs in
+          \`sidecar/Dockerfile\`. Beide zusammen, damit die Zusage aus
+          docs/architecture.md - derselbe MuseScore auf beiden
+          Konvertierungswegen - durchgehend gilt; der Job \`versionen\` in
+          ci.yml prueft sie.
+
+          Gate ist der Job \`konverter\`: echte Partitur, Node 18 und 22,
+          Zusagen M2/M4/M7. Gruen heisst mergefaehig.
+
+          ## Von Hand, falls MuseScore mitgesprungen ist
+
+          Prosa nennt der Bot nicht an, weil ein Teil davon Messwerte
+          begleitet:
+
+          - [ ] \`README.md\`, \`docs/architecture.md\`, \`docs/installation.md\`,
+                \`docs/limits.md\`, \`scoreview/converter/convert.mjs\`,
+                \`scoreview/lib/Service/LocalConverter.php\` nennen die
+                MuseScore-Version im Text
+          - [ ] \`docs/architecture.md\` nennt eine an einer bestimmten
+                Engine-Version **gemessene** Zahl - die Version dort nur mit
+                einer neuen Messung heben, nicht mit dem Pin
+          - [ ] \`CHANGELOG.md\`
+          EOF
+
+          URL=$(gh pr create --base master --head "$BRANCH" \
+                  --title "Engine-Pin auf $TAG heben" --body-file pr.md)
+          echo "angelegt: $URL"
+
+          # workflow_dispatch ist das einzige Ereignis, das GITHUB_TOKEN noch
+          # ausloesen darf. Setzt voraus, dass ci.yml den Trigger im
+          # Standardbranch fuehrt.
+          gh workflow run ci.yml --ref "$BRANCH" || \
+            echo "ci.yml liess sich nicht anstossen - von Hand starten" >&2
