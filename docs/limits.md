@@ -91,6 +91,31 @@ Wiederholungen und Volten funktionieren gemessen korrekt.
 **Große Partituren.** Orchesterpartituren sind nicht gemessen. Die Zahlen oben
 stammen von Chorsätzen bis fünf Seiten.
 
+**Die Bedienung auf Telefonbreite.** Dass der Viewer in den mobilen Apps
+überhaupt läuft, ist gemessen (siehe unten); ob Mixer und Notizen auf 360 dp
+brauchbar sind, ist es **nicht**. Die Bedienleiste ist seit 1.8.0 auf
+Telefonbreite einzeilig, alles Weitere steckt im Überlaufmenü. Ein eigener
+Telefon-Modus wäre ein eigenes Vorhaben.
+
+**Die WebView der mobilen Apps.** Gemessen auf einem Samsung Galaxy S23 mit der
+Nextcloud-Android-App, Instanz über `adb reverse` als `http://localhost:8134`:
+AudioWorklet und WebAssembly laufen, der Ton ist hörbar, `navigator.wakeLock`
+wird erteilt. Abgeschaltet ist dort die **Vollbild-API**
+(`document.fullscreenEnabled === false`) – der Vollbildknopf erscheint deshalb
+nur, wo Vollbild möglich ist. Andere Geräte, andere Android-Versionen und die
+iOS-App sind ungeprüft; die Brücke ist für beide Plattformen geschrieben, aber
+nur auf Android nachgemessen.
+
+Wichtig für jede Wiederholung dieser Messung: Sie braucht einen **sicheren
+Kontext**. Über ein schlichtes `http://<LAN-IP>:8134` fehlen `navigator.wakeLock`
+und `audioWorklet` ersatzlos – die Messung fällt dann negativ aus, ohne über
+die WebView etwas auszusagen (in Chromium gegengeprüft).
+
+**Der Rückfall im Browser über die mobilen Apps.** Er funktioniert dort
+(gemessen), kostet aber dieselben rund 14 MB Engine je Öffnen wie am Desktop –
+auf einer Mobilfunkverbindung ist das viel. Wo der Server konvertieren kann,
+tritt der Fall nicht ein.
+
 **Konvertierung im Browser auf echten Geräten.** Alle Zahlen dazu stammen von
 einem Desktop-Chromium. Wie lange ein Tablet oder Telefon braucht und ab
 welcher Partiturgröße der Tab am Speicher stirbt, ist **ungeprüft** – der
@@ -115,7 +140,7 @@ Sammel-Vorabkonvertierung (`eager_conversion`) deshalb spürbar werden.
 
 **Die MuseScore-Version des lokalen Wegs hängt an einem eigenen Build.**
 [AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) trägt
-4.7.4 (MuseScore als gepinnter, ungepatchter Submodul-Stand, Qt-frei); sie
+4.7.5 (MuseScore als gepinnter, ungepatchter Submodul-Stand, Qt-frei); sie
 zieht nicht von selbst nach, wenn MuseScore weitergeht – ein neuer Kern heißt,
 die Engine zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
 Betriebsdiagnose prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine

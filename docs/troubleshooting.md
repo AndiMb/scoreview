@@ -35,6 +35,44 @@ foreach ($qb->executeQuery()->fetchAll() as $row) { print_r($row); }
 `SELECT * FROM oc_mimetypes WHERE mimetype LIKE '%musescore%'` –, nicht die von
 `application/octet-stream`.
 
+## In der Nextcloud-App am Telefon fehlt „Bearbeiten“
+
+Der Einstieg der mobilen Apps läuft über Nextclouds Direct Editing
+([E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps)), und
+dessen Auswahl hängt **allein am Mimetype**. Die Ersatz-Dateiaktion auf der
+Endung, die im Browser einspringt, hat dort keine Entsprechung.
+
+Erste Probe: Meldet der Server den Editor überhaupt?
+
+```sh
+curl -u <Nutzerin> -H 'OCS-APIRequest: true' -H 'Accept: application/json'   https://<instanz>/ocs/v2.php/apps/files/api/v1/directEditing
+```
+
+In der Antwort muss unter `editors` ein Eintrag `scoreview` stehen. Fehlt er,
+ist die App nicht aktiviert. Steht er da und der Menüpunkt fehlt trotzdem, ist
+der **Mimetype der Datei** nicht `application/x-musescore` – siehe den
+Abschnitt ganz oben, `occ files:scan` eingeschlossen. Manche App-Stände halten
+die Editorliste zwischen; ein Aktualisieren des Ordners hilft.
+
+## Die Seite in der App bleibt leer oder zeigt nur einen Fehler
+
+Zwei Ursachen, am Verhalten zu unterscheiden.
+
+**Der Ladebildschirm der App bleibt liegen und meldet nach zehn Sekunden einen
+Timeout.** Dann hat die Seite ihr `loaded()` nicht abgesetzt – entweder ist das
+Skript gar nicht angelaufen, oder die Brücke zur App fehlt. Im Zweifel `js/`
+neu bauen (`npm run build`).
+
+**Die Seite steht da, zeigt aber nichts von der Partitur.** Dann kommen ihre
+Folgeanfragen nicht durch. Sie weisen sich mit einem Token im Header
+`X-ScoreView-Token` aus; abgewiesen wird mit einem Code im Antwortkörper:
+
+| Antwort | Bedeutung |
+|---|---|
+| `401 no_session` | Weder Sitzung noch Token – der Header fehlt |
+| `401 token_expired` | Token abgelaufen oder verbraucht; die App holt daraufhin einen frischen. Direct-Editing-Token gelten 12 h und sind für `edit()` Einmal-Token – ein Neuladen der WebView von Hand läuft deshalb in die Fehlerseite der App |
+| `403 token_file_mismatch` | Der Token gehört zu einer anderen Partitur |
+
 ## Der Viewer dreht sich endlos, die Konvertierung bleibt auf „pending"
 
 Background-Jobs laufen nicht. Nextclouds Default-Modus `ajax` reicht nicht

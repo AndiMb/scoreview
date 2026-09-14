@@ -7,7 +7,7 @@ es **zwei zur Wahl**, und sie liefern dasselbe Ergebnis
 | | **Weg A: Lokal** (Voreinstellung) | **Weg B: Sidecar** |
 |---|---|---|
 | Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
-| MuseScore | MuseScore 4.7.4 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
+| MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
 | SoundFont | holt der Server selbst, Adresse voreingestellt | bringt der Container mit |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
 | Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
@@ -178,6 +178,13 @@ Was die Registrierung zusätzlich bringt: das eigene Dateisymbol, die Vorschau
 in Nextclouds Viewer samt Blättern zwischen Dateien und das gewohnte
 Öffnen-Verhalten. Wo sie fehlt, übernimmt die Dateiaktion – dieselbe Ansicht,
 nur ohne Viewer-Rahmen.
+
+**Für die mobilen Nextcloud-Apps ist dieser Schritt dagegen zwingend.** Sie
+laden keine Skripte der Dateien-Seite und erreichen die Partitur allein über
+Nextclouds Direct Editing, dessen Auswahl ausschließlich am Mimetype hängt
+([E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps)). Die
+Dateiaktion auf der Endung hat dort keine Entsprechung: Ohne registrierten
+Mimetype bietet die App bei einer `.mscz` nur „Herunterladen“ an.
 
 Die Registrierung wirkt **server-weit**, nicht app-lokal: Nextcloud lädt
 `mimetypemapping.json` und `mimetypealiases.json` nicht aus Apps. Die beiden

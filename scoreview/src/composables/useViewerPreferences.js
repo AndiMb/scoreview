@@ -39,13 +39,31 @@ export function useViewerPreferences() {
 
 	const highlightStyle = computed(() => highlightCssVars(highlightColor.value))
 
+	// Auf der eigenstaendigen Seite der mobilen Apps wird NICHT gespeichert.
+	//
+	// Der Grund liegt nicht in der Oberflaeche, sondern im Zuschnitt des
+	// Tokenwegs: `preference#update` ist als einzige Route der App nicht
+	// dateibezogen - sie aendert die Einstellung der Nutzerin instanzweit.
+	// Der Pflichtvergleich der Middleware (Token gilt fuer GENAU diese
+	// fileId) hat dort nichts zu vergleichen, und der Token allein waere zu
+	// wenig; die Route bleibt deshalb bewusst draussen
+	// (Middleware\DirectAccessMiddleware). Jeder Speicherversuch von dort
+	// liefe in ein 401.
+	//
+	// Die Einstellung wirkt im geoeffneten Viewer trotzdem sofort - sie ist
+	// nur nicht ueber diese Sitzung hinaus gemerkt. Das ist genau der
+	// Verlust, den auch der Fehlerfall unten hinnimmt; ihn hier absichtlich
+	// hinzunehmen ist ehrlicher, als am Telefon eine Anfrage loszuschicken,
+	// von der feststeht, dass sie abgewiesen wird.
 	let saveTimer = null
-	watch([highlightColor, highlightMode], () => {
-		if (saveTimer) {
-			clearTimeout(saveTimer)
-		}
-		saveTimer = setTimeout(save, SAVE_DELAY_MS)
-	})
+	if (!istEigenstaendigeSeite()) {
+		watch([highlightColor, highlightMode], () => {
+			if (saveTimer) {
+				clearTimeout(saveTimer)
+			}
+			saveTimer = setTimeout(save, SAVE_DELAY_MS)
+		})
+	}
 
 	async function save() {
 		saveTimer = null
@@ -66,6 +84,23 @@ export function useViewerPreferences() {
 	}
 
 	return { highlightColor, highlightMode, highlightStyle }
+}
+
+/**
+ * Ob diese Seite die eigenstaendige der mobilen Apps ist
+ * (DirectEditing\ScoreDirectEditor). Erkannt am Initial State, nicht an
+ * einem Merkmal des Geraets: Dieselbe Seite laesst sich auch am Rechner
+ * oeffnen, und es geht nicht um klein oder gross, sondern darum, ob es eine
+ * Sitzung gibt.
+ *
+ * @return {boolean}
+ */
+function istEigenstaendigeSeite() {
+	try {
+		return loadState('scoreview', 'standalone')?.directEditing === true
+	} catch {
+		return false
+	}
 }
 
 /**

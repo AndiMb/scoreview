@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\SoundFontService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\StreamResponse;
 use OCP\IRequest;
@@ -23,9 +25,13 @@ use Psr\Log\LoggerInterface;
  * SoundFont haengt an keiner fileId und durchlaeuft deshalb auch keine der
  * dortigen Datei-/Rechtepruefungen.
  *
- * Zugriff fuer jede eingeloggte Nutzerin (#[NoAdminRequired]) - es ist
- * appeigenes, statisches Beiwerk wie ein Bundle oder ein Icon, kein
- * Nutzerinhalt.
+ * Zugriff fuer jede eingeloggte Nutzerin - und, ueber ein
+ * Direct-Editing-Token, fuer die Seite einer mobilen App
+ * (#[DirectTokenOrSession], ohne Dateivergleich: Das SoundFont haengt an
+ * keiner fileId). Es ist appeigenes, statisches Beiwerk wie ein Bundle oder
+ * ein Icon, kein Nutzerinhalt. Anonym erreichbar ist es deswegen nicht -
+ * #[PublicPage] macht nur den Weg zur eigenen Middleware frei, die ohne
+ * Sitzung UND ohne gueltigen Token mit 401 abweist.
  *
  * Warum die App das selbst ausliefert statt den Browser direkt zum
  * SoundFont-Host zu schicken: same-origin. Kein CORS-Problem, keine
@@ -47,6 +53,8 @@ class SoundFontController extends Controller {
 
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
+	#[PublicPage]
+	#[DirectTokenOrSession(csrfInSession: false)]
 	public function get(): Http\Response {
 		try {
 			$file = $this->soundFontService->getOrFetch();

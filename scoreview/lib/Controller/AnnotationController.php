@@ -6,12 +6,15 @@ namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\Annotation;
+use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\AnnotationService;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Constants;
 use OCP\Files\Node;
@@ -52,6 +55,9 @@ class AnnotationController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession]
 	public function index(int $fileId): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
@@ -72,6 +78,9 @@ class AnnotationController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession]
 	public function create(int $fileId, int $measureNumber, float $fraction, string $content, ?int $elid = null, ?string $anchorEtag = null, string $visibility = Annotation::VISIBILITY_PRIVATE): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
@@ -110,6 +119,9 @@ class AnnotationController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession]
 	public function update(int $fileId, int $id, string $content): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
@@ -133,6 +145,9 @@ class AnnotationController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession]
 	public function destroy(int $fileId, int $id): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();

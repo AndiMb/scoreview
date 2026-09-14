@@ -77,18 +77,31 @@ Verzweigung; was der Viewer tut, hängt weiterhin allein an den Artefakten.
 Alle Routen liegen unter `/apps/scoreview/api/` und stehen in
 `scoreview/appinfo/routes.php`. Die App hat bewusst **keine eigene Seite** und
 keinen Navigationseintrag; `/apps/scoreview/` antwortet 404. Eingestiegen wird
-ausschließlich aus Files, auf zwei Wegen: über Nextclouds Viewer (am Mimetype
-`application/x-musescore`) und, wo der nicht greift, über eine eigene
-Dateiaktion auf der Endung, die dieselbe Komponente in einem Vollbildfenster
-zeigt. Warum es beide braucht, steht in
-[E6](#e6-zwei-einstiege-mimetype-und-dateiendung).
+auf drei Wegen, und alle drei zeigen **dieselbe Komponente**:
+
+1. **Nextclouds Viewer**, am Mimetype `application/x-musescore` – der
+   reguläre Weg im Browser.
+2. **Eine eigene Dateiaktion auf der Endung**, wo der Mimetype nicht
+   registriert ist ([E6](#e6-zwei-einstiege-mimetype-und-dateiendung)).
+3. **Eine eigenständige Seite über Nextclouds Direct Editing**, für die
+   mobilen Apps, die keine Skripte der Dateien-Seite laden
+   ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)). Auch sie hat
+   keine eigene Route – sie wird unter `/apps/files/directEditing/{token}`
+   ausgeliefert.
+
+Der dritte Weg bringt eine zweite Art Ausweis mit: Seine Seite kommt **ohne
+Sitzungscookie** an, ihre Folgeanfragen weisen sich mit einem
+Direct-Editing-Token im Header `X-ScoreView-Token` aus. Welche Routen das
+annehmen, entscheidet das Attribut `#[DirectTokenOrSession]`; geprüft wird es
+in `Middleware\DirectAccessMiddleware`. Ohne Header verhält sich jede Route
+exakt wie vorher.
 
 | Route | Zweck |
 |---|---|
 | `GET /api/scores/{fileId}/status` | Konvertierungsstatus, Seitenzahl, Metadaten |
 | `GET /api/scores/{fileId}/artifact/{name}` | Ein Artefakt aus dem Cache (`page-N`, `midi`, `timing`, `measures`, `meta`) |
 | `GET /api/scores/{fileId}/source` | Die `.mscz` selbst – nur für die Konvertierung im Browser ([E7](#e7-konvertierung-im-browser-als-rückfall)) |
-| `GET /api/engine/{name}` | Die drei Dateien der scoreview-engine, für denselben Weg |
+| `GET /api/engine/{name}` | Die drei Dateien der scoreview-engine, für denselben Weg (**ohne Anmeldung** – appeigene Bauartefakte, für alle dieselben Bytes; ein nativer `import()` kann keinen Ausweis tragen) |
 | `POST /api/scores/{fileId}/reconvert` | Verwirft die gespeicherte Konvertierung und lässt sie neu erzeugen (nur mit Schreibrecht auf die Datei) |
 | `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe |
 | `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen |
@@ -186,17 +199,28 @@ Einstellungsseite.
 
 Aufbau:
 
+- Drei Webpack-Einträge, drei Seiten: `src/viewer.js` für die Dateien-Seite
+  (Viewer-Handler **und** Dateiaktion, [E6](#e6-zwei-einstiege-mimetype-und-dateiendung)),
+  `src/standalone.js` für die eigenständige Seite der mobilen Apps
+  ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)) und
+  `src/settings.js` für die Verwaltung.
 - `src/components/` – `ScoreViewer.vue` als Rahmen, dazu `ScorePage.vue`,
-  `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreModal.vue`, `AdminSettings.vue`.
+  `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreModal.vue`,
+  `StandaloneFrame.vue`, `AdminSettings.vue`.
 - `src/composables/` – der Zustand des Viewers, nach Themen getrennt:
   Konvertierungsstatus, Notizen, Zoom, Autoscroll, Metronom, Loop, Wiedergabe.
 - `src/lib/` – **reine Logik ohne DOM, ohne `AudioContext`, ohne Nextcloud** und
   damit ohne Browser testbar: `scoreLayout.js`, `mixerLayout.js`,
   `timingSync.js`, `scrollPlan.js`, `metronome.js`, `svgSanitizer.js`,
   `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`,
-  `playbackTime.js`, `audioHealth.js`,
+  `playbackTime.js`, `audioHealth.js`, `directToken.js`, `mobileBridge.js`,
   `svgIndex.js`, `highlightStyle.js`. Neue Logik gehört hierhin, nicht in die
   Komponenten.
+
+`ScoreViewer.vue` ist auf allen drei Seiten dieselbe Komponente und weiß
+nicht, über welche sie geladen wurde. Was den Seiten eigen ist – das
+Schließkreuz, der Token an den Anfragen, die Brücke zur mobilen App – steht in
+ihrem jeweiligen Einstiegspunkt, nicht im Viewer.
 
 Wiedergabe: `spessasynth_lib` synthetisiert das MIDI im Browser gegen das
 ausgelieferte SoundFont. Eine einzige `requestAnimationFrame`-Schleife treibt
@@ -286,7 +310,7 @@ Sanitizer (DOMPurify), nicht durch reguläre Ausdrücke.
 ## Entwurfsentscheidungen
 
 Diese sechs Entscheidungen tragen den Aufbau. Sie sind im Code an vielen
-Stellen als `E1`…`E6` referenziert und sollten nicht ohne erneute Bewertung
+Stellen als `E1`…`E8` referenziert und sollten nicht ohne erneute Bewertung
 revidiert werden.
 
 ### E1: MIDI statt MP3 als Audioartefakt
@@ -336,7 +360,7 @@ zu beantworten.
 
 | | Lokal (Voreinstellung) | Sidecar |
 |---|---|---|
-| MuseScore | MuseScore 4.7.4 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) | echtes MuseScore 4 aus gepinntem AppImage |
+| MuseScore | MuseScore 4.7.5 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) | echtes MuseScore 4 aus gepinntem AppImage |
 | Läuft als | Kindprozess der Node-Laufzeit des Servers | eigener Container, HTTP-API |
 | Voraussetzung beim Betreiber | Node.js ≥ 18, `proc_open` erlaubt | Docker o. ä. |
 | Im App-Paket | rund 14 MB Wasm + Ressourcen (`converter/`) | nichts |
@@ -422,7 +446,7 @@ ein Browser selbst anzeigt; die beiden Formate, die dabei ausfallen, stehen
 in [Grenzwerte](limits.md#bekannte-lücken).
 
 Dass die Ergebnisse im Übrigen zusammenpassen, liegt am gemeinsamen Kern: Es
-ist derselbe MuseScore 4.7.4, einmal als AppImage und einmal Qt-frei nach
+ist derselbe MuseScore 4.7.5, einmal als AppImage und einmal Qt-frei nach
 WebAssembly übersetzt (MuseScore als ungepatchtes Submodul). `savePositions`
 liefert die Koordinaten dort bereits in SVG-Einheiten, die Division durch 12
 entfällt (`converter/lib/artifacts.mjs`).
@@ -580,7 +604,7 @@ jeweils andere bleibt unbeachtet, es gibt weiterhin genau einen Menüeintrag.
 
 Wo der Server **nicht konvertieren kann** – keine Node-Laufzeit, `proc_open`
 gesperrt, kein erreichbarer Sidecar –, konvertiert der Browser. Dieselbe Engine
-(scoreview-engine, MuseScore 4.7.4 als WebAssembly), dieselben Artefakte, nur
+(scoreview-engine, MuseScore 4.7.5 als WebAssembly), dieselben Artefakte, nur
 ein anderer Ort.
 
 Das ist **kein dritter Konvertierungsweg**: Er steht in keiner Einstellung zur
@@ -653,6 +677,87 @@ auf „wird konvertiert" stehen.
 angemeldeten Nutzerkontext, und die CSP-Lockerung greift nur auf
 `/apps/files`. Der Rückfall nimmt dafür die serverseitige Hürde weg, mehr
 nicht.
+
+### E8: Eine eigenständige Seite für die mobilen Apps
+
+Die Nextcloud-Apps für Android und iOS laden **keine Skripte der Dateien-Seite**
+und kennen Nextclouds Weboberfläche nicht. Weder der Viewer-Handler noch die
+Dateiaktion aus [E6](#e6-zwei-einstiege-mimetype-und-dateiendung) erreicht sie:
+Eine `.mscz` ließe sich dort nur herunterladen.
+
+Der einzige Haken, den die Apps anbieten, ist **Direct Editing**. Meldet der
+Server für den Mimetype einer Datei einen Editor, blenden sie den Menüpunkt
+„Bearbeiten“ ein und öffnen dessen Seite in einer Vollbild-WebView.
+`DirectEditing\ScoreDirectEditor` meldet genau einen Mimetype an –
+`application/x-musescore`, keine optionalen – und liefert
+`templates/standalone.php` mit `src/standalone.js` aus. Kein Creator: ScoreView
+erzeugt keine Partituren, ein Eintrag „Neue Partitur“ führte nirgendwohin.
+
+**Die Auswahl läuft allein über den Mimetype.** Die Krücke aus E6 hat in der
+App keine Entsprechung – ohne registrierten Mimetype bleibt der Menüpunkt aus.
+
+Drei Dinge unterscheiden diese Seite vom Browser, und jedes hat eine Folge:
+
+**Sie hat keine Sitzung.** `OC\DirectEditing\Manager` nimmt den Token-Scope
+gleich nach `open()` wieder zurück; gemessen auf Nextcloud 31 und 34
+antworten alle Folgeanfragen mit 401. Der Ausweis ist deshalb der Token selbst,
+im Header `X-ScoreView-Token`. `Middleware\DirectAccessMiddleware` prüft ihn
+und vergleicht **verpflichtend** die Datei: Ein Token für Partitur A darf kein
+Schlüssel für Partitur B derselben Nutzerin sein. Routen ohne `fileId`
+(SoundFont) liefern instanzweites Beiwerk, dort bleibt es bei der Gültigkeit.
+`POST /api/preferences` nimmt den Token **nicht** an: Die Route ist als einzige
+nicht dateibezogen, der Pflichtvergleich hätte dort nichts zu vergleichen –
+die Anzeigeeinstellungen wirken auf dieser Seite, werden aber nicht gespeichert.
+
+Der Token hängt an **zwei** Wegen, weil der Viewer zwei benutzt: einem
+axios-Interceptor und einem Mantel um `window.fetch` (das SoundFont holt
+`usePlayback.js` bewusst mit `fetch`). Beide entscheiden mit derselben reinen
+Prüfung in `src/lib/directToken.js`, und zwar an der **Herkunft der URL** –
+ein extern konfiguriertes SoundFont bekommt den Token nie zu sehen, und
+`blob:`-URLs bleiben außen vor.
+
+Eine Ausnahme bleibt: `GET /api/engine/{name}` trägt **keinen** Token, sondern
+`#[PublicPage]`. Der Grund ist technisch zwingend – die Engine wird mit
+`import(engineUrl)` geladen, und ein nativer dynamischer Import kann keinen
+Header tragen. Was dort herauskommt, sind appeigene Bauartefakte: für jede
+Instanz dieselben Bytes, kein Nutzerinhalt, dieselbe Art Material, die
+Nextcloud unter `/apps/<app>/js/` ohnehin ohne Anmeldung ausliefert. Der Preis
+ist benannt: rund 14 MB sind ohne Konto abholbar.
+
+**Sie hat keinen Wirt.** In den beiden anderen Einstiegen stellt der Wirt das
+Schließkreuz – Nextclouds Viewer-App bzw. das `NcModal`. `ScoreViewer.vue` hat
+dafür weder Knopf noch Ereignis, es gäbe also keinen Weg hinaus. Deshalb eine
+schmale Kopfzeile mit Dateiname und ✕ in `StandaloneFrame.vue`. Der Rahmen
+räumt zwei Eigenheiten des `base`-Renderers weg, beide am Gerät gemessen: Der
+Montageknoten ist ein Flex-Eintrag und wuchs ohne `min-inline-size: 0` auf die
+natürliche Breite der Partitur (924 px in einem 412 px breiten Bild), und die
+über 100 px Rand für eine Kopfleiste, die es hier nicht gibt, sind auf einem
+Telefon Bildschirm für nichts.
+
+**Sie läuft in einer WebView.** Die App zeigt ihren eigenen Ladebildschirm und
+blendet ihn erst auf `loaded()` aus; bleibt das aus, meldet sie nach zehn
+Sekunden einen Timeout. `ScoreViewer.vue` feuert dafür `ready`, sobald
+wirklich etwas zu sehen ist – Notenbild **oder** Fehlermeldung, nicht schon
+beim Laden der Seite. Das ist die einzige Änderung, die dieser Weg am Viewer
+verlangt, und für die anderen Einstiege folgenlos. Die Brücke selbst liegt als
+reines Modul in `src/lib/mobileBridge.js`; fehlt sie, sind alle Aufrufe
+wirkungslos statt Fehler – dieselbe Seite läuft auch im gewöhnlichen Browser.
+
+**Was die WebView kann**, ist gemessen, nicht angenommen (Galaxy S23,
+Android-App, Instanz über `adb reverse` als `http://localhost:8134` –
+`localhost` gilt als sicherer Kontext, und ohne den gibt es weder `wakeLock`
+noch `audioWorklet`):
+
+| | Befund | Folge |
+|---|---|---|
+| AudioWorklet, WebAssembly, Ton | laufen, Ton hörbar | keine |
+| `navigator.wakeLock` | Sperre wird erteilt | keine |
+| Vollbild-API | `document.fullscreenEnabled === false` | Der Vollbildknopf erscheint nur, wo Vollbild möglich ist (`useZoom.js`) |
+
+Der Vollbildknopf hängt dabei an der **Fähigkeit des Browsers**, nicht am
+Einstieg: Der Viewer soll nicht danach verzweigen, wie seine Seite ausgeliefert
+wurde. Dieselbe Regel deckt ein iframe mit entsprechender Permissions-Policy
+gleich mit ab.
 
 ## Formatgrundlagen
 
@@ -813,7 +918,8 @@ Damit ist die Umkehrung von [M4](#m4-koordinaten-passen-mit-faktor-12-auf-das-sv
 nicht mehr nur geometrisch möglich: Zu einem Zeitpunkt liefert `timing.json` die
 `elid`, und die zeigt direkt auf die Knoten, die dafür gezeichnet wurden.
 
-An der Selbsttest-Partitur gemessen (`v4.7.4-engine.2`): 20 Segmente, 44
+An der Selbsttest-Partitur gemessen (`v4.7.4-engine.2`, an `v4.7.5-engine.1`
+unverändert nachgemessen): 20 Segmente, 44
 Elemente mit Kennung, **jede Kennung hat ein Element in `spos`, und kein
 `spos`-Element bleibt ungezeichnet**. Der größte Abstand zwischen einem
 Notenkopf und der x-Position seines Segments beträgt **0,98 SVG-Einheiten** bei

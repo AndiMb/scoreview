@@ -38,6 +38,22 @@ export function useZoom({ rootEl, scrollEl }) {
 	// Drehen des Tablets wieder verwerfen.
 	const followsWidth = ref(true)
 	const isFullscreen = ref(false)
+
+	/**
+	 * Ob diese Umgebung Vollbild ueberhaupt anbietet.
+	 *
+	 * Gemessen in der WebView der Nextcloud-Android-App (Galaxy S23,
+	 * NC-App ueber Direct Editing): `document.fullscreenEnabled === false` -
+	 * die App setzt in ihrem WebChromeClient kein `onShowCustomView`, und
+	 * ohne das gibt es dort kein Vollbild. Derselbe Fall tritt in einem
+	 * iframe mit entsprechender Permissions-Policy auf.
+	 *
+	 * Abgefragt wird die Faehigkeit des Browsers, NICHT der Weg, auf dem die
+	 * Seite ausgeliefert wurde: Der Viewer ist auf allen drei Einstiegen
+	 * derselbe und soll nicht danach verzweigen. Einmal beim Aufbau
+	 * ermittelt - der Wert aendert sich zur Laufzeit nicht.
+	 */
+	const fullscreenPossible = typeof document !== 'undefined' && document.fullscreenEnabled === true
 	// Geometrie der jeweils zuletzt geladenen Seite je Index (Zoom-Presets) -
 	// {viewBox, sizeMm}, gefüllt über ScorePage.vue "loaded".
 	const pageDimensions = shallowRef({})
@@ -238,6 +254,7 @@ export function useZoom({ rootEl, scrollEl }) {
 		zoom,
 		followsWidth,
 		isFullscreen,
+		fullscreenPossible,
 		percent,
 		min: MIN_ZOOM,
 		max: MAX_ZOOM,

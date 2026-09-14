@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Controller;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
@@ -15,6 +16,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\StreamResponse;
 use OCP\BackgroundJob\IJobList;
@@ -74,11 +76,18 @@ class ConversionController extends Controller {
 	}
 
 	/**
-	 * Kein #[NoCSRFRequired] hier (anders als auf den reinen
-	 * Auslieferungsrouten unten) - dieser Endpunkt hat mit jobList->add()
-	 * einen Seiteneffekt.
+	 * Dieser Endpunkt hat mit jobList->add() einen Seiteneffekt und braucht
+	 * deshalb die CSRF-Pruefung - anders als die reinen Auslieferungsrouten
+	 * unten. Sie steht trotz #[NoCSRFRequired] weiterhin: Das Attribut nimmt
+	 * sie nur Nextclouds SecurityMiddleware aus der Hand, damit die
+	 * sitzungslose Anfrage einer mobilen App ueberhaupt bis zur eigenen
+	 * Middleware kommt; #[DirectTokenOrSession] ohne Schalter holt sie fuer
+	 * den Sitzungsfall zurueck (Middleware\DirectAccessMiddleware).
 	 */
 	#[NoAdminRequired]
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession]
 	public function status(int $fileId): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
@@ -224,6 +233,8 @@ class ConversionController extends Controller {
 	 */
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
+	#[PublicPage]
+	#[DirectTokenOrSession(csrfInSession: false)]
 	public function artifact(int $fileId, string $name): Http\Response {
 		return $this->serveCachedFile($fileId, $name);
 	}
@@ -242,6 +253,8 @@ class ConversionController extends Controller {
 	 */
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
+	#[PublicPage]
+	#[DirectTokenOrSession(csrfInSession: false)]
 	public function source(int $fileId): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {

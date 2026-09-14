@@ -8,12 +8,15 @@ use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\ScoreView\Listener\AddCspListener;
 use OCA\ScoreView\Listener\FilesLoadAdditionalScriptsListener;
 use OCA\ScoreView\Listener\NodeDeletedListener;
+use OCA\ScoreView\Listener\RegisterDirectEditorListener;
 use OCA\ScoreView\Listener\ScoreFileListener;
 use OCA\ScoreView\Listener\UserDeletedListener;
+use OCA\ScoreView\Middleware\DirectAccessMiddleware;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\DirectEditing\RegisterDirectEditorEvent;
 use OCP\Files\Events\Node\NodeCreatedEvent;
 use OCP\Files\Events\Node\NodeDeletedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
@@ -22,6 +25,15 @@ use OCP\User\Events\UserDeletedEvent;
 
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'scoreview';
+
+	/**
+	 * Der Mimetype, an dem .mscz erkannt wird - an Nextclouds Viewer
+	 * (src/lib/scoreFile.js), an der Auslieferung der Partitur selbst
+	 * (Controller\ConversionController::source) und an der Editorliste der
+	 * mobilen Apps (DirectEditing\ScoreDirectEditor). Seine Registrierung ist
+	 * server-weit und nicht Sache der App, siehe E6 in docs/architecture.md.
+	 */
+	public const MSCZ_MIMETYPE = 'application/x-musescore';
 
 	public function __construct(array $urlParams = []) {
 		parent::__construct(self::APP_ID, $urlParams);
@@ -43,6 +55,19 @@ class Application extends App implements IBootstrap {
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
 
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, FilesLoadAdditionalScriptsListener::class);
+
+		// Der Einstieg fuer die mobilen Nextcloud-Apps: Sie laden keine
+		// Skripte der Files-Seite und erreichen den Viewer nur ueber
+		// Nextclouds Direct Editing (siehe DirectEditing\ScoreDirectEditor).
+		$context->registerEventListener(RegisterDirectEditorEvent::class, RegisterDirectEditorListener::class);
+
+		// Laesst die mit #[DirectTokenOrSession] markierten Routen auch gegen
+		// ein Direct-Editing-Token zu - der Weg der mobilen Apps, deren Seite
+		// ohne Sitzungscookie ankommt (gemessen: ihre Folgeanfragen bekommen
+		// sonst 401). Bewusst nicht global: Die Middleware soll nur die
+		// Controller dieser App sehen, und sie ruehrt dort nichts an, was das
+		// Attribut nicht traegt.
+		$context->registerMiddleware(DirectAccessMiddleware::class);
 
 		// Lockert die CSP fuer WASM-Audiodekodierung und den konfigurierten
 		// SoundFont-Host - siehe Listener\AddCspListener fuer den vollen

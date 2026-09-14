@@ -22,7 +22,8 @@
 			"OCP\\": "vendor/nextcloud/ocp/OCP/"
 		},
 		"files": [
-			"tests/stubs/OCHooksEmitter.php"
+			"tests/stubs/OCHooksEmitter.php",
+			"tests/stubs/OCServer.php"
 		]
 	},
 	"scripts": {

@@ -8,8 +8,8 @@ use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Service\LocalConverter;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
-use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
+use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\StreamResponse;
 use OCP\IL10N;
@@ -45,8 +45,23 @@ use OCP\IRequest;
  * stimmt das von selbst - deshalb ist der Routenzuschnitt hier keine
  * Geschmacksfrage.
  *
- * Zugriff fuer jede eingeloggte Nutzerin (#[NoAdminRequired]): appeigenes,
- * statisches Beiwerk wie ein Bundle, kein Nutzerinhalt.
+ * **Zugriff ohne Anmeldung (#[PublicPage]).** Was hier herauskommt, sind
+ * appeigene Bauartefakte: fuer jede Instanz und jede Nutzerin dieselben Bytes,
+ * mitgeliefert im App-Paket, kein Nutzerinhalt und kein Rueckschluss auf
+ * welchen. Dieselbe Art Material liefert Nextcloud unter `/apps/<app>/js/`
+ * ohnehin ohne Anmeldung aus; dass diese drei Dateien ueberhaupt durch einen
+ * Controller gehen, hat seinen Grund in der Dateiendung (siehe oben), keinen
+ * im Schutzbedarf.
+ *
+ * Den Ausschlag gab der Rueckfall im Browser auf der eigenstaendigen Seite der
+ * mobilen Apps: Sie laedt die Engine mit `import(engineUrl)`, und ein nativer
+ * dynamischer Import kann keinen Header tragen - ein Token-Weg wie bei den
+ * uebrigen Auslieferungsrouten ist dort technisch nicht erreichbar, gemessen
+ * als 401.
+ *
+ * Der Preis ist benannt, nicht uebersehen: Rund 14 MB lassen sich von hier
+ * ohne Konto abholen. `immutable` sorgt dafuer, dass ein Browser das einmal je
+ * Engine-Version tut; gegen absichtliches Wiederholen schuetzt es nicht.
  */
 class EngineController extends Controller {
 	/** Wie in ConversionController: der Inhalt ist fuer eine Version unveraenderlich. */
@@ -73,7 +88,9 @@ class EngineController extends Controller {
 		parent::__construct(Application::APP_ID, $request);
 	}
 
-	#[NoAdminRequired]
+	// Kein #[NoAdminRequired] daneben: Es hiesse „angemeldet, aber kein
+	// Admin“ und waere neben #[PublicPage] schlicht unwahr.
+	#[PublicPage]
 	#[NoCSRFRequired]
 	public function get(string $name): Http\Response {
 		$mimeType = self::FILES[$name] ?? null;

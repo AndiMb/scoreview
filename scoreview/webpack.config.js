@@ -6,9 +6,13 @@ const path = require('path')
 // Util::addScript geladenen Skript passen:
 //   js/scoreview-settings.js -> addScript('scoreview', 'scoreview-settings')  (Settings\AdminSettings)
 //   js/scoreview-viewer.js   -> addScript('scoreview', 'scoreview-viewer')    (Listener\FilesLoadAdditionalScriptsListener)
+//   js/scoreview-standalone.js -> addScript('scoreview', 'scoreview-standalone') (DirectEditing\ScoreDirectEditor)
 webpackConfig.entry = {
 	'scoreview-settings': path.join(__dirname, 'src', 'settings.js'),
 	'scoreview-viewer': path.join(__dirname, 'src', 'viewer.js'),
+	// Die eigenstaendige Seite fuer die mobilen Apps - derselbe Viewer, nur
+	// ohne Nextclouds Oberflaeche drumherum.
+	'scoreview-standalone': path.join(__dirname, 'src', 'standalone.js'),
 }
 
 // Ausgabedateiname explizit festlegen (kein Content-Hash im Dateinamen),

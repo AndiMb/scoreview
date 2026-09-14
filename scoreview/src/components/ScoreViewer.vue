@@ -493,7 +493,14 @@
 							<NotebookOutline :size="20" />
 						</template>
 					</NcButton>
+					<!--
+						Ein Knopf, der nichts tut, ist schlimmer als keiner: In der
+						WebView der mobilen Nextcloud-App ist die Vollbild-API
+						abgeschaltet (gemessen: document.fullscreenEnabled = false),
+						und dort ist die Ansicht ohnehin schon Vollbild.
+					-->
 					<NcButton
+						v-if="fullscreenPossible"
 						:pressed="isFullscreen"
 						:aria-label="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
 						:title="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
@@ -749,6 +756,19 @@ export default {
 	},
 
 	/**
+	 * Feuert einmal, sobald hier wirklich etwas zu sehen ist - Notenbild ODER
+	 * Fehlermeldung. Der einzige Abnehmer ist heute die eigenstaendige Seite
+	 * (StandaloneFrame.vue): Die mobile App blendet ihren Ladebildschirm erst
+	 * darauf hin aus. Frueher gemeldet laege er bei laufender Konvertierung
+	 * minutenlang ueber einem leeren Viewer, und nach zehn Sekunden meldete
+	 * die App zusaetzlich einen Timeout (A3).
+	 *
+	 * Fuer die beiden anderen Einstiege folgenlos - ein Ereignis, das niemand
+	 * abhoert, kostet nichts.
+	 */
+	emits: ['ready'],
+
+	/**
 	 * Zerlegung von ScoreViewer.vue in Composables - schrittweise, ein
 	 * Bereich nach dem anderen.
 	 *
@@ -846,6 +866,7 @@ export default {
 			zoom: zoomApi.zoom,
 			zoomFollowsWidth: zoomApi.followsWidth,
 			isFullscreen: zoomApi.isFullscreen,
+			fullscreenPossible: zoomApi.fullscreenPossible,
 			zoomPercent: zoomApi.percent,
 			minZoom: zoomApi.min,
 			maxZoom: zoomApi.max,
@@ -954,6 +975,9 @@ export default {
 
 	data() {
 		return {
+			// Siehe emits: genau einmal, egal wie oft der Zustand danach noch
+			// wechselt.
+			readyGemeldet: false,
 			pageUrls: [],
 			cursorRect: null,
 			// Zeitquelle: entweder lib/player.js (echte Wiedergabe, sobald ein
@@ -1177,9 +1201,30 @@ export default {
 	},
 
 	watch: {
+		/**
+		 * Sichtbar heisst: Noten oder Fehlermeldung. Beides beendet das
+		 * Warten - fuer die App ist der Unterschied keiner, ihr Ladebildschirm
+		 * gehoert in beiden Faellen weg.
+		 *
+		 * `$nextTick`, damit das Notenbild beim Melden wirklich im DOM steht
+		 * und nicht erst im selben Tick eingehaengt wird.
+		 *
+		 * @param {string} neu Der neue Zustand aus useConversionStatus
+		 */
+		state(neu) {
+			if (this.readyGemeldet || (neu !== 'ready' && neu !== 'error')) {
+				return
+			}
+			this.readyGemeldet = true
+			this.$nextTick(() => this.$emit('ready', neu))
+		},
+
 		fileid: {
 			immediate: true,
 			handler() {
+				// Eine andere Partitur faengt von vorn an - auch mit dem
+				// Melden.
+				this.readyGemeldet = false
 				// Rueckruf VOR dem ersten poll() setzen, nicht in created():
 				// dieser Watcher ist `immediate` und laeuft damit noch vor
 				// created(). Ein sehr schnelles "ready" liefe sonst in den
