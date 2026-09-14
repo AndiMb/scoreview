@@ -4,6 +4,43 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.9.0] – 2026-09-14
+
+### Neu
+
+- **Partituren lassen sich jetzt aus den mobilen Nextcloud-Apps öffnen.** Sie
+  laden keine Skripte der Dateien-Seite und kennen Nextclouds Weboberfläche
+  nicht – bisher bot eine `.mscz` dort nur „Herunterladen“ an. ScoreView meldet
+  sich nun als **Direct Editor** an: Die App blendet „Bearbeiten“ ein und
+  öffnet eine eigenständige Seite mit demselben Viewer, nur ohne Nextclouds
+  Oberfläche drumherum – mit einer schmalen Kopfzeile aus Dateiname und
+  Schließkreuz, weil dort kein Wirt eines stellt
+  ([E8](docs/architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps)).
+
+  Wichtig: Dieser Weg hängt **allein am Mimetype**. Die Ersatz-Dateiaktion auf
+  der Endung, die im Browser einspringt, hat in der App keine Entsprechung –
+  ohne registriertes `application/x-musescore` bleibt der Menüpunkt aus (siehe
+  [Installation, Schritt 4](docs/installation.md#4-mimetype-registrieren-empfohlen-nicht-zwingend)).
+
+  Gemessen auf einem Samsung Galaxy S23 mit der Android-App: AudioWorklet und
+  WebAssembly laufen, der Ton ist hörbar, der Bildschirm bleibt an. Nur die
+  Vollbild-API ist in der WebView abgeschaltet – der Vollbildknopf erscheint
+  deshalb ab sofort nur dort, wo Vollbild überhaupt möglich ist.
+
+### Geändert
+
+- **MuseScore 4.7.5 auf beiden Konvertierungswegen** (scoreview-engine
+  `v4.7.5-engine.1`, Sidecar-AppImage 4.7.5.260831071). Die Zusagen aus M2, M4
+  und M7 hat der Konverter-Selbsttest mit der neuen Engine unverändert
+  bestätigt.
+- **`GET /api/engine/{name}` antwortet jetzt ohne Anmeldung.** Die eigenständige
+  Seite lädt die Engine mit `import(engineUrl)`, und ein nativer dynamischer
+  Import kann keinen Ausweis tragen – der Rückfall im Browser wäre dort sonst
+  unerreichbar. Was die Route ausliefert, sind appeigene Bauartefakte: für jede
+  Instanz dieselben Bytes, kein Nutzerinhalt, dieselbe Art Material, die
+  Nextcloud unter `/apps/<app>/js/` ohnehin ohne Anmeldung ausliefert. Alle
+  übrigen Routen bleiben unverändert geschützt.
+
 ## [1.8.2] – 2026-09-14
 
 ### Behoben
