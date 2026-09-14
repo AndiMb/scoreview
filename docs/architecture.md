@@ -563,11 +563,18 @@ Menüeintrag und keine zweite Standardaktion.
 Der Preis ist eine doppelte Registrierung: `@nextcloud/files` hat zwischen den
 Nextcloud-Ständen sowohl den Ablageort der Aktionsliste als auch die
 Rückrufsignatur gewechselt (bis v3 ein globales Array `_nc_fileactions` mit
-`(nodes, view)`, ab v4 `_nc_files_scope.v4_0` mit einem Kontextobjekt). An
-Nextcloud 34 gemessen gibt es nur noch den neuen Ort. `viewer.js` trägt sich
-deshalb im neuen ein und, wenn der fehlt, zusätzlich im alten – beide Male mit
-derselben Bedingung aus `scoreFile.js`. Fehlte der zweite Zweig, täte die
-Aktion auf älteren Ständen einfach nichts: keine Fehlermeldung, kein Eintrag.
+`(nodes, view)`, ab v4 `_nc_files_scope.v4_0` mit einem Kontextobjekt). Gemessen:
+Nextcloud 32 liefert `@nextcloud/files` v3 aus und liest ausschließlich das
+Array (`dist/files-main.js`), Nextcloud 34 nur noch den neuen Ort. `viewer.js`
+trägt sich deshalb in **beide** ein – bedingungslos und beide Male mit derselben Bedingung
+aus `scoreFile.js`.
+
+Bedingungslos, weil sich von der App aus nicht feststellen lässt, welchen Ort
+der Server liest: `window._nc_files_scope.v4_0` entsteht bereits im Modulrumpf
+von `@nextcloud/files` v4, also beim bloßen Import, ganz gleich ob die
+Files-App des Servers das Objekt je ansieht. Eine Abfrage darauf ist immer
+wahr. Zwei Einträge stören nicht, weil kein Stand beide Listen liest – der
+jeweils andere bleibt unbeachtet, es gibt weiterhin genau einen Menüeintrag.
 
 ### E7: Konvertierung im Browser als Rückfall
 

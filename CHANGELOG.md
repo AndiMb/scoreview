@@ -4,6 +4,27 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.8.2] – 2026-09-14
+
+### Behoben
+
+- **Eine `.mscz` bot auf manchen Instanzen nur „Herunterladen" an, obwohl die
+  Ersatz-Dateiaktion dafür da ist.** Betroffen war jeder Server, dessen
+  Files-App noch `@nextcloud/files` v3 mitbringt und die Aktionsliste im
+  globalen Array `_nc_fileactions` führt. Der Eintrag dort hängte an der
+  Abfrage, ob der neue Ablageort `_nc_files_scope.v4_0` fehlt – den legt aber
+  schon der Import von `@nextcloud/files` v4 selbst an, die Abfrage war also
+  nie wahr. Die Aktion landete damit ausschließlich an einem Ort, den solche
+  Server nicht lesen, und blieb ohne Fehlermeldung unsichtbar. Sie wird jetzt
+  bedingungslos in beiden Listen eingetragen (E6). Besonders spürbar auf
+  verwaltetem Hosting: Dort gibt es kein `occ`, die Dateiaktion ist der einzige
+  Weg in den Viewer.
+- **Ein fehlendes `OCA.Viewer` nahm die Dateiaktion mit.** Die Registrierung beim
+  Viewer steht im Modulrumpf, noch vor der Dateiaktion; ohne Viewer-App – oder
+  wenn deren Skript erst nach unserem lädt – brach dort ein `TypeError` das
+  ganze Modul ab, und mit ihm den zweiten Einstieg. Sie wird jetzt übersprungen,
+  wenn es nichts zu registrieren gibt; die Dateiaktion entsteht in jedem Fall.
+
 ## [1.8.1] – 2026-09-04
 
 ### Behoben

@@ -116,11 +116,20 @@ const ScoreViewerWrapper = {
 	},
 }
 
-OCA.Viewer.registerHandler({
-	id: 'scoreview',
-	mimes: [MSCZ_MIME],
-	component: ScoreViewerWrapper,
-})
+// Abgesichert, obwohl `OCA.Viewer` auf der Files-Seite normalerweise steht:
+// Diese Zeile laeuft im Modulrumpf, noch vor der Dateiaktion weiter unten.
+// Faende sie `OCA.Viewer` nicht - Viewer-App abgeschaltet, oder ihr Skript
+// erst nach unserem geladen -, risse der TypeError das ganze Modul mit, und
+// mit ihm den zweiten Einstieg (E6), der genau fuer solche Instanzen da ist.
+// Aus Sicht der Nutzerin sieht beides gleich aus: eine `.mscz`, die nur
+// heruntergeladen wird. Ohne Viewer-App bleibt die Dateiaktion der Weg.
+if (OCA?.Viewer?.registerHandler) {
+	OCA.Viewer.registerHandler({
+		id: 'scoreview',
+		mimes: [MSCZ_MIME],
+		component: ScoreViewerWrapper,
+	})
+}
 
 // ---------------------------------------------------------------------------
 // Zweiter Einstieg: eine Dateiaktion auf der Endung
@@ -203,14 +212,24 @@ registerFileAction({
 // Aeltere Staende fuehren dieselbe Liste als globales Array `_nc_fileactions`
 // und rufen die Rueckrufe mit `(nodes, view)` statt mit einem Kontextobjekt
 // auf - dieselbe Aktion, andere Form. Gemessen an Nextcloud 34: dort gibt es
-// `_nc_files_scope.v4_0`, und das Array liest niemand mehr. Fehlt der neue
-// Ort, ist es umgekehrt, und ohne diesen Zweig bliebe die Aktion dort
-// unsichtbar (kein Fehler, keine Meldung - sie taete einfach nichts).
-if (!window._nc_files_scope?.v4_0) {
-	window._nc_fileactions = window._nc_fileactions || []
-	window._nc_fileactions.push({
-		...AKTION,
-		enabled: (nodes) => nodes.length === 1 && needsOwnFileAction(nodes[0]),
-		exec: (node) => aktionAusfuehren(node),
-	})
-}
+// `_nc_files_scope.v4_0`, und das Array liest niemand mehr.
+//
+// Der Eintrag geschieht BEDINGUNGSLOS, und das ist der Kern: Woran der
+// Server die Aktionen liest, laesst sich von hier aus nicht feststellen.
+// `window._nc_files_scope.v4_0` entsteht schon im Modulrumpf von
+// @nextcloud/files v4 (`window._nc_files_scope.v4_0 ??= {}`), also beim
+// blossen Import - unabhaengig davon, ob die Files-App des Servers dieses
+// Objekt jemals ansieht. Eine Abfrage darauf ist damit immer wahr; sie hat
+// den Zweig hier nie erreicht. Auf Staenden mit @nextcloud/files v3 landete
+// die Aktion so ausschliesslich an einem Ort, den niemand liest, und eine
+// `.mscz` ohne registrierten Mimetype bot weiterhin nur "Herunterladen" an -
+// genau der Fall, fuer den dieser zweite Einstieg existiert (E6).
+// Beide Listen zu fuellen ist gefahrlos, weil kein Stand beide liest: Der
+// Eintrag im jeweils anderen Ort bleibt unbeachtet, es gibt also weiterhin
+// nur einen Menueintrag.
+window._nc_fileactions = window._nc_fileactions || []
+window._nc_fileactions.push({
+	...AKTION,
+	enabled: (nodes) => nodes.length === 1 && needsOwnFileAction(nodes[0]),
+	exec: (node) => aktionAusfuehren(node),
+})
