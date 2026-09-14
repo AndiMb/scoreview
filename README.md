@@ -62,7 +62,7 @@ Ergebnis liefern und sich nur darin unterscheiden, was der Server dafür braucht
 | | **Lokal** (Voreinstellung) | **Sidecar** |
 |---|---|---|
 | Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
-| MuseScore | MuseScore 4.7.4 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
+| MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
 | Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
 

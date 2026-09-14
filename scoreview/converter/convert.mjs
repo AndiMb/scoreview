@@ -6,7 +6,7 @@
  *
  * Das ist der zweite Konvertierungsweg neben dem Sidecar (E3): dieselben
  * Artefakte, dieselbe HTTP-API der App darueber, nur ohne Container -
- * MuseScore 4.7.4 als WebAssembly, ausgefuehrt von der Node-Laufzeit des
+ * MuseScore 4.7.5 als WebAssembly, ausgefuehrt von der Node-Laufzeit des
  * Servers. Aufgerufen wird das hier ausschliesslich von
  * Service\LocalConverter.
  *
@@ -116,7 +116,7 @@ async function loadFonts(fontVerzeichnis) {
  *
  * Zur Laufzeit ist das nicht vollstaendig zu erfahren: `Engine.version()`
  * liefert die MSCZ-DATEIFORMATversion (470), und das package.json des
- * Engine-Pakets nennt nur den MuseScore-Kern (4.7.4), nicht den Build der
+ * Engine-Pakets nennt nur den MuseScore-Kern (4.7.5), nicht den Build der
  * Engine - zwei Builds desselben Kerns tragen dieselbe Nummer. Die
  * vollstaendige Angabe ist deshalb der Release-Tag, auf den die Abhaengigkeit
  * hier zeigt - eine Stelle, dieselbe, die auch bestimmt, was installiert wird.

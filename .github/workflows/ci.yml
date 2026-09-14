@@ -196,7 +196,7 @@ jobs:
           xmllint --noout --schema /tmp/info.xsd scoreview/appinfo/info.xml
 
   # Beide Konvertierungswege muessen dieselbe MuseScore-Version fahren. Genau
-  # das behauptet docs/architecture.md ("derselbe MuseScore 4.7.4, einmal als
+  # das behauptet docs/architecture.md ("derselbe MuseScore 4.7.5, einmal als
   # AppImage und einmal Qt-frei"), und genau das hat bisher niemand geprueft:
   # der eine Pin steht als Release-URL in converter/package.json, der andere
   # als ARG im Dockerfile, und nichts verbindet sie. Laufen sie auseinander,

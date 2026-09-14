@@ -3,8 +3,8 @@
 # Pinned MuseScore Studio version - update deliberately, never track "latest".
 # Chosen because it is well past the 4.0.0/4.0.1 .spos/.mpos export
 # regression (musescore/MuseScore#16710, fixed by PR #17464).
-ARG MUSESCORE_VERSION=4.7.4
-ARG MUSESCORE_BUILD=4.7.4.260706075
+ARG MUSESCORE_VERSION=4.7.5
+ARG MUSESCORE_BUILD=4.7.5.260831071
 ARG MUSESCORE_APPIMAGE_URL=https://github.com/musescore/MuseScore/releases/download/v${MUSESCORE_VERSION}/MuseScore-Studio-${MUSESCORE_BUILD}-x86_64.AppImage
 
 FROM ubuntu:22.04

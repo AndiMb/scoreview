@@ -11,7 +11,7 @@ use OCP\ITempManager;
 use Psr\Log\LoggerInterface;
 
 /**
- * Der zweite Konvertierungsweg: MuseScore 4.7.4 als WebAssembly, ausgefuehrt
+ * Der zweite Konvertierungsweg: MuseScore 4.7.5 als WebAssembly, ausgefuehrt
  * von der Node-Laufzeit des Servers (siehe docs/architecture.md E3). Kein
  * Container, kein X-Server, kein HTTP - ein Kindprozess je Partitur.
  *
