@@ -179,9 +179,16 @@ class ConversionService {
 	public function getArtifact(int $fileId, string $etag, string $name): array {
 		if (str_starts_with($name, 'page-')) {
 			$number = substr($name, strlen('page-'));
-			// Streng auf Ziffern pruefen: `page-01`, `page-1.5` oder
-			// `page-../x` duerfen nicht ueber eine (int)-Kastung durchrutschen.
-			if ($number === '' || !ctype_digit($number) || (int)$number < 1) {
+			// Streng auf Ziffern pruefen: `page-1.5` oder `page-../x` duerfen
+			// nicht ueber eine (int)-Kastung durchrutschen.
+			//
+			// Der Vergleich mit der zurueckgewandelten Zahl haelt zusaetzlich
+			// `page-01` draussen. Das ist keine Sicherheitsfrage - es loest auf
+			// dieselbe Datei auf wie `page-1` -, sondern eine des Cachings:
+			// Jede Auslieferung traegt `immutable`, und dieselbe Seite unter
+			// zwei Namen waere zweimal derselbe halbe Megabyte im Browsercache.
+			// Erzeugt werden die Namen ohnehin serverseitig (buildFileUrls).
+			if ($number === '' || !ctype_digit($number) || (int)$number < 1 || $number !== (string)(int)$number) {
 				throw new NotFoundException("Unbekanntes Artefakt: {$name}");
 			}
 			return [
