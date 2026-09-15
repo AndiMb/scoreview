@@ -214,7 +214,9 @@ betrifft ausschließlich den Bestand von vor der Registrierung.
 
 Konvertierungen laufen als Background-Job. Nextclouds Default-Modus `ajax`
 reicht dafür nicht zuverlässig: Jobs bleiben sichtbar auf `pending` stehen, wenn
-kein Seitenaufruf sie anstößt, und der Viewer dreht sich endlos.
+kein Seitenaufruf sie anstößt. Der Viewer weist nach zwei Minuten auf diese
+Ursache hin und gibt nach einer halben Stunde auf – eine Partitur lässt sich
+ohne laufenden Cron also gar nicht öffnen.
 
 ```sh
 occ background:cron

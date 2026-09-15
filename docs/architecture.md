@@ -158,6 +158,18 @@ Konvertierung neu ein; nur mit Schreibrecht, denn der Cache hängt an der Datei
 und gilt für alle, die sie öffnen. Für **alle** Partituren einer Instanz auf
 einmal bleibt das Hochzählen von `CURRENT_FORMAT_VERSION` der Hebel.
 
+Während ein Lauf arbeitet, verweigert der Knopf – sonst schriebe der laufende
+Job sein Ergebnis auf eine gelöschte Zeile. Ob überhaupt noch einer arbeitet,
+beantwortet `ConversionService::isStale()` an genau einer Stelle: Ein Datensatz
+auf `pending`/`processing`, dessen `updated_at` älter als eine halbe Stunde ist,
+gilt als tot. Der Lauf, der ihn hielt, ist dann abgebrochen (Speichermangel,
+abgewürgter Cron-Durchgang, Neustart), und ohne diese Frage bliebe die Partitur
+dauerhaft unerreichbar – der Hintergrundjob übersprang sie als „läuft schon",
+dieser Knopf verweigerte aus demselben Grund. Der Statusendpunkt meldet einen
+solchen Datensatz als Fehler `stale` und reiht ihn neu ein. Bewusst **kein**
+`timeout`: Das bedeutet „diese Partitur war zu langsam", also einen
+Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
+
 ### Datenbank
 
 | Tabelle | Inhalt |

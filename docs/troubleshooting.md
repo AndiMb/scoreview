@@ -73,7 +73,7 @@ Folgeanfragen nicht durch. Sie weisen sich mit einem Token im Header
 | `401 token_expired` | Token abgelaufen oder verbraucht; die App holt daraufhin einen frischen. Direct-Editing-Token gelten 12 h und sind für `edit()` Einmal-Token – ein Neuladen der WebView von Hand läuft deshalb in die Fehlerseite der App |
 | `403 token_file_mismatch` | Der Token gehört zu einer anderen Partitur |
 
-## Der Viewer dreht sich endlos, die Konvertierung bleibt auf „pending"
+## Die Konvertierung kommt nicht voran
 
 Background-Jobs laufen nicht. Nextclouds Default-Modus `ajax` reicht nicht
 zuverlässig; es braucht `cron` **und** einen echten Cron-Aufruf von `cron.php`:
@@ -85,6 +85,19 @@ occ background:cron
 Die Betriebsdiagnose meldet diesen Fall ausdrücklich („kein Lauf in den letzten
 15 Minuten"). Siehe
 [Installation, Schritt 5](installation.md#5-background-jobs-sicherstellen).
+
+**Woran es im Viewer zu erkennen ist.** Nach zwei Minuten erscheint unter dem
+Ladekreisel ein Hinweis auf genau diese Ursache, nach einer halben Stunde bricht
+der Viewer mit „Die Konvertierung wurde nie abgeschlossen" ab. Beides ist eine
+Aussage über die *Instanz*, nicht über die Partitur – eine andere Datei zu
+öffnen hilft nicht.
+
+Dasselbe gilt für einen Lauf, der unterwegs gestorben ist (abgewürgter
+Cron-Durchgang, Speichermangel, Neustart des Containers). Der Datensatz bleibt
+dann auf `processing` stehen; er gilt nach einer halben Stunde als tot, wird
+beim nächsten Öffnen als Fehler gemeldet und erneut eingereiht. „Neu
+konvertieren" greift an ihm ebenfalls wieder – anders als an einem Lauf, der
+tatsächlich noch arbeitet.
 
 ## „Der Konvertierungsdienst konnte nicht erreicht werden"
 

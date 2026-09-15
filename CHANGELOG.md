@@ -4,6 +4,69 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.9.1] – 2026-09-15
+
+### Behoben
+
+- **Eine abgebrochene Konvertierung sperrte die Partitur dauerhaft.** Starb der
+  Prozess mitten im Lauf – OOM-Kill, abgewürgter Cron-Durchgang, Neustart des
+  Containers –, blieb der Datensatz für immer auf `processing`. Von da an war
+  jeder Ausweg zu: Der Hintergrundjob übersprang ihn als „läuft schon",
+  „Neu konvertieren" verweigerte aus demselben Grund, und aufgeräumt wurde er
+  nie. Es half nur ein Eingriff in die Datenbank oder ein erneuter Upload.
+  Ein solcher Lauf gilt jetzt nach einer halben Stunde als tot und wird beim
+  nächsten Öffnen als Fehler gemeldet – samt neuem Versuch. Der Knopf
+  „Neu konvertieren" greift an ihm wieder, an einem tatsächlich laufenden
+  weiterhin nicht.
+
+- **Der Viewer drehte sich endlos, wenn die Hintergrundverarbeitung stillstand.**
+  Läuft kein Cron, entsteht serverseitig gar kein Datensatz, der Statusendpunkt
+  antwortet dauerhaft „wird konvertiert", und der Viewer fragte im
+  Zweisekundentakt weiter – ohne Grenze und ohne Hinweis. Nach zwei Minuten
+  steht jetzt der wahrscheinliche Grund unter dem Kreisel, nach einer halben
+  Stunde wird abgebrochen. Die Auskunft gab es bisher nur in der
+  Betriebsdiagnose der Administration.
+
+- **Ein zu langer Notizanker endete als Serverfehler.** `anchorEtag` war das
+  einzige frei bestimmbare Feld der Notiz-Schnittstelle ohne Prüfung und lief
+  ungeprüft in eine Spalte der Breite 64. Jetzt eine saubere 400er-Antwort.
+
+- **Seiten waren unter zwei Namen abrufbar.** `page-01` löste auf dieselbe Datei
+  auf wie `page-1`, obwohl die Prüfung das ausschloss – bei durchgehend
+  unveränderlich ausgelieferten Antworten hieß das dieselbe Seite zweimal im
+  Browsercache.
+
+### Geändert
+
+- **Der Konvertierungsdienst muss ein vertrauter Dienst bleiben – und kann es
+  jetzt nicht mehr nur aus Gewohnheit sein.** Die Artefaktpfade aus seiner
+  Antwort werden geprüft, bevor daraus eine Adresse wird; ein präparierter Pfad
+  hätte die Anfrage samt Zugangsgeheimnis auf einen fremden Host lenken können.
+
+- **Notenbilder und Partiturdateien werden als Anhang ausgeliefert.** Sie sind
+  Material für den Viewer, kein Dokument, das ein Browser selbst darstellen
+  soll. Am Viewer ändert das nichts – er holt sie ohnehin per XHR.
+
+- **Der lokale Konverter dreht nicht mehr leer.** Schloss der Kindprozess seine
+  Ausgabekanäle, ohne sich zu beenden, lief die Warteschleife bis zur
+  Zeitgrenze auf voller CPU; seine Fehlerausgabe wuchs dabei unbegrenzt im
+  Speicher.
+
+### Intern
+
+- **Die Rechteprüfung der Endpunkte steht unter Test.** Wer welche Partitur
+  sehen, neu konvertieren und mit geteilten Notizen versehen darf, entscheiden
+  die Controller – geprüft wurden bisher nur die Dienste darunter. 71 neue
+  Testfälle.
+
+- **Die Zusage „Nextcloud 31–35" wird an beiden Enden geprüft.** Getestet wurde
+  bislang ausschließlich gegen die Schnittstellen von Nextcloud 31, obwohl
+  `info.xml` bis 35 verspricht – für PHP, Node und Python galt der Grundsatz
+  „eine ungeprüfte Zusage ist keine" längst, für Nextcloud selbst nicht.
+
+- **Sicherheitsmeldungen der Abhängigkeiten laufen wöchentlich in CI**, als
+  eigener Job, damit eine neue Meldung nicht die Testergebnisse verdeckt.
+
 ## [1.9.0] – 2026-09-14
 
 ### Neu
