@@ -217,8 +217,37 @@ class SidecarClient {
 		}
 	}
 
+	/**
+	 * Wie ein Artefaktpfad aussehen darf, den der Sidecar selbst genannt hat.
+	 *
+	 * Der Pfad stammt aus der ANTWORT des Sidecars
+	 * (BackgroundJob\PollConversionJob::fetchAndStore) und wird unten an die
+	 * Basis-URL gehaengt - reine Zeichenverkettung, kein Aufloesen relativer
+	 * URLs. Ein fuehrendes `@` machte daraus eine FREMDE Adresse:
+	 * `http://sidecar:8765` + `@example.invalid/x` ergibt nach RFC 3986 den
+	 * Host `example.invalid` mit `sidecar:8765` als Userinfo - und das Secret
+	 * ginge im Header mit. Dasselbe gilt fuer `//host/x` (netzwerkrelativ)
+	 * und `:` (eigenes Schema).
+	 *
+	 * Der Lookahead gegen den ZWEITEN Schraegstrich steht ausdruecklich da:
+	 * `/` gehoert in die Zeichenklasse (ein Artefaktpfad hat mehrere Ebenen),
+	 * und ohne ihn waere `//example.invalid/x` ein gueltiger „Pfad" -
+	 * nachgemessen, die erste Fassung dieser Zeile liess ihn durch. `..`
+	 * faellt getrennt heraus: Der Ausdruck braucht Punkte, aber keine
+	 * Aufstiege.
+	 *
+	 * Der Sidecar ist ein vertrauter Dienst. Diese Zeilen sorgen dafuer, dass
+	 * er es bleiben MUSS, statt dass es nur niemand ausprobiert.
+	 */
+	private const ARTEFAKTPFAD = '#^/(?!/)[A-Za-z0-9/_.\-]*$#';
+
 	/** @throws SidecarException */
 	public function fetchFile(string $relativeUrl): string {
+		if (preg_match(self::ARTEFAKTPFAD, $relativeUrl) !== 1 || str_contains($relativeUrl, '..')) {
+			throw new SidecarException(
+				'Sidecar nannte einen unbrauchbaren Artefaktpfad: ' . $relativeUrl,
+				0, null, ScoreConversion::ERROR_SIDECAR_REJECTED);
+		}
 		$client = $this->clientService->newClient();
 		try {
 			$response = $client->get($this->getBaseUrl() . $relativeUrl, [
