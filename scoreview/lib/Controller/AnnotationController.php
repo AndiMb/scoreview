@@ -44,6 +44,9 @@ class AnnotationController extends Controller {
 	 */
 	private const MAX_CONTENT_LENGTH = 10000;
 
+	/** Die Breite der Spalte - siehe validateAnchorEtag(). */
+	private const MAX_ANCHOR_ETAG_LENGTH = 64;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -87,7 +90,7 @@ class AnnotationController extends Controller {
 		if ($node === null || $userId === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
-		$fehler = $this->validateContent($content);
+		$fehler = $this->validateContent($content) ?? $this->validateAnchorEtag($anchorEtag);
 		if ($fehler !== null) {
 			return $fehler;
 		}
@@ -167,19 +170,6 @@ class AnnotationController extends Controller {
 	}
 
 	/**
-	 * Ob die anfragende Nutzerin geteilte Notizen dieser Datei anlegen/
-	 * aendern/loeschen darf - an den Dateirechten festgemacht, statt eine
-	 * eigene Rechteverwaltung zu bauen. Der aufgeloeste Node spiegelt
-	 * bereits die Rechte AUS SICHT der anfragenden Nutzerin wider
-	 * (UserFileResolver liest ueber deren eigenen Dateibaum) - bei einer
-	 * geteilten Datei ist das genau die vom Share gewaehrte Berechtigung.
-	 *
-	 * Nimmt den bereits aufgeloesten Node entgegen statt einer fileId: jede
-	 * Aufloesung ist ein `getUserFolder()->getById()` samt
-	 * Filesystem-Aufbau, und vorher lief das pro Schreibanfrage zweimal -
-	 * einmal in requireOwnAccess(), einmal hier.
-	 */
-	/**
 	 * Prueft den Text einer Notiz - leer und zu lang an EINER Stelle, weil
 	 * create() und update() dieselbe Zusage geben muessen: was angelegt
 	 * werden darf, darf auch hineingeaendert werden.
@@ -198,6 +188,42 @@ class AnnotationController extends Controller {
 		return null;
 	}
 
+	/**
+	 * Prueft den Sekundaeranker. Die Spalte ist VARCHAR(64)
+	 * (Migration\Version000100Date20260823130000); ohne diese Pruefung endete
+	 * ein laengerer Wert unter MySQL/PostgreSQL im Strict-Mode als 500er - fuer
+	 * eine Eingabe, die der Client vollstaendig bestimmt, und als einziges
+	 * Feld dieses Endpunkts ohne Pruefung (Text, Sichtbarkeit, Taktnummer und
+	 * Bruchteil haben laengst eine).
+	 *
+	 * Geprueft wird nur die LAENGE, nicht der Inhalt: Ein etag ist fuer diese
+	 * App undurchsichtig, und ob er noch zu einer Konvertierung passt,
+	 * entscheidet ohnehin erst die Anzeige (AnnotationService::serialize
+	 * markiert eine nicht mehr aufloesbare Notiz als `orphaned`, statt sie zu
+	 * verwerfen).
+	 *
+	 * @return ?JSONResponse null, wenn der Anker in Ordnung ist
+	 */
+	private function validateAnchorEtag(?string $anchorEtag): ?JSONResponse {
+		if ($anchorEtag !== null && mb_strlen($anchorEtag) > self::MAX_ANCHOR_ETAG_LENGTH) {
+			return new JSONResponse(['error' => $this->l->t('Invalid note anchor.')], Http::STATUS_BAD_REQUEST);
+		}
+		return null;
+	}
+
+	/**
+	 * Ob die anfragende Nutzerin geteilte Notizen dieser Datei anlegen/
+	 * aendern/loeschen darf - an den Dateirechten festgemacht, statt eine
+	 * eigene Rechteverwaltung zu bauen. Der aufgeloeste Node spiegelt
+	 * bereits die Rechte AUS SICHT der anfragenden Nutzerin wider
+	 * (UserFileResolver liest ueber deren eigenen Dateibaum) - bei einer
+	 * geteilten Datei ist das genau die vom Share gewaehrte Berechtigung.
+	 *
+	 * Nimmt den bereits aufgeloesten Node entgegen statt einer fileId: jede
+	 * Aufloesung ist ein `getUserFolder()->getById()` samt
+	 * Filesystem-Aufbau, und vorher lief das pro Schreibanfrage zweimal -
+	 * einmal in requireOwnAccess(), einmal hier.
+	 */
 	private function canWriteShared(Node $node): bool {
 		return ($node->getPermissions() & Constants::PERMISSION_UPDATE) !== 0;
 	}
