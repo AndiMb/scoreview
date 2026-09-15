@@ -59,6 +59,8 @@ OC.L10N.register(
     "The score could not be converted." : "Die Partitur konnte nicht konvertiert werden.",
     "The conversion did not finish in time." : "Die Konvertierung wurde nicht rechtzeitig abgeschlossen.",
     "The score contains no pages that could be converted." : "Die Partitur enthält keine Seiten, die konvertiert werden konnten.",
+    "The conversion was never finished. On the server this usually means that background job processing (cron) is not running." : "Die Konvertierung wurde nie abgeschlossen. Auf dem Server liegt das meist daran, dass die Hintergrundverarbeitung (Cron) nicht läuft.",
+    "This is taking longer than usual. If it never finishes, check that background job processing (cron) is running on this server." : "Das dauert länger als gewöhnlich. Falls es gar nicht fertig wird, prüfe, ob die Hintergrundverarbeitung (Cron) dieses Servers läuft.",
     "This score is too large to be set in this browser, and this server cannot convert it itself." : "Diese Partitur ist zu groß, um in diesem Browser gesetzt zu werden, und dieser Server kann sie nicht selbst konvertieren.",
     "This score could not be set in this browser, and this server cannot convert it itself. Reloading the page may help." : "Diese Partitur konnte in diesem Browser nicht gesetzt werden, und dieser Server kann sie nicht selbst konvertieren. Ein Neuladen der Seite hilft möglicherweise.",
     "Without effect right now: scores are converted in the browser, and nothing is stored on the server that could be prepared in advance." : "Derzeit ohne Wirkung: Partituren werden im Browser gesetzt, und auf dem Server wird nichts abgelegt, was sich vorab vorbereiten liesse.",

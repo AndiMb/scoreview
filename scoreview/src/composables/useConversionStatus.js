@@ -6,6 +6,29 @@ import { useClientConversion } from './useClientConversion.js'
 
 const POLL_INTERVAL_MS = 2000
 
+/**
+ * Ab wann der Kreisel allein nicht mehr genügt. Länger als jede gemessene
+ * serverseitige Konvertierung samt Cron-Takt (0,7–2,9 s lokal, ~5,4 s je
+ * Seite im Sidecar, siehe docs/limits.md) – wer so lange wartet, wartet
+ * nicht mehr auf Rechenzeit, sondern auf etwas, das nicht kommt. Hier steht
+ * dann ein Hinweis auf den häufigsten Grund; ein Urteil ist es noch nicht,
+ * die Konvertierung läuft weiter.
+ */
+const LANGE_WARTEZEIT_MS = 120_000
+
+/**
+ * Wann aufgegeben wird.
+ *
+ * Großzügiger als die serverseitige Frist (`ConversionService::
+ * STALE_AFTER_SECONDS`, 1800 s), damit der Server sein genaueres Urteil
+ * zuerst abgeben kann: Wo es einen Datensatz gibt, kommt `stale` von dort.
+ * Diese Frist greift für den Fall, in dem serverseitig gar nichts entsteht,
+ * das überaltern könnte – läuft der Cron nie, kommt `ConvertScoreJob` nie
+ * bis `createPending()`, und der Statusendpunkt antwortet für immer
+ * `pending` (siehe ConversionController::pendingOrClient).
+ */
+const POLL_DEADLINE_MS = 1_860_000
+
 const t = (text, vars) => translate('scoreview', text, vars)
 
 /**
@@ -39,13 +62,20 @@ export function useConversionStatus({ fileId, onReady }) {
 	const state = ref('loading')
 	const errorMessage = ref('')
 	// sidecar_unreachable | sidecar_rejected | local_unavailable |
-	// conversion_failed | timeout | no_pages | too_large |
+	// conversion_failed | timeout | no_pages | too_large | stale |
 	// client_too_large | client_engine_unavailable | unknown | ''
 	// (kein Fehler bzw. Fehler kam nicht vom Server, sondern vom Abruf selbst)
 	const errorCode = ref('')
+	/**
+	 * Ob die Konvertierung ungewöhnlich lange dauert – eine Auskunft, kein
+	 * Zustand: `state` bleibt `converting`, der Kreisel dreht weiter.
+	 */
+	const langeWartezeit = ref(false)
 
 	let pollTimer = null
 	let autoRetried = false
+	/** Beginn des Wartens, für beide Fristen oben. Verworfen in reset(). */
+	let pollBegonnenAm = null
 
 	const client = useClientConversion()
 	/** Gesetzt, solange die Artefakte aus dem Browser stammen - siehe reconvert(). */
@@ -67,6 +97,11 @@ export function useConversionStatus({ fileId, onReady }) {
 			timeout: t('The conversion did not finish in time.'),
 			no_pages: t('The score contains no pages that could be converted.'),
 			too_large: t('The score is too large to be converted.'),
+			// Ein Lauf, den niemand beendet hat. Der Satz nennt den häufigsten
+			// Grund gleich mit: Ohne laufenden Cron werden Background-Jobs nie
+			// ausgeführt, und von außen ist das ausschließlich daran zu sehen,
+			// dass nichts passiert (siehe Service\HealthService).
+			stale: t('The conversion was never finished. On the server this usually means that background job processing (cron) is not running.'),
 			client_too_large: t('This score is too large to be set in this browser, and this server cannot convert it itself.'),
 			client_engine_unavailable: t('This score could not be set in this browser, and this server cannot convert it itself. Reloading the page may help.'),
 			unknown: t('An unknown error occurred during conversion.'),
@@ -82,6 +117,9 @@ export function useConversionStatus({ fileId, onReady }) {
 		: (errorMessage.value || t('Unknown error.'))))
 
 	async function poll() {
+		if (pollBegonnenAm === null) {
+			pollBegonnenAm = Date.now()
+		}
 		let body
 		try {
 			const res = await axios.get(generateUrl('/apps/scoreview/api/scores/{fileId}/status', { fileId: fileId() }))
@@ -114,6 +152,19 @@ export function useConversionStatus({ fileId, onReady }) {
 			}
 		} else {
 			state.value = 'converting'
+			// Kein eigener Timer: Der Zweisekundentakt kommt ohnehin hier
+			// vorbei, die verstrichene Zeit ist damit gratis.
+			const gewartet = Date.now() - pollBegonnenAm
+			if (gewartet > POLL_DEADLINE_MS) {
+				// Derselbe Code wie serverseitig, weil es derselbe Befund ist:
+				// Der Lauf, auf den gewartet wird, hat nie stattgefunden. Nur
+				// ist hier nichts da, was ihn hätte melden können.
+				state.value = 'error'
+				errorMessage.value = ''
+				errorCode.value = 'stale'
+				return
+			}
+			langeWartezeit.value = gewartet > LANGE_WARTEZEIT_MS
 			pollTimer = setTimeout(poll, POLL_INTERVAL_MS)
 		}
 	}
@@ -195,9 +246,11 @@ export function useConversionStatus({ fileId, onReady }) {
 		errorMessage.value = ''
 		errorCode.value = ''
 		autoRetried = false
+		langeWartezeit.value = false
+		pollBegonnenAm = null
 	}
 
 	// `clientProgress` ist null, solange nichts im Browser gerechnet wird -
 	// auf einer Instanz mit funktionierendem Serverweg also immer.
-	return { state, errorMessage, errorCode, errorText, clientProgress: client.progress, poll, reconvert, stop, reset }
+	return { state, errorMessage, errorCode, errorText, langeWartezeit, clientProgress: client.progress, poll, reconvert, stop, reset }
 }

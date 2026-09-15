@@ -947,6 +947,7 @@ export default {
 			highlightStyle: preferences.highlightStyle,
 			state: conversion.state,
 			clientProgress: conversion.clientProgress,
+			longWait: conversion.langeWartezeit,
 			errorMessage: conversion.errorMessage,
 			errorCode: conversion.errorCode,
 			errorText: conversion.errorText,
@@ -1091,7 +1092,15 @@ export default {
 		conversionProgressText() {
 			const stand = this.clientProgress
 			if (!stand) {
-				return ''
+				// Serverseitig konvertiert: Hier steht sonst nichts, weil es
+				// nichts zu melden gibt. Dauert es ungewoehnlich lange, ist
+				// genau dieses Schweigen die Fehlinformation - dann steht hier
+				// der haeufigste Grund, waehrend der Kreisel weiterlaeuft.
+				// Noch kein Urteil: Das faellt erst mit der Frist in
+				// useConversionStatus.js.
+				return this.longWait
+					? this.t('This is taking longer than usual. If it never finishes, check that background job processing (cron) is running on this server.')
+					: ''
 			}
 			if (stand.phase === 'source') {
 				return this.t('Loading score…')
