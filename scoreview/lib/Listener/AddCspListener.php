@@ -60,6 +60,14 @@ use OCP\Security\CSP\AddContentSecurityPolicyEvent;
  * der Seite auch kein Notenbild stehen; die Lockerung wäre folgenlos, aber
  * wirksam.
  *
+ * **Der zweite Pfad unter diesem Praefix.** Die eigenstaendige Seite fuer die
+ * mobilen Apps (DirectEditing\ScoreDirectEditor) wird unter
+ * `/apps/files/directEditing/{token}` ausgeliefert und faellt damit unter
+ * denselben Vergleich. Sie braucht dieselben Lockerungen, weil dort derselbe
+ * Viewer laeuft - `wasm-unsafe-eval` fuer die Wiedergabe, `blob:` fuer den
+ * Rueckfall. Das ist Absicht, nicht Zufall: Wer diesen Vergleich enger zieht
+ * (etwa auf `/apps/files/files`), nimmt dem mobilen Viewer still den Ton.
+ *
  * Ehrlich bleibt: das lockert weiterhin die **ganze Files-Seite**, nicht nur
  * den Viewer darin. Feiner geht es mit diesem Ereignis nicht - eine echte
  * Begrenzung auf den Viewer bräuchte eine eigene Controller-Response, also

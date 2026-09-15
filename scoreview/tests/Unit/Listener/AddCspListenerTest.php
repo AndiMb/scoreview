@@ -169,6 +169,12 @@ class AddCspListenerTest extends TestCase {
 			'mit Schraegstrich' => ['/apps/files/'],
 			'Ansicht mit Datei' => ['/apps/files/files/42'],
 			'andere Ansicht' => ['/apps/files/favorites'],
+			// Die eigenstaendige Seite fuer die mobilen Apps
+			// (DirectEditing\ScoreDirectEditor). Sie laeuft unter demselben
+			// Praefix und braucht dieselben Lockerungen - ohne sie bleibt der
+			// Viewer dort stumm, und zwar ohne Fehlermeldung. Bis hierher war
+			// das nirgends festgehalten.
+			'Direct Editing der mobilen Apps' => ['/apps/files/directEditing/tok3n'],
 		];
 	}
 

@@ -38,6 +38,20 @@ class LocalConverter {
 	private const DEFAULT_TIMEOUT_SECONDS = 120;
 
 	/**
+	 * Wieviel Fehlerausgabe mitgefuehrt wird.
+	 *
+	 * MuseScore schreibt seine Qt-Meldungen nach stderr, und convert.mjs leitet
+	 * seine eigene Ausgabe dorthin um - ein haengender Lauf kann das bis zur
+	 * Zeitgrenze tun, und ohne Deckel laege alles davon im Speicher des
+	 * Cron-Prozesses. Behalten wird der SCHWANZ: lastLine() sucht die Ursache
+	 * am Ende, vorne steht Rauschen.
+	 *
+	 * stdout bleibt ungedeckelt - dort steht die JSON-Antwort des Selbsttests,
+	 * die vollstaendig bleiben muss, und sie ist durch den Aufbau begrenzt.
+	 */
+	private const MAX_STDERR_BYTES = 1048576;
+
+	/**
 	 * Wo nach `node` gesucht wird, wenn die Einstellung `node_path` leer ist.
 	 * Der nackte Name steht zuerst: proc_open() sucht ihn ueber PATH, was auf
 	 * einem gepflegten System die richtige Antwort ist. Die absoluten Pfade
@@ -319,8 +333,21 @@ class LocalConverter {
 						$stdout .= $chunk;
 					} else {
 						$stderr .= $chunk;
+						if (strlen($stderr) > self::MAX_STDERR_BYTES) {
+							$stderr = substr($stderr, -self::MAX_STDERR_BYTES);
+						}
 					}
 				}
+			}
+
+			// Ein Kind, das seine Pipes schliesst, ohne sich zu beenden, laesst
+			// stream_select() sofort zurueckkehren (EOF gilt als lesbar) -
+			// die Schleife drehte dann bis zur Zeitgrenze auf voller CPU, ohne
+			// je ein Byte zu holen. Das kurze Warten kostet nichts: Von hier
+			// ist ohnehin nichts mehr zu lesen, es geht nur noch darum, das
+			// Ende des Prozesses zu bemerken.
+			if (feof($pipes[1]) && feof($pipes[2])) {
+				usleep(50000);
 			}
 
 			$status = proc_get_status($process);

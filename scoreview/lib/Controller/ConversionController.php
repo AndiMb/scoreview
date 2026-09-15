@@ -299,6 +299,10 @@ class ConversionController extends Controller {
 		// Mimetype-Registrierung `application/octet-stream`, und der Browser
 		// soll nicht von der Serverkonfiguration abhaengen.
 		$response->addHeader('Content-Type', 'application/x-musescore');
+		// Wie bei den Artefakten (serveCachedFile): Diese Route liefert
+		// Material, das nur der Viewer per XHR liest - nie ein Dokument, das
+		// der Browser selbst darstellen soll.
+		$response->addHeader('Content-Disposition', 'attachment');
 		$response->addHeader('Content-Length', (string)$node->getSize());
 		$response->setETag($node->getEtag());
 		$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
@@ -382,6 +386,15 @@ class ConversionController extends Controller {
 		// als PHP-String im Speicher (vorher: getContent()/DataDisplayResponse).
 		$response = new StreamResponse($file->read());
 		$response->addHeader('Content-Type', $mimeType);
+		// Die Bereinigung des SVG sitzt im Browser (ScorePage.vue ->
+		// lib/svgSanitizer.js) und greift nur, wo der Viewer es holt. Wer
+		// diese URL direkt aufruft, bekaeme das SVG als DOKUMENT auf der
+		// Nextcloud-Herkunft - Nextclouds nonce-basierte Default-CSP faengt
+		// Skripte darin zwar ab, aber der Sanitizer waere dann nicht mehr die
+		// Schicht, die das traegt. Dieser Header macht die Frage
+		// gegenstandslos. Den Viewer beruehrt er nicht: Er holt das Artefakt
+		// per XHR, und dort spielt Content-Disposition keine Rolle.
+		$response->addHeader('Content-Disposition', 'attachment');
 		// $etag ist der Nextcloud-Datei-etag, nicht IAppData's eigener - bewusst
 		// so: Inhalt ist fuer (fileId, etag) invariant (siehe ConversionService),
 		// er reicht also als stabiler HTTP-ETag, ohne von
