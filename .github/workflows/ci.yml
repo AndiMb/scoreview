@@ -18,6 +18,12 @@ on:
   # keinen Lauf aus, workflow_dispatch ist von dieser Bremse ausgenommen.
   # Ohne das haette der Pin-PR des Bots kein Gate.
   workflow_dispatch:
+  # Nur fuer den Advisory-Job: Eine Sicherheitsmeldung erscheint, ohne dass
+  # hier jemand etwas aendert - ein Lauf allein bei Aenderungen faende sie
+  # erst beim naechsten Commit. Montagmorgen, damit sie zum Wochenstart
+  # dasteht.
+  schedule:
+    - cron: '0 6 * * 1'
 
 permissions:
   contents: read
@@ -63,15 +69,41 @@ jobs:
         run: npm run build
 
   backend:
-    name: Backend (PHP ${{ matrix.php }})
+    name: Backend (PHP ${{ matrix.php }}, OCP ${{ matrix.ocp }})
     runs-on: ubuntu-latest
+    # Ein beweglicher Zweig kann brechen, ohne dass hier jemand etwas getan
+    # hat - diese eine Achse darf deshalb rot werden, ohne den Lauf zu
+    # stoppen. Sobald NC 35 erschienen ist, wird daraus `^35.0` und die Zeile
+    # hier faellt weg: Dann ist es ein fester Stand wie die anderen.
+    # Nachgemessen am 2026-09-15: gegen dev-stable35 lief die Suite gruen.
+    continue-on-error: ${{ matrix.unveroeffentlicht == true }}
     strategy:
       fail-fast: false
       matrix:
         # Unter- und Obergrenze aus appinfo/info.xml. Beide Enden bleiben
         # geprueft - wie bei Node und Python: max-version ist eine Zusage an
         # den App Store, und eine ungepruefte Zusage ist keine.
-        php: ['8.1', '8.5']
+        #
+        # Dasselbe gilt fuer NEXTCLOUD selbst, und das fehlte bis hierher:
+        # info.xml verspricht 31-35, `nextcloud/ocp` stand aber auf `^31.0`
+        # (also < 32). Getestet wurde damit ausschliesslich gegen die
+        # Schnittstellen von NC 31 - eine Signaturaenderung in 32-35 waere
+        # nirgends aufgefallen, obwohl die App mehrere OCP-Schnittstellen
+        # implementiert (IEditor, IEventListener, Middleware, QBMapper).
+        #
+        # Drei Achsen, weil die zugesagte Obergrenze noch gar nicht draussen
+        # ist: `nextcloud/ocp` hat als hoechsten STABILEN Stand v34, NC 35
+        # existiert nur als Zweig `dev-stable35`. Geprueft wird deshalb der
+        # hoechste veroeffentlichte Stand hart - und die eigentliche Zusage
+        # zusaetzlich weich, siehe continue-on-error unten.
+        include:
+          - php: '8.1'
+            ocp: '^31.0'
+          - php: '8.5'
+            ocp: '^34.0'
+          - php: '8.5'
+            ocp: 'dev-stable35'
+            unveroeffentlicht: true
     defaults:
       run:
         working-directory: scoreview
@@ -87,12 +119,31 @@ jobs:
       # Vor dem Install, damit ein Fehler in composer.json auch als solcher
       # gemeldet wird und nicht als merkwuerdiger Aufloesungsfehler. --strict
       # zieht auch einen composer.lock hoch, der nicht mehr zur composer.json
-      # passt. Nur auf einer Version - die Datei ist nicht versionsabhaengig.
+      # passt. Nur auf der Achse, deren OCP-Stand der Lock auch abbildet - die
+      # andere zieht ihn gleich planmaessig hoch und muss ihn verlassen.
       - name: composer.json und composer.lock pruefen
-        if: matrix.php == '8.1'
+        if: matrix.ocp == '^31.0'
         run: composer validate --strict --no-check-publish
 
-      - run: composer install --no-interaction --no-progress
+      # Die Untergrenze laeuft gegen den Lock (reproduzierbar), die Obergrenze
+      # gegen frisch aufgeloeste Abhaengigkeiten. composer.json bleibt bei
+      # `^31.0`: Sie ist die Zusage, die der Lock traegt - die Obergrenze ist
+      # eine Pruefung, keine Festlegung.
+      - name: OCP-Stand dieser Achse
+        if: matrix.ocp != '^31.0'
+        run: |
+          # Ein Zweigstand ist per Definition instabil - ohne diese beiden
+          # Zeilen lehnt composer ihn ab ("does not match your
+          # minimum-stability"). prefer-stable haelt alles UEBRIGE stabil.
+          if [ "${{ matrix.unveroeffentlicht }}" = "true" ]; then
+            composer config minimum-stability dev
+            composer config prefer-stable true
+          fi
+          composer require --dev --no-update --no-interaction "nextcloud/ocp:${{ matrix.ocp }}"
+          composer update --no-interaction --no-progress
+
+      - if: matrix.ocp == '^31.0'
+        run: composer install --no-interaction --no-progress
 
       - name: Syntaxpruefung
         run: find lib templates appinfo -name '*.php' -print0 | xargs -0 -n1 php -l
@@ -240,3 +291,41 @@ jobs:
               echo "MUSESCORE_BUILD ($BUILD) gehoert nicht zu MUSESCORE_VERSION ($SIDECAR)" >&2
               exit 1 ;;
           esac
+
+  # Bekannte Sicherheitsluecken in den Abhaengigkeiten.
+  #
+  # Bewusst ein EIGENER Job und nicht ein Schritt in frontend/backend: Eine
+  # neue Meldung soll CI rot machen - aber nicht so, dass die Testergebnisse
+  # dahinter verschwinden. Wer den roten Punkt sieht, soll auf einen Blick
+  # unterscheiden koennen, ob der Code kaputt ist oder die Welt sich geaendert
+  # hat.
+  #
+  # `--audit-level=high`, nicht strenger: Die niedrigen Meldungen stammen
+  # durchweg aus Webpacks Node-Polyfills (crypto-browserify und Angrenzendes),
+  # laufen also zur BAUZEIT und landen in keinem Bundle. Sie jedes Mal rot zu
+  # faerben hiesse, den Job binnen einer Woche zu ignorieren.
+  advisories:
+    name: Abhaengigkeiten (Sicherheitsmeldungen)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scoreview
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: npm (Laufzeit und Bauzeit)
+        run: npm audit --audit-level=high
+
+      # composer audit braucht nur den Lock, keine Installation.
+      - name: composer
+        run: composer audit --no-interaction --locked
