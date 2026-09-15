@@ -52,6 +52,17 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	public const ERROR_TIMEOUT = 'timeout';
 	public const ERROR_NO_PAGES = 'no_pages';
 	public const ERROR_TOO_LARGE = 'too_large';
+	/**
+	 * Der Lauf, der diesen Datensatz hielt, hat ihn nie beendet -
+	 * Prozessabbruch, OOM-Kill oder ein Cron, der nicht laeuft.
+	 *
+	 * Bewusst KEIN ERROR_TIMEOUT: das hiesse "diese Partitur war zu langsam"
+	 * und steht damit fuer einen Inhaltsfehler. Hier ist die Partitur
+	 * unverdaechtig - es fehlt der Lauf. Der Unterschied ist nicht kosmetisch:
+	 * Service\ClientFallback entscheidet an den Codes, ob der Browser
+	 * uebernehmen soll, und beide Antworten waeren hier falsch (siehe dort).
+	 */
+	public const ERROR_STALE = 'stale';
 	public const ERROR_UNKNOWN = 'unknown';
 
 	protected $fileId;

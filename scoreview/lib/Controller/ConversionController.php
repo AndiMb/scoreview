@@ -111,6 +111,20 @@ class ConversionController extends Controller {
 			return $this->pendingOrClient($fileId, $node);
 		}
 
+		// Der Lauf, der diesen Datensatz hielt, ist gestorben (siehe
+		// ConversionService::isStale). Kein eigener Zweig und kein fuenfter
+		// Status: markError() schreibt in dieselbe Entity, die gleich darauf
+		// gelesen wird - der Datensatz faellt damit in den error-Zweig unten,
+		// der ohnehin schon einen neuen Versuch einreiht. Kommt der Cron
+		// zurueck, konvertiert die Partitur beim naechsten Durchgang.
+		if ($this->conversionService->isStale($conversion)) {
+			$this->conversionService->markError(
+				$conversion,
+				'Der Konvertierungslauf wurde nie abgeschlossen.',
+				ScoreConversion::ERROR_STALE,
+			);
+		}
+
 		$body = ['status' => $conversion->getStatus()];
 		if ($conversion->getStatus() === ScoreConversion::STATUS_ERROR) {
 			$body['error'] = $conversion->getErrorMessage();
@@ -204,10 +218,18 @@ class ConversionController extends Controller {
 		}
 
 		$conversion = $this->conversionService->find($fileId, $node->getEtag());
-		if ($conversion !== null && in_array($conversion->getStatus(), [ScoreConversion::STATUS_PENDING, ScoreConversion::STATUS_PROCESSING], true)) {
+		if ($conversion !== null
+			&& in_array($conversion->getStatus(), [ScoreConversion::STATUS_PENDING, ScoreConversion::STATUS_PROCESSING], true)
+			&& !$this->conversionService->isStale($conversion)) {
 			// Laeuft ohnehin gerade - nichts verwerfen, sonst schriebe der
 			// laufende Job sein Ergebnis auf eine geloeschte Zeile und die
 			// Konvertierung liefe ein zweites Mal.
+			//
+			// An einem TOTEN Datensatz gilt das nicht (isStale): dort laeuft
+			// nichts mehr, das sein Ergebnis noch schreiben koennte, und
+			// dieser Knopf ist der Weg heraus. Ihn auch dort zu verweigern
+			// hiesse, die Nutzerin auf einen Lauf warten zu lassen, den es
+			// nicht mehr gibt.
 			return new JSONResponse(['status' => $conversion->getStatus()]);
 		}
 

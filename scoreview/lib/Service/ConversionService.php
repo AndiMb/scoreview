@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Service;
 
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreConversionMapper;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
@@ -42,9 +43,22 @@ class ConversionService {
 	 */
 	public const CURRENT_FORMAT_VERSION = 2;
 
+	/**
+	 * Wie lange ein Lauf einen Datensatz halten darf, bevor er als tot gilt.
+	 *
+	 * Grosszuegig gegenueber allem, was ein regulaerer Lauf braucht: Der
+	 * Sidecar-Weg gibt nach 300 s selbst auf (ConvertScoreJob::
+	 * MAX_TOTAL_SECONDS), der lokale nach `local_timeout` (120 s) - dazu
+	 * kommt der Cron-Takt der Instanz, der zwischen zwei Schritten der
+	 * Poll-Kette liegt. Die Grenze soll einen toten Lauf einfangen, nicht
+	 * eine langsame Instanz bestrafen.
+	 */
+	public const STALE_AFTER_SECONDS = 1800;
+
 	public function __construct(
 		private ScoreConversionMapper $mapper,
 		private IAppData $appData,
+		private ITimeFactory $time,
 	) {
 	}
 
@@ -100,6 +114,27 @@ class ConversionService {
 	/** Siehe CURRENT_FORMAT_VERSION. */
 	public function isCurrentFormat(ScoreConversion $conversion): bool {
 		return $conversion->getFormatVersion() === self::CURRENT_FORMAT_VERSION;
+	}
+
+	/**
+	 * Haelt diesen Datensatz noch ein Lauf - oder ist der gestorben?
+	 *
+	 * `pending`/`processing` sagen "jemand arbeitet daran"; ein abgebrochener
+	 * PHP-Prozess (OOM-Kill, Cron-Abbruch, Neustart) hinterlaesst diese Zusage
+	 * ohne jemanden, der sie einloest. Ohne diese Frage blieb die Partitur
+	 * danach unerreichbar: ConvertScoreJob ueberspringt einen laufenden
+	 * Datensatz, und „Neu konvertieren" verweigert an ihm - der einzige
+	 * Ausweg war ein Eingriff in die Datenbank.
+	 *
+	 * `updated_at` taugt als Alter des LAUFS, nicht nur der letzten Aenderung:
+	 * markProcessing() setzt es einmal, und waehrend der Konvertierung
+	 * schreibt niemand fort (PollConversionJob liest nur).
+	 */
+	public function isStale(ScoreConversion $conversion): bool {
+		if (!in_array($conversion->getStatus(), [ScoreConversion::STATUS_PENDING, ScoreConversion::STATUS_PROCESSING], true)) {
+			return false;
+		}
+		return ($this->time->getTime() - $conversion->getUpdatedAt()->getTimestamp()) > self::STALE_AFTER_SECONDS;
 	}
 
 	private function updateStatus(ScoreConversion $conversion, string $status): void {
