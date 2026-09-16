@@ -206,3 +206,20 @@ Alle ausführlich in `docs/troubleshooting.md`:
 einzige Ausnahme ist die selbst erstellte `repeat-test.*`. Ebenso draußen:
 `scoreview/js/` (Build-Artefakte), `node_modules/` und das lokale
 Wegwerf-Verzeichnis `spike/`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues liegen als GitHub-Issues am Repo und werden über die `gh`-CLI
+bearbeitet. Siehe `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Die fünf kanonischen Rollen, Labelnamen unverändert übernommen.
+Siehe `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-Context: ein `CONTEXT.md` und `docs/adr/` im Wurzelverzeichnis – beides
+wird erst angelegt, wenn es gebraucht wird. Siehe `docs/agents/domain.md`.
