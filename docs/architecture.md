@@ -582,19 +582,46 @@ deklariert 31–35, die Bibliotheksversion muss dazu passen. Für Regler
 ### E6: Zwei Einstiege – Mimetype und Dateiendung
 
 Der reguläre Einstieg ist Nextclouds Viewer, und der wählt am **Mimetype**:
-`application/x-musescore`. Diese Registrierung ist server-weit und lässt sich
-aus einer App heraus nicht vornehmen – Nextcloud liest `mimetypemapping.json`
-ausschließlich aus `config/` – und sie braucht anschließend `occ`. Auf
-verwaltetem Hosting gibt es beides nicht. Selbst auf einer eigenen Instanz
-bleiben bereits hochgeladene Dateien bis zu einem `occ files:scan` auf
-`application/octet-stream` stehen und sind für den Viewer unsichtbar.
+`application/x-musescore`. Die *Zuordnung* `.mscz` → Mimetype liest Nextcloud
+ausschließlich aus `config/mimetypemapping.json`, nie aus einer App. Auf
+verwaltetem Hosting ist diese Datei unerreichbar, und `occ` gibt es dort
+ebenfalls nicht.
 
-Deshalb registriert `src/viewer.js` zusätzlich eine **Dateiaktion auf der
-Endung**, die dieselbe Komponente in einem `NcModal` zeigt. Ihre Bedingung
-steht als reine Funktion in `src/lib/scoreFile.js` und lautet: Endung `.mscz`
-**und** Mimetype nicht `application/x-musescore`. Sie greift also genau dort,
-wo der Viewer nichts tut – wo die Registrierung sitzt, gibt es keinen zweiten
-Menüeintrag und keine zweite Standardaktion.
+**Die App trägt den Mimetype deshalb selbst in die Instanz ein**
+(`Service\MimetypeRegistration`): `IMimeTypeLoader::getId()` legt ihn an,
+`IMimeTypeLoader::updateFilecache()` setzt ihn auf jede Filecache-Zeile, deren
+Name auf `.mscz` endet – ein einziges UPDATE über alle Speicher hinweg,
+Gruppenordner und Freigaben eingeschlossen. Das ist genau das, was
+`occ maintenance:mimetype:update-db` tut, nur über öffentliche Schnittstellen
+und ohne Shell. Ausgelöst wird es an zwei Stellen:
+
+| Auslöser | Was er abdeckt |
+|---|---|
+| `Migration\RegisterScoreMimetype` (Repair-Step bei Installation **und** Update) | den Bestand |
+| `Listener\ScoreMimetypeListener` → `BackgroundJob\RegisterMimetypeJob` | jeden neuen Upload |
+
+Der zweite ist nötig, weil Nextclouds **Erkennung** unberührt bleibt:
+`IMimeTypeDetector` bietet einer App nur Lesezugriff, eine frisch hochgeladene
+Partitur trägt also zuerst wieder `application/octet-stream`. Der Job hängt
+ohne Argument in der Warteschlange und fällt damit für beliebig viele Uploads
+zu einem einzigen Lauf zusammen – der Tabellendurchlauf gehört nicht in den
+Upload-Pfad.
+
+Ohne Wirkung bleibt das beim **Dateisymbol**: Das hängt an
+`mimetypealiases.json` und `occ maintenance:mimetype:update-js`, beides
+außerhalb der Reichweite einer App. Wer es haben will, registriert zusätzlich
+von Hand ([installation.md](installation.md)).
+
+Trotzdem bleibt es bei **zwei** Einstiegen: `src/viewer.js` registriert
+zusätzlich eine **Dateiaktion auf der Endung**, die dieselbe Komponente in
+einem `NcModal` zeigt. Ihre Bedingung steht als reine Funktion in
+`src/lib/scoreFile.js` und lautet: Endung `.mscz` **und** Mimetype nicht
+`application/x-musescore`. Sie greift also genau dort, wo der Viewer nichts
+tut – und das ist nach wie vor ein echtes Fenster: zwischen Upload und dem
+nächsten Cron-Lauf, auf einer Instanz, deren Registrierung scheiterte, und bei
+jedem Bestand, der noch nie ein Update der App gesehen hat. Wo der Mimetype
+stimmt, ist die Aktion abgeschaltet – kein zweiter Menüeintrag, keine zweite
+Standardaktion.
 
 Der Preis ist eine doppelte Registrierung: `@nextcloud/files` hat zwischen den
 Nextcloud-Ständen sowohl den Ablageort der Aktionsliste als auch die
@@ -707,6 +734,19 @@ erzeugt keine Partituren, ein Eintrag „Neue Partitur“ führte nirgendwohin.
 
 **Die Auswahl läuft allein über den Mimetype.** Die Krücke aus E6 hat in der
 App keine Entsprechung – ohne registrierten Mimetype bleibt der Menüpunkt aus.
+Dass er stimmt, besorgt die App inzwischen selbst
+([E6](#e6-zwei-einstiege-mimetype-und-dateiendung)); vorher hing dieser
+Einstieg an einer Handreichung des Betreibers und war auf verwaltetem Hosting
+überhaupt nicht erreichbar.
+
+**Und er hängt am ⋮-Menü, nicht am Antippen.** Nachgesehen in
+nextcloud/android, `FileOperationsHelper.openFile()`: Kann irgendeine
+installierte App den Mimetype öffnen, bekommt sie die heruntergeladene Datei –
+Direct Editing ist dort ausdrücklich nur der Rückfall („first always try to use
+available apps"). Wer auf dem Telefon eine App installiert hat, die `.mscz`
+beansprucht, landet beim Antippen also bei ihr und erreicht ScoreView über
+⋮ → „Bearbeiten". Das entscheidet das Gerät; vom Server aus ist daran nichts zu
+ändern.
 
 Drei Dinge unterscheiden diese Seite vom Browser, und jedes hat eine Folge:
 

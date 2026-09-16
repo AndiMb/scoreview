@@ -1,12 +1,14 @@
 <!--
 	Der zweite Einstieg in den Viewer - ohne Nextclouds Viewer-App.
 
-	Der reguläre Weg läuft über OCA.Viewer und damit über den registrierten
-	Mimetype `application/x-musescore`. Dessen Registrierung ist server-weit
-	(config/mimetypemapping.json + occ maintenance:mimetype:update-db) und auf
-	verwaltetem Hosting schlicht nicht durchführbar; dazu kommt, dass sie für
-	bereits hochgeladene Dateien erst nach einem occ files:scan greift. In
-	beiden Fällen bliebe die Partitur ohne diesen Weg unerreichbar.
+	Der reguläre Weg läuft über OCA.Viewer und damit über den Mimetype
+	`application/x-musescore`. Den trägt die App zwar selbst ein
+	(lib/Service/MimetypeRegistration.php), aber nicht lückenlos: Eine frisch
+	hochgeladene Partitur erkennt Nextcloud weiterhin als
+	application/octet-stream und wird erst vom Background-Job berichtigt, und wo
+	dieser Weg gar nicht lief - Update noch nicht eingespielt, kein Cron, ein
+	Fehler im Log - bleibt es dabei. Ohne diesen zweiten Weg wäre die Partitur
+	dann unerreichbar.
 
 	Deshalb hier dieselbe Komponente in einem eigenen Vollbild-Modal, geöffnet
 	über eine Dateiaktion auf der Dateiendung (siehe viewer.js).

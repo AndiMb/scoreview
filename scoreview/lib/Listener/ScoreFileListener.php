@@ -18,15 +18,13 @@ use Psr\Log\LoggerInterface;
 /**
  * @template-implements IEventListener<NodeCreatedEvent|NodeWrittenEvent>
  *
- * Erkennt .mscz-Dateien an der Endung, nicht am Mimetype - und das bleibt so:
- * `appinfo/mimetypemapping.json` ist reine Referenz, Nextcloud liest Custom-
- * Mappings NICHT aus dem App-Verzeichnis (siehe den Kommentar dort und
- * README.md#troubleshooting). Ob `application/x-musescore` überhaupt bekannt
- * ist, hängt also daran, ob der Betreiber die Datei nach
- * `config/mimetypemapping.json` kopiert und anschließend `occ files:scan`
- * ausgeführt hat. Ein Mimetype-Vergleich hier würde diesen Trigger damit von
- * einer Serverkonfiguration abhängig machen; ohne sie erkennt Nextcloud eine
- * .mscz generisch als application/zip und der Trigger liefe ins Leere.
+ * Erkennt .mscz-Dateien an der Endung, nicht am Mimetype - und das bleibt so.
+ * Zwar trägt die App den Mimetype inzwischen selbst ein
+ * (Service\MimetypeRegistration), aber erst *nachdem* die Datei da ist: Die
+ * Erkennung beim Upload gehört weiterhin Nextcloud, und die kennt `.mscz`
+ * ohne `config/mimetypemapping.json` nicht. Genau in diesem Ereignis trägt
+ * eine frisch hochgeladene Partitur also noch `application/octet-stream` -
+ * ein Mimetype-Vergleich liefe hier ins Leere.
  *
  * Löst standardmäßig KEINE Konvertierung mehr aus (vorher: jeder
  * Upload/jede Bearbeitung stieß sofort eine Konvertierung an - bei z.B.

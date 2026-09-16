@@ -4,6 +4,40 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.9.2] – 2026-09-16
+
+### Behoben
+
+- **In den mobilen Nextcloud-Apps fehlte „Bearbeiten", und ScoreView war dort
+  nicht erreichbar.** Deren Editorauswahl vergleicht ausschließlich den
+  Mimetype der Datei; stand `.mscz` auf `application/octet-stream`, blieb der
+  Menüpunkt aus. Die Zuordnung `.mscz` → `application/x-musescore` liest
+  Nextcloud aber nur aus `config/mimetypemapping.json` und nie aus einer App –
+  auf verwaltetem Hosting war der mobile Einstieg damit überhaupt nicht
+  herstellbar, und auf einer eigenen Instanz hing er an zwei `occ`-Aufrufen,
+  die niemand vermutet, solange der Browser funktioniert.
+
+  Die App trägt den Mimetype jetzt selbst ein: bei Installation und Update über
+  einen Repair-Step, und nach jedem Upload über einen Background-Job. Beides
+  benutzt dieselben öffentlichen Schnittstellen, die auch
+  `occ maintenance:mimetype:update-db` benutzt, und berichtigt den ganzen
+  Bestand auf einmal – Gruppenordner und Freigaben eingeschlossen, ohne
+  `occ files:scan`. Nicht abgedeckt bleiben das eigene Dateisymbol und die
+  Erkennung im Moment des Uploads; beides braucht weiterhin Schreibzugriff auf
+  `config/`.
+
+### Geändert
+
+- **Dokumentation zum Mimetype richtiggestellt.**
+  `occ maintenance:mimetype:update-db` zieht den Bestand sehr wohl mit, sobald
+  der Mimetype neu in die Datenbank kommt – die bisherige Aussage, dafür sei
+  zusätzlich `occ files:scan` nötig, galt nur für einen bereits eingetragenen
+  Mimetype (dort hilft `--repair-filecache`). Dazu neu in
+  [docs/troubleshooting.md](docs/troubleshooting.md): eine PROPFIND-Probe für
+  den Mimetype ohne Shell, und warum das **Antippen** einer `.mscz` in der
+  Android-App bei einer fremden Anwendung landet statt bei ScoreView –
+  installierte Apps haben dort Vorrang, Direct Editing ist nur der Rückfall.
+
 ## [1.9.1] – 2026-09-15
 
 ### Behoben

@@ -134,13 +134,12 @@ if (OCA?.Viewer?.registerHandler) {
 // ---------------------------------------------------------------------------
 // Zweiter Einstieg: eine Dateiaktion auf der Endung
 // ---------------------------------------------------------------------------
-// Der Handler oben greift nur, wenn `.mscz` server-weit als MSCZ_MIME
-// registriert ist. Diese Registrierung laesst sich nicht aus einer App
-// heraus vornehmen - Nextcloud liest mimetypemapping.json ausschliesslich
-// aus config/ - und sie braucht anschliessend `occ`. Auf verwaltetem
-// Hosting ist beides nicht verfuegbar, und selbst auf einer eigenen
-// Instanz bleiben bereits hochgeladene Dateien bis zu einem
-// `occ files:scan` auf application/octet-stream stehen.
+// Der Handler oben greift nur, wenn die Datei MSCZ_MIME traegt. Dafuer
+// sorgt die App selbst (lib/Service/MimetypeRegistration.php), aber mit
+// zwei Luecken: Eine frisch hochgeladene Partitur wird von Nextcloud
+// weiterhin als application/octet-stream erkannt und erst vom
+// Background-Job berichtigt, und wo dieser Weg gar nicht lief - Update noch
+// nicht eingespielt, kein Cron, ein Fehler im Log - bleibt es dabei.
 //
 // Die Aktion schaltet sich deshalb genau dort ein, wo Viewer die Datei
 // NICHT aufmacht: Endung `.mscz`, aber ein anderer Mimetype. Wo die

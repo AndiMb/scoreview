@@ -45,8 +45,10 @@ schon zur Ursache; sonst hilft
 
 Die Dateien `appinfo/mimetypemapping.json` und `appinfo/mimetypealiases.json`
 sind **Vorlage, keine wirksame Konfiguration**: Nextcloud lädt sie nicht aus
-Apps. Ihr Inhalt gehört in die gleichnamigen Dateien unter `config/` des
-Servers, siehe Installationsanleitung.
+Apps. Den Mimetype trägt die App trotzdem selbst ein
+(`lib/Service/MimetypeRegistration.php`); die Vorlagen braucht nur noch, wer
+zusätzlich das Dateisymbol und die Erkennung beim Upload will – siehe
+Installationsanleitung.
 
 ## Entwicklung
 

@@ -2,11 +2,12 @@
 // und ohne Nextcloud-Objekte.
 //
 // Der regulaere Einstieg ist Nextclouds Viewer, und der haengt am Mimetype
-// MSCZ_MIME. Dessen Registrierung ist server-weit (config/mimetypemapping.json
-// plus `occ maintenance:mimetype:update-db`) und laesst sich aus einer App
-// heraus nicht vornehmen: auf verwaltetem Hosting fehlt beides, und selbst auf
-// einer eigenen Instanz bleiben bereits hochgeladene Dateien bis zu einem
-// `occ files:scan` auf `application/octet-stream` stehen.
+// MSCZ_MIME. Den traegt die App zwar selbst ein
+// (lib/Service/MimetypeRegistration.php), aber nicht lueckenlos: Die Erkennung
+// beim Upload bleibt Nextclouds Sache, eine frisch hochgeladene Partitur steht
+// deshalb bis zum naechsten Cron-Lauf auf `application/octet-stream` - und auf
+// einer Instanz, wo die Registrierung scheiterte oder das Update der App noch
+// nicht lief, dauerhaft.
 //
 // Genau dann - Endung stimmt, Mimetype nicht - macht der Viewer die Datei
 // nicht auf, und nur dann springt die eigene Dateiaktion ein. Wo die

@@ -164,51 +164,57 @@ Auf der Verwaltungsseite prüft ein Knopf den Zustand und ein zweiter startet de
 den gewählten Weg, samt Prüfung aller Zusagen, auf denen die App aufbaut. Nach
 jedem Wechsel der MuseScore-Version einmal auslösen.
 
-## 4. Mimetype registrieren (empfohlen, nicht zwingend)
+## 4. Mimetype (in der Regel nichts zu tun)
 
-Ohne diesen Schritt erkennt Nextcloud `.mscz` als `application/octet-stream`.
-Die Partitur lässt sich trotzdem öffnen – dafür gibt es die Dateiaktion
-**„In ScoreView öffnen"**, die an der Dateiendung hängt und die Partitur in
-einem eigenen Fenster zeigt
-([E6](architecture.md#e6-zwei-einstiege--mimetype-und-dateiendung)). Wer `occ`
-nicht ausführen kann, weil die Instanz verwaltet ist, überspringt diesen
-Abschnitt also.
+Damit eine `.mscz` als `application/x-musescore` gilt, **trägt die App den
+Mimetype selbst ein** – bei der Installation, bei jedem Update und nach jedem
+Upload erneut
+([E6](architecture.md#e6-zwei-einstiege--mimetype-und-dateiendung)). Dafür
+braucht es weder `occ` noch Schreibzugriff auf `config/`; auf verwaltetem
+Hosting funktioniert es genauso.
 
-Was die Registrierung zusätzlich bringt: das eigene Dateisymbol, die Vorschau
-in Nextclouds Viewer samt Blättern zwischen Dateien und das gewohnte
-Öffnen-Verhalten. Wo sie fehlt, übernimmt die Dateiaktion – dieselbe Ansicht,
-nur ohne Viewer-Rahmen.
+Prüfen lässt sich das ohne Shell, mit den Zugangsdaten einer Nutzerin:
 
-**Für die mobilen Nextcloud-Apps ist dieser Schritt dagegen zwingend.** Sie
-laden keine Skripte der Dateien-Seite und erreichen die Partitur allein über
-Nextclouds Direct Editing, dessen Auswahl ausschließlich am Mimetype hängt
-([E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps)). Die
-Dateiaktion auf der Endung hat dort keine Entsprechung: Ohne registrierten
-Mimetype bietet die App bei einer `.mscz` nur „Herunterladen“ an.
+```sh
+curl -u <Nutzerin> -X PROPFIND -H 'Depth: 0' \
+  --data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getcontenttype/></d:prop></d:propfind>' \
+  'https://<instanz>/remote.php/dav/files/<Nutzerin>/Pfad/Partitur.mscz'
+```
 
-Die Registrierung wirkt **server-weit**, nicht app-lokal: Nextcloud lädt
-`mimetypemapping.json` und `mimetypealiases.json` nicht aus Apps. Die beiden
-Dateien unter `scoreview/appinfo/` sind Vorlage und Dokumentation. Übernehmen
-Sie ihren Inhalt in `config/mimetypemapping.json` bzw.
+Steht dort `application/x-musescore`, ist alles in Ordnung. Steht dort
+`application/octet-stream`, lief entweder das Update der App noch nicht, oder
+die Partitur wurde gerade erst hochgeladen und der zuständige Background-Job
+ist noch nicht gelaufen (siehe Schritt 5 – ohne Cron bleibt er liegen).
+
+### Was die Registrierung von Hand zusätzlich bringt
+
+Zwei Dinge kann eine App nicht, beide rein kosmetisch bzw. zeitlich:
+
+- **Das eigene Dateisymbol.** Es hängt an `mimetypealiases.json` und an
+  `occ maintenance:mimetype:update-js`.
+- **Die Erkennung beim Upload.** Nextcloud fragt dafür seine eigene
+  Zuordnungstabelle; eine frisch hochgeladene Partitur trägt deshalb bis zum
+  nächsten Cron-Lauf `application/octet-stream`.
+
+Wer `occ` hat und beides will, übernimmt den Inhalt von
+`scoreview/appinfo/mimetypemapping.json` und
+`scoreview/appinfo/mimetypealiases.json` in `config/mimetypemapping.json` bzw.
 `config/mimetypealiases.json` des Servers – vorhandene andere Einträge dabei
-erhalten, nicht überschreiben – und dann:
+erhalten, nicht überschreiben; Nextcloud legt die eigene Datei per
+`array_replace` nur über die mitgelieferte, die Standardzuordnungen bleiben
+also erhalten. Danach:
 
 ```sh
 occ maintenance:mimetype:update-db
 occ maintenance:mimetype:update-js
 ```
 
-**Für bereits hochgeladene Dateien reicht das nicht.** `update-db` aktualisiert
-den Filecache vorhandener Dateien nicht; sie bleiben dauerhaft auf
-`application/octet-stream` stehen. Der Bestand braucht zusätzlich einen Rescan:
-
-```sh
-occ files:scan <Nutzername>
-occ files:scan --all          # für alle Nutzer, teurer
-```
-
-Neu hochgeladene Dateien bekommen den richtigen Mimetype sofort – das Problem
-betrifft ausschließlich den Bestand von vor der Registrierung.
+`update-db` zieht den **Bestand mit**: Für jeden Mimetype, der noch nicht in
+der Datenbank steht, aktualisiert es zugleich alle Filecache-Zeilen mit der
+passenden Endung – quer über alle Speicher, Gruppenordner und Freigaben
+eingeschlossen. Ein `occ files:scan` ist dafür nicht nötig. Nur wenn der
+Mimetype bereits eingetragen war, bleibt der Bestand unberührt; dann hilft
+`occ maintenance:mimetype:update-db --repair-filecache`.
 
 ## 5. Background-Jobs sicherstellen
 

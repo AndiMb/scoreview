@@ -7,18 +7,30 @@ Zahl der Konvertierungen je Status.
 
 ## Eine `.mscz`-Datei bietet nur „Herunterladen" an
 
-Fast immer ein Mimetype-Problem. Die Registrierung wirkt **nicht rückwirkend**:
-Dateien, die vor der Registrierung hochgeladen wurden, bleiben dauerhaft auf
-`application/octet-stream` stehen, auch nach
-`occ maintenance:mimetype:update-db`. Der Bestand braucht zusätzlich einen
-Rescan:
+Fast immer ein Mimetype-Problem. Den Mimetype trägt die App seit 1.9.2 selbst
+ein – bei Installation, Update und nach jedem Upload
+([E6](architecture.md#e6-zwei-einstiege--mimetype-und-dateiendung)). Bleibt er
+falsch, sind drei Dinge zu prüfen, in dieser Reihenfolge:
+
+1. **Lief das Update der App?** Der Repair-Step hängt an `occ upgrade`; ohne
+   Versionswechsel läuft er nicht.
+2. **Läuft Cron?** Frisch hochgeladene Partituren berichtigt ein
+   Background-Job, kein Upload-Pfad. Ohne Cron bleibt er liegen (siehe
+   [Installation, Schritt 5](installation.md#5-background-jobs-sicherstellen)).
+3. **Meldet der Server einen Fehler?** `apply()` schluckt jeden Fehlschlag
+   bewusst und schreibt ihn ins Log – dort steht dann „Mimetype konnte nicht
+   registriert werden".
+
+Ohne Shell prüfen lässt sich der Mimetype über WebDAV:
 
 ```sh
-occ files:scan <Nutzername>
+curl -u <Nutzerin> -X PROPFIND -H 'Depth: 0' \
+  --data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getcontenttype/></d:prop></d:propfind>' \
+  'https://<instanz>/remote.php/dav/files/<Nutzerin>/Pfad/Partitur.mscz'
 ```
 
-Siehe [Installation, Schritt 4](installation.md#4-mimetype-registrieren). Prüfen
-lässt sich der gespeicherte Mimetype direkt in der Datenbank:
+Erwartet wird `application/x-musescore`. Mit Shell geht es auch direkt in der
+Datenbank:
 
 ```sh
 php -r '
@@ -48,11 +60,36 @@ Erste Probe: Meldet der Server den Editor überhaupt?
 curl -u <Nutzerin> -H 'OCS-APIRequest: true' -H 'Accept: application/json'   https://<instanz>/ocs/v2.php/apps/files/api/v1/directEditing
 ```
 
-In der Antwort muss unter `editors` ein Eintrag `scoreview` stehen. Fehlt er,
-ist die App nicht aktiviert. Steht er da und der Menüpunkt fehlt trotzdem, ist
-der **Mimetype der Datei** nicht `application/x-musescore` – siehe den
-Abschnitt ganz oben, `occ files:scan` eingeschlossen. Manche App-Stände halten
-die Editorliste zwischen; ein Aktualisieren des Ordners hilft.
+In der Antwort muss unter `editors` ein Eintrag `scoreview` stehen – mit
+`"mimetypes":["application/x-musescore"]`. Fehlt der Eintrag ganz, ist die App
+nicht aktiviert oder älter als 1.9.0. Steht er da und der Menüpunkt fehlt
+trotzdem, ist der **Mimetype der Datei** nicht `application/x-musescore` –
+siehe den Abschnitt ganz oben.
+
+Zwei Eigenheiten der Android-App, die schon Zeit gekostet haben (beide in
+nextcloud/android nachgesehen):
+
+- **Die Editorliste ist zwischengespeichert.** Die App liest sie aus ihrer
+  eigenen Datenbank (`EditorUtils.getEditors()`) und holt sie nur beim Sync des
+  **Wurzelverzeichnisses** neu, und auch dann nur, wenn sich der ETag der
+  Server-Capabilities geändert hat (`RefreshFolderOperation`). Auf der obersten
+  Ebene einmal nach unten ziehen.
+- **Auch den Mimetype je Datei hält die App lokal.** Wurde er serverseitig
+  berichtigt, muss zusätzlich der **Ordner mit der Partitur** neu geladen
+  werden – sonst vergleicht `FileMenuFilter.filterEdit()` weiter den alten
+  Wert.
+
+## In der App öffnet das Antippen einer `.mscz` eine fremde Anwendung
+
+Kein Fehler, sondern die Vorrangregel der Android-App:
+`FileOperationsHelper.openFile()` reicht die Datei an **jede installierte App**
+weiter, die den Mimetype öffnen kann – Direct Editing ist dort ausdrücklich nur
+der Rückfall („first always try to use available apps"). Wer etwa eine
+MuseScore-App auf dem Telefon hat, landet beim Antippen dort, und deren
+Fehlermeldung sieht dann aus, als käme sie von ScoreView.
+
+ScoreView erreicht man in diesem Fall über **⋮ → „Bearbeiten"**. Vom Server aus
+ist daran nichts zu ändern; die Entscheidung fällt auf dem Gerät.
 
 ## Die Seite in der App bleibt leer oder zeigt nur einen Fehler
 

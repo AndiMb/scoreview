@@ -1,4 +1,4 @@
 {
-	"_comment": "Nextcloud lädt Custom-Mappings NICHT automatisch aus appinfo/ (anders als zunächst angenommen) - diese Datei ist Referenz/Dokumentation. Tatsächlich wirksam wird sie erst als config/mimetypemapping.json des Servers, danach `occ maintenance:mimetype:update-db` + `update-js` + `occ files:scan --all` (siehe README.md).",
+	"_comment": "Nextcloud liest Custom-Mappings NICHT aus appinfo/ - diese Datei ist Vorlage. Den Mimetype traegt die App selbst in die Instanz ein (lib/Service/MimetypeRegistration.php, E6); wirksam wird DIESE Datei erst als config/mimetypemapping.json des Servers, danach `occ maintenance:mimetype:update-db`. Noetig ist das nur noch fuer die Erkennung beim Upload und fuer das Dateisymbol (docs/installation.md, Schritt 4).",
 	"mscz": ["application/x-musescore"]
 }

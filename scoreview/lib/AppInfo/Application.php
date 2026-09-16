@@ -10,6 +10,7 @@ use OCA\ScoreView\Listener\FilesLoadAdditionalScriptsListener;
 use OCA\ScoreView\Listener\NodeDeletedListener;
 use OCA\ScoreView\Listener\RegisterDirectEditorListener;
 use OCA\ScoreView\Listener\ScoreFileListener;
+use OCA\ScoreView\Listener\ScoreMimetypeListener;
 use OCA\ScoreView\Listener\UserDeletedListener;
 use OCA\ScoreView\Middleware\DirectAccessMiddleware;
 use OCP\AppFramework\App;
@@ -30,8 +31,10 @@ class Application extends App implements IBootstrap {
 	 * Der Mimetype, an dem .mscz erkannt wird - an Nextclouds Viewer
 	 * (src/lib/scoreFile.js), an der Auslieferung der Partitur selbst
 	 * (Controller\ConversionController::source) und an der Editorliste der
-	 * mobilen Apps (DirectEditing\ScoreDirectEditor). Seine Registrierung ist
-	 * server-weit und nicht Sache der App, siehe E6 in docs/architecture.md.
+	 * mobilen Apps (DirectEditing\ScoreDirectEditor). Die App traegt ihn
+	 * selbst in die Instanz ein (Service\MimetypeRegistration); die
+	 * *Erkennung* neuer Uploads bleibt Nextclouds Sache, siehe E6 in
+	 * docs/architecture.md.
 	 */
 	public const MSCZ_MIMETYPE = 'application/x-musescore';
 
@@ -46,6 +49,13 @@ class Application extends App implements IBootstrap {
 		// (siehe ScoreFileListener).
 		$context->registerEventListener(NodeCreatedEvent::class, ScoreFileListener::class);
 		$context->registerEventListener(NodeWrittenEvent::class, ScoreFileListener::class);
+
+		// Zieht den Mimetype frisch hochgeladener Partituren nach. Getrennt
+		// vom Listener darueber, weil der an der Einstellung
+		// `eager_conversion` haengt und der Mimetype immer stimmen muss -
+		// siehe Listener\ScoreMimetypeListener.
+		$context->registerEventListener(NodeCreatedEvent::class, ScoreMimetypeListener::class);
+		$context->registerEventListener(NodeWrittenEvent::class, ScoreMimetypeListener::class);
 
 		// Aufraeumen. Bewusst getrennt: der Cache verschwindet schon beim
 		// Loeschen der Datei (regenerierbar), die Notizen erst, wenn die

@@ -175,8 +175,10 @@ Alle ausführlich in `docs/troubleshooting.md`:
 - **Neue Route liefert 404.** Nextclouds `CachingRouter` cacht die
   kompilierte Routentabelle eine Stunde lang, keyed nach Host-Header.
   Version hochzählen + `occ upgrade`, oder Container neu starten.
-- **`.mscz` bietet nur „Herunterladen" an.** Mimetype-Registrierung wirkt
-  nicht rückwirkend; `occ files:scan <Nutzer>` ist zusätzlich nötig.
+- **`.mscz` bietet nur „Herunterladen" an.** Ein Mimetype-Problem. Den
+  Mimetype trägt die App seit 1.9.2 selbst ein (Repair-Step beim Update,
+  Background-Job nach dem Upload) – bleibt er falsch, lief entweder kein
+  `occ upgrade` oder kein Cron.
 - **Antivirus unter Windows** quarantäniert `scoreview/node_modules/stb-vorbis/dist/index.js`
   (bestätigt: Windows Defender, ThreatID 2147842389, zuletzt am 2026-08-24).
   Mal schlägt der Build damit hart fehl, mal liefert er nur eine kaputte
