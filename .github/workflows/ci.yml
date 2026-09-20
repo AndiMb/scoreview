@@ -71,12 +71,6 @@ jobs:
   backend:
     name: Backend (PHP ${{ matrix.php }}, OCP ${{ matrix.ocp }})
     runs-on: ubuntu-latest
-    # Ein beweglicher Zweig kann brechen, ohne dass hier jemand etwas getan
-    # hat - diese eine Achse darf deshalb rot werden, ohne den Lauf zu
-    # stoppen. Sobald NC 35 erschienen ist, wird daraus `^35.0` und die Zeile
-    # hier faellt weg: Dann ist es ein fester Stand wie die anderen.
-    # Nachgemessen am 2026-09-15: gegen dev-stable35 lief die Suite gruen.
-    continue-on-error: ${{ matrix.unveroeffentlicht == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -84,26 +78,20 @@ jobs:
         # geprueft - wie bei Node und Python: max-version ist eine Zusage an
         # den App Store, und eine ungepruefte Zusage ist keine.
         #
-        # Dasselbe gilt fuer NEXTCLOUD selbst, und das fehlte bis hierher:
-        # info.xml verspricht 31-35, `nextcloud/ocp` stand aber auf `^31.0`
-        # (also < 32). Getestet wurde damit ausschliesslich gegen die
-        # Schnittstellen von NC 31 - eine Signaturaenderung in 32-35 waere
-        # nirgends aufgefallen, obwohl die App mehrere OCP-Schnittstellen
-        # implementiert (IEditor, IEventListener, Middleware, QBMapper).
+        # Dasselbe gilt fuer NEXTCLOUD selbst: info.xml verspricht 31-35,
+        # `nextcloud/ocp` steht in composer.json aber auf `^31.0` (also < 32).
+        # Ohne die obere Achse liefe die Suite ausschliesslich gegen die
+        # Schnittstellen von NC 31 - eine Signaturaenderung in 32-35 fiele
+        # nirgends auf, obwohl die App mehrere OCP-Schnittstellen implementiert
+        # (IEditor, IEventListener, Middleware, QBMapper).
         #
-        # Drei Achsen, weil die zugesagte Obergrenze noch gar nicht draussen
-        # ist: `nextcloud/ocp` hat als hoechsten STABILEN Stand v34, NC 35
-        # existiert nur als Zweig `dev-stable35`. Geprueft wird deshalb der
-        # hoechste veroeffentlichte Stand hart - und die eigentliche Zusage
-        # zusaetzlich weich, siehe continue-on-error unten.
+        # PHP 8.5 auf der oberen Achse ist keine freie Wahl: `nextcloud/ocp`
+        # v35 verlangt ~8.3 || ~8.4 || ~8.5.
         include:
           - php: '8.1'
             ocp: '^31.0'
           - php: '8.5'
-            ocp: '^34.0'
-          - php: '8.5'
-            ocp: 'dev-stable35'
-            unveroeffentlicht: true
+            ocp: '^35.0'
     defaults:
       run:
         working-directory: scoreview
@@ -132,13 +120,6 @@ jobs:
       - name: OCP-Stand dieser Achse
         if: matrix.ocp != '^31.0'
         run: |
-          # Ein Zweigstand ist per Definition instabil - ohne diese beiden
-          # Zeilen lehnt composer ihn ab ("does not match your
-          # minimum-stability"). prefer-stable haelt alles UEBRIGE stabil.
-          if [ "${{ matrix.unveroeffentlicht }}" = "true" ]; then
-            composer config minimum-stability dev
-            composer config prefer-stable true
-          fi
           composer require --dev --no-update --no-interaction "nextcloud/ocp:${{ matrix.ocp }}"
           composer update --no-interaction --no-progress
 

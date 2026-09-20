@@ -20,6 +20,14 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   entstehen; das Lockfile verliert dabei gut 1600 Zeilen, den gesamten
   `@babel/preset-env`-Baum.
 
+- **Nextcloud 35 wird hart geprüft statt weich.** Die obere Achse der
+  Backend-Matrix lief gegen den beweglichen Zweig `dev-stable35` und durfte
+  deshalb rot werden, ohne den Lauf zu stoppen – `nextcloud/ocp` gab es nicht
+  anders. Seit dem 4. September 2026 ist v35.0.0 veröffentlicht, die Achse
+  steht jetzt auf `^35.0` und zählt wie jede andere. Die Zwischenachse
+  `^34.0` entfällt damit: Geprüft werden wieder genau die beiden Enden, die
+  `info.xml` zusagt.
+
 - **`@nextcloud/vue` auf 9.13.0, `@nextcloud/files` auf 4.1.0.** Die neue
   Fassung von `@nextcloud/vue` führt `@nextcloud/files` als optionalen peer ab
   4.1.0; das hebt die Version mit an.
