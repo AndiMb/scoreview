@@ -4,6 +4,26 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.9.3] – 2026-09-20
+
+### Geändert
+
+- **`@nextcloud/babel-config` entfernt – das Paket war nie verdrahtet.** Es
+  stand seit dem Grundgerüst in den Entwicklungsabhängigkeiten, aber es gibt
+  weder `babel.config.js` noch `.babelrc` noch einen `babel`-Schlüssel, über
+  den es eingebunden worden wäre; der `babel-loader` aus
+  `@nextcloud/webpack-vue-config` lief die ganze Zeit ohne Presets.
+  Aufgefallen ist es erst, als die Aktualisierung auf 2.0.0 die Installation
+  zerlegte: Die Version verlangt `@babel/core ^8`, `@nextcloud/webpack-vue-config`
+  besteht auf `^7.22.9` – ein unauflösbarer Konflikt um ein Paket ohne
+  Wirkung. Ein Vergleichsbau belegt, dass die Bundles byteweise unverändert
+  entstehen; das Lockfile verliert dabei gut 1600 Zeilen, den gesamten
+  `@babel/preset-env`-Baum.
+
+- **`@nextcloud/vue` auf 9.13.0, `@nextcloud/files` auf 4.1.0.** Die neue
+  Fassung von `@nextcloud/vue` führt `@nextcloud/files` als optionalen peer ab
+  4.1.0; das hebt die Version mit an.
+
 ## [1.9.2] – 2026-09-16
 
 ### Behoben
