@@ -41,7 +41,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           # Deckt sich mit "engines" in package.json.
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: scoreview/package-lock.json
 
@@ -296,7 +296,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
 
       - uses: shivammathur/setup-php@v2
         with:

@@ -20,6 +20,20 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   entstehen; das Lockfile verliert dabei gut 1600 Zeilen, den gesamten
   `@babel/preset-env`-Baum.
 
+- **Der Frontend-Build läuft auf Node 24 statt 22.** `@nextcloud/files` 4.1.0
+  verlangt `^24 || >=26`; auf Node 22 blieb das eine `EBADENGINE`-Warnung,
+  während `engines` in `package.json` weiterhin 22 zusagte – eine Zusage, die
+  ihre eigenen Abhängigkeiten nicht mehr deckte. Die Zusage lautet jetzt
+  `^24.0.0`, und zwar ohne Oder-Zweig: `@nextcloud/vue` 9.13.0 deckt
+  `^20.11 || ^22 || ^24` ab, `@nextcloud/files` 4.1.0 `^24 || >=26` –
+  gemeinsam bleibt genau Node 24 übrig. CI und Release-Workflow bauen
+  entsprechend. Nur der Bau ist betroffen: Der ausgelieferte Tarball bringt
+  `js/` fertig mit, auf dem Server läuft dafür kein Node.
+
+  Unberührt bleibt der lokale Konvertierungsweg, der auf dem Server sehr wohl
+  Node braucht – `converter/` sagt weiterhin `>=18` zu und wird gegen 18 und
+  22 geprüft.
+
 - **Nextcloud 35 wird hart geprüft statt weich.** Die obere Achse der
   Backend-Matrix lief gegen den beweglichen Zweig `dev-stable35` und durfte
   deshalb rot werden, ohne den Lauf zu stoppen – `nextcloud/ocp` gab es nicht

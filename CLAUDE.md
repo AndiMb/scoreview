@@ -194,7 +194,7 @@ Alle ausführlich in `docs/troubleshooting.md`:
   MSYS_NO_PATHCONV=1 docker run --rm \
     -v "$(pwd)/scoreview:/app" \
     -v scoreview-nodemodules:/app/node_modules \
-    -w /app node:22-bookworm sh -c "npm ci && npm run build"
+    -w /app node:24-bookworm sh -c "npm ci && npm run build"
   ```
 
   Achtung: Ein fehlgeschlagener Webpack-Lauf räumt `js/` vorher leer – nach
