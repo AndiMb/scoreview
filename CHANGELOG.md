@@ -4,7 +4,20 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
-## [1.9.3] – 2026-09-20
+## [1.9.3] – 2026-09-23
+
+### Behoben
+
+- **Die Engine des lokalen Konvertierungswegs steht auf
+  `v4.7.5-engine.2`.** Derselbe MuseScore-Kern 4.7.5 wie zuvor, dieselben
+  Artefakte – der Selbsttest misst unverändert 20 markierte Segmente und
+  0,98 SVG-Einheiten größten Notenkopfabstand. Der Stand bringt gehärtete
+  Dateizugriffe und beseitigte Speicherlecks mit. Die eine Schwäche, die
+  darin schwer wiegt – eine Partitur konnte einen Pfad außerhalb des
+  Ressourcenbaums benennen –, traf ScoreView nicht: Hier läuft die Engine
+  als WebAssembly unter Node und damit in einem reinen Hauptspeicher-
+  Dateisystem, in dem es nichts vom Server zu erreichen gibt. Betroffen war
+  die native Kommandozeile, die diese App nicht benutzt.
 
 ### Geändert
 

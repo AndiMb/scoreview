@@ -971,7 +971,7 @@ nicht mehr nur geometrisch möglich: Zu einem Zeitpunkt liefert `timing.json` di
 `elid`, und die zeigt direkt auf die Knoten, die dafür gezeichnet wurden.
 
 An der Selbsttest-Partitur gemessen (`v4.7.4-engine.2`, an `v4.7.5-engine.1`
-unverändert nachgemessen): 20 Segmente, 44
+und `v4.7.5-engine.2` unverändert nachgemessen): 20 Segmente, 44
 Elemente mit Kennung, **jede Kennung hat ein Element in `spos`, und kein
 `spos`-Element bleibt ungezeichnet**. Der größte Abstand zwischen einem
 Notenkopf und der x-Position seines Segments beträgt **0,98 SVG-Einheiten** bei
