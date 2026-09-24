@@ -49,11 +49,21 @@ class LeaderService {
 	public const MIN_QUERY_LENGTH = 2;
 	/**
 	 * So viele Treffer holt die Suche, bevor auf den Dateizugriff gefiltert
-	 * wird. Mehr als MAX_CANDIDATES, weil ein Teil der Treffer die Datei nicht
-	 * sieht und wegfaellt; nach oben begrenzt, weil jeder Treffer eine
-	 * Aufloesung im Dateibaum kostet.
+	 * wird. Etwas mehr als MAX_CANDIDATES, weil ein Teil der Treffer die Datei
+	 * nicht sieht und wegfaellt; knapp gehalten, weil jeder Treffer eine
+	 * Aufloesung im Dateibaum einer FREMDEN Person kostet (getUserFolder
+	 * samt Einhaengen ihrer Freigaben) - und das je Tastendruck im Suchfeld.
+	 * Wer so allgemein sucht, dass nach 30 Treffern keine 20 mit Zugriff
+	 * uebrig sind, tippt weiter.
 	 */
-	private const SEARCH_LIMIT = 50;
+	private const SEARCH_LIMIT = 30;
+
+	/**
+	 * Hoechstens so viele Zugriffspruefungen je Suche - die eigentliche
+	 * Kostengrenze. Die Suche liefert exakte Treffer ZUSAETZLICH zum Limit,
+	 * die Zahl der Treffer allein begrenzt die Pruefungen also nicht.
+	 */
+	private const MAX_ACCESS_CHECKS = self::SEARCH_LIMIT;
 
 	public function __construct(
 		private LeaderMapper $mapper,
@@ -85,6 +95,14 @@ class LeaderService {
 	 * Ernannten in der Reihenfolge ihrer Ernennung. Eintraege von Personen
 	 * ohne Dateizugriff fehlen - sie haben keine Wirkung, und die Liste soll
 	 * zeigen, wer die Partitur leitet, nicht wer es einmal durfte.
+	 *
+	 * Bewusst NUR ausgeblendet, nicht geloescht, obwohl die Pruefung hier
+	 * ohnehin laeuft und das Aufraeumen nichts extra kostete: Eine entzogene
+	 * Freigabe ist oft voruebergehend (Gruppe umgebaut, Share neu angelegt),
+	 * und ein lesender Aufruf, der dabei still Ernennungen loescht, nahme sie
+	 * auch dann weg (Grundsatz 3 oben). Ein verwaister Eintrag ist eine Zeile
+	 * ohne Wirkung; endgueltig gehen die Eintraege mit der Datei
+	 * (CleanupOrphansJob) oder dem Konto (UserDeletedListener).
 	 *
 	 * Ohne Eigentuemerin fehlen die Leitungen kraft Schreibrecht: Wer
 	 * alles schreiben darf, weiss nur der Speicher, und aufzaehlen laesst es
@@ -190,10 +208,19 @@ class LeaderService {
 		}
 
 		[$treffer] = $this->search->search($query, [IShare::TYPE_USER], false, self::SEARCH_LIMIT, 0);
+		// Ausgeschlossen wird, wer schon Leitung ist - direkt aus der Tabelle
+		// statt ueber listLeaders(): Die prueft fuer jeden Eintrag den
+		// Dateizugriff, und hier waere das Aufwand ohne Ergebnis. Wer einen
+		// Eintrag hat, aber die Datei nicht sieht, fiele unten ohnehin weg.
 		$gesehen = [];
-		foreach (array_column($this->listLeaders($node), 'userId') as $uid) {
-			$gesehen[$uid] = true;
+		$owner = $node->getOwner();
+		if ($owner !== null) {
+			$gesehen[$owner->getUID()] = true;
 		}
+		foreach ($this->mapper->findByFileId($node->getId()) as $leader) {
+			$gesehen[$leader->getUserId()] = true;
+		}
+		$pruefungen = 0;
 		$result = [];
 		// Exakte Treffer zuerst - wer den vollen Namen tippt, soll die Person
 		// oben sehen und nicht nach zwanzig Teiltreffern suchen muessen.
@@ -203,6 +230,9 @@ class LeaderService {
 				continue;
 			}
 			$gesehen[$uid] = true;
+			if (++$pruefungen > self::MAX_ACCESS_CHECKS) {
+				break;
+			}
 			if (!$this->canSee($uid, $node->getId())) {
 				continue;
 			}

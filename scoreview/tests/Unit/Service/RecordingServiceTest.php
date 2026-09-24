@@ -261,6 +261,62 @@ class RecordingServiceTest extends TestCase {
 		$this->assertSame(99, $this->erzeugen(WavFormatTest::wav(100))->getId());
 	}
 
+	public function testGleichzeitigerUploadUeberDemSpeicherJePersonNimmtDieEigeneZurueck(): void {
+		// Beide Uploads sahen vor dem Schreiben denselben Stand; nach dem
+		// Schreiben enthaelt die Summe beide und liegt ueber der Grenze.
+		$this->ints[FeatureConfig::MAX_RECORDING_BYTES_PER_USER] = 10 * 1024 * 1024;
+		$this->vorhanden(0);
+		$this->mapper->method('sumSizeByUser')->willReturnOnConsecutiveCalls(9 * 1024 * 1024, 11 * 1024 * 1024);
+		$geloescht = [];
+		$this->storage->method('delete')->willReturnCallback(function (Recording $r) use (&$geloescht) {
+			$geloescht[] = $r->getId();
+		});
+
+		$this->assertSame(RecordingException::USER_STORAGE_FULL, $this->grund(fn () => $this->erzeugen(WavFormatTest::wav(1000))));
+		$this->assertSame([99], $geloescht, 'nur die eigene, gerade geschriebene Aufnahme');
+	}
+
+	public function testGleichzeitigerUploadUeberDemSpeicherDerInstanzNimmtDieEigeneZurueck(): void {
+		$this->ints[FeatureConfig::MAX_RECORDING_BYTES_TOTAL] = 100 * 1024 * 1024;
+		$this->vorhanden(0);
+		$this->mapper->method('sumSizeByUser')->willReturn(0);
+		$this->mapper->method('sumSizeTotal')->willReturnOnConsecutiveCalls(90 * 1024 * 1024, 101 * 1024 * 1024);
+		$this->storage->expects($this->once())->method('delete')
+			->with($this->callback(static fn (Recording $r) => $r->getId() === 99));
+
+		$this->assertSame(RecordingException::TOTAL_STORAGE_FULL, $this->grund(fn () => $this->erzeugen(WavFormatTest::wav(1000))));
+	}
+
+	public function testNachpruefungDesSpeichersLaesstDieZuErsetzendeStehen(): void {
+		// Scheitert die Nachpruefung, geht nur die neue - die aelteste, die
+		// ersetzt werden sollte, bleibt: Es wurde ja nichts ersetzt.
+		$this->ints[FeatureConfig::MAX_RECORDING_BYTES_PER_USER] = 10 * 1024 * 1024;
+		$this->vorhanden(5, 1000);
+		$this->mapper->method('sumSizeByUser')->willReturnOnConsecutiveCalls(5000, 12 * 1024 * 1024);
+		$geloescht = [];
+		$this->storage->method('delete')->willReturnCallback(function (Recording $r) use (&$geloescht) {
+			$geloescht[] = $r->getId();
+		});
+
+		$this->assertSame(RecordingException::USER_STORAGE_FULL, $this->grund(fn () => $this->erzeugen(WavFormatTest::wav(1000), true)));
+		$this->assertSame([99], $geloescht);
+	}
+
+	public function testNachpruefungZaehltDasErsetzteAlsFrei(): void {
+		// Nach dem Schreiben liegen alte und neue noch zusammen - die
+		// verdraengte zaehlt wie beim ersten Pruefen schon als frei.
+		$this->ints[FeatureConfig::MAX_RECORDING_BYTES_PER_USER] = 10 * 1024 * 1024;
+		$liste = $this->vorhanden(5, 5000);
+		$this->mapper->method('sumSizeByUser')->willReturnOnConsecutiveCalls(10 * 1024 * 1024 - 1000, 10 * 1024 * 1024 + 4000);
+		$geloescht = [];
+		$this->storage->method('delete')->willReturnCallback(function (Recording $r) use (&$geloescht) {
+			$geloescht[] = $r->getId();
+		});
+
+		$this->assertSame(99, $this->erzeugen(WavFormatTest::wav(1000), true)->getId());
+		$this->assertSame([$liste[0]->getId()], $geloescht);
+	}
+
 	public function testDieGroesseKommtAusDemStrom(): void {
 		$this->vorhanden(0);
 		$wav = WavFormatTest::wav(16000);

@@ -9,6 +9,7 @@ use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\LocalConverterException;
 use OCP\IAppConfig;
 use OCP\ITempManager;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
@@ -96,6 +97,63 @@ class LocalConverterTest extends TestCase {
 			'RuntimeError: null function or function signature mismatch',
 			$methode->invoke($this->converter(), $stderr),
 		);
+	}
+
+	/**
+	 * Ein ECHTER Kindprozess ueber den Ausfuehrungspfad, den auch
+	 * `node --version` und jede Konvertierung nehmen. Gestartet wird PHP
+	 * selbst (PHP_BINARY) - das gibt es auf jeder Maschine, auf der dieser
+	 * Test laeuft, node dagegen nicht.
+	 *
+	 * Der Fall, um den es geht: Vor PHP 8.3 liefert proc_close() nach einem
+	 * proc_get_status(), das das Ende schon gemeldet hat, -1 statt des
+	 * Exitcodes. Mit -1 galt jedes node als kaputt, und der lokale Weg war
+	 * unter 8.1/8.2 nie verfuegbar. Aussagekraeftig ist der Test deshalb in
+	 * der 8.1-Achse der CI; unter 8.3 waere er auch mit dem Fehler gruen.
+	 *
+	 * @return array<string, array{int}>
+	 */
+	public static function exitcodes(): array {
+		return ['Erfolg' => [0], 'Fehler' => [3]];
+	}
+
+	#[DataProvider('exitcodes')]
+	public function testLiefertDenExitcodeEinesEchtenProzesses(int $code): void {
+		$ergebnis = $this->ausfuehren([PHP_BINARY, '-r', 'echo "v99.0.0"; exit(' . $code . ');']);
+
+		$this->assertFalse($ergebnis['timedOut']);
+		$this->assertSame($code, $ergebnis['exitCode']);
+		$this->assertSame('v99.0.0', $ergebnis['stdout']);
+		$this->assertFalse($ergebnis['stdoutOverflow']);
+	}
+
+	public function testZuVielAufStdoutIstEinFehlerStattGekappt(): void {
+		// Ueber stdout kommt nur eine Zeile JSON. Mehr als die Grenze heisst:
+		// nicht der erwartete Prozess - und ein abgeschnittenes JSON waere
+		// eine falsche Antwort, keine kuerzere.
+		if (PHP_OS_FAMILY === 'Windows') {
+			// Nextcloud laeuft nicht auf Windows-Servern, und dort blockiert
+			// das Lesen aus proc_open-Pipes trotz stream_set_blocking(false) -
+			// ein Megabyte-Strom haengt den Test auf. Die CI (Linux) prueft ihn.
+			$this->markTestSkipped('Nicht-blockierende Pipes gibt es unter Windows nicht.');
+		}
+		$ergebnis = $this->ausfuehren([PHP_BINARY, '-r', 'echo str_repeat("x", 2 * 1024 * 1024);']);
+
+		$this->assertTrue($ergebnis['stdoutOverflow']);
+		$this->assertSame('', $ergebnis['stdout']);
+		$this->assertSame(0, $ergebnis['exitCode'], 'der Prozess lief trotzdem zu Ende, statt an der vollen Pipe zu haengen');
+	}
+
+	/**
+	 * @param string[] $kommando
+	 * @return array{stdout: string, stderr: string, exitCode: int, timedOut: bool, stdoutOverflow: bool}
+	 */
+	private function ausfuehren(array $kommando): array {
+		// Ueber Reflection wie lastLine(): execute() ist bewusst privat, und
+		// der oeffentliche Weg dorthin verlangt node samt Engine.
+		$methode = new \ReflectionMethod(LocalConverter::class, 'execute');
+		$methode->setAccessible(true);
+		return $methode->invoke($this->converter(), $kommando, sys_get_temp_dir(), 30);
 	}
 
 	public function testSelbsttestScheitertLesbarStattZuWerfen(): void {

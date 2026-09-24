@@ -87,6 +87,17 @@ class ConversionService {
 		$this->updateStatus($conversion, ScoreConversion::STATUS_PROCESSING);
 	}
 
+	/**
+	 * Zurueck auf `pending`: Der Konvertierungsweg nimmt gerade nichts an,
+	 * ein Neuversuch ist eingeplant (BackgroundJob\ConvertScoreJob).
+	 * updateStatus() setzt dabei `updated_at` neu - jede Warterunde ist damit
+	 * ein Lebenszeichen, und isStale() schlaegt nur zu, wenn die Kette
+	 * tatsaechlich abreisst (etwa ein Cron, der nicht mehr laeuft).
+	 */
+	public function markWaiting(ScoreConversion $conversion): void {
+		$this->updateStatus($conversion, ScoreConversion::STATUS_PENDING);
+	}
+
 	public function markError(ScoreConversion $conversion, string $message, string $errorCode = ScoreConversion::ERROR_UNKNOWN): void {
 		$conversion->setErrorMessage($message);
 		$conversion->setErrorCode($errorCode);

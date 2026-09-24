@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Tests\Unit\Controller;
 
+use OCA\ScoreView\Controller\AnnotationController;
 use OCA\ScoreView\Controller\FollowController;
 use OCA\ScoreView\Controller\RecordingController;
 use OCA\ScoreView\Controller\SetlistController;
@@ -26,6 +27,11 @@ class WriteRateLimitTest extends TestCase {
 			'Mitverfolgen steuern' => [FollowController::class, 'update', 120, 60],
 			'Setliste speichern' => [SetlistController::class, 'update', 30, 60],
 			'Setliste anlegen' => [SetlistController::class, 'create', 30, 60],
+			'Mitverfolgen starten' => [FollowController::class, 'create', 30, 60],
+			'Mitverfolgen beenden' => [FollowController::class, 'destroy', 30, 60],
+			'Fuer Push anmelden' => [FollowController::class, 'join', 30, 60],
+			'Notiz anlegen' => [AnnotationController::class, 'create', 60, 60],
+			'Notiz aendern' => [AnnotationController::class, 'update', 60, 60],
 		];
 	}
 

@@ -175,4 +175,35 @@ class RecordingStorageTest extends TestCase {
 
 		$this->storage()->delete($this->aufnahme());
 	}
+
+	/**
+	 * @return array<string, array{string}>
+	 */
+	public static function unbrauchbareKennungen(): array {
+		return [
+			'Punkt' => ['.'],
+			'Aufstieg' => ['..'],
+			'leer' => [''],
+			'Schraegstrich' => ['a/b'],
+			'Rueckstrich' => ['a\\b'],
+		];
+	}
+
+	/**
+	 * Nextcloud laesst solche Kennungen beim Anlegen eines Kontos nicht zu -
+	 * geprueft wird trotzdem, weil `..` aus `recordings/<uid>/` den
+	 * App-Datenordner selbst machte und eine Kontoloeschung ihn samt Cache
+	 * mitnaehme.
+	 */
+	#[\PHPUnit\Framework\Attributes\DataProvider('unbrauchbareKennungen')]
+	public function testEineUnbrauchbareKennungWirdKeinOrdner(string $uid): void {
+		$this->appData->expects($this->never())->method('getFolder');
+		$this->appData->expects($this->never())->method('newFolder');
+		$this->mapper->method('deleteByUserId')->willReturn(0);
+
+		// Loeschen raeumt nur Zeilen, statt einen Ordner anzufassen.
+		$this->assertSame(0, $this->storage()->deleteAllForUser($uid));
+		$this->expectException(\InvalidArgumentException::class);
+		$this->storage()->folderFor($uid, 42);
+	}
 }

@@ -33,6 +33,10 @@
     "Your recordings use all the storage allowed per person. Delete older recordings first." : "Deine Aufnahmen belegen den ganzen Speicher, der je Person erlaubt ist. Lösche zuerst ältere Aufnahmen.",
     "The storage for recordings on this server is full. Please tell your administrator." : "Der Speicher für Aufnahmen auf diesem Server ist voll. Bitte gib der Administration Bescheid.",
     "Recording not found." : "Aufnahme nicht gefunden.",
-    "The recording is longer than the %s seconds allowed on this server." : "Die Aufnahme ist länger als die %s Sekunden, die dieser Server erlaubt."
+    "The recording is longer than the %s seconds allowed on this server." : "Die Aufnahme ist länger als die %s Sekunden, die dieser Server erlaubt.",
+    "You already have the maximum number of notes for this score. Delete some notes first." : "Du hast bereits die höchstmögliche Zahl an Notizen zu dieser Partitur. Lösche zuerst einige Notizen.",
+    "Only administrators can change the Node.js path, the conversion service and the SoundFont source." : "Nur Administratoren können den Node.js-Pfad, den Konvertierungsdienst und die SoundFont-Quelle ändern.",
+    "The Node.js path must be empty or an absolute path to a program named node or nodejs." : "Der Node.js-Pfad muss leer sein oder ein absoluter Pfad zu einem Programm namens node oder nodejs.",
+    "Addresses for the conversion service and the SoundFont source must start with http:// or https://." : "Adressen für den Konvertierungsdienst und die SoundFont-Quelle müssen mit http:// oder https:// beginnen."
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }

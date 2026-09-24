@@ -8,6 +8,7 @@ use OCA\ScoreView\Db\AnnotationMapper;
 use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\FollowSession;
 use OCA\ScoreView\Db\LeaderMapper;
+use OCA\ScoreView\Db\MyPartPreferenceMapper;
 use OCA\ScoreView\Db\ScoreConversionMapper;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\RecordingStorage;
@@ -17,7 +18,8 @@ use OCP\Files\IRootFolder;
 use Psr\Log\LoggerInterface;
 
 /**
- * Räumt Cache, Notizen, Leitungen, „Folgt mir"-Sitzungen und Aufnahmen von
+ * Räumt Cache, Notizen, Leitungen, „Folgt mir"-Sitzungen, Aufnahmen und die
+ * „Meine Stimme"-Wahl (`my_part.<fileId>` in den Nutzereinstellungen) von
  * Dateien weg, die es nicht mehr gibt.
  *
  * Zwei Aufgaben, die der ereignisbasierte Weg nicht abdecken kann:
@@ -55,6 +57,7 @@ class CleanupOrphansJob extends TimedJob {
 		private LeaderMapper $leaderMapper,
 		private FollowMapper $followMapper,
 		private RecordingStorage $recordingStorage,
+		private MyPartPreferenceMapper $myPartPreferences,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -73,6 +76,7 @@ class CleanupOrphansJob extends TimedJob {
 			$this->leaderMapper->findAllFileIds(),
 			$this->followMapper->findAllFileIds(),
 			$this->recordingStorage->findAllFileIds(),
+			$this->myPartPreferences->findAllFileIds(),
 		));
 
 		$caches = 0;
@@ -89,6 +93,7 @@ class CleanupOrphansJob extends TimedJob {
 				$others += $this->leaderMapper->deleteByFileId($fileId);
 				$others += $this->followMapper->deleteByFileId($fileId);
 				$others += $this->recordingStorage->deleteAllForFile($fileId);
+				$others += $this->myPartPreferences->deleteByFileId($fileId);
 			} catch (\Throwable $e) {
 				// Eine einzelne kaputte fileId darf den Durchlauf nicht beenden -
 				// der naechste Lauf versucht es erneut.
@@ -101,7 +106,7 @@ class CleanupOrphansJob extends TimedJob {
 		}
 
 		if ($caches > 0 || $annotations > 0 || $others > 0) {
-			$this->logger->info('ScoreView: {caches} verwaiste Cache-Eintraege, {annotations} Notizen und {others} Leitungen, Sitzungen und Aufnahmen entfernt.', [
+			$this->logger->info('ScoreView: {caches} verwaiste Cache-Eintraege, {annotations} Notizen und {others} Leitungen, Sitzungen, Aufnahmen und Stimmwahlen entfernt.', [
 				'caches' => $caches,
 				'annotations' => $annotations,
 				'others' => $others,

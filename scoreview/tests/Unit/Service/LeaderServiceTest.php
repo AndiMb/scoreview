@@ -283,6 +283,42 @@ class LeaderServiceTest extends TestCase {
 		$this->assertCount(LeaderService::MAX_CANDIDATES, $this->service()->candidates($this->datei(), 'anna', 'person'));
 	}
 
+	public function testDieZugriffspruefungenSindGedeckelt(): void {
+		// Jede Pruefung loest einen fremden Dateibaum auf. Sieht kaum ein
+		// Treffer die Datei, sollen es trotzdem nicht beliebig viele werden -
+		// auch nicht mit exakten Treffern obendrauf.
+		$ohneZugriff = array_map(fn (int $i) => 'fremd' . $i, range(1, 60));
+		$this->search->method('search')->willReturn($this->suchergebnis(array_slice($ohneZugriff, 0, 20), array_slice($ohneZugriff, 20)));
+		$aufgeloest = 0;
+		$this->rootFolder = $this->createMock(IRootFolder::class);
+		$this->rootFolder->method('getUserFolder')->willReturnCallback(function () use (&$aufgeloest) {
+			$aufgeloest++;
+			$folder = $this->createMock(Folder::class);
+			$folder->method('getById')->willReturn([]);
+			return $folder;
+		});
+
+		$this->assertSame([], $this->service()->candidates($this->datei(), 'anna', 'fremd'));
+		$this->assertLessThanOrEqual(30, $aufgeloest);
+	}
+
+	public function testBisherigeLeitungenKostenKeineZugriffspruefung(): void {
+		// Ausgeschlossen wird direkt aus der Tabelle, nicht ueber
+		// listLeaders() - fuer bert wird kein Dateibaum aufgeloest.
+		$this->search->method('search')->willReturn($this->suchergebnis([], ['bert', 'carla']));
+		$aufgeloest = [];
+		$this->rootFolder = $this->createMock(IRootFolder::class);
+		$this->rootFolder->method('getUserFolder')->willReturnCallback(function (string $uid) use (&$aufgeloest) {
+			$aufgeloest[] = $uid;
+			$folder = $this->createMock(Folder::class);
+			$folder->method('getById')->willReturn([$this->createMock(Node::class)]);
+			return $folder;
+		});
+
+		$this->assertSame(['carla'], array_column($this->service()->candidates($this->datei(), 'anna', 'ar'), 'userId'));
+		$this->assertSame(['carla'], $aufgeloest);
+	}
+
 	public function testVorschlaegeNurFuerLeitungen(): void {
 		$this->search->expects($this->never())->method('search');
 		$this->abgelehnt(LeaderException::NOT_LEADER, fn () => $this->service()->candidates($this->datei(), 'carla', 'ber'));

@@ -92,6 +92,12 @@ class FollowController extends Controller {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
+	// Starten und Beenden verteilen je einen Push an alle Folgenden; 30 je
+	// Minute sind weit mehr, als eine Probe braucht (wie beim Ernennen von
+	// Leitungen). Beide Grenzen, weil Anfragen mit Token fuer die
+	// RateLimitingMiddleware anonym sind.
+	#[UserRateLimit(limit: 30, period: 60)]
+	#[AnonRateLimit(limit: 30, period: 60)]
 	public function create(int $fileId, ?int $measure = null, ?string $mark = null): JSONResponse {
 		[$node, $userId] = $this->resolve($fileId);
 		if ($node === null) {
@@ -150,6 +156,8 @@ class FollowController extends Controller {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
+	#[UserRateLimit(limit: 30, period: 60)]
+	#[AnonRateLimit(limit: 30, period: 60)]
 	public function destroy(int $fileId): JSONResponse {
 		[$node, $userId] = $this->resolve($fileId);
 		if ($node === null) {
@@ -170,6 +178,10 @@ class FollowController extends Controller {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
+	// Ein Geraet meldet sich beim Oeffnen und nach jedem Verbindungsabbruch
+	// neu an - 30 je Minute lassen auch einem wackligen WLAN Luft.
+	#[UserRateLimit(limit: 30, period: 60)]
+	#[AnonRateLimit(limit: 30, period: 60)]
 	public function join(int $fileId): JSONResponse {
 		[$node, $userId] = $this->resolve($fileId);
 		if ($node === null) {

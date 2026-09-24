@@ -7,15 +7,18 @@ namespace OCA\ScoreView\Controller;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\Annotation;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
+use OCA\ScoreView\Service\AnnotationLimitException;
 use OCA\ScoreView\Service\AnnotationService;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LeaderService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Constants;
 use OCP\Files\Node;
@@ -106,6 +109,13 @@ class AnnotationController extends Controller {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
+	// Stempel setzt man in der Probe schnell hintereinander - 60 je Minute
+	// lassen dem Raum und deckeln doch, was ein Skript in eine Partitur
+	// schreiben kann, die bei jedem Oeffnen allen ausgeliefert wird. Beide
+	// Grenzen, weil Anfragen mit Token fuer Nextclouds
+	// RateLimitingMiddleware anonym sind (wie bei den Aufnahmen).
+	#[UserRateLimit(limit: 60, period: 60)]
+	#[AnonRateLimit(limit: 60, period: 60)]
 	public function create(int $fileId, int $measureNumber, float $fraction, string $content = '', ?int $elid = null, ?string $anchorEtag = null, string $visibility = Annotation::VISIBILITY_PRIVATE, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?array $targetParts = null): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
@@ -163,7 +173,14 @@ class AnnotationController extends Controller {
 		$measureNumber = max(1, $measureNumber);
 		$fraction = is_finite($fraction) ? min(1.0, max(0.0, $fraction)) : 0.0;
 
-		$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content, $visibility, $kind, $stamp, $targetPartsJson, $byLeader);
+		try {
+			$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content, $visibility, $kind, $stamp, $targetPartsJson, $byLeader);
+		} catch (AnnotationLimitException) {
+			return new JSONResponse([
+				'error' => $this->l->t('You already have the maximum number of notes for this score. Delete some notes first.'),
+				'reason' => 'limit',
+			], Http::STATUS_CONFLICT);
+		}
 		return new JSONResponse($this->annotationService->serialize($annotation, $userId), Http::STATUS_CREATED);
 	}
 
@@ -175,6 +192,8 @@ class AnnotationController extends Controller {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
+	#[UserRateLimit(limit: 60, period: 60)]
+	#[AnonRateLimit(limit: 60, period: 60)]
 	public function update(int $fileId, int $id, string $content = '', ?array $targetParts = null): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();

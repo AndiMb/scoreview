@@ -9,6 +9,7 @@ use OCA\ScoreView\Db\AnnotationMapper;
 use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\FollowSession;
 use OCA\ScoreView\Db\LeaderMapper;
+use OCA\ScoreView\Db\MyPartPreferenceMapper;
 use OCA\ScoreView\Db\ScoreConversionMapper;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\RecordingStorage;
@@ -38,6 +39,7 @@ class CleanupOrphansJobTest extends TestCase {
 	private LeaderMapper&MockObject $leaderMapper;
 	private FollowMapper&MockObject $followMapper;
 	private RecordingStorage&MockObject $recordingStorage;
+	private MyPartPreferenceMapper&MockObject $myPartPreferences;
 	private ITimeFactory&MockObject $time;
 
 	protected function setUp(): void {
@@ -48,6 +50,7 @@ class CleanupOrphansJobTest extends TestCase {
 		$this->leaderMapper = $this->createMock(LeaderMapper::class);
 		$this->followMapper = $this->createMock(FollowMapper::class);
 		$this->recordingStorage = $this->createMock(RecordingStorage::class);
+		$this->myPartPreferences = $this->createMock(MyPartPreferenceMapper::class);
 		$this->time = $this->createMock(ITimeFactory::class);
 		$this->time->method('getDateTime')->willReturnCallback(fn () => new \DateTime('2026-09-24 12:00:00'));
 	}
@@ -63,6 +66,7 @@ class CleanupOrphansJobTest extends TestCase {
 			$this->leaderMapper,
 			$this->followMapper,
 			$this->recordingStorage,
+			$this->myPartPreferences,
 			$this->createMock(LoggerInterface::class),
 		);
 		$method = new \ReflectionMethod($job, 'run');
@@ -206,6 +210,20 @@ class CleanupOrphansJobTest extends TestCase {
 		$this->assertSame([7, 8, 9], $leitungen);
 		$this->assertSame([7, 8, 9], $aufnahmen, 'Aufnahmen samt IAppData-Ordner ueber RecordingStorage');
 		$this->assertSame([7, 8, 9], $sitzungen);
+	}
+
+	/**
+	 * „Meine Stimme" haengt je Partitur in den Nutzereinstellungen und kommt
+	 * sonst in keiner Tabelle vor - eine Datei, zu der nur jemand eine Stimme
+	 * gewaehlt hat, muss trotzdem gefunden werden.
+	 */
+	public function testRaeumtDieStimmwahlZuEinerEndgueltigGeloeschtenDateiAb(): void {
+		$this->myPartPreferences->method('findAllFileIds')->willReturn([11, 12]);
+		$this->dateienBestand([12 => true]);
+
+		$this->myPartPreferences->expects($this->once())->method('deleteByFileId')->with(11)->willReturn(2);
+
+		$this->jobLaufenLassen();
 	}
 
 	public function testRaeumtSitzungenOhneLebenszeichenAb(): void {

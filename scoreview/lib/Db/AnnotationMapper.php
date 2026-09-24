@@ -94,6 +94,22 @@ class AnnotationMapper extends QBMapper {
 	}
 
 	/**
+	 * Wie viele Notizen eine Nutzerin zu einer Datei angelegt hat - gleich
+	 * welcher Sichtbarkeit. Traegt der Index `sv_annot_file_user`.
+	 */
+	public function countByFileAndUser(int $fileId, string $userId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count('*', 'n'))
+			->from($this->getTableName())
+			->where($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)));
+		$result = $qb->executeQuery();
+		$count = (int)$result->fetchOne();
+		$result->closeCursor();
+		return $count;
+	}
+
+	/**
 	 * Nur ueber Datei-ID gefiltert, bewusst OHNE Owner-Einschraenkung (anders
 	 * als der Name suggerieren mag) - geteilte Notizen duerfen
 	 * von JEDER Nutzerin mit Schreibrecht auf die Datei geaendert werden,

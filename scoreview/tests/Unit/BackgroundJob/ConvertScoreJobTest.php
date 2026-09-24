@@ -10,6 +10,7 @@ use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\LocalConverterException;
+use OCA\ScoreView\Service\SidecarBusyException;
 use OCA\ScoreView\Service\SidecarClient;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
@@ -38,6 +39,7 @@ class ConvertScoreJobTest extends TestCase {
 	private IAppConfig&MockObject $appConfig;
 	private ITempManager&MockObject $tempManager;
 	private string $backend = ConversionBackend::SIDECAR;
+	private ?ScoreConversion $gefunden = null;
 
 	protected function setUp(): void {
 		$this->rootFolder = $this->createMock(IRootFolder::class);
@@ -59,14 +61,14 @@ class ConvertScoreJobTest extends TestCase {
 		$folder->method('getById')->willReturn([$file]);
 		$this->rootFolder->method('getUserFolder')->willReturn($folder);
 
-		$this->conversionService->method('find')->willReturn(null);
+		$this->conversionService->method('find')->willReturnCallback(fn () => $this->gefunden);
 		$this->conversionService->method('createPending')->willReturn(new ScoreConversion());
 		$this->appConfig->method('getValueInt')->willReturnCallback(
 			static fn (string $app, string $key, int $default = 0) => $default,
 		);
 	}
 
-	private function jobLaufenLassen(): void {
+	private function jobLaufenLassen(array $zusatz = []): void {
 		$backend = $this->createMock(ConversionBackend::class);
 		$backend->method('isLocal')->willReturn($this->backend === ConversionBackend::LOCAL);
 
@@ -84,7 +86,7 @@ class ConvertScoreJobTest extends TestCase {
 		);
 		$method = new \ReflectionMethod($job, 'run');
 		$method->setAccessible(true);
-		$method->invoke($job, ['userId' => 'andreas', 'fileId' => 42]);
+		$method->invoke($job, ['userId' => 'andreas', 'fileId' => 42] + $zusatz);
 	}
 
 	public function testReichtDiePartiturBeimSidecarEinUndLaesstPollen(): void {
@@ -152,5 +154,88 @@ class ConvertScoreJobTest extends TestCase {
 			->with($this->anything(), $this->anything(), ScoreConversion::ERROR_TOO_LARGE);
 
 		$this->jobLaufenLassen();
+	}
+
+	// --- Sidecar ausgelastet (volle Warteschlange, HTTP 503) ---------------
+
+	/**
+	 * Kein Fehlercode, also nichts, was ClientFallback als
+	 * Infrastrukturfehler lesen und fuer alle auf den Browser umschalten
+	 * koennte. Stattdessen: zurueck auf pending, Neuversuch nach Retry-After.
+	 */
+	public function testAusgelasteterSidecarWirdSpaeterErneutVersuchtStattZuScheitern(): void {
+		$this->sidecarClient->method('submitConversion')->willThrowException(new SidecarBusyException('voll', 30));
+		$this->conversionService->expects($this->never())->method('markError');
+		$this->conversionService->expects($this->once())->method('markWaiting');
+		$this->jobList->expects($this->never())->method('add');
+		$this->jobList->expects($this->once())->method('scheduleAfter')
+			->with(ConvertScoreJob::class, 30, ['userId' => 'andreas', 'fileId' => 42, 'busyRetry' => 1]);
+
+		$this->jobLaufenLassen();
+	}
+
+	/**
+	 * @return array<string, array{int, int}>
+	 */
+	public static function wartezeiten(): array {
+		return [
+			'Null wird zur Untergrenze' => [0, 15],
+			'Stunde wird zur Obergrenze' => [3600, 300],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('wartezeiten')]
+	public function testDieWartezeitIstGedeckelt(int $retryAfter, int $erwartet): void {
+		$this->sidecarClient->method('submitConversion')->willThrowException(new SidecarBusyException('voll', $retryAfter));
+		$this->jobList->expects($this->once())->method('scheduleAfter')
+			->with(ConvertScoreJob::class, $erwartet, $this->anything());
+
+		$this->jobLaufenLassen();
+	}
+
+	public function testDerNeuversuchUebergehtDenEigenenWartendenDatensatzNicht(): void {
+		// Ohne busyRetry hielte der Guard den eigenen pending-Datensatz fuer
+		// "laeuft schon" und der Neuversuch taete nichts.
+		$this->gefunden = $this->datensatz(ScoreConversion::STATUS_PENDING);
+		$this->sidecarClient->expects($this->once())->method('submitConversion')->willReturn('job-1');
+		$this->jobList->expects($this->once())->method('add');
+
+		$this->jobLaufenLassen(['busyRetry' => 3]);
+	}
+
+	public function testEinNormalerJobUeberspringtDenWartendenDatensatz(): void {
+		// Sonst reichte ein zweiter Upload-Event dieselbe Partitur neben dem
+		// eingeplanten Neuversuch ein zweites Mal ein.
+		$this->gefunden = $this->datensatz(ScoreConversion::STATUS_PENDING);
+		$this->sidecarClient->expects($this->never())->method('submitConversion');
+
+		$this->jobLaufenLassen();
+	}
+
+	public function testEinUeberholterNeuversuchTutNichts(): void {
+		// Inzwischen fertig (oder verworfen) - der eingeplante Versuch ist
+		// hinfaellig.
+		$this->gefunden = $this->datensatz(ScoreConversion::STATUS_READY);
+		$this->sidecarClient->expects($this->never())->method('submitConversion');
+		$this->conversionService->expects($this->never())->method('createPending');
+
+		$this->jobLaufenLassen(['busyRetry' => 2]);
+	}
+
+	public function testNachDenNeuversuchenEndetEsMitEigenemCode(): void {
+		$this->gefunden = $this->datensatz(ScoreConversion::STATUS_PENDING);
+		$this->sidecarClient->method('submitConversion')->willThrowException(new SidecarBusyException('voll', 30));
+		$this->jobList->expects($this->never())->method('scheduleAfter');
+		$this->conversionService->expects($this->once())->method('markError')
+			->with($this->anything(), $this->anything(), ScoreConversion::ERROR_SIDECAR_BUSY);
+
+		$this->jobLaufenLassen(['busyRetry' => ConvertScoreJob::MAX_BUSY_RETRIES]);
+	}
+
+	private function datensatz(string $status): ScoreConversion {
+		$c = new ScoreConversion();
+		$c->setStatus($status);
+		$c->setFormatVersion(\OCA\ScoreView\Service\ConversionService::CURRENT_FORMAT_VERSION);
+		return $c;
 	}
 }

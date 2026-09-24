@@ -31,6 +31,22 @@ use OCP\IUserManager;
  * pflegen, aber keine geteilten: Die Rolle ergaenzt die Regeln der geteilten Notizen, sie ersetzt sie nicht.
  */
 class AnnotationService {
+	/**
+	 * Hoechstens so viele Notizen je Nutzerin und Datei, alle Sichtbarkeiten
+	 * zusammen (S4). Ohne Grenze liesse sich eine Partitur mit beliebig vielen
+	 * geteilten oder Stimmnotizen fluten - und listForFile() liefert sie bei
+	 * JEDEM Oeffnen allen Lesenden aus. 500 sind mehr als ein Stempel je Takt
+	 * einer langen Partitur; wer das erreicht, raeumt auf statt weiter
+	 * anzuhaeufen.
+	 *
+	 * Gezaehlt wird vor dem Einfuegen, ohne Sperre: Zwei gleichzeitige
+	 * Anfragen derselben Person koennen die Grenze um eine Notiz
+	 * ueberschreiten. Das ist hier harmlos - anders als bei den Aufnahmen
+	 * geht es um Bytes, nicht um Megabytes -, und die Drosselung der Route
+	 * haelt die Zahl solcher Paare klein.
+	 */
+	public const MAX_PER_USER_AND_FILE = 500;
+
 	public function __construct(
 		private AnnotationMapper $mapper,
 		private IUserManager $userManager,
@@ -81,8 +97,12 @@ class AnnotationService {
 	 * @param ?string $targetPartsJson JSON `[{id, name}]`, bereits geprueft
 	 *                                 (Controller) - nur bei `parts`
 	 * @param bool $byLeader ob die Autorin beim Anlegen Leitung ist
+	 * @throws AnnotationLimitException bei MAX_PER_USER_AND_FILE
 	 */
 	public function create(int $fileId, string $userId, int $measureNumber, float $fraction, ?int $elid, ?string $anchorEtag, string $content, string $visibility, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?string $targetPartsJson = null, bool $byLeader = false): Annotation {
+		if ($this->mapper->countByFileAndUser($fileId, $userId) >= self::MAX_PER_USER_AND_FILE) {
+			throw new AnnotationLimitException('Zu viele Notizen zu dieser Datei.');
+		}
 		$now = new \DateTime();
 		$annotation = new Annotation();
 		$annotation->setFileId($fileId);

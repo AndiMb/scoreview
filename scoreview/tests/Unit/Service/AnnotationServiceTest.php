@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Tests\Unit\Service;
 
 use OCA\ScoreView\Db\Annotation;
 use OCA\ScoreView\Db\AnnotationMapper;
+use OCA\ScoreView\Service\AnnotationLimitException;
 use OCA\ScoreView\Service\AnnotationService;
 use OCP\IUser;
 use OCP\IUserManager;
@@ -314,6 +315,21 @@ class AnnotationServiceTest extends TestCase {
 		$data = $a->jsonSerialize();
 		$this->assertSame([['id' => '3', 'name' => 'Tenor']], $data['targetParts']);
 		$this->assertTrue($data['byLeader']);
+	}
+
+	public function testAnDerObergrenzeWirdNichtsMehrAngelegt(): void {
+		$this->mapper->method('countByFileAndUser')->with(42, 'alice')->willReturn(AnnotationService::MAX_PER_USER_AND_FILE);
+		$this->mapper->expects($this->never())->method('insert');
+
+		$this->expectException(AnnotationLimitException::class);
+		$this->service->create(42, 'alice', 1, 0.0, null, null, 'Notiz', Annotation::VISIBILITY_PRIVATE);
+	}
+
+	public function testUnterDerObergrenzeWirdAngelegt(): void {
+		$this->mapper->method('countByFileAndUser')->willReturn(AnnotationService::MAX_PER_USER_AND_FILE - 1);
+		$this->mapper->expects($this->once())->method('insert')->willReturnArgument(0);
+
+		$this->assertSame('Notiz', $this->service->create(42, 'alice', 1, 0.0, null, null, 'Notiz', Annotation::VISIBILITY_PRIVATE)->getContent());
 	}
 
 	/**

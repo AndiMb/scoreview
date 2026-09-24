@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Settings;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Controller\SettingsController;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\SoundFontService;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
 use OCP\IAppConfig;
+use OCP\IGroupManager;
+use OCP\IUserSession;
 use OCP\Settings\ISettings;
 use OCP\Util;
 
@@ -37,12 +40,20 @@ class AdminSettings implements ISettings {
 		private IInitialState $initialState,
 		private ConversionBackend $backend,
 		private FeatureConfig $features,
+		private IUserSession $userSession,
+		private IGroupManager $groupManager,
 	) {
 	}
 
 	public function getForm(): TemplateResponse {
 		$this->initialState->provideInitialState('admin-settings', [
 			'conversionBackend' => $this->backend->current(),
+			// Delegierte Admins sehen diese Seite auch, duerfen aber node-Pfad,
+			// Sidecar (URL, Secret) und SoundFont-Quelle nicht aendern - das
+			// startet Programme bzw. laesst den Server Adressen abrufen (siehe
+			// SettingsController::update). Das Formular sperrt die Felder
+			// danach, statt erst beim Speichern ein 403 zu zeigen.
+			'fullAdmin' => SettingsController::isFullAdmin($this->userSession, $this->groupManager),
 			'nodePath' => $this->appConfig->getValueString(Application::APP_ID, 'node_path'),
 			'soundFontFetchUrl' => $this->appConfig->getValueString(Application::APP_ID, SoundFontService::FETCH_URL_KEY),
 			// Roh aus der Konfiguration oben, die Vorbelegung getrennt daneben:

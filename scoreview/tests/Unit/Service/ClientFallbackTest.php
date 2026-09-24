@@ -167,6 +167,9 @@ class ClientFallbackTest extends TestCase {
 			'zu gross' => [ScoreConversion::ERROR_TOO_LARGE],
 			'Zeitgrenze' => [ScoreConversion::ERROR_TIMEOUT],
 			'unbekannt' => [ScoreConversion::ERROR_UNKNOWN],
+			// Ausgelastet ist nicht kaputt: Ein Stapel-Upload ueber die
+			// Warteschlange hinaus darf nicht alle auf den Browser schicken.
+			'Sidecar ausgelastet' => [ScoreConversion::ERROR_SIDECAR_BUSY],
 			'gar keiner' => [null],
 		];
 	}

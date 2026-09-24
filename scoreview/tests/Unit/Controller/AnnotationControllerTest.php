@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Tests\Unit\Controller;
 
 use OCA\ScoreView\Controller\AnnotationController;
 use OCA\ScoreView\Db\Annotation;
+use OCA\ScoreView\Service\AnnotationLimitException;
 use OCA\ScoreView\Service\AnnotationService;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LeaderService;
@@ -373,6 +374,18 @@ class AnnotationControllerTest extends TestCase {
 			->willReturn(new Annotation());
 
 		$this->controller()->create(42, 1, 0.0, 'Notiz', null, null, 'shared');
+	}
+
+	public function testDieObergrenzeEndetAls409MitGrund(): void {
+		// Eigener Grund statt nur eines Texts: Der Viewer soll erkennen
+		// koennen, dass Loeschen hilft und ein neuer Versuch nicht.
+		$this->angemeldetMitDatei();
+		$this->annotationService->method('create')->willThrowException(new AnnotationLimitException());
+
+		$response = $this->controller()->create(42, 1, 0.0, 'Notiz');
+
+		$this->assertSame(Http::STATUS_CONFLICT, $response->getStatus());
+		$this->assertSame('limit', $response->getData()['reason']);
 	}
 
 	// --- Stempel (B3) --------------------------------------------------------

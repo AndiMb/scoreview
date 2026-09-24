@@ -26,9 +26,20 @@
 					{{ t('Sidecar container (MuseScore 4 in its own container)') }}
 				</NcCheckboxRadioSwitch>
 
+				<!--
+					Delegierte Admins duerfen diese Seite bedienen, aber nicht die
+					Felder, mit denen der Server ein Programm startet oder eine
+					Adresse abruft (SettingsController::update). Gesperrt und
+					erklaert statt erst beim Speichern abgelehnt.
+				-->
+				<p v-if="!initial.fullAdmin" class="scoreview-hint">
+					{{ t('Only administrators can change the sidecar connection, the path to node and the SoundFont download URL.') }}
+				</p>
+
 				<template v-if="form.conversionBackend === 'sidecar'">
 					<NcTextField
 						v-model="form.sidecarUrl"
+						:disabled="!initial.fullAdmin"
 						class="scoreview-field"
 						:label="t('Sidecar URL')"
 						placeholder="http://scoreview-sidecar:8765" />
@@ -43,6 +54,7 @@
 					-->
 					<NcPasswordField
 						v-model="form.sidecarSecret"
+						:disabled="!initial.fullAdmin"
 						class="scoreview-field"
 						:label="t('Shared secret')"
 						:placeholder="secretPlaceholder"
@@ -52,6 +64,7 @@
 				<NcTextField
 					v-else
 					v-model="form.nodePath"
+					:disabled="!initial.fullAdmin"
 					class="scoreview-field"
 					:label="t('Path to node (optional)')"
 					placeholder="/usr/bin/node"
@@ -73,6 +86,7 @@
 				<NcTextField
 					v-if="form.conversionBackend === 'local'"
 					v-model="form.soundFontFetchUrl"
+					:disabled="!initial.fullAdmin"
 					class="scoreview-field"
 					:label="t('SoundFont download URL (SF2/SF3, optional)')"
 					:placeholder="initial.soundFontFetchUrlDefault"

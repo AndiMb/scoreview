@@ -63,6 +63,14 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	 * uebernehmen soll, und beide Antworten waeren hier falsch (siehe dort).
 	 */
 	public const ERROR_STALE = 'stale';
+	/**
+	 * Der Sidecar blieb ueber alle Neuversuche hinweg ausgelastet (volle
+	 * Warteschlange, siehe BackgroundJob\ConvertScoreJob::MAX_BUSY_RETRIES).
+	 * Weder ein Inhalts- noch ein Infrastrukturfehler - Service\ClientFallback
+	 * wertet ihn deshalb nicht als Grund fuer den Browser, und der
+	 * Statusendpunkt reiht beim naechsten Oeffnen einen neuen Versuch ein.
+	 */
+	public const ERROR_SIDECAR_BUSY = 'sidecar_busy';
 	public const ERROR_UNKNOWN = 'unknown';
 
 	protected $fileId;

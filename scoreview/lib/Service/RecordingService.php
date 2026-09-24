@@ -33,6 +33,9 @@ use OCP\Files\SimpleFS\ISimpleFile;
  *
  * Erst danach wird geschrieben, und die verdraengte Aufnahme erst geloescht,
  * wenn die neue sicher liegt: Scheitert das Schreiben, ist nichts verloren.
+ * Anzahl und Speicher werden nach dem Schreiben ein zweites Mal geprueft,
+ * gegen gleichzeitige Uploads (enforceStorageAfterStore(),
+ * enforceCountAfterStore()).
  */
 class RecordingService {
 	public function __construct(
@@ -100,6 +103,9 @@ class RecordingService {
 		$recording->setTempoFactor($meta['tempoFactor']);
 		$recording->setWithAccompaniment($meta['withAccompaniment']);
 		$recording = $this->storage->store($recording, $wav);
+		// VOR dem Verdraengen: Scheitert die Nachpruefung, geht nur die neue
+		// Aufnahme wieder, die alten bleiben unangetastet.
+		$this->enforceStorageAfterStore($recording, $freed);
 
 		$deleted = [];
 		foreach ($victims as $victim) {
@@ -130,9 +136,8 @@ class RecordingService {
 	 *   solche Uploads exakt gleichzeitig, kann es beide treffen - lieber eine
 	 *   Aufnahme zu wenig als eine Grenze, die sich umgehen laesst.
 	 *
-	 * Die Speichergrenzen bleiben ungeschuetzt: Dort kann ein gleichzeitiger
-	 * Upload sie um hoechstens seine eigene Groesse ueberschreiten, und jeder
-	 * weitere Upload zaehlt dann richtig.
+	 * Die Speichergrenzen prueft enforceStorageAfterStore() nach demselben
+	 * Muster.
 	 *
 	 * @param array<int, true> $deleted schon verdraengte Kennungen
 	 * @throws RecordingException LIMIT_REACHED
@@ -157,6 +162,37 @@ class RecordingService {
 		if (in_array($recording->getId(), $newest, true)) {
 			$this->storage->delete($recording);
 			throw new RecordingException(RecordingException::LIMIT_REACHED);
+		}
+	}
+
+	/**
+	 * Prueft die Speichergrenzen (S5) ein zweites Mal, nachdem die neue
+	 * Aufnahme liegt - aus demselben Grund wie enforceCountAfterStore():
+	 * Zwei Uploads, die gleichzeitig vor der Grenze stehen, sehen beide
+	 * denselben Stand und laegen zusammen darueber. Beim Speicher sind das
+	 * bis zu hundert Megabyte je Upload, und die Grenze fuer die ganze
+	 * Instanz ist genau die, bei der mehrere Personen gleichzeitig hochladen.
+	 *
+	 * Die Summen enthalten die neue Aufnahme jetzt schon; was ein
+	 * bestaetigtes Ersetzen gleich freigibt ($freed), zaehlt wie beim ersten
+	 * Pruefen als frei. Ist es zu viel, geht die EIGENE Aufnahme wieder - nie
+	 * eine fremde oder eine aeltere -, und die Antwort ist dieselbe wie beim
+	 * ersten Pruefen. Treffen sich zwei Uploads exakt, kann es beide treffen;
+	 * wie bei der Anzahl lieber eine Aufnahme zu wenig als eine Grenze, die
+	 * sich umgehen laesst.
+	 *
+	 * @throws RecordingException USER_STORAGE_FULL, TOTAL_STORAGE_FULL
+	 */
+	private function enforceStorageAfterStore(Recording $recording, int $freed): void {
+		$reason = null;
+		if ($this->mapper->sumSizeByUser($recording->getUserId()) - $freed > $this->features->maxRecordingBytesPerUser()) {
+			$reason = RecordingException::USER_STORAGE_FULL;
+		} elseif ($this->mapper->sumSizeTotal() - $freed > $this->features->maxRecordingBytesTotal()) {
+			$reason = RecordingException::TOTAL_STORAGE_FULL;
+		}
+		if ($reason !== null) {
+			$this->storage->delete($recording);
+			throw new RecordingException($reason);
 		}
 	}
 

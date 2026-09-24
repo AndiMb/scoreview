@@ -10,6 +10,7 @@ use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\LocalConverter;
+use OCA\ScoreView\Service\SidecarBusyException;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SidecarException;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -61,6 +62,25 @@ class ConvertScoreJob extends QueuedJob {
 	 */
 	public const DEFAULT_MAX_BYTES = 100 * 1024 * 1024;
 
+	/**
+	 * Wie oft eine Partitur beim ausgelasteten Sidecar (volle Warteschlange,
+	 * Service\SidecarBusyException) erneut eingereicht wird, bevor sie mit
+	 * ERROR_SIDECAR_BUSY endet. Bei den 30 s, die der Sidecar nennt, sind das
+	 * mindestens zehn Minuten, mit dem Cron-Takt der Instanz eher mehr - genug,
+	 * dass ein Stapel-Upload abgearbeitet ist; und eine Grenze, damit ein
+	 * dauerhaft ueberlasteter Sidecar nicht endlos Jobs nachzieht.
+	 */
+	public const MAX_BUSY_RETRIES = 20;
+
+	/**
+	 * Grenzen fuer die Wartezeit bis zum Neuversuch. Unten, damit ein
+	 * `Retry-After: 0` keine Schleife im Cron-Takt ergibt; oben weit unter
+	 * ConversionService::STALE_AFTER_SECONDS, damit eine Warterunde nie fuer
+	 * einen toten Lauf gehalten wird.
+	 */
+	private const MIN_BUSY_DELAY_SECONDS = 15;
+	private const MAX_BUSY_DELAY_SECONDS = 300;
+
 	public function __construct(
 		ITimeFactory $time,
 		private IRootFolder $rootFolder,
@@ -77,11 +97,15 @@ class ConvertScoreJob extends QueuedJob {
 	}
 
 	/**
-	 * @param array{userId: string, fileId: int} $argument
+	 * `busyRetry` steht nur im Argument eines Neuversuchs nach ausgelastetem
+	 * Sidecar (retryWhenBusy()).
+	 *
+	 * @param array{userId: string, fileId: int, busyRetry?: int} $argument
 	 */
 	protected function run($argument): void {
 		$userId = $argument['userId'];
 		$fileId = (int)$argument['fileId'];
+		$busyRetry = (int)($argument['busyRetry'] ?? 0);
 
 		$node = $this->resolveNode($userId, $fileId);
 		if ($node === null) {
@@ -102,7 +126,17 @@ class ConvertScoreJob extends QueuedJob {
 			// diesen Job gezielt fuer GENAU diesen Fall neu ein und braucht ihn
 			// nicht uebersprungen.
 			$alreadyReadyAndCurrent = $conversion->getStatus() === ScoreConversion::STATUS_READY && $this->conversionService->isCurrentFormat($conversion);
-			if ($alreadyInProgress || $alreadyReadyAndCurrent) {
+			// Der eigene Neuversuch findet den Datensatz absichtlich auf
+			// `pending` vor (markWaiting() unten) - der Guard gilt fuer ihn nur
+			// umgekehrt: Steht der Datensatz NICHT mehr auf pending, hat ihn
+			// inzwischen jemand anders uebernommen (Neu konvertieren, ein neuer
+			// Upload, der Statusendpunkt nach stale), und dieser Versuch ist
+			// hinfaellig.
+			if ($busyRetry > 0) {
+				if ($conversion->getStatus() !== ScoreConversion::STATUS_PENDING) {
+					return;
+				}
+			} elseif ($alreadyInProgress || $alreadyReadyAndCurrent) {
 				// Bereits angestoßen oder fertig (z.B. NodeCreatedEvent UND
 				// NodeWrittenEvent für denselben Upload, oder Status-Endpunkt hat
 				// zwischenzeitlich schon selbst nachgelegt) - nicht doppelt tun.
@@ -110,6 +144,12 @@ class ConvertScoreJob extends QueuedJob {
 			}
 		}
 		if ($conversion === null) {
+			if ($busyRetry > 0) {
+				// Der Datensatz ist weg (Neu konvertieren, neue Fassung der
+				// Datei mit anderem etag) - wer ihn verworfen hat, hat auch
+				// einen eigenen Job eingereiht.
+				return;
+			}
 			$conversion = $this->conversionService->createPending($fileId, $etag);
 		}
 
@@ -138,6 +178,9 @@ class ConvertScoreJob extends QueuedJob {
 				throw new SidecarException('Partitur konnte nicht zum Lesen geoeffnet werden.');
 			}
 			$jobId = $this->sidecarClient->submitConversion($stream, $node->getName());
+		} catch (SidecarBusyException $e) {
+			$this->retryWhenBusy($conversion, $userId, $fileId, $busyRetry, $e);
+			return;
 		} catch (\Throwable $e) {
 			$this->logger->error('ScoreView: Einreichen beim Sidecar fehlgeschlagen für fileId={fileId}: {message}', [
 				'fileId' => $fileId,
@@ -153,6 +196,45 @@ class ConvertScoreJob extends QueuedJob {
 			'etag' => $etag,
 			'jobId' => $jobId,
 			'deadline' => $this->time->getTime() + self::MAX_TOTAL_SECONDS,
+		]);
+	}
+
+	/**
+	 * Der Sidecar ist erreichbar, aber ausgelastet: Die Konvertierung bleibt
+	 * offen und wird spaeter erneut eingereicht, statt als Fehler zu enden.
+	 *
+	 * Bewusst KEIN markError(): Jeder Fehlercode geht beim naechsten
+	 * Statusabruf durch ClientFallback::noteConversionError(), und ein
+	 * Infrastrukturcode schaltete fuer alle auf den Browser um - fuer einen
+	 * Dienst, der nur gerade viel zu tun hat. So erfaehrt der Rueckfall
+	 * davon gar nichts; der Viewer sieht `pending` und wartet.
+	 *
+	 * Der Datensatz geht zurueck auf `pending` (markWaiting setzt dabei
+	 * updated_at neu): Jede Warterunde ist ein Lebenszeichen, isStale()
+	 * greift erst, wenn die Kette abreisst. Erst nach MAX_BUSY_RETRIES endet
+	 * es mit einem eigenen, ehrlichen Code, der weder die Partitur noch die
+	 * Instanz beschuldigt.
+	 */
+	private function retryWhenBusy(ScoreConversion $conversion, string $userId, int $fileId, int $busyRetry, SidecarBusyException $e): void {
+		if ($busyRetry >= self::MAX_BUSY_RETRIES) {
+			$this->logger->warning('ScoreView: Sidecar nach {retries} Neuversuchen weiter ausgelastet, fileId={fileId} aufgegeben.', [
+				'retries' => $busyRetry,
+				'fileId' => $fileId,
+			]);
+			$this->conversionService->markError($conversion, $e->getMessage(), ScoreConversion::ERROR_SIDECAR_BUSY);
+			return;
+		}
+		$delay = max(self::MIN_BUSY_DELAY_SECONDS, min(self::MAX_BUSY_DELAY_SECONDS, $e->getRetryAfterSeconds()));
+		$this->conversionService->markWaiting($conversion);
+		$this->jobList->scheduleAfter(self::class, $this->time->getTime() + $delay, [
+			'userId' => $userId,
+			'fileId' => $fileId,
+			'busyRetry' => $busyRetry + 1,
+		]);
+		$this->logger->info('ScoreView: Sidecar ausgelastet, fileId={fileId} in {delay} s erneut (Versuch {retry}).', [
+			'fileId' => $fileId,
+			'delay' => $delay,
+			'retry' => $busyRetry + 1,
 		]);
 	}
 

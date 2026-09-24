@@ -36,8 +36,14 @@ class RecordingStorage {
 	/**
 	 * Ordner der Aufnahmen einer Nutzerin zu einer Partitur, bei Bedarf
 	 * angelegt.
+	 *
+	 * @throws \InvalidArgumentException bei einer Kennung, die kein
+	 *                                   Ordnername sein darf (siehe isSafeSegment())
 	 */
 	public function folderFor(string $userId, int $fileId): ISimpleFolder {
+		if (!self::isSafeSegment($userId)) {
+			throw new \InvalidArgumentException('Unbrauchbare Nutzerkennung fuer den Aufnahmeordner.');
+		}
 		$root = $this->getOrCreate(null, self::ROOT_FOLDER);
 		$byUser = $this->getOrCreate($root, $userId);
 		return $this->getOrCreate($byUser, (string)$fileId);
@@ -72,8 +78,7 @@ class RecordingStorage {
 	 * @throws NotFoundException wenn die Zeile da ist, die Datei aber nicht
 	 */
 	public function open(Recording $recording): ISimpleFile {
-		return $this->appData->getFolder(self::ROOT_FOLDER)
-			->getFolder($recording->getUserId())
+		return $this->userFolder($recording->getUserId())
 			->getFolder((string)$recording->getFileId())
 			->getFile(self::fileName($recording->getId()));
 	}
@@ -92,7 +97,7 @@ class RecordingStorage {
 		$fileId = $recording->getFileId();
 		if ($this->mapper->findByFileAndUser($fileId, $userId) === []) {
 			try {
-				$this->appData->getFolder(self::ROOT_FOLDER)->getFolder($userId)->getFolder((string)$fileId)->delete();
+				$this->userFolder($userId)->getFolder((string)$fileId)->delete();
 			} catch (NotFoundException) {
 				// Nie angelegt oder schon weg.
 			}
@@ -110,7 +115,7 @@ class RecordingStorage {
 		$userIds = $this->mapper->findUserIdsByFileId($fileId);
 		foreach ($userIds as $userId) {
 			try {
-				$this->appData->getFolder(self::ROOT_FOLDER)->getFolder($userId)->getFolder((string)$fileId)->delete();
+				$this->userFolder($userId)->getFolder((string)$fileId)->delete();
 			} catch (NotFoundException) {
 				// Zeile ohne Datei (Upload abgebrochen) - nichts zu tun.
 			}
@@ -137,7 +142,7 @@ class RecordingStorage {
 	 */
 	public function deleteAllForUser(string $userId): int {
 		try {
-			$this->appData->getFolder(self::ROOT_FOLDER)->getFolder($userId)->delete();
+			$this->userFolder($userId)->delete();
 		} catch (NotFoundException) {
 			// Nie aufgenommen - nichts zu tun.
 		}
@@ -157,10 +162,38 @@ class RecordingStorage {
 			return;
 		}
 		try {
-			$this->appData->getFolder(self::ROOT_FOLDER)->getFolder($userId)->delete();
+			$this->userFolder($userId)->delete();
 		} catch (NotFoundException) {
 			// Schon weg.
 		}
+	}
+
+	/**
+	 * Der vorhandene Ordner `recordings/<uid>/`.
+	 *
+	 * @throws NotFoundException auch bei einer unbrauchbaren Kennung - ein
+	 *                           solcher Ordner kann nie angelegt worden sein
+	 */
+	private function userFolder(string $userId): ISimpleFolder {
+		if (!self::isSafeSegment($userId)) {
+			throw new NotFoundException('Unbrauchbare Nutzerkennung fuer den Aufnahmeordner.');
+		}
+		return $this->appData->getFolder(self::ROOT_FOLDER)->getFolder($userId);
+	}
+
+	/**
+	 * Ob eine Nutzerkennung als EIN Pfadsegment unter `recordings/` taugt.
+	 *
+	 * Nextcloud lehnt beim Anlegen eines Kontos Kennungen ab, die nur aus
+	 * Punkten bestehen, und laesst keine Schraegstriche zu - `.` oder `..`
+	 * kaemen hier also regulaer nie an. Geprueft wird trotzdem: Die Kennung
+	 * wird zum Ordnernamen, `..` machte aus `recordings/<uid>/` den
+	 * App-Datenordner selbst, und deleteAllForUser() loeschte ihn samt
+	 * Cache. Eine Nutzerverwaltung aus einem anderen Backend (LDAP, SAML,
+	 * eine kuenftige Version) soll diese Annahme nicht still brechen koennen.
+	 */
+	private static function isSafeSegment(string $userId): bool {
+		return trim($userId, '.') !== '' && strpbrk($userId, "/\\\0") === false;
 	}
 
 	private function getOrCreate(?ISimpleFolder $parent, string $name): ISimpleFolder {

@@ -136,6 +136,8 @@ class PollConversionJobTest extends TestCase {
 			'Aufstieg getarnt' => ['/convert/abc/..%2fx'],
 			'kein fuehrender Schraegstrich' => ['convert/abc/artifact/midi'],
 			'leer' => [''],
+			// Ohne den Modifikator D liesse `$` diesen Umbruch zu.
+			'abschliessender Zeilenumbruch' => ["/x\n"],
 		];
 	}
 

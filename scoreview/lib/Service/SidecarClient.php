@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Service;
 
 use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\ServerException;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCP\Http\Client\IClientService;
@@ -73,6 +74,20 @@ class SidecarClient {
 			// anderer Befund als "nicht erreichbar" und verdient einen eigenen
 			// Code (siehe ScoreConversion::ERROR_*).
 			throw new SidecarException('Sidecar-Anfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
+		} catch (ServerException $e) {
+			// 503 heisst beim Sidecar genau eines: Warteschlange voll. Er ist
+			// also erreichbar und gesund, nur gerade ausgelastet - ein
+			// Neuversuch spaeter ist die Antwort, nicht der Rueckfall auf den
+			// Browser (siehe SidecarBusyException). Jedes andere 5xx bleibt
+			// "nicht erreichbar".
+			if ($e->getResponse()->getStatusCode() === 503) {
+				throw new SidecarBusyException(
+					'Sidecar ausgelastet: ' . $e->getMessage(),
+					self::retryAfterSeconds($e->getResponse()->getHeaderLine('Retry-After')),
+					$e,
+				);
+			}
+			throw new SidecarException('Sidecar-Anfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		} catch (\Exception $e) {
 			throw new SidecarException('Sidecar-Anfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
@@ -81,6 +96,17 @@ class SidecarClient {
 			throw new SidecarException('Sidecar-Antwort auf /convert ohne jobId.');
 		}
 		return (string)$body['jobId'];
+	}
+
+	/**
+	 * Retry-After in Sekunden. Der Sidecar schickt eine Zahl; die
+	 * HTTP-Datumsform und alles Unlesbare werden zur Vorgabe von 30 s - der
+	 * Wert, den der Sidecar selbst voreinstellt. Gedeckelt wird erst beim
+	 * Einplanen (BackgroundJob\ConvertScoreJob), hier wird nur gelesen.
+	 */
+	public static function retryAfterSeconds(string $header): int {
+		$header = trim($header);
+		return ctype_digit($header) ? (int)$header : 30;
 	}
 
 	/**
@@ -236,10 +262,14 @@ class SidecarClient {
 	 * faellt getrennt heraus: Der Ausdruck braucht Punkte, aber keine
 	 * Aufstiege.
 	 *
+	 * Der Modifikator `D` gehoert dazu: Ohne ihn passt `$` auch VOR einem
+	 * abschliessenden Zeilenumbruch, und `/x\n` ginge als Pfad durch - ein
+	 * Steuerzeichen in einer URL, die mit dem Secret im Header abgerufen wird.
+	 *
 	 * Der Sidecar ist ein vertrauter Dienst. Diese Zeilen sorgen dafuer, dass
 	 * er es bleiben MUSS, statt dass es nur niemand ausprobiert.
 	 */
-	private const ARTEFAKTPFAD = '#^/(?!/)[A-Za-z0-9/_.\-]*$#';
+	private const ARTEFAKTPFAD = '#^/(?!/)[A-Za-z0-9/_.\-]*$#D';
 
 	/** @throws SidecarException */
 	public function fetchFile(string $relativeUrl): string {

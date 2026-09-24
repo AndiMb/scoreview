@@ -46,10 +46,26 @@ class LocalConverter {
 	 * Cron-Prozesses. Behalten wird der SCHWANZ: lastLine() sucht die Ursache
 	 * am Ende, vorne steht Rauschen.
 	 *
-	 * stdout bleibt ungedeckelt - dort steht die JSON-Antwort des Selbsttests,
-	 * die vollstaendig bleiben muss, und sie ist durch den Aufbau begrenzt.
 	 */
 	private const MAX_STDERR_BYTES = 1048576;
+
+	/**
+	 * Obergrenze fuer stdout - anders behandelt als stderr.
+	 *
+	 * Ueber stdout kommt nur EINE Zeile JSON: bei der Konvertierung Seitenzahl,
+	 * Taktzahl und Version (unter 200 Bytes), beim Selbsttest der Bericht mit
+	 * Befunden (wenige Kilobyte), bei `node --version` die Versionsnummer. Die
+	 * Artefakte selbst gehen als Dateien ins Ausgabeverzeichnis, nie ueber die
+	 * Pipe, und convert.mjs leitet alles andere nach stderr um. Ein Megabyte
+	 * ist damit das Hundertfache des Groessten, was legitim kommen kann.
+	 *
+	 * Kommt mehr, ist der Kindprozess nicht der, fuer den er gehalten wird -
+	 * und dann wird NICHT gekappt: Ein abgeschnittenes JSON waere eine
+	 * falsche Antwort, keine kuerzere. Der Lauf endet als Fehler
+	 * (`stdoutOverflow`), der Rest wird nur noch abgelesen und verworfen,
+	 * damit das Kind nicht an einer vollen Pipe haengt.
+	 */
+	private const MAX_STDOUT_BYTES = 1048576;
 
 	/**
 	 * Wo nach `node` gesucht wird, wenn die Einstellung `node_path` leer ist.
@@ -207,7 +223,7 @@ class LocalConverter {
 			return null;
 		}
 		$version = trim($output['stdout']);
-		return ($output['exitCode'] === 0 && str_starts_with($version, 'v')) ? $version : null;
+		return ($output['exitCode'] === 0 && !$output['stdoutOverflow'] && str_starts_with($version, 'v')) ? $version : null;
 	}
 
 	/**
@@ -243,6 +259,13 @@ class LocalConverter {
 			$timeout = self::DEFAULT_TIMEOUT_SECONDS;
 		}
 
+		// Bewusst ohne `--max-old-space-size`: Die Flagge begrenzt nur den
+		// JS-Heap von V8. Der grosse Verbraucher ist der lineare Speicher der
+		// Wasm-Engine, ein ArrayBuffer ausserhalb dieses Heaps - gedeckelt
+		// waere also gerade nicht der Teil, der waechst, wohl aber die
+		// SVG-Seiten einer grossen Partitur, die als JS-Strings im Heap
+		// liegen. Eine Speichergrenze gehoert, wo gewuenscht, an den Prozess
+		// (ulimit/cgroup des PHP-Dienstes), nicht in diese Zeile.
 		$command = [$node, $this->getConverterDir() . '/convert.mjs'];
 		// Zusatzfonts fuer CJK-Liedtexte, falls eingerichtet. Bewusst ein
 		// Verzeichnis AUSSERHALB der App: Das ausgelieferte App-Verzeichnis ist
@@ -280,6 +303,12 @@ class LocalConverter {
 				errorCode: ScoreConversion::ERROR_CONVERSION_FAILED,
 			);
 		}
+		if ($result['stdoutOverflow']) {
+			throw new LocalConverterException(
+				sprintf('Der lokale Konverter schrieb mehr als %d Bytes auf stdout - erwartet ist eine Zeile JSON.', self::MAX_STDOUT_BYTES),
+				errorCode: ScoreConversion::ERROR_CONVERSION_FAILED,
+			);
+		}
 		return $result['stdout'];
 	}
 
@@ -293,7 +322,7 @@ class LocalConverter {
 	 * MuseScore-Lauf den Cron-Durchgang der Instanz auf.
 	 *
 	 * @param string[] $command
-	 * @return array{stdout: string, stderr: string, exitCode: int, timedOut: bool}
+	 * @return array{stdout: string, stderr: string, exitCode: int, timedOut: bool, stdoutOverflow: bool}
 	 * @throws LocalConverterException
 	 */
 	private function execute(array $command, string $cwd, int $timeoutSeconds): array {
@@ -313,8 +342,10 @@ class LocalConverter {
 
 		$stdout = '';
 		$stderr = '';
+		$stdoutOverflow = false;
 		$deadline = microtime(true) + $timeoutSeconds;
 		$timedOut = false;
+		$exitCode = null;
 
 		while (true) {
 			$read = [$pipes[1], $pipes[2]];
@@ -330,7 +361,7 @@ class LocalConverter {
 						continue;
 					}
 					if ($stream === $pipes[1]) {
-						$stdout .= $chunk;
+						$this->appendStdout($stdout, $stdoutOverflow, $chunk);
 					} else {
 						$stderr .= $chunk;
 						if (strlen($stderr) > self::MAX_STDERR_BYTES) {
@@ -352,10 +383,18 @@ class LocalConverter {
 
 			$status = proc_get_status($process);
 			if (!$status['running']) {
+				// Der Exitcode MUSS hier abgelesen werden, beim ersten
+				// Aufruf, der das Ende meldet: proc_get_status() hat den
+				// Prozess damit schon eingesammelt (waitpid), und vor PHP 8.3
+				// liefert jeder spaetere Aufruf - auch proc_close() unten -
+				// nur noch -1. Gemessen: 8.1/8.2 -1, 8.3 0. Mit -1 hielte
+				// nodeVersion() jedes node fuer kaputt, und der lokale Weg
+				// fiele still auf den Browser zurueck (E7).
+				$exitCode = (int)$status['exitcode'];
 				// Nachlesen, was zwischen dem letzten Lesen und dem Ende noch
 				// in den Puffern lag - sonst fehlt ausgerechnet die
 				// Fehlermeldung eines schnell gescheiterten Laufs.
-				$stdout .= (string)stream_get_contents($pipes[1]);
+				$this->appendStdout($stdout, $stdoutOverflow, (string)stream_get_contents($pipes[1]));
 				$stderr .= (string)stream_get_contents($pipes[2]);
 				break;
 			}
@@ -368,14 +407,46 @@ class LocalConverter {
 
 		fclose($pipes[1]);
 		fclose($pipes[2]);
-		$exitCode = proc_close($process);
+		$closed = proc_close($process);
+		// proc_close() nur als Rueckfall: -1 von proc_get_status() heisst,
+		// dass PHP den Code dort nicht kannte (etwa ein durch Signal
+		// beendetes Kind); dann kann proc_close() mehr wissen, schlechter
+		// als -1 wird es nicht.
+		if ($exitCode === null || $exitCode === -1) {
+			$exitCode = $closed;
+		}
+
+		// Nach dem Kappen nicht mehr zu gebrauchen - nur die Grenze ist eine
+		// verlaessliche Aussage (siehe MAX_STDOUT_BYTES).
+		if ($stdoutOverflow) {
+			$stdout = '';
+		}
 
 		return [
 			'stdout' => $stdout,
 			'stderr' => $stderr,
 			'exitCode' => $timedOut ? -1 : $exitCode,
 			'timedOut' => $timedOut,
+			'stdoutOverflow' => $stdoutOverflow,
 		];
+	}
+
+	/**
+	 * Haengt an stdout an, bis MAX_STDOUT_BYTES erreicht ist; danach wird nur
+	 * noch vermerkt, dass es zu viel war. Der Strom wird trotzdem weiter
+	 * gelesen: Ein Kind, dessen Pipe niemand leert, blockiert beim Schreiben
+	 * und liefe bis zur Zeitgrenze.
+	 */
+	private function appendStdout(string &$stdout, bool &$overflow, string $chunk): void {
+		if ($overflow || $chunk === '') {
+			return;
+		}
+		if (strlen($stdout) + strlen($chunk) > self::MAX_STDOUT_BYTES) {
+			$overflow = true;
+			$stdout = '';
+			return;
+		}
+		$stdout .= $chunk;
 	}
 
 	/**
