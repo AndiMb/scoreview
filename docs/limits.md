@@ -222,7 +222,7 @@ tatsächlich an der früheren Zeitfenster-Heuristik lag, steht aus.**
 **Offlinebetrieb.** Im Probenraum ist WLAN oft schlecht oder gar nicht vorhanden.
 Die Artefakte sind unveränderlich und aggressiv cachebar, was günstig ist – aber
 Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
-~40 MB. Ob die App ohne Netz brauchbar ist, ist ungeprüft.
+~24 MB (Vorgabe) bzw. ~40 MB (aus dem Sidecar). Ob die App ohne Netz brauchbar ist, ist ungeprüft.
 
 ## Probe- und Konzertfunktionen
 

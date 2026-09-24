@@ -10,6 +10,11 @@ App-Pakets. Er ist einer von zwei Konvertierungswegen – der andere kommt ohne
 Container aus und liegt im App-Paket. Beide erzeugen dieselben Artefakte; wann
 welcher die bessere Wahl ist, steht unter
 [E3](../docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
+Was nur der Weg ohne Container zusätzlich liefert – Kennungen der Notenköpfe im
+SVG, Tonarten samt Dur/Moll und Studierbuchstaben in den Metadaten – und wie der
+Viewer ohne diese Angaben auskommt, steht in
+[M10](../docs/architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)
+und [E12](../docs/architecture.md#e12-partiturfakten-aus-der-engine-mit-midi-rückfall).
 
 ## Build und Start
 

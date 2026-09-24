@@ -530,7 +530,7 @@ Eine Setliste wechselt das Stück **im** Viewer, nicht durch ein neues
 Einhängen von außen: `ScoreViewer.vue` hält dafür seine eigene `activeFileId`,
 die `useSetlist` setzt. Nur so bleiben Aufführungsmodus, Notenfarbe und Zoom
 über den Wechsel erhalten. Der AudioContext wird dabei neu aufgebaut, das
-SoundFont (rund 40 MB) aber nicht neu geladen: `soundFontCache.js` hält es auf
+SoundFont (rund 24–40 MB, je nach Quelle) aber nicht neu geladen: `soundFontCache.js` hält es auf
 Modulebene für die Lebensdauer der Seite, teilt einen laufenden Abruf und
 merkt sich keinen Fehler. Ein Generationszähler in `usePlayback.js` verwirft
 Antworten, die zu einem schon verlassenen Stück gehören.
@@ -641,7 +641,7 @@ erfüllen: Lautstärke einzelner Stimmen (unmöglich), Instrumentenwechsel
 Qualitätsverlust). Mit clientseitiger Synthese werden alle drei zu Parametern
 statt zu Pipelinestufen.
 
-Der Preis: Ein SoundFont (~40 MB SF3) muss ausgeliefert werden, und die
+Der Preis: Ein SoundFont (~24–40 MB SF3, je nach Quelle) muss ausgeliefert werden, und die
 Klangqualität liegt unter MuseScores eigenem Render – gemessen rund 7 dB
 leiser, siehe [Grenzwerte](limits.md). Dafür ist das Audioartefakt pro Partitur
 um etwa den Faktor 400 kleiner (8 KB MIDI statt 3109 KB MP3), und der langsamste

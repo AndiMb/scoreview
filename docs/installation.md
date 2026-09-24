@@ -259,8 +259,9 @@ dort, denn dessen MuseScore-Installation bringt bereits eines mit – nichts wir
 aus dem Netz geladen. Der Browser spricht dabei nie mit dem Sidecar; die App legt
 die Datei in ihrem IAppData-Cache ab und liefert sie selbst aus.
 
-In beiden Fällen überträgt der erste Abruf nach einer Neuinstallation ~40 MB zum
-Browser. Danach greifen der serverseitige Cache und `Cache-Control: immutable`.
+Der erste Abruf nach einer Neuinstallation überträgt das SoundFont einmal zum
+Browser: ~24 MB bei Weg A (`FluidR3Mono_GM`), ~40 MB bei Weg B
+(`MuseScore_General_Lite` aus dem Sidecar-Image). Danach greifen der serverseitige Cache und `Cache-Control: immutable`.
 
 Das Feld **SoundFont-URL** ist etwas anderes: eine Übersteuerung, bei der der
 **Browser** direkt von dieser Adresse lädt. Sie muss dann vom Browser aus
