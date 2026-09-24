@@ -11,8 +11,12 @@ Zwei Eigenschaften, die deshalb belegt gehoeren:
   ``/artifact/<name>``-Route zusammengefallen.
 """
 
+import contextlib
+import io
+
 import pytest
 
+from scoreview_sidecar import app as app_modul
 from scoreview_sidecar import config, jobs
 from scoreview_sidecar.app import create_app
 
@@ -135,3 +139,68 @@ def test_convert_ohne_datei_ist_ein_400(client):
 
 def test_upload_limit_ist_gesetzt(client):
     assert client.application.config["MAX_CONTENT_LENGTH"] == config.MAX_UPLOAD_BYTES
+
+
+# --- Auslastung -------------------------------------------------------------
+
+def test_volle_warteschlange_ist_ein_503_mit_retry_after(client, monkeypatch):
+    # 503 und nicht 429: auf der PHP-Seite gehoert ein 4xx zu den
+    # Ablehnungen DIESER Datei (sidecar_rejected), ein 5xx zu den
+    # Infrastrukturfehlern, die den Rueckfall auf den Browser ausloesen.
+    monkeypatch.setattr(config, "MAX_QUEUED_JOBS", 1)
+    jobs.JOBS["wartet"] = {"status": "pending", "createdAt": 0, "completedAt": None}
+
+    antwort = client.post(
+        "/convert",
+        headers=SECRET,
+        data={"file": (io.BytesIO(b"mscz"), "stueck.mscz")},
+        content_type="multipart/form-data",
+    )
+
+    assert antwort.status_code == 503
+    assert antwort.headers["Retry-After"] == str(config.QUEUE_FULL_RETRY_AFTER_SECONDS)
+    assert "queue full" in antwort.get_json()["error"]
+    assert set(jobs.JOBS) == {"wartet"}
+
+
+def test_selftest_wartet_nur_begrenzt_auf_einen_platz(client, monkeypatch, tmp_path):
+    partitur = tmp_path / "selftest.mscz"
+    partitur.write_bytes(b"mscz")
+    monkeypatch.setattr(config, "SELFTEST_SCORE", partitur)
+    monkeypatch.setattr(config, "SELFTEST_SLOT_WAIT_SECONDS", 0.05)
+
+    def darf_nicht_laufen(*args, **kwargs):
+        raise AssertionError("MuseScore lief ohne freien Platz")
+
+    monkeypatch.setattr(app_modul, "run_score_media", darf_nicht_laufen)
+
+    with contextlib.ExitStack() as stack:
+        for _ in range(config.MAX_CONCURRENT_CONVERSIONS):
+            stack.enter_context(jobs.conversion_slot(timeout=1))
+        antwort = client.get("/selftest", headers=SECRET)
+
+    # Weiterhin 200 mit ok:false - ein 5xx waere von "nicht erreichbar"
+    # nicht zu unterscheiden (siehe README, /selftest).
+    assert antwort.status_code == 200
+    body = antwort.get_json()
+    assert body["ok"] is False
+    assert "Konvertierungsplaetze" in body["error"]
+
+
+def test_selftest_laeuft_auf_einem_konvertierungsplatz(client, monkeypatch, tmp_path):
+    partitur = tmp_path / "selftest.mscz"
+    partitur.write_bytes(b"mscz")
+    monkeypatch.setattr(config, "SELFTEST_SCORE", partitur)
+    gesehen = []
+
+    def mscore(pfad, display=None):
+        gesehen.append(display)
+        return {}
+
+    monkeypatch.setattr(app_modul, "run_score_media", mscore)
+
+    client.get("/selftest", headers=SECRET)
+
+    erste = config.FIRST_DISPLAY_NUMBER
+    assert len(gesehen) == 1
+    assert erste <= gesehen[0] < erste + config.MAX_CONCURRENT_CONVERSIONS

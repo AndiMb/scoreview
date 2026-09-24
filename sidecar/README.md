@@ -55,7 +55,9 @@ Alle Variablen außer dem Secret sind optional.
 | `MSCORE_TIMEOUT_SECONDS` | `600` | Harter Timeout-Guard pro Konvertierung |
 | `SCOREVIEW_MAX_UPLOAD_BYTES` | `209715200` | Upload-Limit (200 MB); größere Requests werden mit `413` abgelehnt, bevor MuseScore startet |
 | `SCOREVIEW_JOB_TTL_SECONDS` | `600` | Wie lange die Dateien eines fertigen Jobs abrufbar bleiben |
-| `SCOREVIEW_MAX_CONCURRENT` | `2` | Gleichzeitig laufende Konvertierungen |
+| `SCOREVIEW_MAX_CONCURRENT` | `2` | Gleichzeitig laufende Konvertierungen (der Selbsttest zählt mit) |
+| `SCOREVIEW_MAX_QUEUED` | `30` | Wie viele Aufträge höchstens auf einen Konvertierungsplatz warten; darüber antwortet `POST /convert` mit `503` |
+| `SCOREVIEW_PENDING_MAX_AGE_SECONDS` | `3600` | Ab welchem Alter ein noch wartender Auftrag verworfen wird |
 | `SCOREVIEW_JOBS_DIR` | `/tmp/scoreview-jobs` | Arbeitsverzeichnis für laufende Jobs |
 | `SCOREVIEW_SOUNDFONT_PATH` | automatische Suche | Welches SoundFont `GET /soundfont` ausliefert |
 | `PORT` | `8765` | Port, auf dem gunicorn im Container lauscht |
@@ -108,6 +110,10 @@ Asynchrone Job-API; ein Container läuft dauerhaft. Alle Endpunkte außer
 
 - **`POST /convert`** – Multipart-Feld `file` = `.mscz`. Antwortet
   `202 {"jobId": "..."}`; die Konvertierung läuft im Hintergrund.
+  Warten schon `SCOREVIEW_MAX_QUEUED` Aufträge, antwortet er stattdessen
+  `503` mit `Retry-After` und speichert nichts. Bewusst 5xx und nicht 429:
+  Die App wertet das als Infrastrukturfehler und lässt den Browser
+  konvertieren, statt die Partitur als abgelehnt zu markieren.
 - **`GET /convert/{jobId}`** –
   `{"status": "pending"|"processing"|"ready"|"error", ...}`. Bei `ready`
   zusätzlich `files`:
@@ -137,7 +143,8 @@ Asynchrone Job-API; ein Container läuft dauerhaft. Alle Endpunkte außer
 
 Fehlerpfade: unbekannte `jobId` → 404, fehlendes `file`-Feld → 400,
 fehlendes oder falsches Secret → 401 – auch auf den Artefakt-Endpunkten. Die
-Existenz eines Jobs wird erst **nach** der Secret-Prüfung offengelegt. Eine
+Existenz eines Jobs wird erst **nach** der Secret-Prüfung offengelegt; volle
+Warteschlange → 503. Eine
 defekte `.mscz` landet sichtbar auf `status: error`, statt zu hängen.
 
 ### Diagnose
@@ -158,8 +165,12 @@ defekte `.mscz` landet sichtbar auf `status: error`, statt zu hängen.
   gesetzten Umgebungsvariable, nicht aus `mscore4portable --version` – der
   Aufruf braucht einen X-Server und mischt Qt-Rauschen in die Ausgabe.
 
+  Er belegt einen Konvertierungsplatz wie jeder Auftrag; wird binnen 60 s
+  keiner frei, meldet er `ok: false` mit diesem Grund.
+
   Gedacht für die **Versionspflege**: Nach einem Wechsel der
-  `MUSESCORE_VERSION`/`MUSESCORE_BUILD`-ARGs im Dockerfile einmal aufrufen, bevor
+  `MUSESCORE_VERSION`/`MUSESCORE_BUILD`-ARGs im Dockerfile (samt
+  `MUSESCORE_APPIMAGE_SHA256`, wie dort beschrieben) einmal aufrufen, bevor
   das Image produktiv geht. Die Verwaltungsseite in Nextcloud hat dafür einen
   Knopf. Der Selbsttest läuft **nicht** automatisch beim Containerstart: Eine
   echte Konvertierung der Minipartitur dauert gemessen ~8 s, das würde jeden Start verzögern und einen
@@ -225,7 +236,10 @@ Zwei unabhängige Mechanismen:
   Arbeitsverzeichnis `SCOREVIEW_JOB_TTL_SECONDS` nach Abschluss. Das ist kein
   Ersatz für die Abholung durch Nextcloud (die passiert sofort nach `ready`),
   sondern ein Sicherheitsnetz gegen unbegrenztes Wachstum von
-  `SCOREVIEW_JOBS_DIR`.
+  `SCOREVIEW_JOBS_DIR`. Derselbe Thread verwirft Aufträge, die länger als
+  `SCOREVIEW_PENDING_MAX_AGE_SECONDS` warten (die App hat sie da längst
+  aufgegeben), und Läufe, die länger dauern, als `MSCORE_TIMEOUT_SECONDS`
+  überhaupt zulässt.
 - **Hängende Jobs** nach einem Container-Neustart mitten in einer Konvertierung.
   Der Job-Status lebt nur im Prozessspeicher; nach einem Neustart ist die Job-ID
   unbekannt, und `SCOREVIEW_JOBS_DIR` kann verwaiste Arbeitsverzeichnisse

@@ -121,8 +121,18 @@ jobs:
               echo "Kein x86_64-AppImage im MuseScore-Release v$MSV gefunden" >&2
               exit 1
             fi
+            # Die Pruefsumme gehoert zum Pin: Das Dockerfile prueft das
+            # AppImage mit sha256sum -c, ein alter Hash liesse den naechsten
+            # Build scheitern. GitHub fuehrt sie als `digest` am Asset.
+            DIGEST=$(gh api "repos/musescore/MuseScore/releases/tags/v$MSV" \
+                       --jq ".assets[] | select(.name==\"MuseScore-Studio-$BUILD-x86_64.AppImage\") | .digest")
+            case "$DIGEST" in
+              sha256:*) ;;
+              *) echo "Keine SHA256-Pruefsumme fuer das AppImage von v$MSV" >&2; exit 1 ;;
+            esac
             sed -i "s|^ARG MUSESCORE_VERSION=.*|ARG MUSESCORE_VERSION=$MSV|" sidecar/Dockerfile
             sed -i "s|^ARG MUSESCORE_BUILD=.*|ARG MUSESCORE_BUILD=$BUILD|" sidecar/Dockerfile
+            sed -i "s|^ARG MUSESCORE_APPIMAGE_SHA256=.*|ARG MUSESCORE_APPIMAGE_SHA256=${DIGEST#sha256:}|" sidecar/Dockerfile
             echo "Sidecar $SIDECAR -> $MSV (Build $BUILD)"
             echo "sidecar=$SIDECAR -> $MSV" >> "$GITHUB_OUTPUT"
           fi

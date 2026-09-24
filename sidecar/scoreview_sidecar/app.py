@@ -88,9 +88,16 @@ def create_app(start_reaper: bool = True) -> Flask:
         try:
             target = workdir / "selftest.mscz"
             shutil.copy(config.SELFTEST_SCORE, target)
-            started = time.time()
-            media = run_score_media(target)
-            elapsed = time.time() - started
+            # Ueber denselben Konvertierungsplatz wie jeder Auftrag: sonst
+            # liefe ein dritter MuseScore-Prozess neben den erlaubten zwei,
+            # und auf derselben Xvfb-Displaynummer wie einer von ihnen.
+            # Begrenzt gewartet - ein voll ausgelasteter Sidecar soll das
+            # sagen, statt den Aufruf in den Timeout der PHP-Seite laufen
+            # zu lassen (NoSlotAvailable landet unten als ok:false).
+            with jobs.conversion_slot(timeout=config.SELFTEST_SLOT_WAIT_SECONDS) as display:
+                started = time.time()
+                media = run_score_media(target, display=display)
+                elapsed = time.time() - started
 
             problems, details = check_promises(media)
             return jsonify({
@@ -134,7 +141,21 @@ def create_app(start_reaper: bool = True) -> Flask:
         uploaded = request.files.get("file")
         if uploaded is None or uploaded.filename == "":
             abort(400, "multipart field 'file' with the .mscz upload is required")
-        return jsonify({"jobId": jobs.submit(uploaded)}), 202
+        try:
+            job_id = jobs.submit(uploaded)
+        except jobs.QueueFull as exc:
+            # 503 statt 429: die Ablehnung sagt nichts ueber diesen Aufrufer
+            # oder diese Partitur, sondern dass der Dienst gerade ausgelastet
+            # ist. Auf der PHP-Seite landet ein 5xx dadurch NICHT bei den
+            # 4xx-Ablehnungen (sidecar_rejected, ein Fehler dieser Datei),
+            # sondern bei den Infrastrukturfehlern - und die loesen den
+            # Rueckfall auf die Konvertierung im Browser aus (E7). Genau das
+            # ist bei einem ueberlasteten Sidecar die brauchbare Antwort.
+            response = jsonify({"error": f"conversion queue full: {exc}"})
+            response.status_code = 503
+            response.headers["Retry-After"] = str(config.QUEUE_FULL_RETRY_AFTER_SECONDS)
+            return response
+        return jsonify({"jobId": job_id}), 202
 
     @app.get("/convert/<job_id>")
     def convert_status(job_id):

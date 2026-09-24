@@ -3,12 +3,36 @@
 # Pinned MuseScore Studio version - update deliberately, never track "latest".
 # Chosen because it is well past the 4.0.0/4.0.1 .spos/.mpos export
 # regression (musescore/MuseScore#16710, fixed by PR #17464).
+#
+# Die beiden Zeilen MUSESCORE_VERSION/MUSESCORE_BUILD liest CI per
+# `grep '^ARG MUSESCORE_VERSION='` (Abgleich mit der Engine-Version) und
+# hebt der Engine-Release-Bot per sed - Form "ARG NAME=wert" beibehalten.
 ARG MUSESCORE_VERSION=4.7.5
 ARG MUSESCORE_BUILD=4.7.5.260831071
 ARG MUSESCORE_APPIMAGE_URL=https://github.com/musescore/MuseScore/releases/download/v${MUSESCORE_VERSION}/MuseScore-Studio-${MUSESCORE_BUILD}-x86_64.AppImage
+# SHA256 genau dieses AppImages. Ohne ihn lieferte ein ausgetauschtes
+# Release-Asset (oder ein Umweg ueber einen manipulierten Spiegel) fremden
+# Code, der danach auf jede hochgeladene Partitur losgelassen wird. Beim
+# Heben von VERSION/BUILD MUSS er mitgehoben werden, sonst bricht der Build
+# an `sha256sum -c` ab - gewollt, lieber laut als mit ungeprueftem Binary.
+# Neu ermitteln, eine der beiden Arten (sie muessen uebereinstimmen):
+#   gh api repos/musescore/MuseScore/releases/tags/v<VERSION> \
+#     --jq '.assets[] | select(.name|endswith("x86_64.AppImage")) | .digest'
+#   curl -fsSL -o ms.AppImage "<MUSESCORE_APPIMAGE_URL>" && sha256sum ms.AppImage
+ARG MUSESCORE_APPIMAGE_SHA256=a31b2da2dbcc2191bcc98beb7be5c15f2f517bedb3444def96fe3088b74d3a1e
 
-FROM ubuntu:22.04
+# Basis-Image per Digest statt nur per Tag: `ubuntu:22.04` wird laufend neu
+# gebaut, derselbe Dockerfile ergaebe sonst von Build zu Build ein anderes
+# Image, ohne dass sich im Repo etwas geaendert haette. Der Digest ist der
+# des Multi-Arch-Index, nicht eines einzelnen Plattform-Manifests.
+# Der Preis: Sicherheitsupdates der Basis kommen nur noch mit einem
+# bewussten Heben. Neu ermitteln mit
+#   docker buildx imagetools inspect ubuntu:22.04   (Zeile "Digest:")
+# und das Tag davor stehen lassen - es ist nur Lesehilfe, massgeblich ist
+# der Digest.
+FROM ubuntu:22.04@sha256:b8b6ee6aa931ecd9d0d952abc34dc0e5f7c6a30c6bb71b079fe399fde0329c02
 ARG MUSESCORE_APPIMAGE_URL
+ARG MUSESCORE_APPIMAGE_SHA256
 
 # `musescore` (the distro package) is installed only to pull in its full set
 # of runtime shared libraries (audio/GL/font stack) via apt dependency
@@ -24,6 +48,7 @@ RUN apt-get update && \
         xvfb wget libopengl0 musescore ca-certificates libpipewire-0.3-0 \
         python3 python3-flask gunicorn && \
     wget -O /tmp/musescore.AppImage "${MUSESCORE_APPIMAGE_URL}" && \
+    echo "${MUSESCORE_APPIMAGE_SHA256}  /tmp/musescore.AppImage" | sha256sum -c - && \
     chmod +x /tmp/musescore.AppImage && \
     cd /opt && /tmp/musescore.AppImage --appimage-extract && \
     mv squashfs-root musescore && \
@@ -76,7 +101,8 @@ ENV MSCORE_TIMEOUT_SECONDS=600
 # Wie viele MuseScore-Prozesse gleichzeitig laufen duerfen. Ohne Grenze
 # wuerde jedes /convert sofort einen eigenen Prozess samt Xvfb starten.
 # Wartende Auftraege bleiben schlicht auf "pending", die PHP-Seite pollt
-# ohnehin.
+# ohnehin - bis zu SCOREVIEW_MAX_QUEUED (Default 30, siehe config.py),
+# darueber lehnt /convert mit 503 ab.
 ENV SCOREVIEW_MAX_CONCURRENT=2
 
 # Haertung: der Konvertierungsprozess (mscore4portable, eine grosse

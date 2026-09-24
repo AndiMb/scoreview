@@ -44,18 +44,74 @@ REAPER_INTERVAL_SECONDS = 30
 
 # How many MuseScore processes may run at the same time.
 #
-# Without a limit, every POST /convert would immediately spawn a thread with
-# its own mscore4portable plus Xvfb, and `run_score_media` additionally
-# buffers the complete `--score-media` output in memory - measured at 16 MB
-# of JSON for a five-page score, correspondingly more for the orchestral
-# scores the 600s timeout accounts for. Twenty scores opened at once would
-# be enough to put the container under memory pressure, and nothing on the
-# PHP side throttles either.
+# Without a limit, every POST /convert would immediately start its own
+# mscore4portable plus Xvfb, and `run_score_media` additionally parses the
+# complete `--score-media` output in memory - measured at 16 MB of JSON for
+# a five-page score, correspondingly more for the orchestral scores the
+# 600s timeout accounts for. Twenty scores opened at once would be enough
+# to put the container under memory pressure, and nothing on the PHP side
+# throttles either.
 #
 # Default 2: conversion is CPU- and memory-bound, so more parallelism buys
 # little, and waiting jobs simply stay "pending" - the PHP side polls anyway
 # and does not need to know (see jobs.py).
 MAX_CONCURRENT_CONVERSIONS = int(os.environ.get("SCOREVIEW_MAX_CONCURRENT", "2"))
+
+# Wie viele Auftraege hoechstens auf einen freien Konvertierungsplatz warten
+# ("pending"). Darueber lehnt POST /convert mit 503 ab, statt den Upload
+# anzunehmen: jeder wartende Auftrag belegt seine Upload-Datei in JOBS_DIR
+# (bis MAX_UPLOAD_BYTES), und ohne Grenze liesse sich der Container allein
+# durch Einreichen volllaufen lassen.
+#
+# Default 30, hergeleitet aus der Wartezeit der App: ConvertScoreJob gibt
+# einen Auftrag 300 s nach dem Einreichen auf. Eine uebliche Chorpartitur
+# (2-4 Seiten, ~6 s pro Seite) braucht ~20 s, bei zwei Plaetzen also ~10 s
+# Durchsatz je Auftrag - nach rund 30 wartenden kaeme ein neuer ohnehin
+# nicht mehr rechtzeitig dran. Mehr Warteplaetze erzeugten nur Arbeit, deren
+# Ergebnis niemand mehr abholt. Mindestens 1, sonst wuerde jeder Auftrag
+# abgelehnt: auch einer, der sofort drankaeme, ist kurz "pending".
+MAX_QUEUED_JOBS = max(1, int(os.environ.get("SCOREVIEW_MAX_QUEUED", "30")))
+
+# Retry-After der 503-Antwort bei voller Warteschlange. Grob die Zeit, in
+# der bei zwei Plaetzen wieder einige Auftraege durch sind; eine Zusage ist
+# das nicht, nur ein Richtwert fuer den Aufrufer.
+QUEUE_FULL_RETRY_AFTER_SECONDS = 30
+
+# Ab welchem Alter der Reaper einen noch wartenden Auftrag verwirft. Die App
+# wartet hoechstens 300 s (ConvertScoreJob) und reicht danach neu ein; ein
+# Auftrag, der eine Stunde lang nicht drankam, wird also von niemandem mehr
+# abgefragt. Ohne diese Grenze liefe MuseScore dafuer spaeter trotzdem noch
+# an und belegte einen Platz fuer ein Ergebnis ohne Abnehmer.
+PENDING_MAX_AGE_SECONDS = int(os.environ.get("SCOREVIEW_PENDING_MAX_AGE_SECONDS", "3600"))
+
+
+def _timeout_as_seconds(value: str):
+    """MSCORE_TIMEOUT_SECONDS geht unveraendert an `timeout`, das auch
+    Suffixe wie "10m" versteht. Fuer den Reaper wird die Zahl gebraucht;
+    was sich nicht deuten laesst, ergibt None - dann raeumt der Reaper
+    laufende Auftraege lieber gar nicht, als sie zu frueh zu verwerfen."""
+    factors = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    text = value.strip().lower()
+    factor = factors.get(text[-1:], None)
+    if factor is not None:
+        text = text[:-1]
+    try:
+        return float(text) * (factor or 1)
+    except ValueError:
+        return None
+
+
+TIMEOUT_SECONDS_NUMERIC = _timeout_as_seconds(TIMEOUT_SECONDS)
+
+# Displaynummern fuer Xvfb, eine feste je Konvertierungsplatz (siehe
+# musescore.run_score_media). 99 ist xvfb-runs eigener Default; im Container
+# laeuft sonst kein X-Server, Kollisionen gibt es also nicht.
+FIRST_DISPLAY_NUMBER = 99
+
+# Wie lange /selftest auf einen freien Konvertierungsplatz wartet. Die
+# PHP-Seite gibt dem ganzen Aufruf 120 s (SidecarClient::runSelfTest), die
+# Konvertierung selbst braucht ~8 s - 60 s Warten lassen dafuer genug Luft.
+SELFTEST_SLOT_WAIT_SECONDS = 60
 
 # `--score-media` coordinates are 12x the SVG viewBox units (M4, measured
 # against real output: viewBox "0 0 10200 13200" vs. spos coordinates in
