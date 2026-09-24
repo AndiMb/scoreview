@@ -55,7 +55,8 @@
 				:anyToolActive="anyToolActive"
 				:readProgress="readPlaybackPercent"
 				@show="showBar"
-				@activity="scheduleBarCollapse">
+				@activity="scheduleBarCollapse"
+				@overflow="reportBarOverflow">
 				<template #transport>
 					<NcButton
 						class="scoreview-play"
@@ -177,205 +178,272 @@
 				</template>
 				<template #tools>
 					<!--
-						Im Aufführungsmodus bleiben nur Zoom und Vollbild;
-						was gesperrt ist, verschwindet, statt ausgegraut
-						dazustehen - ein grauer Knopf laedt zum Antippen ein.
+						Die Werkzeuge in drei Gruppen (lib/barGroups.js - dort
+						steht auch, was wann sichtbar ist). Im Aufführungsmodus
+						bleibt nur „Ansicht" mit dem Zoom; was gesperrt ist,
+						verschwindet, statt ausgegraut dazustehen - ein grauer
+						Knopf laedt zum Antippen ein.
 					-->
-					<NcPopover v-if="can('loop')">
-						<template #trigger>
-							<NcButton :pressed="loopActive" :aria-label="t('Loop')" :title="loopActive ? t('Loop on') : t('Loop off')">
-								<template #icon>
-									<Repeat :size="20" />
-								</template>
-							</NcButton>
-						</template>
-						<template #default>
-							<div class="scoreview-popover">
-								<div class="scoreview-popover-row">
-									<NcTextField
-										v-model.number="loopFromMeasure"
-										type="number"
-										min="1"
-										:label="t('From measure')" />
-									<NcTextField
-										v-model.number="loopToMeasure"
-										type="number"
-										min="1"
-										:label="t('To measure')" />
-								</div>
-								<NcButton wide :aria-label="t('Loop from current measure')" @click="setLoopFromMeasure(currentAnchor?.measureNumber)">
-									<template #icon>
-										<CrosshairsGps :size="20" />
-									</template>
-									{{ t('Loop from current measure') }}
-								</NcButton>
-								<NcButton
-									wide
-									:pressed="loopActive"
-									:aria-label="loopActive ? t('Loop on') : t('Loop off')"
-									@click="onToggleLoop">
+					<template v-for="group in barGroups" :key="group.id">
+						<ToolGroup
+							v-if="group.id === 'practice'"
+							:label="t('Practice')"
+							:active="groupActive('practice')">
+							<template #icon>
+								<Metronome :size="20" />
+							</template>
+							<template #default="{ openPage, close }">
+								<ToolRow
+									v-if="has(group, 'loop')"
+									page
+									:label="t('Loop')"
+									:value="loopLabel"
+									@click="openPage('loop', t('Loop'))">
 									<template #icon>
 										<Repeat :size="20" />
 									</template>
-									{{ loopActive ? t('Loop on') : t('Loop off') }}
-								</NcButton>
-								<ScoreSpeedTrainer
-									v-if="loopActive && hasRealPlayer"
-									v-model:startBpm="trainerStartBpm"
-									v-model:targetBpm="trainerTargetBpm"
-									v-model:stepBpm="trainerStepBpm"
-									:minBpm="minTempoBpm"
-									:maxBpm="maxTempoBpm"
-									:active="trainerActive"
-									:passes="trainerPasses"
-									:currentBpm="effectiveTempoBpm"
-									@toggle="toggleSpeedTrainer" />
-							</div>
-						</template>
-					</NcPopover>
-					<TempoPopover
-						v-if="can('settings')"
-						v-model:metronomeBeats="metronomeBeats"
-						:hasRealPlayer="hasRealPlayer"
-						:effectiveTempoBpm="effectiveTempoBpm"
-						:tempoGuessed="tempoGuessed"
-						:minTempoBpm="minTempoBpm"
-						:maxTempoBpm="maxTempoBpm"
-						:audioOffsetMs="audioOffsetMs"
-						:readAutomaticLatencyMs="readAutomaticLatencyMs"
-						@tempoInput="onTempoBpmInput"
-						@audioOffsetInput="onAudioOffsetInput" />
-					<NcButton
-						v-if="can('settings')"
-						:pressed="metronomeEnabled"
-						:aria-label="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
-						:title="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
-						@click="metronomeEnabled = !metronomeEnabled">
-						<template #icon>
-							<Metronome :size="20" />
-						</template>
-					</NcButton>
+								</ToolRow>
+								<ToolRow
+									v-if="has(group, 'tempo')"
+									page
+									:label="t('Tempo and metronome')"
+									:value="tempoLabel"
+									@click="openPage('tempo', t('Tempo and metronome'))">
+									<template #icon>
+										<Speedometer :size="20" />
+									</template>
+								</ToolRow>
+								<NcCheckboxRadioSwitch
+									v-if="has(group, 'metronome')"
+									v-model="metronomeEnabled"
+									type="switch">
+									{{ t('Metronome') }}
+								</NcCheckboxRadioSwitch>
+								<!--
+									Welcher Ton der Anfangston ist: der eigene
+									oder der Grundton. Beide Moeglichkeiten
+									beschriftet nebeneinander - an dieser Wahl
+									entscheidet sich, was man gleich hoert.
+								-->
+								<fieldset v-if="has(group, 'toneMode')" class="scoreview-popover-group">
+									<legend>{{ t('Starting note') }}</legend>
+									<div class="scoreview-tone-modes">
+										<NcCheckboxRadioSwitch
+											:modelValue="startToneMode"
+											type="radio"
+											:value="MODE_TONIC"
+											name="scoreview-tone-mode"
+											buttonVariant
+											buttonVariantGrouped="horizontal"
+											:title="t('Key note of the current key')"
+											@update:modelValue="setStartToneMode">
+											{{ t('Key note') }}
+										</NcCheckboxRadioSwitch>
+										<NcCheckboxRadioSwitch
+											:modelValue="startToneMode"
+											type="radio"
+											:value="MODE_VOICE"
+											name="scoreview-tone-mode"
+											buttonVariant
+											buttonVariantGrouped="horizontal"
+											:title="t('The first note of my voice')"
+											@update:modelValue="setStartToneMode">
+											{{ t('My note') }}
+										</NcCheckboxRadioSwitch>
+									</div>
+								</fieldset>
+								<ToolRow
+									v-if="has(group, 'mixer')"
+									:pressed="showMixer"
+									:label="t('Mixer')"
+									@click="showMixer = !showMixer; close()">
+									<template #icon>
+										<Tune :size="20" />
+									</template>
+								</ToolRow>
+								<!-- Nur, wenn die Administration Aufnahme oder
+									Intonation eingeschaltet hat. -->
+								<ToolRow
+									v-if="has(group, 'practice')"
+									:pressed="showPractice"
+									:label="t('Recording and intonation')"
+									@click="showPractice = !showPractice; close()">
+									<template #icon>
+										<Microphone :size="20" />
+									</template>
+								</ToolRow>
+							</template>
+							<template #page-loop>
+								<div class="scoreview-controls">
+									<div class="scoreview-popover-row">
+										<NcTextField
+											v-model.number="loopFromMeasure"
+											type="number"
+											min="1"
+											:label="t('From measure')" />
+										<NcTextField
+											v-model.number="loopToMeasure"
+											type="number"
+											min="1"
+											:label="t('To measure')" />
+									</div>
+									<NcButton wide :aria-label="t('Loop from current measure')" @click="setLoopFromMeasure(currentAnchor?.measureNumber)">
+										<template #icon>
+											<CrosshairsGps :size="20" />
+										</template>
+										{{ t('Loop from current measure') }}
+									</NcButton>
+									<NcButton
+										wide
+										:pressed="loopActive"
+										:aria-label="loopActive ? t('Loop on') : t('Loop off')"
+										@click="onToggleLoop">
+										<template #icon>
+											<Repeat :size="20" />
+										</template>
+										{{ loopActive ? t('Loop on') : t('Loop off') }}
+									</NcButton>
+									<ScoreSpeedTrainer
+										v-if="loopActive && hasRealPlayer"
+										v-model:startBpm="trainerStartBpm"
+										v-model:targetBpm="trainerTargetBpm"
+										v-model:stepBpm="trainerStepBpm"
+										:minBpm="minTempoBpm"
+										:maxBpm="maxTempoBpm"
+										:active="trainerActive"
+										:passes="trainerPasses"
+										:currentBpm="effectiveTempoBpm"
+										@toggle="toggleSpeedTrainer" />
+								</div>
+							</template>
+							<template #page-tempo>
+								<TempoControls
+									v-model:metronomeBeats="metronomeBeats"
+									:hasRealPlayer="hasRealPlayer"
+									:effectiveTempoBpm="effectiveTempoBpm"
+									:tempoGuessed="tempoGuessed"
+									:minTempoBpm="minTempoBpm"
+									:maxTempoBpm="maxTempoBpm"
+									:audioOffsetMs="audioOffsetMs"
+									:readAutomaticLatencyMs="readAutomaticLatencyMs"
+									@tempoInput="onTempoBpmInput"
+									@audioOffsetInput="onAudioOffsetInput" />
+							</template>
+						</ToolGroup>
+						<ToolGroup
+							v-else-if="group.id === 'view'"
+							:label="t('View')"
+							:active="groupActive('view')">
+							<template #icon>
+								<EyeOutline :size="20" />
+							</template>
+							<template #default="{ openPage, close }">
+								<ZoomControls
+									v-if="has(group, 'zoom')"
+									:zoom="zoom"
+									:percent="zoomPercent"
+									:min="minZoom"
+									:max="maxZoom"
+									@input="onZoomInput"
+									@preset="applyZoomPreset" />
+								<ToolRow
+									v-if="has(group, 'appearance')"
+									page
+									:label="t('Appearance')"
+									@click="openPage('appearance', t('Appearance'))">
+									<template #icon>
+										<Palette :size="20" />
+									</template>
+								</ToolRow>
+								<!--
+									„Nur meine Zeile" erscheint nur, wenn eine
+									Stimme als „meine" gewaehlt ist UND sich die
+									Notenzeilen den Stimmen zuordnen lassen - sonst
+									waere es ein Schalter, der nichts tut oder,
+									schlimmer, die falsche Zeile markiert (siehe
+									lib/staffBands.js und canFocusMyPart).
+								-->
+								<NcCheckboxRadioSwitch
+									v-if="has(group, 'myPart')"
+									v-model="focusMyPart"
+									type="switch">
+									{{ t('Show only my part') }}
+								</NcCheckboxRadioSwitch>
+								<NcCheckboxRadioSwitch
+									v-if="has(group, 'noteText')"
+									v-model="showNoteText"
+									type="switch">
+									{{ t('Show notes in the score') }}
+								</NcCheckboxRadioSwitch>
+								<ToolRow
+									v-if="has(group, 'annotations')"
+									:pressed="showAnnotations"
+									:label="t('Notes')"
+									@click="showAnnotations = !showAnnotations; close()">
+									<template #icon>
+										<NotebookOutline :size="20" />
+									</template>
+								</ToolRow>
+							</template>
+							<template #page-appearance>
+								<AppearanceControls
+									v-model:highlightMode="highlightMode"
+									v-model:highlightColor="highlightColor"
+									v-model:noteTheme="noteTheme"
+									:rendererBackend="rendererBackend"
+									:mscoreVersion="mscoreVersion"
+									:canReconvert="canReconvert"
+									:readDiagnostics="readAudioDiagnostics"
+									@reconvert="reconvertScore" />
+							</template>
+						</ToolGroup>
+						<ToolGroup
+							v-else-if="group.id === 'rehearsal'"
+							:label="t('Rehearsal')"
+							:active="groupActive('rehearsal')">
+							<template #icon>
+								<AccountGroup :size="20" />
+							</template>
+							<template #default="{ close }">
+								<!--
+									Unter 'settings', weil Ernennen und Abberufen
+									verwalten und nichts mit dem Musizieren selbst
+									zu tun haben - im Aufführungsmodus also
+									gesperrt wie die anderen Werkzeuge.
+								-->
+								<ToolRow
+									v-if="has(group, 'rehearsal')"
+									:pressed="showRehearsal"
+									:label="t('Leaders and “Follow me”')"
+									@click="showRehearsal = !showRehearsal; close()">
+									<template #icon>
+										<AccountGroup :size="20" />
+									</template>
+								</ToolRow>
+								<!--
+									„Neue Setliste" im Ordner der offenen Partitur
+									(E11) - nur, wo dort angelegt werden darf.
+									Bearbeiten sitzt an der Setlisten-Leiste selbst.
+								-->
+								<ToolRow
+									v-if="has(group, 'newSetlist')"
+									:pressed="setlistEditorMode === 'new'"
+									:label="t('New setlist')"
+									@click="openSetlistEditor('new'); close()">
+									<template #icon>
+										<PlaylistPlus :size="20" />
+									</template>
+								</ToolRow>
+							</template>
+						</ToolGroup>
+					</template>
 					<!--
-						Welcher Ton der Anfangston ist: der eigene oder der
-						Grundton. Beschriftet statt nur ein Symbol - an diesem
-						Knopf entscheidet sich, was man gleich hoert.
-					-->
-					<NcButton
-						v-if="hasRealPlayer && can('tone')"
-						class="scoreview-tone-mode"
-						:aria-label="startToneMode === 'tonic' ? t('Starting note: key note of the current key. Switch to my voice') : t('Starting note: my voice. Switch to the key note')"
-						:title="startToneMode === 'tonic' ? t('Starting note: key note of the current key. Switch to my voice') : t('Starting note: my voice. Switch to the key note')"
-						@click="toggleStartToneMode">
-						{{ startToneMode === 'tonic' ? t('Key note') : t('My note') }}
-					</NcButton>
-					<ZoomPopover
-						:zoom="zoom"
-						:percent="zoomPercent"
-						:min="minZoom"
-						:max="maxZoom"
-						@input="onZoomInput"
-						@preset="applyZoomPreset" />
-					<AppearancePopover
-						v-if="can('settings')"
-						v-model:highlightMode="highlightMode"
-						v-model:highlightColor="highlightColor"
-						v-model:noteTheme="noteTheme"
-						:rendererBackend="rendererBackend"
-						:mscoreVersion="mscoreVersion"
-						:canReconvert="canReconvert"
-						:readDiagnostics="readAudioDiagnostics"
-						@reconvert="reconvertScore" />
-					<NcButton
-						v-if="hasRealPlayer && can('mixer')"
-						:pressed="showMixer"
-						:aria-label="t('Mixer')"
-						:title="t('Mixer')"
-						@click="showMixer = !showMixer">
-						<template #icon>
-							<Tune :size="20" />
-						</template>
-					</NcButton>
-					<!--
-						Erscheint nur, wenn eine Stimme als „meine" gewaehlt ist UND
-						sich die Notenzeilen den Stimmen ueberhaupt zuordnen lassen -
-						sonst waere es ein Schalter, der nichts tut oder, schlimmer,
-						die falsche Zeile markiert (siehe lib/staffBands.js).
-					-->
-					<NcButton
-						v-if="canFocusMyPart && can('settings')"
-						:pressed="focusMyPart"
-						:aria-label="t('Show only my part')"
-						:title="t('Show only my part')"
-						@click="focusMyPart = !focusMyPart">
-						<template #icon>
-							<FormatAlignMiddle :size="20" />
-						</template>
-					</NcButton>
-					<NcButton
-						v-if="can('settings')"
-						:pressed="showNoteText"
-						:aria-label="t('Show notes in the score')"
-						:title="t('Show notes in the score')"
-						@click="showNoteText = !showNoteText">
-						<template #icon>
-							<CommentTextOutline :size="20" />
-						</template>
-					</NcButton>
-					<NcButton
-						v-if="can('annotate')"
-						:pressed="showAnnotations"
-						:aria-label="t('Notes')"
-						:title="t('Notes')"
-						@click="showAnnotations = !showAnnotations">
-						<template #icon>
-							<NotebookOutline :size="20" />
-						</template>
-					</NcButton>
-					<!--
-						Aufnahme und Intonation - nur, wenn die
-						Administration eine der beiden eingeschaltet hat.
-					-->
-					<NcButton
-						v-if="(recordingEnabled || intonationEnabled) && can('settings')"
-						:pressed="showPractice"
-						:aria-label="t('Recording and intonation')"
-						:title="t('Recording and intonation')"
-						@click="showPractice = !showPractice">
-						<template #icon>
-							<Microphone :size="20" />
-						</template>
-					</NcButton>
-					<!--
-						Unter 'settings', weil Ernennen und Abberufen verwalten und
-						nichts mit dem Musizieren selbst zu tun haben - im
-						Aufführungsmodus also gesperrt wie die anderen Werkzeuge.
-					-->
-					<NcButton
-						v-if="can('settings')"
-						:pressed="showRehearsal"
-						:aria-label="t('Rehearsal')"
-						:title="t('Rehearsal')"
-						@click="showRehearsal = !showRehearsal">
-						<template #icon>
-							<AccountGroup :size="20" />
-						</template>
-					</NcButton>
-					<!--
-						„Neue Setliste" im Ordner der offenen Partitur
-						(E11) - nur, wo dort angelegt werden darf.
-						Bearbeiten sitzt an der Setlisten-Leiste selbst.
-					-->
-					<NcButton
-						v-if="can('settings') && setlistCanCreate"
-						:pressed="setlistEditorMode === 'new'"
-						:aria-label="t('New setlist')"
-						:title="t('New setlist')"
-						@click="openSetlistEditor('new')">
-						<template #icon>
-							<PlaylistPlus :size="20" />
-						</template>
-					</NcButton>
-					<!--
+						Vollbild steht ausserhalb der Gruppen: Es wird am
+						Notenstaender gebraucht, nicht eingerichtet. In der
+						kompakten Leiste steht es vorn im Werkzeug-Streifen
+						(CSS unten) - auf 360 px traegt der Transport keinen
+						weiteren Knopf (docs/architecture.md, Telefonbreite).
+
 						Ein Knopf, der nichts tut, ist schlimmer als keiner: In der
 						WebView der mobilen Nextcloud-App ist die Vollbild-API
 						abgeschaltet (gemessen: document.fullscreenEnabled = false),
@@ -383,6 +451,7 @@
 					-->
 					<NcButton
 						v-if="fullscreenPossible"
+						class="scoreview-fullscreen"
 						:pressed="isFullscreen"
 						:aria-label="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
 						:title="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
@@ -650,20 +719,21 @@ import NcTextField from '@nextcloud/vue/components/NcTextField'
 import AccountGroup from 'vue-material-design-icons/AccountGroup.vue'
 import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
 import Close from 'vue-material-design-icons/Close.vue'
-import CommentTextOutline from 'vue-material-design-icons/CommentTextOutline.vue'
 import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
-import FormatAlignMiddle from 'vue-material-design-icons/FormatAlignMiddle.vue'
+import EyeOutline from 'vue-material-design-icons/EyeOutline.vue'
 import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
 import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
 import Metronome from 'vue-material-design-icons/Metronome.vue'
 import Microphone from 'vue-material-design-icons/Microphone.vue'
 import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
+import Palette from 'vue-material-design-icons/Palette.vue'
 import Pause from 'vue-material-design-icons/Pause.vue'
 import Play from 'vue-material-design-icons/Play.vue'
 import PlaylistPlus from 'vue-material-design-icons/PlaylistPlus.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
+import Speedometer from 'vue-material-design-icons/Speedometer.vue'
 import Tune from 'vue-material-design-icons/Tune.vue'
-import AppearancePopover from './AppearancePopover.vue'
+import AppearanceControls from './AppearanceControls.vue'
 import FollowBadge from './FollowBadge.vue'
 import LeaderPanel from './LeaderPanel.vue'
 import LiveValue from './LiveValue.vue'
@@ -681,8 +751,10 @@ import ScoreStartTone from './ScoreStartTone.vue'
 import ScoreStatus from './ScoreStatus.vue'
 import SetlistBar from './SetlistBar.vue'
 import SetlistEditor from './SetlistEditor.vue'
-import TempoPopover from './TempoPopover.vue'
-import ZoomPopover from './ZoomPopover.vue'
+import TempoControls from './TempoControls.vue'
+import ToolGroup from './ToolGroup.vue'
+import ToolRow from './ToolRow.vue'
+import ZoomControls from './ZoomControls.vue'
 import { useAnnotations } from '../composables/useAnnotations.js'
 import { useAutoScroll } from '../composables/useAutoScroll.js'
 import { useBarLayout } from '../composables/useBarLayout.js'
@@ -708,6 +780,7 @@ import { useStartTone } from '../composables/useStartTone.js'
 import { useViewerPreferences } from '../composables/useViewerPreferences.js'
 import { useWakeLock } from '../composables/useWakeLock.js'
 import { useZoom } from '../composables/useZoom.js'
+import { anyGroupActive, groupActive as isGroupActive, barGroups as visibleBarGroups } from '../lib/barGroups.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
 import { resolveKey } from '../lib/keyMap.js'
 import { browserFileUrl } from '../lib/micAccess.js'
@@ -745,7 +818,7 @@ export default {
 	name: 'ScoreViewer',
 
 	components: {
-		AppearancePopover,
+		AppearanceControls,
 		BookmarkOutline,
 		FollowBadge,
 		LeaderPanel,
@@ -772,8 +845,6 @@ export default {
 		Tune,
 		NotebookOutline,
 		Close,
-		CommentTextOutline,
-		FormatAlignMiddle,
 		Repeat,
 		Fullscreen,
 		FullscreenExit,
@@ -783,8 +854,13 @@ export default {
 		PlaylistPlus,
 		SetlistBar,
 		SetlistEditor,
-		TempoPopover,
-		ZoomPopover,
+		Speedometer,
+		EyeOutline,
+		Palette,
+		TempoControls,
+		ToolGroup,
+		ToolRow,
+		ZoomControls,
 	},
 
 	props: {
@@ -871,12 +947,6 @@ export default {
 		})
 		const autoScroll = useAutoScroll({ scrollEl: scrollElement })
 		const playback = usePlayback({ clock, durationMs, defaultTempoBpm: DEFAULT_TEMPO_BPM })
-		const bar = useBarLayout({
-			rootEl: rootElement,
-			isFullscreen: () => zoomApi.isFullscreen.value,
-			isPlaying: () => playback.isPlaying.value,
-		})
-
 		const metronome = useMetronome({
 			measuresTimeline: () => measuresTimeline.value,
 			durationMs: () => durationMs.value,
@@ -1176,6 +1246,24 @@ export default {
 			stopZoomObserver: zoomApi.stop,
 		})
 
+		// Erst hier, weil der Inhaltsschluessel der Leiste auf Modus, Folgen,
+		// Leitung und Mikrofon schaut - die entstehen weiter oben.
+		const bar = useBarLayout({
+			rootEl: rootElement,
+			isFullscreen: () => zoomApi.isFullscreen.value,
+			isPlaying: () => playback.isPlaying.value,
+			// Alles, was die Breite der Leiste aendert: Rechte und Modus
+			// bestimmen die Gruppen, Studierbuchstaben und Mikrofon den
+			// Transport. Aendert sich davon etwas, wird breit neu versucht.
+			contentKey: () => [
+				performance.active.value,
+				follow.following.value,
+				leaders.isLeader.value,
+				scoreFacts.marks.value.length > 0,
+				microphone.active.value,
+			].join('|'),
+		})
+
 		return {
 			root,
 			scroll,
@@ -1192,6 +1280,9 @@ export default {
 			scheduleBarCollapse: bar.scheduleCollapse,
 			observeBarWidth: bar.observe,
 			stopBarLayout: bar.stop,
+			reportBarOverflow: bar.reportOverflow,
+			MODE_TONIC,
+			MODE_VOICE,
 			standalonePage,
 			setlist: setlist.setlist,
 			setlistActive: setlist.active,
@@ -1490,19 +1581,50 @@ export default {
 		// --- Leiste ---------------------------------------------------------
 
 		/**
-		 * Ob irgendein Werkzeug aktiv ist - der Punkt am „Mehr"-Knopf.
-		 * Ohne ihn verschwaende ein laufendes Metronom hinter einem
-		 * geschlossenen Menue, und niemand faende den Schalter dafuer wieder.
+		 * Die Gruppen der Leiste mit ihren sichtbaren Werkzeugen
+		 * (lib/barGroups.js - die einzige Stelle, die das entscheidet).
 		 */
+		barGroups() {
+			return visibleBarGroups({
+				can: this.can,
+				hasRealPlayer: this.hasRealPlayer,
+				canFocusMyPart: this.canFocusMyPart,
+				recordingEnabled: this.recordingEnabled,
+				intonationEnabled: this.intonationEnabled,
+				setlistCanCreate: this.setlistCanCreate,
+				isLeader: this.isLeader,
+			})
+		},
+
+		/** Was in den Gruppen eingeschaltet ist - fuer die Punkte. */
+		barState() {
+			return {
+				metronomeEnabled: this.metronomeEnabled,
+				loopActive: this.loopActive,
+				trainerActive: this.trainerActive,
+				showMixer: this.showMixer,
+				showPractice: this.showPractice,
+				focusMyPart: this.focusMyPart,
+				showNoteText: this.showNoteText,
+				showAnnotations: this.showAnnotations,
+				showRehearsal: this.showRehearsal,
+				setlistEditorMode: this.setlistEditorMode,
+			}
+		},
+
+		/** Der Punkt am „Mehr"-Knopf der kompakten Leiste. */
 		anyToolActive() {
-			return this.metronomeEnabled
-				|| this.loopActive
-				|| this.focusMyPart
-				|| this.showNoteText
-				|| this.showAnnotations
-				|| this.showMixer
-				|| this.showRehearsal
-				|| this.showPractice
+			return anyGroupActive(this.barState)
+		},
+
+		/** Der Loop-Bereich als Wert in der Gruppenzeile, wenn er laeuft. */
+		loopLabel() {
+			return this.loopActive ? `${this.loopFromMeasure}–${this.loopToMeasure}` : ''
+		},
+
+		/** Das Tempo in der Gruppenzeile; „*" heisst geschaetzt (M8). */
+		tempoLabel() {
+			return `♩ ${this.effectiveTempoBpm}${this.tempoGuessed ? '*' : ''}`
 		},
 
 		/** Fuer die eingefahrene Leiste, die nur noch die Position zeigt. */
@@ -1597,6 +1719,25 @@ export default {
 	},
 
 	methods: {
+		// --- Leiste ---------------------------------------------------------
+
+		/**
+		 * @param {{items: string[]}} group
+		 * @param {string} id
+		 * @return {boolean} ob das Werkzeug in dieser Gruppe sichtbar ist
+		 */
+		has(group, id) {
+			return group.items.includes(id)
+		},
+
+		/**
+		 * @param {string} id
+		 * @return {boolean} der Punkt am Gruppenknopf
+		 */
+		groupActive(id) {
+			return isGroupActive(id, this.barState)
+		},
+
 		// Einzelargument-Wrapper um @nextcloud/l10n translate() (siehe
 		// tools/l10n.mjs zur Extraktion) - hier statt auf Modulebene definiert,
 		// damit t() dort ausgewertet wird, wo der Text gebraucht wird
@@ -1617,10 +1758,6 @@ export default {
 			if (partId === null) {
 				this.focusMyPart = false
 			}
-		},
-
-		toggleStartToneMode() {
-			this.setStartToneMode(this.startToneMode === MODE_TONIC ? MODE_VOICE : MODE_TONIC)
 		},
 
 		/**
@@ -1966,7 +2103,7 @@ export default {
 		 * Die Betriebsdiagnose und die erkannte Latenz fuer die Aufklapper -
 		 * als Methoden, damit die Kindkomponenten eine gleichbleibende
 		 * Funktion bekommen statt eines Werts, der sich in jedem Frame
-		 * aendert (siehe TempoPopover.vue, AppearancePopover.vue).
+		 * aendert (siehe TempoControls.vue, AppearanceControls.vue).
 		 *
 		 * @return {object}
 		 */
@@ -2155,8 +2292,18 @@ export default {
 	white-space: nowrap;
 }
 
-.scoreview-tone-mode {
-	white-space: nowrap;
+/* Grundton | Meine Stimme als zusammenhaengende Knopfgruppe. */
+.scoreview-tone-modes {
+	display: flex;
+}
+
+/*
+ * Vollbild in der kompakten Leiste vorn im Werkzeug-Streifen: der erste
+ * Griff nach „Mehr", nicht der letzte hinter drei Gruppen. Auf breiter
+ * Leiste steht es als letzter Knopf, dort, wo es immer stand.
+ */
+.scoreview-bar--compact .scoreview-fullscreen {
+	order: -1;
 }
 
 .scoreview-body {

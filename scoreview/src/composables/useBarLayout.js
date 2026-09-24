@@ -1,12 +1,5 @@
 import { ref, watch } from 'vue'
-
-// Ab dieser Breite (px) passen Transport UND Werkzeuge nebeneinander.
-// Gerechnet, nicht geraten: 9 Icon-Knoepfe zu 44px (Touch-Zielgroesse, siehe
-// das Override von --default-clickable-area im CSS des Viewers) plus
-// Wiedergabe, Tempoanzeige, Taktfeld, Suchlauf und Zwischenraeume ergeben rund
-// 780px. Darunter braeche die Reihe um - auf einem Telefon (360-412px) auf
-// drei Zeilen, rund 18% der Bildschirmhoehe.
-const COMPACT_BAR_WIDTH_PX = 700
+import { initialBarFit, nextBarFit } from '../lib/barFit.js'
 
 // Wie lange die Leiste im Vollbild stehen bleibt, bevor sie sich waehrend der
 // Wiedergabe zur Fortschrittslinie zusammenzieht.
@@ -16,23 +9,44 @@ const BAR_IDLE_MS = 3000
  * Die Gestalt der Bedienleiste: kompakt oder breit, Werkzeuge auf Abruf,
  * im Vollbild waehrend der Wiedergabe eingefahren.
  *
- * `compact` haengt an der GEMESSENEN Breite, nicht an einer Media Query: Der
- * Viewer sitzt mal in Nextclouds Viewer, mal im eigenen Modal, mal im
- * Vollbild - massgeblich ist die Breite, die er tatsaechlich hat, nicht die
- * des Fensters. Und die Umschaltung ist strukturell (Popovers in einem
- * eigenen Streifen statt daneben), das kann CSS allein nicht leisten.
+ * `compact` haengt am gemessenen UEBERLAUF der breiten Leiste
+ * (lib/barFit.js), nicht an einer Media Query und nicht an einer
+ * Breitenschwelle: Der Viewer sitzt mal in Nextclouds Viewer, mal im eigenen
+ * Modal, mal im Vollbild, und was in der Leiste steht, haengt an Rechten und
+ * Modus. Den Ueberlauf meldet ScoreBar.vue (`reportOverflow`), die Breite des
+ * Viewers misst `observe`.
  *
  * @param {object} deps
  * @param {() => ?Element} deps.rootEl das Wurzelelement des Viewers
  * @param {() => boolean} deps.isFullscreen
  * @param {() => boolean} deps.isPlaying
+ * @param {() => string} deps.contentKey was in der Leiste steht - aendert es
+ *   sich, wird die breite Gestalt neu versucht
  */
-export function useBarLayout({ rootEl, isFullscreen, isPlaying }) {
+export function useBarLayout({ rootEl, isFullscreen, isPlaying, contentKey }) {
 	const compact = ref(false)
 	const toolsOpen = ref(false)
 	const collapsed = ref(false)
 	let idleHandle = null
 	let observer = null
+	let fit = { ...initialBarFit(), contentKey: contentKey() }
+	let rootWidth = 0
+	let overflowing = false
+
+	function applyFit() {
+		fit = nextBarFit(fit, { rootWidth, overflowing, contentKey: contentKey() })
+		compact.value = fit.compact
+	}
+
+	/**
+	 * Von ScoreBar.vue: ob der Transport der breiten Leiste gerade ueberlaeuft.
+	 *
+	 * @param {boolean} isOverflowing
+	 */
+	function reportOverflow(isOverflowing) {
+		overflowing = isOverflowing
+		applyFit()
+	}
 
 	function clearIdle() {
 		if (idleHandle) {
@@ -76,7 +90,8 @@ export function useBarLayout({ rootEl, isFullscreen, isPlaying }) {
 			return
 		}
 		observer = new ResizeObserver(([entry]) => {
-			compact.value = entry.contentRect.width < COMPACT_BAR_WIDTH_PX
+			rootWidth = entry.contentRect.width
+			applyFit()
 		})
 		observer.observe(el)
 	}
@@ -103,5 +118,14 @@ export function useBarLayout({ rootEl, isFullscreen, isPlaying }) {
 	// Nextcloud-Umgebung drumherum, in der ein leerer Streifen irritierte.
 	watch(isFullscreen, (fullscreen) => (fullscreen ? scheduleCollapse() : show()))
 
-	return { compact, toolsOpen, collapsed, show, scheduleCollapse, observe, stop }
+	// Neuer Inhalt (Auffuehrungsmodus, Leitungsrolle, ...): Die gemerkte
+	// Breite gilt nicht mehr. Der Versuch in breiter Gestalt rendert, und
+	// ScoreBar misst gleich danach (updated) und noch vor dem Zeichnen - ein
+	// Flackern gibt es deshalb nicht.
+	watch(contentKey, () => {
+		overflowing = false
+		applyFit()
+	})
+
+	return { compact, toolsOpen, collapsed, show, scheduleCollapse, observe, stop, reportOverflow }
 }

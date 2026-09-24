@@ -276,8 +276,9 @@ Aufbau:
   `ScorePage.vue`, `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreStamps.vue`,
   `ScoreModal.vue`, `StandaloneFrame.vue`, `AdminSettings.vue`, die Teile der
   Oberfläche des Viewers (`ScoreBar.vue` für die Gestalt der Leiste,
+  `ToolGroup.vue` und `ToolRow.vue` für ihre Werkzeuggruppen,
   `ScoreStatus.vue`, `ScorePanel.vue` als Rahmen der Seitenkarten, die
-  Popover für Tempo, Zoom und Darstellung) und die Bedienteile der Probe- und
+  Bedienfelder für Tempo, Zoom und Darstellung) und die Bedienteile der Probe- und
   Konzertfunktionen (Tabelle unten). `LiveValue.vue` liest die
   Wiedergabezeit an Stelle des Viewers: Was sich mit jedem Frame ändert, hängt
   nur an diesem kleinen Teilbaum, der Viewer selbst rendert beim Abspielen
@@ -293,7 +294,8 @@ Aufbau:
   `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`,
   `playbackTime.js`, `audioHealth.js`, `directToken.js`, `mobileBridge.js`,
   `svgIndex.js`, `highlightStyle.js`, `staffBands.js`, `generation.js`,
-  `assetVersion.js`, `viewerFormat.js`, `viewerTexts.js`, für den Rückfall im Browser `clientConversion.js` und
+  `assetVersion.js`, `viewerFormat.js`, `viewerTexts.js`, für die Leiste
+  `barGroups.js` und `barFit.js`, für den Rückfall im Browser `clientConversion.js` und
   `artifactUrls.js` ([E7](#e7-konvertierung-im-browser-als-rückfall)) und die
   Module der Tabelle unten. Neue Logik gehört hierhin, nicht in die Komponenten.
 
@@ -1250,10 +1252,38 @@ Einstieg: Der Viewer soll nicht danach verzweigen, wie seine Seite ausgeliefert
 wurde. Dieselbe Regel deckt ein iframe mit entsprechender Permissions-Policy
 gleich mit ab.
 
-**Telefonbreite.** Die Leiste muss auf 360 px in eine Zeile passen: Play,
-Taktfeld, Anfangston, Schloss und „Mehr“. Entschieden wird das an der Breite
-des Streifens, nicht des Fensters (`@container (max-width: 400px)` in
-`ScoreViewer.vue`) – der Viewer kann auch in einem schmalen Rahmen stecken.
+**Die Leiste.** Draußen steht, was während des Singens gebraucht wird: der
+Transport (Play, Suchlauf, Zeit, Taktfeld, Studierbuchstaben, Anfangston,
+Schloss, Mikrofonanzeige) und Vollbild. Alle übrigen Werkzeuge stehen in drei
+Gruppen – Üben, Ansicht, Probe –, jede ein Knopf mit einem einzigen
+Aufklapper (`ToolGroup.vue`). Werkzeuge mit eigenem Bedienfeld (Loop, Tempo,
+Darstellung) öffnen darin eine Unterseite, keinen zweiten Aufklapper; der Zoom
+steht ohne Unterseite oben in „Ansicht“, weil er im Aufführungsmodus dort das
+einzige Werkzeug ist. Was wann sichtbar ist und in welcher Gruppe, steht allein
+in `lib/barGroups.js`: Leere Gruppen entfallen, für die Leitung steht die
+Probe vorn, für alle anderen zuletzt – aber sie steht da, denn die Liste der
+Leitungen sehen alle ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)).
+Ist in einer Gruppe etwas eingeschaltet (Metronom, Loop, ein offenes Panel),
+trägt ihr Knopf einen Punkt. Die Folgen-Anzeige steht nicht in der Leiste,
+sondern über den Noten (`FollowBadge.vue`) – dort kostet sie keine Höhe und
+bleibt im Aufführungsmodus sichtbar.
+
+Breit oder kompakt (Werkzeuge auf Abruf hinter „Mehr“) entscheidet der
+**Überlauf des Transports**, keine Breitenschwelle (`lib/barFit.js`,
+gemessen in `ScoreBar.vue`). Eine feste Schwelle war aus einer Knopfzahl
+gerechnet und veraltete mit jedem neuen Werkzeug; dazwischen schob sich der
+Transport unter die Werkzeuge. Nach „breit“ zurück geht es erst 24 px über der
+Breite, bei der der Überlauf auftrat, oder wenn sich der Inhalt der Leiste
+ändert (Aufführungsmodus, Folgen, Leitung, Studierbuchstaben, Mikrofon).
+Gemessen wird der Überlauf und nicht ein Umbruch, weil der Transport ein
+Container für die Abfragen unten ist (`container-type: inline-size`) und damit
+für Flexbox keine Eigenbreite hat: Er würde zusammengedrückt, nie umgebrochen.
+
+**Telefonbreite.** Die kompakte Leiste muss auf 360 px in eine Zeile passen:
+Play, Taktfeld, Anfangston, Schloss und „Mehr“. Vollbild steht deshalb dort
+vorn im aufgeklappten Werkzeugstreifen statt im Transport. Entschieden wird an
+der Breite des Streifens, nicht des Fensters (`@container (max-width: 400px)`
+in `ScoreViewer.vue`) – der Viewer kann auch in einem schmalen Rahmen stecken.
 Weichen muss dort der Suchlauf, den das Taktfeld daneben ohnehin trägt, und bei
 Studierbuchstaben die Gesamtzahl der Takte.
 

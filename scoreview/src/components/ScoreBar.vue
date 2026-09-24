@@ -35,13 +35,18 @@
 
 		Die Knoepfe selbst kommen als Slots aus dem Viewer - dort sind sie
 		verdrahtet. Hier steht nur, WIE die Leiste steht.
+
+		Ob breit oder kompakt, entscheidet der Platz im Transport
+		(lib/barFit.js): Laeuft sein Inhalt ueber, meldet die Leiste das
+		(`overflow`) und wird kompakt - noch bevor der Ueberlauf gezeichnet
+		wird, der sonst unter den Werkzeugen laege.
 	-->
 	<div
 		v-else
 		class="scoreview-bar"
 		:class="{ 'scoreview-bar--compact': compact }"
 		@pointerdown="$emit('activity')">
-		<div class="scoreview-bar-transport">
+		<div :ref="setTransportEl" class="scoreview-bar-transport">
 			<slot name="transport" />
 			<!--
 				Der Zugang zu den Werkzeugen auf schmalen Schirmen. Der
@@ -120,11 +125,64 @@ export default {
 
 	// `show`: die eingefahrene Linie wurde angetippt. `activity`: in der
 	// Leiste wurde bedient - die Ruhefrist bis zum Einfahren beginnt neu.
-	emits: ['show', 'activity', 'update:toolsOpen'],
+	// `overflow`: ob der Transport der BREITEN Leiste ueberlaeuft
+	// (useBarLayout.reportOverflow).
+	emits: ['show', 'activity', 'update:toolsOpen', 'overflow'],
+
+	// Neu gerendert heisst oft: anderer Inhalt (Mikrofonanzeige,
+	// Auffuehrungsmodus, der Versuch in breiter Gestalt). Die Slots rendern
+	// hier, ihre Abhaengigkeiten zaehlen also zu dieser Komponente - und der
+	// ResizeObserver meldet sich nur, wenn sich die GROESSE des Streifens
+	// aendert, nicht sein Inhalt. Gemessen wird nach dem Rendern und vor dem
+	// Zeichnen.
+	updated() {
+		this.reportOverflow()
+	},
+
+	beforeUnmount() {
+		this.setTransportEl(null)
+	},
 
 	methods: {
 		t(text, vars) {
 			return translate('scoreview', text, vars)
+		},
+
+		/**
+		 * Den Transport beobachten, solange er steht - als Funktions-Ref,
+		 * weil er mit dem Einfahren im Vollbild verschwindet und wiederkommt.
+		 *
+		 * @param {?Element} el
+		 */
+		setTransportEl(el) {
+			if (el === this.transportEl) {
+				return
+			}
+			this.overflowObserver?.disconnect()
+			this.overflowObserver = null
+			this.transportEl = el
+			if (!el || typeof ResizeObserver === 'undefined') {
+				return
+			}
+			this.overflowObserver = new ResizeObserver(() => this.reportOverflow())
+			this.overflowObserver.observe(el)
+		},
+
+		/**
+		 * Ueberlauf statt Umbruch: Der Transport ist ein Container
+		 * (`container-type: inline-size`, fuer die Abfragen im Viewer), und
+		 * ein solcher hat fuer Flexbox keine Eigenbreite - er wird beliebig
+		 * zusammengedrueckt, statt die Leiste umbrechen zu lassen, und sein
+		 * Inhalt ragt dann unter die Werkzeuge. Genau das zeigt scrollWidth.
+		 * Der Suchlauf gibt vorher bis auf seine Mindestbreite nach,
+		 * ueberlaufen heisst also wirklich: kein Platz mehr.
+		 */
+		reportOverflow() {
+			const el = this.transportEl
+			if (!el) {
+				return
+			}
+			this.$emit('overflow', !this.compact && el.scrollWidth > el.clientWidth + 1)
 		},
 	},
 }

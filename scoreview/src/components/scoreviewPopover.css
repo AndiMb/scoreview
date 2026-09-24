@@ -1,7 +1,7 @@
 /*
- * Die Popover-Inhalte der Bedienleiste (Loop, Tempo/Metronom, Zoom,
- * Darstellung, Studierbuchstaben). Eine Datei statt einer Kopie je
- * Komponente: Jede bindet sie mit `<style scoped src>` ein und bekommt sie
+ * Die Aufklapper der Bedienleiste (Werkzeuggruppen, Studierbuchstaben) und
+ * die Bedienfelder darin (Loop, Tempo/Metronom, Zoom, Darstellung). Eine
+ * Datei statt einer Kopie je Komponente: Jede bindet sie mit `<style scoped src>` ein und bekommt sie
  * damit unter ihrer eigenen Scope-ID - der Popover-Inhalt steht im Template
  * der jeweiligen Komponente, nicht in dem des Viewers.
  *
@@ -15,6 +15,14 @@
 	padding: 12px;
 	min-width: 260px;
 	max-width: 320px;
+}
+
+/* Ein Bedienfeld innerhalb einer Gruppe: dieselbe Spalte, aber ohne eigenen
+   Rand - den hat schon der Aufklapper drumherum. */
+.scoreview-controls {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }
 
 .scoreview-popover-row {

@@ -4,6 +4,26 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.11.0] – 2026-09-24
+
+### Geändert
+
+- **Die Bedienleiste ordnet ihre Werkzeuge in drei Gruppen:** Üben (Loop,
+  Tempo, Metronom, Anfangston, Mixer, Aufnahme), Ansicht (Zoom, Darstellung,
+  Meine Stimme, Notizen) und Probe (Leitung und „Folgt mir“, neue Setliste).
+  Draußen bleiben Transport und Vollbild. Werkzeuge mit eigenem Bedienfeld
+  öffnen innerhalb der Gruppe eine Unterseite statt eines zweiten
+  Aufklappers. Ist in einer Gruppe etwas eingeschaltet, trägt ihr Knopf einen
+  Punkt. Für die Leitung steht die Probe-Gruppe vorn.
+
+### Behoben
+
+- **Auf Tabletbreite (etwa 700–1200 px) überlagerten sich Suchlauf, Zeit und
+  Taktfeld mit den Werkzeugen.** Die Leiste schaltete fest ab 700 px auf
+  kompakt um, gerechnet für neun Werkzeuge, inzwischen waren es bis zu
+  vierzehn. Sie schaltet jetzt um, sobald der Transport tatsächlich
+  überläuft.
+
 ## [1.10.2] – 2026-09-24
 
 ### Behoben
