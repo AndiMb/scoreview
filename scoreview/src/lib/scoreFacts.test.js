@@ -8,6 +8,7 @@ import {
 	keyAt,
 	marksNeedMidi,
 	pitchAt,
+	positionWithMark,
 	resolveJumpTarget,
 	tonicPitch,
 } from './scoreFacts.js'
@@ -279,5 +280,23 @@ describe('formatMeasureWithMark', () => {
 	it('bleibt vor dem ersten Buchstaben bei der Zahl', () => {
 		expect(formatMeasureWithMark(3, marks)).toBe('3')
 		expect(formatMeasureWithMark(3, [])).toBe('3')
+	})
+})
+
+describe('positionWithMark', () => {
+	const marks = [{ measure: 17, text: 'B' }, { measure: 44, text: 'C' }]
+
+	it('nennt den Buchstaben nur auf genau seinem Takt', () => {
+		expect(positionWithMark(44, marks)).toEqual({ measure: 44, mark: 'C' })
+		expect(positionWithMark(47, marks)).toEqual({ measure: 47, mark: null })
+	})
+
+	it('liefert ohne Takt keine Stelle', () => {
+		expect(positionWithMark(null, marks)).toBeNull()
+		expect(positionWithMark(0, marks)).toBeNull()
+	})
+
+	it('kommt ohne Buchstaben aus', () => {
+		expect(positionWithMark(3, [])).toEqual({ measure: 3, mark: null })
 	})
 })

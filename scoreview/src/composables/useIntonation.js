@@ -1,4 +1,5 @@
-import { computed, ref, shallowRef } from 'vue'
+import { translate } from '@nextcloud/l10n'
+import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
 import { createGeneration } from '../lib/generation.js'
 import {
 	classify,
@@ -16,6 +17,8 @@ import { decodeWav } from '../lib/wavCodec.js'
  * mit jedem Vibrato-Ausschlag, laenger kommt sie beim Tonwechsel zu spaet.
  */
 const LIVE_SMOOTHING_FRAMES = 5
+
+const t = (text, vars) => translate('scoreview', text, vars)
 
 /**
  * Intonationsrueckmeldung: live am Cursor und danach aus einer
@@ -97,7 +100,10 @@ export function useIntonation({
 	// beenden.
 	let destroyed = false
 
-	const marks = computed(() => [...(analysis.value?.marks ?? []), ...liveMarks.value])
+	// Getrennt statt zusammengefuehrt: Die Live-Markierung wechselt mit jedem
+	// Rahmen, die der Auswertung nie - eine gemeinsame Liste zwang jede Seite,
+	// bei jedem Rahmen alle ausgewerteten Noten neu zu faerben.
+	const marks = computed(() => analysis.value?.marks ?? [])
 
 	function ensureWorker() {
 		if (worker || destroyed) {
@@ -123,7 +129,34 @@ export function useIntonation({
 				waiting.delete(message.id)
 			}
 		}
+		// Ein Worker, der wirft (etwa ohne Speicher bei einer langen
+		// Aufnahme), meldet sich sonst nie wieder: Die wartende Auswertung
+		// hinge fuer immer auf „laeuft", und die Nadel stuende still.
+		worker.onerror = (event) => {
+			event.preventDefault?.()
+			failWorker()
+		}
+		worker.onmessageerror = () => failWorker()
 		return worker
+	}
+
+	/**
+	 * Den Worker aufgeben: wartende Auswertungen enden mit null, die Nadel geht
+	 * aus, und der naechste Auftrag bekommt einen frischen Worker.
+	 */
+	function failWorker() {
+		error.value = t('The pitch analysis stopped unexpectedly.')
+		for (const resolve of waiting.values()) {
+			resolve(null)
+		}
+		waiting.clear()
+		stopLive()
+		dropWorker()
+	}
+
+	function dropWorker() {
+		worker?.terminate()
+		worker = null
 	}
 
 	async function startLive() {
@@ -298,10 +331,19 @@ export function useIntonation({
 	/** Laufende Auswertungen verwerfen - wartende Versprechen enden mit null. */
 	function abandonAnalysis() {
 		analysisGeneration.invalidate()
+		const liefNoch = waiting.size > 0
 		for (const resolve of waiting.values()) {
 			resolve(null)
 		}
 		waiting.clear()
+		// Der Worker hat nur einen Faden: Eine verworfene Auswertung rechnete
+		// sonst im Hintergrund zu Ende, und eine danach eingeschaltete Nadel
+		// kaeme erst hinter ihr an die Reihe. Beenden ist billiger als
+		// abwarten - der naechste Auftrag legt einen neuen an. Nur ohne
+		// laufende Nadel: Die haengt an genau diesem Worker.
+		if (liefNoch && !live.value && !startingLive) {
+			dropWorker()
+		}
 		analyzing.value = false
 		progress.value = 0
 	}
@@ -321,14 +363,22 @@ export function useIntonation({
 	function destroy() {
 		destroyed = true
 		reset()
-		worker?.terminate()
-		worker = null
+		dropWorker()
+	}
+
+	// Raeumt sich selbst ab, wenn der Besitzer geht - ScoreViewer ruft den
+	// Abbau zwar ausdruecklich (in fester Reihenfolge, siehe beforeUnmount),
+	// aber eine vergessene Zeile dort liesse sonst den Worker offen. Doppelt
+	// aufgerufen schadet der Abbau nicht.
+	if (getCurrentScope()) {
+		onScopeDispose(destroy)
 	}
 
 	return {
 		live,
 		needle,
 		marks,
+		liveMarks,
 		analysis,
 		analyzing,
 		progress,

@@ -35,6 +35,10 @@ const TONE_VELOCITY = 100
 // ankommt (Finger vom Bildschirm gerutscht, Tab gewechselt), laesst den Ton
 // sonst endlos klingen.
 const TONE_MAX_MS = 8000
+// Frist fuer das Einlesen des MIDI im Worklet. Grosszuegig, weil ein
+// langsames Geraet nicht an ihr scheitern soll - sie faengt nur den Fall, in
+// dem nie eine Antwort kommt.
+const SONG_LOAD_TIMEOUT_MS = 30_000
 
 /**
  * @param {ArrayBuffer} midiArrayBuffer
@@ -42,42 +46,60 @@ const TONE_MAX_MS = 8000
  */
 export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	const context = new AudioContext()
-	await context.audioWorklet.addModule(WORKLET_URL)
-	const synth = new WorkletSynthesizer(context)
-	// Ein Regler fuer die ganze Begleitung, vor dem Ausgang: Eine eigene
-	// Aufnahme laeuft wahlweise mit oder ohne Begleitung, mit getrennten
-	// Pegeln. Das Metronom haengt bewusst NICHT daran - es
-	// soll auch zu hoeren sein, wenn die Begleitung schweigt.
-	const master = context.createGain()
-	master.connect(context.destination)
-	synth.connect(master)
-	// „Meine Stimme im Stereobild" haengt HINTER dem Synthesizer, nicht an
-	// CC10: Gemessen am Abgriff je Kanal liess CC10 selbst ganz aussen (0/127)
-	// bei den Chorstimmen des SoundFonts noch ein Drittel auf der anderen Seite
-	// - deren Samples sind selbst stereo, CC10 verschiebt nur die Balance. Ein
-	// StereoPannerNode auf dem eigenen Ausgang des Kanals legt beide Seiten
-	// wirklich auf ein Ohr, und er steht ausserhalb des Sequencers, den ein
-	// Suchlauf zuruecksetzt (siehe setController). Der Effektbus (Ausgang 0,
-	// Hall/Chorus aller Stimmen) bleibt in der Mitte.
+	// Scheitert der Aufbau irgendwo dazwischen (Worklet nicht ladbar,
+	// SoundFont kaputt, MIDI unlesbar), gehoert der Kontext niemandem mehr -
+	// ohne das close() hielte der Tab ihn samt Audio-Thread bis zum Schliessen,
+	// und Browser deckeln die Zahl gleichzeitiger AudioContexts.
+	let synth
+	let sequencer
+	let master
 	const panners = []
-	for (let channel = 0; channel < MIDI_CHANNELS; channel++) {
-		const panner = context.createStereoPanner()
-		panner.connect(master)
-		synth.disconnectChannel(master, channel)
-		synth.connectChannel(panner, channel)
-		panners.push(panner)
-	}
-	await synth.soundBankManager.addSoundBank(soundFontArrayBuffer, 'main')
-	await synth.isReady
+	try {
+		await context.audioWorklet.addModule(WORKLET_URL)
+		synth = new WorkletSynthesizer(context)
+		// Ein Regler fuer die ganze Begleitung, vor dem Ausgang: Eine eigene
+		// Aufnahme laeuft wahlweise mit oder ohne Begleitung, mit getrennten
+		// Pegeln. Das Metronom haengt bewusst NICHT daran - es
+		// soll auch zu hoeren sein, wenn die Begleitung schweigt.
+		master = context.createGain()
+		master.connect(context.destination)
+		synth.connect(master)
+		// „Meine Stimme im Stereobild" haengt HINTER dem Synthesizer, nicht an
+		// CC10: Gemessen am Abgriff je Kanal liess CC10 selbst ganz aussen (0/127)
+		// bei den Chorstimmen des SoundFonts noch ein Drittel auf der anderen Seite
+		// - deren Samples sind selbst stereo, CC10 verschiebt nur die Balance. Ein
+		// StereoPannerNode auf dem eigenen Ausgang des Kanals legt beide Seiten
+		// wirklich auf ein Ohr, und er steht ausserhalb des Sequencers, den ein
+		// Suchlauf zuruecksetzt (siehe setController). Der Effektbus (Ausgang 0,
+		// Hall/Chorus aller Stimmen) bleibt in der Mitte.
+		for (let channel = 0; channel < MIDI_CHANNELS; channel++) {
+			const panner = context.createStereoPanner()
+			panner.connect(master)
+			synth.disconnectChannel(master, channel)
+			synth.connectChannel(panner, channel)
+			panners.push(panner)
+		}
+		await synth.soundBankManager.addSoundBank(soundFontArrayBuffer, 'main')
+		await synth.isReady
 
-	const sequencer = new Sequencer(synth, { skipToFirstNoteOn: false })
-	sequencer.loadNewSongList([{ binary: midiArrayBuffer }])
-	// loadNewSongList lädt/parst asynchron (Worklet-intern) - ohne auf
-	// 'songChange' zu warten, wäre sequencer.duration beim Verlassen dieser
-	// Funktion noch nicht verlässlich (0 oder veraltet).
-	await new Promise((resolve) => {
-		sequencer.eventHandler.addEvent('songChange', 'scoreview-player-init', () => resolve())
-	})
+		sequencer = new Sequencer(synth, { skipToFirstNoteOn: false })
+		sequencer.loadNewSongList([{ binary: midiArrayBuffer }])
+		// loadNewSongList lädt/parst asynchron (Worklet-intern) - ohne auf
+		// 'songChange' zu warten, wäre sequencer.duration beim Verlassen dieser
+		// Funktion noch nicht verlässlich (0 oder veraltet).
+		// Mit Frist: Ein MIDI, das das Worklet nicht parsen kann, meldet sich
+		// nie - ohne Frist bliebe die Ladeanzeige fuer immer stehen.
+		await new Promise((resolve, reject) => {
+			const timer = setTimeout(() => reject(new Error('MIDI could not be loaded.')), SONG_LOAD_TIMEOUT_MS)
+			sequencer.eventHandler.addEvent('songChange', 'scoreview-player-init', () => {
+				clearTimeout(timer)
+				resolve()
+			})
+		})
+	} catch (err) {
+		context.close().catch(() => {})
+		throw err
+	}
 
 	const seekedListeners = new Set()
 	// Gemessen: `sequencer.currentTime = x` schickt nur eine Nachricht ans

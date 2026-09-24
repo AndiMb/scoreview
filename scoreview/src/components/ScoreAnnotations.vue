@@ -1,7 +1,7 @@
 <template>
 	<div class="scoreview-annotations">
 		<!-- Die Überschrift "Notes" liefert die Panel-Kopfzeile in
-			ScoreViewer.vue (samt Schließen-Knopf) - hier stünde sie doppelt. -->
+			ScorePanel.vue (samt Schließen-Knopf) - hier stünde sie doppelt. -->
 		<NcButton wide :aria-label="t('+ At current position')" @click="startNewAtCurrentPosition">
 			<template #icon>
 				<PlusCircleOutline :size="20" />
@@ -293,11 +293,14 @@ export default {
 			default: null,
 		},
 
-		// {measureNumber, fraction, elid, anchorEtag} der aktuellen
-		// Wiedergabeposition, von ScoreViewer.vue aus scoreLayout.js berechnet.
+		// Liefert {measureNumber, fraction, elid, anchorEtag} der aktuellen
+		// Wiedergabeposition (ScoreViewer.vue, aus scoreLayout.js) oder null.
+		// Eine Funktion statt des Werts: Die Position aendert sich mit jedem
+		// Frame, gebraucht wird sie nur im Moment des Klicks - als Wert
+		// rendete das offene Panel bei laufender Wiedergabe in jedem Frame neu.
 		currentAnchor: {
-			type: Object,
-			default: null,
+			type: Function,
+			default: () => null,
 		},
 
 		// Serverfehler vom letzten create/update/delete (z.B. 403 beim Anlegen
@@ -421,11 +424,12 @@ export default {
 		},
 
 		startNewAtCurrentPosition() {
-			if (!this.currentAnchor) {
+			const anchor = this.currentAnchor()
+			if (!anchor) {
 				return
 			}
 			this.editingId = null
-			this.draft = { ...this.currentAnchor, content: '' }
+			this.draft = { ...anchor, content: '' }
 		},
 
 		saveDraft() {
@@ -460,7 +464,7 @@ export default {
 
 <style scoped>
 /* Rahmen und Abstand nach oben kommen von der Panel-Karte in
-   ScoreViewer.vue - hier bleibt nur der Inhalt. */
+   ScorePanel.vue - hier bleibt nur der Inhalt. */
 .scoreview-annotations {
 	padding-top: 8px;
 }

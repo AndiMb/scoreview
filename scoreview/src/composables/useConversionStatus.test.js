@@ -107,4 +107,41 @@ describe('useConversionStatus', () => {
 		expect(status.langeWartezeit.value).toBe(false)
 		expect(status.state.value).toBe('converting')
 	})
+
+	// Setliste „weiter" oder Schließen, während der Status-GET noch läuft:
+	// clearTimeout erreicht die laufende Anfrage nicht. Ohne Generation lud
+	// die späte Antwort über `onReady` die gerade offene Partitur ein zweites
+	// Mal und plante bei `pending` einen zweiten Poll-Strang ein.
+	it('verwirft eine Antwort, die nach reset() eintrifft', async () => {
+		let antworte
+		axiosGet.mockReturnValueOnce(new Promise((resolve) => {
+			antworte = resolve
+		}))
+		const onReady = vi.fn()
+		const status = useConversionStatus({ fileId: () => 42, onReady })
+
+		const laufend = status.poll()
+		status.reset()
+		antworte({ data: { status: 'ready', files: {} } })
+		await laufend
+
+		expect(onReady).not.toHaveBeenCalled()
+		expect(status.state.value).toBe('loading')
+	})
+
+	it('plant nach stop() keinen weiteren Abruf ein', async () => {
+		let antworte
+		axiosGet.mockReturnValueOnce(new Promise((resolve) => {
+			antworte = resolve
+		}))
+		const status = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
+
+		const laufend = status.poll()
+		status.stop()
+		antworte({ data: { status: 'pending' } })
+		await laufend
+		await vi.advanceTimersByTimeAsync(10_000)
+
+		expect(axiosGet).toHaveBeenCalledTimes(1)
+	})
 })

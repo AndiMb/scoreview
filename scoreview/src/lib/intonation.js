@@ -250,19 +250,49 @@ export function noteMarks(evaluations, notes, myChannels, events, staff, toleran
 		return []
 	}
 	const channels = new Set(myChannels ?? [])
+	// Einmal nach Einsatz sortiert statt je Bewertung ueber alle Noten
+	// gefiltert: Bei einer Aufnahme ueber eine ganze Partitur waren das
+	// Bewertungen mal Noten Vergleiche im Hauptthread.
+	const eigene = (notes ?? [])
+		.filter((n) => channels.has(n.channel))
+		.sort((a, b) => a.onMs - b.onMs)
 	const marks = []
 	evaluations.forEach((e, index) => {
 		const event = nearestEvent(events, e.note.onMs)
 		if (!event || Math.abs(event.timeMs - e.note.onMs) > toleranceMs) {
 			return
 		}
-		const akkord = (notes ?? [])
-			.filter((n) => channels.has(n.channel) && Math.abs(n.onMs - e.note.onMs) < 5)
+		const akkord = chordAt(eigene, e.note.onMs)
 			.sort((a, b) => b.pitch - a.pitch)
 		const rank = Math.max(0, akkord.findIndex((n) => n.pitch === e.note.pitch))
 		marks.push({ elid: event.elid, staff, rank, size: Math.max(1, akkord.length), cls: e.class, index })
 	})
 	return marks
+}
+
+/**
+ * Die Noten, die mit `onMs` zusammen einsetzen (weniger als 5 ms daneben).
+ *
+ * @param {Array<object>} sorted nach `onMs` sortiert
+ * @param {number} onMs
+ * @return {Array<object>}
+ */
+function chordAt(sorted, onMs) {
+	let lo = 0
+	let hi = sorted.length
+	while (lo < hi) {
+		const mid = (lo + hi) >> 1
+		if (sorted[mid].onMs <= onMs - 5) {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	const akkord = []
+	for (let i = lo; i < sorted.length && sorted[i].onMs < onMs + 5; i++) {
+		akkord.push(sorted[i])
+	}
+	return akkord
 }
 
 function nearestEvent(events, timeMs) {

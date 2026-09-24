@@ -9,6 +9,7 @@ import {
 	findElementAtPoint,
 	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
+	groupRectsByPage,
 	MAX_ZOOM,
 	measurePositionToTimeMs,
 	MIN_ZOOM,
@@ -295,5 +296,25 @@ describe('computePinchZoom', () => {
 
 	it('liefert den Startzoom unverändert bei ungültigem Startabstand (Divisionsschutz)', () => {
 		expect(computePinchZoom(0, 100, 1.5)).toBe(1.5)
+	})
+})
+
+describe('groupRectsByPage', () => {
+	const measures = {
+		elements: {
+			0: { page: 0, x: 0, y: 0, w: 1, h: 1 },
+			1: { page: 0, x: 1, y: 0, w: 1, h: 1 },
+			2: { page: 2, x: 0, y: 0, w: 1, h: 1 },
+		},
+	}
+
+	it('gruppiert nach Seite und laesst fehlende Seiten leer', () => {
+		const byPage = groupRectsByPage(measures)
+		expect(byPage.map((rects) => rects.length)).toEqual([2, 0, 1])
+		expect(byPage[0][1]).toBe(measures.elements[1])
+	})
+
+	it('liefert ohne Taktachse nichts', () => {
+		expect(groupRectsByPage(null)).toEqual([])
 	})
 })

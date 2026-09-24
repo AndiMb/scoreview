@@ -297,6 +297,15 @@ export default {
 			default: () => [],
 		},
 
+		// Dasselbe fuer die Live-Nadel, getrennt von `noteMarks`: Sie wechselt
+		// mit jedem Rahmen, die Auswertung einer Aufnahme dagegen nie. In einer
+		// gemeinsamen Liste faerbte jeder Rahmen alle ausgewerteten Noten
+		// jeder geladenen Seite neu, samt Layoutabfrage je Notenkopf.
+		liveNoteMarks: {
+			type: Array,
+			default: () => [],
+		},
+
 		// Die Live-Nadel: {cents, cls} oder null.
 		needle: {
 			type: Object,
@@ -587,6 +596,10 @@ export default {
 		noteMarks() {
 			this.applyNoteMarks()
 		},
+
+		liveNoteMarks() {
+			this.applyLiveNoteMarks()
+		},
 	},
 
 	created() {
@@ -603,6 +616,7 @@ export default {
 		// und die gerade gefaerbten Knoten mit ihrer Klasse.
 		this.noteIndex = null
 		this.marked = []
+		this.liveMarked = []
 	},
 
 	mounted() {
@@ -700,9 +714,11 @@ export default {
 			this.highlighted = []
 			this.noteIndex = buildNoteIndex(svg)
 			this.marked = []
+			this.liveMarked = []
 			// Die Seite kann mitten in der Wiedergabe nachgeladen worden sein.
 			this.applyHighlight()
 			this.applyNoteMarks()
+			this.applyLiveNoteMarks()
 		},
 
 		/**
@@ -711,22 +727,45 @@ export default {
 		 * hier schlicht keinen Knoten.
 		 */
 		applyNoteMarks() {
-			for (const { node, cls } of this.marked) {
-				node.classList?.remove(cls)
+			this.marked = this.replaceMarks(this.marked, this.noteMarks, this.liveMarked)
+		},
+
+		/** Die Live-Nadel in den Notenkopf - hoechstens eine Note je Rahmen. */
+		applyLiveNoteMarks() {
+			this.liveMarked = this.replaceMarks(this.liveMarked, this.liveNoteMarks, this.marked)
+		},
+
+		/**
+		 * Nimmt die Klassen aus `previous` ab und setzt die aus `marks`.
+		 * `keep` sind die Markierungen der anderen Quelle: Traegt ein Knoten
+		 * dieselbe Klasse auch von dort, bleibt sie stehen - sonst loeschte der
+		 * naechste Live-Rahmen die Farbe einer ausgewerteten Note.
+		 *
+		 * @param {Array<{node: Element, cls: string}>} previous
+		 * @param {Array} marks
+		 * @param {Array<{node: Element, cls: string}>} keep
+		 * @return {Array<{node: Element, cls: string}>}
+		 */
+		replaceMarks(previous, marks, keep) {
+			for (const { node, cls } of previous) {
+				if (!keep.some((k) => k.node === node && k.cls === cls)) {
+					node.classList?.remove(cls)
+				}
 			}
-			this.marked = []
+			const next = []
 			if (!this.noteIndex || this.noteIndex.size === 0) {
-				return
+				return next
 			}
 			const yOf = (node) => node.getBoundingClientRect?.().top ?? 0
-			for (const mark of this.noteMarks) {
+			for (const mark of marks) {
 				const nodes = pickNoteheads(this.noteIndex.get(`${mark.elid}:${mark.staff}`), mark.rank, mark.size, yOf)
 				const cls = `scoreview-intonation-${mark.cls}`
 				for (const node of nodes) {
 					node.classList?.add(cls)
-					this.marked.push({ node, cls })
+					next.push({ node, cls })
 				}
 			}
+			return next
 		},
 
 		/** Haengt die Hervorhebung auf das gerade klingende Segment um. */
@@ -777,6 +816,7 @@ export default {
 			this.notesHighlighted = false
 			this.noteIndex = null
 			this.marked = []
+			this.liveMarked = []
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid: "Klick auf eine Note springt

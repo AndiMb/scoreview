@@ -340,3 +340,29 @@ export function computePinchZoom(startDistance, currentDistance, startZoom, { mi
 // Fassung 9 von 15 geprueften Umgehungsmustern durch, siehe den Kommentar
 // dort. Diese Datei bleibt bewusst DOM-frei (CLAUDE.md), der Sanitizer
 // braucht dagegen ein DOM.
+
+/**
+ * Die Taktrechtecke nach Seite gruppiert, einmal je `measures.json` statt je
+ * Seite und Abfrage. Jede Seite bekommt so bei jedem Aufruf mit denselben
+ * Daten DASSELBE Array - als Prop einer Seite heisst das: kein Neurendern,
+ * nur weil der Viewer gerendert hat.
+ *
+ * @param {?{elements: Object<string,{page:number}>}} measuresTimeline
+ * @return {Array<Array<object>>} Index = Seite (0-indiziert); fehlende Seiten leer
+ */
+export function groupRectsByPage(measuresTimeline) {
+	const byPage = []
+	if (!measuresTimeline) {
+		return byPage
+	}
+	for (const rect of Object.values(measuresTimeline.elements)) {
+		if (!Number.isInteger(rect.page) || rect.page < 0) {
+			continue
+		}
+		while (byPage.length <= rect.page) {
+			byPage.push([])
+		}
+		byPage[rect.page].push(rect)
+	}
+	return byPage
+}

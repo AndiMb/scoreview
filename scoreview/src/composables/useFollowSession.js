@@ -166,6 +166,13 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		if (disabled.value || !enabled()) {
 			return
 		}
+		// Unsichtbar und ohne laufende Sitzung gibt es nichts zu verfolgen -
+		// nur zu entdecken, und das erledigt der Abruf beim Zurueckkehren
+		// (onVisibilityChange). Mit Sitzung bleibt der langsame Takt, damit
+		// ein gesperrter Bildschirm die Stelle nicht ganz verliert.
+		if (!visible.value && !local.value.active) {
+			return
+		}
 		timer = setTimeout(poll, delay)
 	}
 

@@ -37,6 +37,9 @@ class CaptureProcessor extends AudioWorkletProcessor {
 		this.produced = 0
 		this.blockStart = 0
 		this.running = true
+		// Wiederverwendet statt je Quantum neu (siehe lib/resample.js):
+		// Zuteilungen im Audio-Thread koennen als Aussetzer hoerbar werden.
+		this.mono = new Float32Array(QUANTUM)
 		this.port.onmessage = (event) => {
 			if (event.data === 'stop') {
 				this.running = false
@@ -53,7 +56,11 @@ class CaptureProcessor extends AudioWorkletProcessor {
 		}
 		const input = inputs[0] ?? []
 		const length = input[0]?.length ?? QUANTUM
-		const mono = new Float32Array(length)
+		if (this.mono.length !== length) {
+			this.mono = new Float32Array(length)
+		}
+		const mono = this.mono
+		mono.fill(0)
 		for (const channel of input) {
 			for (let i = 0; i < length; i++) {
 				mono[i] += channel[i] / input.length

@@ -194,6 +194,23 @@ export function formatMeasureWithMark(measure, marks) {
 }
 
 /**
+ * Eine Stelle, wie die Leitung sie ansagt: der Takt, und der
+ * Studierbuchstabe nur, wenn der Takt genau einer ist („C" statt „C+3" -
+ * „alle zu C" ist ein Ziel, „C+3" eine Rechnung).
+ *
+ * @param {?number} measure Taktnummer, 1-basiert; null/0 = keine Stelle
+ * @param {MarkFact[]} marks
+ * @return {?{measure:number, mark:?string}}
+ */
+export function positionWithMark(measure, marks) {
+	if (!measure) {
+		return null
+	}
+	const mark = (marks ?? []).find((m) => m.measure === measure)
+	return { measure, mark: mark ? mark.text : null }
+}
+
+/**
  * Ob die Taktnummern der Engine-Felder die des Viewers sind.
  *
  * `meta.measures` zaehlt die notierten Takte, measures.json die

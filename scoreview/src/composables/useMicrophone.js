@@ -1,5 +1,5 @@
 import { generateFilePath } from '@nextcloud/router'
-import { computed, ref, watch } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue'
 import { withAppVersion } from '../lib/assetVersion.js'
 import { classifyMicError, mayUseCapturePath, MIC_CONSTRAINTS } from '../lib/micAccess.js'
 import { inputLatencyMs } from '../lib/recordingAlign.js'
@@ -234,6 +234,14 @@ export function useMicrophone({ audioContext }) {
 			turnOff()
 		}
 	})
+
+	// Raeumt sich selbst ab, wenn der Besitzer geht - ScoreViewer ruft den
+	// Abbau zwar ausdruecklich (in fester Reihenfolge, siehe beforeUnmount),
+	// aber eine vergessene Zeile dort liesse sonst Mikrofon und Kontext offen. Doppelt
+	// aufgerufen schadet der Abbau nicht.
+	if (getCurrentScope()) {
+		onScopeDispose(turnOff)
+	}
 
 	return {
 		consumers,

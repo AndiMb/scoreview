@@ -1,0 +1,49 @@
+/*
+ * Die Popover-Inhalte der Bedienleiste (Loop, Tempo/Metronom, Zoom,
+ * Darstellung, Studierbuchstaben). Eine Datei statt einer Kopie je
+ * Komponente: Jede bindet sie mit `<style scoped src>` ein und bekommt sie
+ * damit unter ihrer eigenen Scope-ID - der Popover-Inhalt steht im Template
+ * der jeweiligen Komponente, nicht in dem des Viewers.
+ *
+ * Eine Spalte, breit genug für die längste Beschriftung, aber schmal genug,
+ * um nicht das halbe Notenbild zu verdecken.
+ */
+.scoreview-popover {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px;
+	min-width: 260px;
+	max-width: 320px;
+}
+
+.scoreview-popover-row {
+	display: flex;
+	gap: 8px;
+}
+
+.scoreview-popover-label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	color: var(--color-text-maxcontrast);
+}
+
+.scoreview-popover-group {
+	border: none;
+	margin: 0;
+	padding: 0;
+}
+
+.scoreview-popover-group legend {
+	color: var(--color-text-maxcontrast);
+	padding: 0 0 4px 0;
+}
+
+/* Erklaerung unter einem Regler - sie wird einmal gelesen, wenn unklar ist,
+   was der Regler tut, und steht danach nur noch da. */
+.scoreview-popover-hint {
+	color: var(--color-text-maxcontrast);
+	font-size: 0.85em;
+	line-height: 1.3;
+}

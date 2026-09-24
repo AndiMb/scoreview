@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import { computed, ref } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { useClientConversion } from './useClientConversion.js'
 
 const POLL_INTERVAL_MS = 2000
@@ -61,7 +61,7 @@ export function useConversionStatus({ fileId, onReady }) {
 	// loading | converting | ready | error
 	const state = ref('loading')
 	const errorMessage = ref('')
-	// sidecar_unreachable | sidecar_rejected | local_unavailable |
+	// sidecar_unreachable | sidecar_rejected | sidecar_busy | local_unavailable |
 	// conversion_failed | timeout | no_pages | too_large | stale |
 	// client_too_large | client_engine_unavailable | unknown | ''
 	// (kein Fehler bzw. Fehler kam nicht vom Server, sondern vom Abruf selbst)
@@ -73,6 +73,15 @@ export function useConversionStatus({ fileId, onReady }) {
 	const langeWartezeit = ref(false)
 
 	let pollTimer = null
+	/**
+	 * Zählt jedes stop()/reset() hoch. Eine Antwort, die nach einem
+	 * Stückwechsel oder dem Schließen noch eintrifft, gehört zu einer
+	 * überholten Generation und darf weder `onReady` auslösen noch einen
+	 * zweiten Poll-Strang einplanen - `clearTimeout` erreicht eine schon
+	 * laufende Anfrage nicht, und `onReady` lädt immer die GERADE offene
+	 * Partitur, also doppelt.
+	 */
+	let generation = 0
 	let autoRetried = false
 	/** Beginn des Wartens, für beide Fristen oben. Verworfen in reset(). */
 	let pollBegonnenAm = null
@@ -92,6 +101,9 @@ export function useConversionStatus({ fileId, onReady }) {
 		const messages = {
 			sidecar_unreachable: t('The conversion service could not be reached.'),
 			sidecar_rejected: t('The conversion service rejected the file.'),
+			// Kein Defekt: Der Dienst blieb über alle Neuversuche ausgelastet.
+			// Beim nächsten Öffnen reiht der Server selbst einen neuen Versuch ein.
+			sidecar_busy: t('The conversion service is busy. Open the score again in a few minutes.'),
 			local_unavailable: t('This server is set up to convert scores itself, but cannot. The administration settings say what is missing.'),
 			conversion_failed: t('The score could not be converted.'),
 			timeout: t('The conversion did not finish in time.'),
@@ -117,6 +129,7 @@ export function useConversionStatus({ fileId, onReady }) {
 		: (errorMessage.value || t('Unknown error.'))))
 
 	async function poll() {
+		const mine = generation
 		if (pollBegonnenAm === null) {
 			pollBegonnenAm = Date.now()
 		}
@@ -125,9 +138,15 @@ export function useConversionStatus({ fileId, onReady }) {
 			const res = await axios.get(generateUrl('/apps/scoreview/api/scores/{fileId}/status', { fileId: fileId() }))
 			body = res.data
 		} catch (err) {
+			if (mine !== generation) {
+				return
+			}
 			state.value = 'error'
 			errorMessage.value = err.message
 			errorCode.value = ''
+			return
+		}
+		if (mine !== generation) {
 			return
 		}
 
@@ -135,7 +154,7 @@ export function useConversionStatus({ fileId, onReady }) {
 			state.value = 'ready'
 			await onReady(body)
 		} else if (body.status === 'client') {
-			await konvertiereImBrowser(body)
+			await konvertiereImBrowser(body, mine)
 		} else if (body.status === 'error') {
 			state.value = 'error'
 			errorMessage.value = body.error || ''
@@ -174,21 +193,25 @@ export function useConversionStatus({ fileId, onReady }) {
 	 * gibt nichts abzufragen, das Ergebnis entsteht hier.
 	 *
 	 * @param {object} body die `client`-Antwort des Statusendpunkts
+	 * @param {number} mine Generation des auslösenden poll()
 	 */
-	async function konvertiereImBrowser(body) {
+	async function konvertiereImBrowser(body, mine) {
 		letzteClientAntwort = body
 		// Für die Nutzerin ist das derselbe Zustand wie eine Konvertierung auf
 		// dem Server: Es dauert, und danach steht die Partitur da.
 		state.value = 'converting'
 		try {
 			const fertig = await client.run(body, fileId())
-			if (fertig === null) {
+			if (fertig === null || mine !== generation) {
 				// Von einem neueren Lauf überholt - der hat die Anzeige.
 				return
 			}
 			state.value = 'ready'
 			await onReady(fertig)
 		} catch (err) {
+			if (mine !== generation) {
+				return
+			}
 			state.value = 'error'
 			errorMessage.value = err?.message ?? ''
 			// Die Codes aus lib/clientConversion.js stehen im selben Vokabular
@@ -210,6 +233,7 @@ export function useConversionStatus({ fileId, onReady }) {
 	async function reconvert() {
 		const warImBrowser = letzteClientAntwort !== null
 		reset()
+		const mine = generation
 		if (warImBrowser) {
 			// Auf diesem Weg gibt es serverseitig nichts zu verwerfen - der
 			// Sitzungscache ist mit reset() schon weg, und poll() lässt
@@ -221,15 +245,22 @@ export function useConversionStatus({ fileId, onReady }) {
 		try {
 			await axios.post(generateUrl('/apps/scoreview/api/scores/{fileId}/reconvert', { fileId: fileId() }))
 		} catch (err) {
+			if (mine !== generation) {
+				return
+			}
 			state.value = 'error'
 			errorMessage.value = err.message
 			errorCode.value = ''
+			return
+		}
+		if (mine !== generation) {
 			return
 		}
 		await poll()
 	}
 
 	function stop() {
+		generation++
 		if (pollTimer) {
 			clearTimeout(pollTimer)
 			pollTimer = null
@@ -248,6 +279,14 @@ export function useConversionStatus({ fileId, onReady }) {
 		autoRetried = false
 		langeWartezeit.value = false
 		pollBegonnenAm = null
+	}
+
+	// Raeumt sich selbst ab, wenn der Besitzer geht - ScoreViewer ruft den
+	// Abbau zwar ausdruecklich (in fester Reihenfolge, siehe beforeUnmount),
+	// aber eine vergessene Zeile dort liesse sonst einen Poll-Strang offen. Doppelt
+	// aufgerufen schadet der Abbau nicht.
+	if (getCurrentScope()) {
+		onScopeDispose(stop)
 	}
 
 	// `clientProgress` ist null, solange nichts im Browser gerechnet wird -

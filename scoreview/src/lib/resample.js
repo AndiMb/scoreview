@@ -70,6 +70,7 @@ export function createDownsampler(inRate, outRate = 16000) {
 	let base = 0
 	let prev = 0
 	let produced = 0
+	let scratch = new Float32Array(0)
 
 	return {
 		ratio,
@@ -80,7 +81,14 @@ export function createDownsampler(inRate, outRate = 16000) {
 		 */
 		process(input) {
 			const n = input.length
-			const filtered = new Float32Array(n)
+			// Laeuft im Audio-Thread, rund 375-mal je Sekunde: Der Zwischenpuffer
+			// wird wiederverwendet, und die Ausgabe entsteht in einem einzigen
+			// Array passender Laenge - jede Zuteilung dort ist Futter fuer eine
+			// Speicherbereinigung, die als Aussetzer hoerbar werden kann.
+			if (scratch.length < n) {
+				scratch = new Float32Array(n)
+			}
+			const filtered = scratch
 			for (let i = 0; i < n; i++) {
 				let v = input[i]
 				for (const f of filters) {
@@ -88,25 +96,28 @@ export function createDownsampler(inRate, outRate = 16000) {
 				}
 				filtered[i] = v
 			}
-			const out = []
-			for (;;) {
+			// Wie viele Ausgabesamples dieser Block fertig macht: alle k mit
+			// floor(k * ratio) + 1 <= base + n - 1.
+			let count = 0
+			while (Math.floor((produced + count) * ratio) + 1 <= base + n - 1) {
+				count++
+			}
+			const out = new Float32Array(count)
+			for (let k = 0; k < count; k++) {
 				const p = produced * ratio
-				// Zwischen floor(p) und floor(p)+1 interpolieren; beide muessen da sein.
+				// Zwischen floor(p) und floor(p)+1 interpolieren; beide sind da.
 				const i0 = Math.floor(p)
-				if (i0 + 1 > base + n - 1) {
-					break
-				}
 				const frac = p - i0
 				const a = i0 < base ? prev : filtered[i0 - base]
 				const b = filtered[i0 + 1 - base]
-				out.push(a + (b - a) * frac)
+				out[k] = a + (b - a) * frac
 				produced++
 			}
 			if (n > 0) {
 				prev = filtered[n - 1]
 			}
 			base += n
-			return Float32Array.from(out)
+			return out
 		},
 
 		/**

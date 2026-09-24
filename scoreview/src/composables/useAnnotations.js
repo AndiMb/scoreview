@@ -1,9 +1,27 @@
 import axios from '@nextcloud/axios'
+import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, ref } from 'vue'
 import { classify, DIM, HIDE, resolveTargets, targetNames } from '../lib/annotationFilter.js'
 import { measurePositionToTimeMs } from '../lib/scoreLayout.js'
 import { anchorFromTap } from '../lib/stampLayout.js'
+
+const t = (text, vars) => translate('scoreview', text, vars)
+
+/**
+ * Die Meldung des Servers, wo es eine gibt (etwa die Obergrenze je Partitur).
+ * Die Drosselung (S4) antwortet dagegen mit Nextclouds eigener 429 ohne
+ * Satz - roh bliebe davon „Request failed with status code 429".
+ *
+ * @param {?object} err
+ * @return {string}
+ */
+function errorText(err) {
+	if (err?.response?.status === 429) {
+		return t('Too many changes in a short time. Please wait a moment and try again.')
+	}
+	return err?.response?.data?.error || err?.message || ''
+}
 
 /**
  * Notizen zu einer Partitur: Laden, Anlegen, Ändern, Löschen, Anspringen -
@@ -41,6 +59,13 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 	// Der Stempel, der auf den naechsten Tipp ins Notenbild wartet (Palette,
 	// Symbol, Tipp) - {stamp, visibility, targetParts} oder null.
 	const armedStamp = ref(null)
+	/**
+	 * Von reset() hochgezählt. In der Setliste wechselt die Partitur, während
+	 * Anfragen noch laufen - ohne die Prüfung landeten die Notizen von A mit
+	 * ihren Ankern in B, eine späte Antwort von load() überschrieb gar die
+	 * Liste des neuen Stücks.
+	 */
+	let generation = 0
 
 	/**
 	 * Jede Notiz mit ihrer Darstellung fuer diese Person (lib/annotationFilter.js):
@@ -143,9 +168,12 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 	})
 
 	async function load() {
+		const mine = generation
 		try {
 			const res = await axios.get(url())
-			annotations.value = res.data
+			if (mine === generation) {
+				annotations.value = res.data
+			}
 		} catch (err) {
 			// Notizen sind eine Zusatzfunktion - ein Fehler hier soll die
 			// eigentliche Notenansicht nicht mit in den Fehlerzustand reißen.
@@ -155,6 +183,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 	}
 
 	async function create(draft) {
+		const mine = generation
 		error.value = ''
 		try {
 			const res = await axios.post(url(), {
@@ -168,35 +197,52 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 				stamp: draft.stamp ?? null,
 				targetParts: draft.visibility === 'parts' ? draft.targetParts : null,
 			})
-			annotations.value = [...annotations.value, { ...res.data, orphaned: false }]
+			if (mine === generation) {
+				annotations.value = [...annotations.value, { ...res.data, orphaned: false }]
+			}
 		} catch (err) {
 			// eslint-disable-next-line no-console
 			console.error('ScoreView: Notiz konnte nicht gespeichert werden.', err)
-			error.value = err.response?.data?.error || err.message
+			if (mine !== generation) {
+				return
+			}
+			error.value = errorText(err)
 		}
 	}
 
 	async function update({ id, content, targetParts = null }) {
+		const mine = generation
 		error.value = ''
 		try {
 			const res = await axios.put(`${url()}/${id}`, targetParts ? { content, targetParts } : { content })
-			annotations.value = annotations.value.map((a) => (a.id === id ? { ...a, ...res.data } : a))
+			if (mine === generation) {
+				annotations.value = annotations.value.map((a) => (a.id === id ? { ...a, ...res.data } : a))
+			}
 		} catch (err) {
 			// eslint-disable-next-line no-console
 			console.error('ScoreView: Notiz konnte nicht aktualisiert werden.', err)
-			error.value = err.response?.data?.error || err.message
+			if (mine !== generation) {
+				return
+			}
+			error.value = errorText(err)
 		}
 	}
 
 	async function remove(annotation) {
+		const mine = generation
 		error.value = ''
 		try {
 			await axios.delete(`${url()}/${annotation.id}`)
-			annotations.value = annotations.value.filter((a) => a.id !== annotation.id)
+			if (mine === generation) {
+				annotations.value = annotations.value.filter((a) => a.id !== annotation.id)
+			}
 		} catch (err) {
 			// eslint-disable-next-line no-console
 			console.error('ScoreView: Notiz konnte nicht gelöscht werden.', err)
-			error.value = err.response?.data?.error || err.message
+			if (mine !== generation) {
+				return
+			}
+			error.value = errorText(err)
 		}
 	}
 
@@ -265,6 +311,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 	}
 
 	function reset() {
+		generation++
 		annotations.value = []
 		error.value = ''
 		visible.value = false

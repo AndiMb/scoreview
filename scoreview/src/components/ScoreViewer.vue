@@ -7,7 +7,7 @@
 		damit alles Gefaerbte in einem Rutsch um - ohne dass eine einzige Seite
 		neu rendern muss.
 	-->
-	<div class="scoreview-viewer" :style="highlightStyle">
+	<div ref="root" class="scoreview-viewer" :style="highlightStyle">
 		<!--
 			Die Setliste steht ueber allem, auch ueber „Wird konvertiert…" und
 			einem Fehler: Im Konzert muss es auch an einem Stueck vorbei
@@ -34,69 +34,29 @@
 		<NcNoteCard v-if="setlistError" type="error" class="scoreview-hint">
 			{{ setlistError }}
 		</NcNoteCard>
-		<div v-if="state === 'converting' || state === 'loading'" class="scoreview-status">
-			<NcLoadingIcon :size="32" :name="state === 'loading' ? t('Loading…') : t('Converting…')" />
-			<!--
-				Nur beim Rueckfall im Browser gefuellt: Dort dauert das erste
-				Oeffnen laenger als sonst, weil die Engine geladen wird - ein
-				stummer Kreisel liesse das wie einen Haenger aussehen.
-				Serverseitig konvertiert bleibt die Zeile leer.
-			-->
-			<p v-if="conversionProgressText" class="scoreview-status-detail">
-				{{ conversionProgressText }}
-			</p>
-		</div>
-		<div v-else-if="state === 'error'" class="scoreview-status scoreview-error">
-			<NcEmptyContent :name="t('Error')" :description="errorText">
-				<template #icon>
-					<AlertCircleOutline :size="48" />
-				</template>
-			</NcEmptyContent>
-			<details v-if="errorCode && errorMessage" class="scoreview-error-detail">
-				<summary>{{ t('Technical detail') }}</summary>
-				<pre>{{ errorMessage }}</pre>
-			</details>
-		</div>
+		<ScoreStatus
+			v-if="state === 'converting' || state === 'loading' || state === 'error'"
+			:state="state"
+			:clientProgress="clientProgress"
+			:longWait="longWait"
+			:errorText="errorText"
+			:errorCode="errorCode"
+			:errorMessage="errorMessage" />
 		<template v-else>
 			<!--
-				Eingefahrene Leiste: Im Vollbild zieht sie sich waehrend der
-				Wiedergabe auf eine Fortschrittslinie zusammen (siehe
-				scheduleBarCollapse) - auf dem Notenstaender zaehlt jede Zeile
-				Noten. Bewusst NICHT ganz ausgeblendet mit "Tippen holt sie
-				zurueck": Ein Tipp auf die Partitur springt bereits an die
-				getippte Note (onNoteClick), zwei Bedeutungen fuer dieselbe
-				Geste waeren ein Fehler. Die Linie ist eindeutig anzutippen und
-				verraet weiter die Position.
+				Die Leiste: Wie sie steht (eingefahren, kompakt, Werkzeuge auf
+				Abruf), regeln ScoreBar.vue und useBarLayout.js; was darin
+				steht, ist hier verdrahtet.
 			-->
-			<button
-				v-if="barCollapsed"
-				type="button"
-				class="scoreview-bar-line"
-				:aria-label="t('Show playback controls')"
-				:title="t('Show playback controls')"
-				@click="showBar">
-				<span class="scoreview-bar-line-fill" :style="{ inlineSize: playbackPercent + '%' }" />
-			</button>
-			<!--
-				EINE Leiste, und zwar ausserhalb des Scroll-Bereichs. Als
-				Geschwister eines eigenen Scroll-Elements ist "wegscrollen"
-				strukturell unmoeglich - und der z-index-Wettlauf gegen die
-				SVG-Seiten entfaellt.
-
-				Zwei Streifen statt einer Knopfreihe: Auf Telefonbreite
-				brauchte die volle Reihe rechnerisch ~780px (14 Bedienelemente
-				bei 44px Touch-Zielgroesse) und brach damit auf drei Zeilen um -
-				dauerhaft rund 18% der Bildschirmhoehe, auch im Vollbild.
-				Draussen bleibt jetzt nur, was waehrend des Singens gebraucht
-				wird; die Werkzeuge kommen auf Abruf. Auf breiten Schirmen
-				stehen beide Streifen nebeneinander, dort aendert sich nichts.
-			-->
-			<div
-				v-else
-				class="scoreview-bar"
-				:class="{ 'scoreview-bar--compact': compactBar }"
-				@pointerdown="scheduleBarCollapse">
-				<div class="scoreview-bar-transport">
+			<ScoreBar
+				v-model:toolsOpen="toolsOpen"
+				:collapsed="barCollapsed"
+				:compact="compactBar"
+				:anyToolActive="anyToolActive"
+				:readProgress="readPlaybackPercent"
+				@show="showBar"
+				@activity="scheduleBarCollapse">
+				<template #transport>
 					<NcButton
 						class="scoreview-play"
 						variant="primary"
@@ -109,16 +69,20 @@
 							<Play v-else :size="20" />
 						</template>
 					</NcButton>
-					<input
-						type="range"
-						class="scoreview-seek"
-						min="0"
-						:max="durationMs"
-						:value="displayTimeMs"
-						:disabled="!can('seek')"
-						:aria-label="t('Playback position')"
-						@input="onSeekBarInput">
-					<span class="scoreview-time">{{ formatTime(displayTimeMs) }} / {{ formatTime(durationMs) }}</span>
+					<!-- Die Zeit liest nur LiveValue: sonst rendert der ganze
+						Viewer in jedem Frame neu (siehe LiveValue.vue). -->
+					<LiveValue v-slot="{ value }" :get="() => displayTimeMs">
+						<input
+							type="range"
+							class="scoreview-seek"
+							min="0"
+							:max="durationMs"
+							:value="value"
+							:disabled="!can('seek')"
+							:aria-label="t('Playback position')"
+							@input="onSeekBarInput">
+						<span class="scoreview-time">{{ formatTime(value) }} / {{ formatTime(durationMs) }}</span>
+					</LiveValue>
 					<!--
 					Taktanzeige und Sprungfeld sind DASSELBE Feld: getrennt zeigten
 					sie dieselbe Zahl an zwei Stellen und kosteten zusammen fast eine
@@ -210,29 +174,8 @@
 						eingefahrenen Werkzeugen sichtbar und antippbar bleiben.
 					-->
 					<MicIndicator v-if="micActive" :consumers="micConsumers" @off="turnMicOff" />
-					<!--
-						Der Zugang zu den Werkzeugen auf schmalen Schirmen. Der
-						Punkt daran ist nicht Zierde: Laeuft das Metronom oder
-						ist ein Loop aktiv, muss das sichtbar bleiben, ohne das
-						Menue zu oeffnen - sonst sucht jemand mitten in der
-						Probe nach einem Klick, den er nicht abstellen kann.
-					-->
-					<NcButton
-						v-if="compactBar"
-						class="scoreview-more"
-						:pressed="toolsOpen"
-						:aria-label="t('Tools')"
-						:title="t('Tools')"
-						@click="toolsOpen = !toolsOpen">
-						<template #icon>
-							<span class="scoreview-more-icon">
-								<DotsHorizontal :size="20" />
-								<span v-if="anyToolActive && !toolsOpen" class="scoreview-more-dot" />
-							</span>
-						</template>
-					</NcButton>
-				</div>
-				<div v-if="!compactBar || toolsOpen" class="scoreview-bar-tools">
+				</template>
+				<template #tools>
 					<!--
 						Im Aufführungsmodus bleiben nur Zoom und Vollbild;
 						was gesperrt ist, verschwindet, statt ausgegraut
@@ -290,84 +233,18 @@
 							</div>
 						</template>
 					</NcPopover>
-					<!--
-						BPM statt Prozent (auf Basis von docs/architecture.md M8:
-						metadata.tempo ist Viertel-BPM) - der Notensymbol-Text "♩ 80"
-						statt "100%" ist die Einheit, die eine Chorleitung tatsaechlich
-						ansagt. tempoGuessed markiert Partituren ohne eigene Tempoangabe
-						(M8: tempo kann 0 sein) sichtbar als geschaetzt, statt eine
-						Genauigkeit vorzutaeuschen, die nicht da ist. Der Regler dazu
-						liegt im Popover - er wird einmal eingestellt, nicht dauernd.
-					-->
-					<NcPopover v-if="can('settings')">
-						<template #trigger>
-							<NcButton
-								class="scoreview-tempo-button"
-								:aria-label="t('Tempo and metronome')"
-								:title="tempoGuessed ? t('No tempo marking in the score – 120 BPM assumed.') : t('Tempo and metronome')">
-								♩ {{ effectiveTempoBpm }}{{ tempoGuessed ? '*' : '' }}
-							</NcButton>
-						</template>
-						<template #default>
-							<div class="scoreview-popover">
-								<label v-if="hasRealPlayer" class="scoreview-popover-label">
-									{{ t('Tempo (BPM)') }}: ♩ = {{ effectiveTempoBpm }}
-									<input
-										type="range"
-										:min="minTempoBpm"
-										:max="maxTempoBpm"
-										step="1"
-										:value="effectiveTempoBpm"
-										:aria-label="t('Tempo (BPM)')"
-										@input="onTempoBpmInput">
-								</label>
-								<fieldset class="scoreview-popover-group">
-									<legend>{{ t('Metronome') }}</legend>
-									<NcCheckboxRadioSwitch
-										v-model="metronomeBeats"
-										type="radio"
-										value="all"
-										name="scoreview-metronome-beats">
-										{{ t('Every beat') }}
-									</NcCheckboxRadioSwitch>
-									<NcCheckboxRadioSwitch
-										v-model="metronomeBeats"
-										type="radio"
-										value="downbeat"
-										name="scoreview-metronome-beats">
-										{{ t('Downbeat only') }}
-									</NcCheckboxRadioSwitch>
-								</fieldset>
-								<!--
-									Bild und Ton abgleichen. Der Cursor stuende sonst
-									dort, wo die Musik erst noch hinkommt: Die Audiouhr
-									meldet, was an das Ausgabegeraet UEBERGEBEN wurde,
-									hoerbar wird es erst nach der Ausgabelatenz - ueber
-									Bluetooth 150-300 ms, bei Viertel = 120 eine
-									Achtelnote. Automatisch ausgeglichen wird, was der
-									Browser meldet (lib/playbackTime.js); dieser Regler
-									traegt den Rest, denn ob der Bluetooth-Anteil
-									ueberhaupt gemeldet wird, haengt am Kopfhoerer.
-									Geraeteweise gemerkt, nicht am Konto - Begruendung
-									in usePlayback.js.
-								-->
-								<label v-if="hasRealPlayer" class="scoreview-popover-label">
-									{{ t('Sync picture and sound') }}: {{ audioOffsetMs }} ms
-									<input
-										type="range"
-										:min="minAudioOffsetMs"
-										:max="maxAudioOffsetMs"
-										step="10"
-										:value="audioOffsetMs"
-										:aria-label="t('Sync picture and sound')"
-										@input="onAudioOffsetInput">
-									<span class="scoreview-popover-hint">
-										{{ t('Adjust while playing, until the highlighted note matches what you hear. Detected automatically: {ms} ms.', { ms: automaticLatencyRounded }) }}
-									</span>
-								</label>
-							</div>
-						</template>
-					</NcPopover>
+					<TempoPopover
+						v-if="can('settings')"
+						v-model:metronomeBeats="metronomeBeats"
+						:hasRealPlayer="hasRealPlayer"
+						:effectiveTempoBpm="effectiveTempoBpm"
+						:tempoGuessed="tempoGuessed"
+						:minTempoBpm="minTempoBpm"
+						:maxTempoBpm="maxTempoBpm"
+						:audioOffsetMs="audioOffsetMs"
+						:readAutomaticLatencyMs="readAutomaticLatencyMs"
+						@tempoInput="onTempoBpmInput"
+						@audioOffsetInput="onAudioOffsetInput" />
 					<NcButton
 						v-if="can('settings')"
 						:pressed="metronomeEnabled"
@@ -391,218 +268,23 @@
 						@click="toggleStartToneMode">
 						{{ startToneMode === 'tonic' ? t('Key note') : t('My note') }}
 					</NcButton>
-					<NcPopover>
-						<template #trigger>
-							<NcButton :aria-label="t('Zoom')" :title="t('Zoom')">
-								<template #icon>
-									<Magnify :size="20" />
-								</template>
-							</NcButton>
-						</template>
-						<template #default>
-							<div class="scoreview-popover">
-								<label class="scoreview-popover-label">
-									{{ t('Zoom') }}: {{ zoomPercent }}%
-									<input
-										type="range"
-										:min="minZoom"
-										:max="maxZoom"
-										step="0.05"
-										:value="zoom"
-										:aria-label="t('Zoom')"
-										@input="onZoomInput">
-								</label>
-								<NcButton wide @click="applyZoomPreset('width')">
-									<template #icon>
-										<ArrowExpandHorizontal :size="20" />
-									</template>
-									{{ t('Fit page width') }}
-								</NcButton>
-								<NcButton wide @click="applyZoomPreset('page')">
-									<template #icon>
-										<FitToPage :size="20" />
-									</template>
-									{{ t('Fit whole page') }}
-								</NcButton>
-								<NcButton wide @click="applyZoomPreset('actual')">
-									<template #icon>
-										<Magnify :size="20" />
-									</template>
-									{{ t('Actual size') }}
-								</NcButton>
-							</div>
-						</template>
-					</NcPopover>
-					<!--
-						Darstellung: wie die klingende Stelle markiert wird - und,
-						im selben Aufklapper, womit diese Seiten ueberhaupt gesetzt
-						wurden. Beides gehoert zusammen: Es ist der Ort fuer
-						"warum sieht das so aus".
-					-->
-					<NcPopover v-if="can('settings')">
-						<template #trigger>
-							<NcButton :aria-label="t('Appearance')" :title="t('Appearance')">
-								<template #icon>
-									<Palette :size="20" />
-								</template>
-							</NcButton>
-						</template>
-						<template #default>
-							<div class="scoreview-popover">
-								<fieldset class="scoreview-popover-group">
-									<legend>{{ t('Playback highlight') }}</legend>
-									<NcCheckboxRadioSwitch
-										v-model="highlightMode"
-										type="radio"
-										value="notes"
-										name="scoreview-highlight-mode">
-										{{ t('Colour the sounding notes') }}
-									</NcCheckboxRadioSwitch>
-									<NcCheckboxRadioSwitch
-										v-model="highlightMode"
-										type="radio"
-										value="bar"
-										name="scoreview-highlight-mode">
-										{{ t('Bar at the sounding position') }}
-									</NcCheckboxRadioSwitch>
-								</fieldset>
-								<!--
-									Vorschlaege UND freie Wahl: Eine Farbe, die auf
-									weissem Papier neben schwarzer Druckfarbe wirklich
-									traegt, ist im Farbwaehler nicht in zwei Klicks
-									gefunden.
-								-->
-								<div class="scoreview-swatches" role="group" :aria-label="t('Highlight colour')">
-									<button
-										v-for="preset in highlightPresets"
-										:key="preset.id"
-										type="button"
-										class="scoreview-swatch"
-										:class="{ 'scoreview-swatch--active': preset.color === highlightColor }"
-										:style="{ background: preset.color }"
-										:aria-pressed="preset.color === highlightColor"
-										:aria-label="presetLabel(preset.id)"
-										:title="presetLabel(preset.id)"
-										@click="highlightColor = preset.color" />
-								</div>
-								<label class="scoreview-popover-label">
-									{{ t('Own colour') }}
-									<input
-										type="color"
-										class="scoreview-color-input"
-										:value="highlightColor"
-										:aria-label="t('Own colour')"
-										@input="onHighlightColorInput">
-								</label>
-								<!--
-									Dunkelmodus der Noten. „Automatisch" folgt
-									dem Nextcloud-Theme; die feste Wahl uebersteuert
-									es, und beides bleibt am Konto gemerkt.
-								-->
-								<fieldset class="scoreview-popover-group">
-									<legend>{{ t('Score colours') }}</legend>
-									<NcCheckboxRadioSwitch
-										v-model="noteTheme"
-										type="radio"
-										value="auto"
-										name="scoreview-note-theme">
-										{{ t('Follow the Nextcloud theme') }}
-									</NcCheckboxRadioSwitch>
-									<NcCheckboxRadioSwitch
-										v-model="noteTheme"
-										type="radio"
-										value="light"
-										name="scoreview-note-theme">
-										{{ t('Dark notes on white') }}
-									</NcCheckboxRadioSwitch>
-									<NcCheckboxRadioSwitch
-										v-model="noteTheme"
-										type="radio"
-										value="dark"
-										name="scoreview-note-theme">
-										{{ t('Light notes on dark') }}
-									</NcCheckboxRadioSwitch>
-								</fieldset>
-								<!--
-									Die Herkunft der Darstellung (E3). Rein
-									beschreibend - der Viewer verzweigt nirgends
-									danach, er sagt nur, womit diese Seiten gesetzt
-									wurden. Das ist die Frage, die bei einem
-									Satzunterschied zwischen zwei Instanzen als
-									Erstes kommt.
-								-->
-								<p class="scoreview-origin">
-									<span class="scoreview-origin-label">{{ t('Rendered by') }}</span>
-									{{ rendererText }}
-									<span v-if="mscoreVersion" class="scoreview-origin-note">
-										{{ t('Score written with MuseScore {version}', { version: mscoreVersion }) }}
-									</span>
-								</p>
-								<!--
-									Genau hier, direkt unter der Herkunft: Das ist die
-									Stelle, an der auffaellt, dass eine Partitur noch von
-									einer aelteren Fassung gesetzt wurde. Nur mit
-									Schreibrecht (canReconvert) - siehe
-									ConversionController::reconvert().
-								-->
-								<NcButton
-									v-if="canReconvert"
-									class="scoreview-origin-action"
-									:title="t('Discards the stored conversion and renders the score again with the current version of the app.')"
-									@click="reconvertScore">
-									<template #icon>
-										<Refresh :size="20" />
-									</template>
-									{{ t('Convert again') }}
-								</NcButton>
-								<!--
-									Was auf DIESEM Geraet gemessen wurde. Steht hier,
-									weil es dieselbe Frage beantwortet wie die
-									Herkunft darueber: "warum ist das so, wie es
-									ist". Rein beschreibend, nichts verzweigt danach.
-
-									Der Grund fuer die Anzeige: "die Wiedergabe
-									synchronisiert nicht sauber" hat zwei ganz
-									verschiedene Ursachen, die sich gleich anfuehlen -
-									die Anzeige laeuft dem Ton voraus (dann steht hier
-									eine Latenz), oder der Ton setzt aus, weil die
-									Synthese auf dem Geraet nicht mitkommt (dann
-									zaehlt hier etwas). Aus der Ferne ist das nicht zu
-									unterscheiden, auf dem Geraet mit einem Blick.
-								-->
-								<details class="scoreview-diagnostics">
-									<summary>{{ t('Playback diagnostics') }}</summary>
-									<dl class="scoreview-diagnostics-list">
-										<div v-if="audioDiagnostics.hasAudio">
-											<dt>{{ t('Output latency') }}</dt>
-											<dd>
-												{{ audioDiagnostics.appliedLatencyMs }} ms
-												<span class="scoreview-diagnostics-note">
-													{{ t('measured {measured}, reported {reported}, by hand {manual}', {
-														measured: formatMs(audioDiagnostics.measuredLatencyMs),
-														reported: formatMs(audioDiagnostics.reportedLatencyMs),
-														manual: audioDiagnostics.manualOffsetMs + ' ms',
-													}) }}
-												</span>
-											</dd>
-											<dt>{{ t('Audio output') }}</dt>
-											<dd>{{ audioDiagnostics.sampleRate }} Hz, {{ audioDiagnostics.contextState }}</dd>
-											<dt>{{ t('Dropouts') }}</dt>
-											<dd>{{ audioDiagnostics.dropoutCount }} ({{ audioDiagnostics.dropoutLostMs }} ms)</dd>
-										</div>
-										<div v-else>
-											<dt>{{ t('Audio output') }}</dt>
-											<dd>{{ t('none – the score cursor runs without sound') }}</dd>
-										</div>
-										<div>
-											<dt>{{ t('Frame rate') }}</dt>
-											<dd>{{ audioDiagnostics.frameRate }} fps</dd>
-										</div>
-									</dl>
-								</details>
-							</div>
-						</template>
-					</NcPopover>
+					<ZoomPopover
+						:zoom="zoom"
+						:percent="zoomPercent"
+						:min="minZoom"
+						:max="maxZoom"
+						@input="onZoomInput"
+						@preset="applyZoomPreset" />
+					<AppearancePopover
+						v-if="can('settings')"
+						v-model:highlightMode="highlightMode"
+						v-model:highlightColor="highlightColor"
+						v-model:noteTheme="noteTheme"
+						:rendererBackend="rendererBackend"
+						:mscoreVersion="mscoreVersion"
+						:canReconvert="canReconvert"
+						:readDiagnostics="readAudioDiagnostics"
+						@reconvert="reconvertScore" />
 					<NcButton
 						v-if="hasRealPlayer && can('mixer')"
 						:pressed="showMixer"
@@ -710,8 +392,8 @@
 							<Fullscreen v-else :size="20" />
 						</template>
 					</NcButton>
-				</div>
-			</div>
+				</template>
+			</ScoreBar>
 			<div class="scoreview-body">
 				<!--
 					„Folgt mir": wer leitet, ob dieses Geraet folgt, ob die
@@ -791,7 +473,7 @@
 							:markers="annotationMarkers"
 							:stamps="annotationStamps"
 							:loopMarkers="loopMarkers"
-							:systemRects="systemRectsForPage(i)"
+							:systemRects="systemRectsByPage[i] ?? NO_RECTS"
 							:myPartIndex="myPartIndex"
 							:focusMyPart="focusMyPart"
 							:partCount="partCount"
@@ -799,6 +481,7 @@
 							:highlightMode="highlightMode"
 							:noteTheme="resolvedNoteTheme"
 							:noteMarks="intonationMarks"
+							:liveNoteMarks="intonationLiveMarks"
 							:needle="intonationNeedle"
 							@noteClick="onNoteClick"
 							@markerClick="onMarkerClick"
@@ -820,7 +503,7 @@
 						in die getippt werden soll -, und dieser Hinweis sagt, was
 						der naechste Tipp tut und wie man es laesst.
 					-->
-					<section v-if="armedStamp" class="scoreview-panel scoreview-armed">
+					<ScorePanel v-if="armedStamp" class="scoreview-armed">
 						<span>{{ t('Tap the score where the {stamp} belongs.', { stamp: armedStampName }) }}</span>
 						<NcButton :aria-label="t('Cancel')" @click="disarmStamp">
 							<template #icon>
@@ -828,16 +511,11 @@
 							</template>
 							{{ t('Cancel') }}
 						</NcButton>
-					</section>
-					<section v-if="setlistEditorMode" class="scoreview-panel">
-						<div class="scoreview-panel-head">
-							<h3>{{ setlistEditorMode === 'new' ? t('New setlist') : t('Edit setlist') }}</h3>
-							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="setlistEditorMode = null">
-								<template #icon>
-									<Close :size="20" />
-								</template>
-							</NcButton>
-						</div>
+					</ScorePanel>
+					<ScorePanel
+						v-if="setlistEditorMode"
+						:title="setlistEditorMode === 'new' ? t('New setlist') : t('Edit setlist')"
+						@close="setlistEditorMode = null">
 						<SetlistEditor
 							:key="setlistEditorMode + ':' + (setlist?.etag ?? '')"
 							:mode="setlistEditorMode"
@@ -848,16 +526,8 @@
 							:noAdding="standalonePage && setlistEditorMode !== 'new'"
 							@saved="onSetlistSaved"
 							@cancel="setlistEditorMode = null" />
-					</section>
-					<section v-if="showMixerPanel" class="scoreview-panel">
-						<div class="scoreview-panel-head">
-							<h3>{{ t('Mixer') }}</h3>
-							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="showMixer = false">
-								<template #icon>
-									<Close :size="20" />
-								</template>
-							</NcButton>
-						</div>
+					</ScorePanel>
+					<ScorePanel v-if="showMixerPanel" :title="t('Mixer')" @close="showMixer = false">
 						<!--
 							Der Anfangston kam ohne gewaehlte Stimme hierher:
 							Er raet nicht, sondern sagt, wo man sie waehlt.
@@ -875,19 +545,11 @@
 							@volumesChanged="onVolumesChanged"
 							@programChanged="onProgramChanged"
 							@focusChanged="onMyPartChanged" />
-					</section>
-					<section v-if="showAnnotations" class="scoreview-panel">
-						<div class="scoreview-panel-head">
-							<h3>{{ t('Notes') }}</h3>
-							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="showAnnotations = false">
-								<template #icon>
-									<Close :size="20" />
-								</template>
-							</NcButton>
-						</div>
+					</ScorePanel>
+					<ScorePanel v-if="showAnnotations" :title="t('Notes')" @close="showAnnotations = false">
 						<ScoreAnnotations
 							:annotations="listedAnnotations"
-							:currentAnchor="currentAnchor"
+							:currentAnchor="readCurrentAnchor"
 							:error="annotationError"
 							:isLeader="isLeader"
 							:parts="scoreParts"
@@ -897,20 +559,12 @@
 							@delete="onAnnotationDelete"
 							@jumpTo="onAnnotationJumpToOwn"
 							@armStamp="onArmStamp" />
-					</section>
+					</ScorePanel>
 					<!--
 						Eigene Aufnahmen und Intonation. Bleibt waehrend
 						des Aufnehmens offen stehen - dort sitzt der Stopp-Knopf.
 					-->
-					<section v-if="showPractice" class="scoreview-panel">
-						<div class="scoreview-panel-head">
-							<h3>{{ t('Recording and intonation') }}</h3>
-							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="showPractice = false">
-								<template #icon>
-									<Close :size="20" />
-								</template>
-							</NcButton>
-						</div>
+					<ScorePanel v-if="showPractice" :title="t('Recording and intonation')" @close="showPractice = false">
 						<RecordingPanel
 							v-model:withAccompaniment="recordWithAccompaniment"
 							v-model:countIn="recordCountIn"
@@ -947,21 +601,13 @@
 							@toggleLive="onToggleLiveIntonation"
 							@clearAnalysis="clearIntonationAnalysis"
 							@jump="onPracticeJump" />
-					</section>
+					</ScorePanel>
 					<!--
 						Der Aufklapper „Probe": die Leitungen - hier sammelt
 						sich, was eine Probe organisiert, statt jedes Stueck davon
 						als eigenen Knopf in die Leiste zu setzen.
 					-->
-					<section v-if="showRehearsal" class="scoreview-panel">
-						<div class="scoreview-panel-head">
-							<h3>{{ t('Rehearsal') }}</h3>
-							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="showRehearsal = false">
-								<template #icon>
-									<Close :size="20" />
-								</template>
-							</NcButton>
-						</div>
+					<ScorePanel v-if="showRehearsal" :title="t('Rehearsal')" @close="showRehearsal = false">
 						<LeaderPanel
 							:leaders="leaders"
 							:isLeader="isLeader"
@@ -984,7 +630,7 @@
 							@followMark="sendFollowMark"
 							@followLoop="sendFollowLoop"
 							@followTone="sendFollowTone" />
-					</section>
+					</ScorePanel>
 				</div>
 			</div>
 		</template>
@@ -992,61 +638,60 @@
 </template>
 
 <script>
-import axios from '@nextcloud/axios'
 import { loadState } from '@nextcloud/initial-state'
 import { translate } from '@nextcloud/l10n'
 import { getRootUrl } from '@nextcloud/router'
-import { getCurrentInstance, ref, shallowRef, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
-import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
-import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcPopover from '@nextcloud/vue/components/NcPopover'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import AccountGroup from 'vue-material-design-icons/AccountGroup.vue'
-import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
-import ArrowExpandHorizontal from 'vue-material-design-icons/ArrowExpandHorizontal.vue'
 import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import CommentTextOutline from 'vue-material-design-icons/CommentTextOutline.vue'
 import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
-import DotsHorizontal from 'vue-material-design-icons/DotsHorizontal.vue'
-import FitToPage from 'vue-material-design-icons/FitToPage.vue'
 import FormatAlignMiddle from 'vue-material-design-icons/FormatAlignMiddle.vue'
 import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
 import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
-import Magnify from 'vue-material-design-icons/Magnify.vue'
 import Metronome from 'vue-material-design-icons/Metronome.vue'
 import Microphone from 'vue-material-design-icons/Microphone.vue'
 import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
-import Palette from 'vue-material-design-icons/Palette.vue'
 import Pause from 'vue-material-design-icons/Pause.vue'
 import Play from 'vue-material-design-icons/Play.vue'
 import PlaylistPlus from 'vue-material-design-icons/PlaylistPlus.vue'
-import Refresh from 'vue-material-design-icons/Refresh.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import Tune from 'vue-material-design-icons/Tune.vue'
+import AppearancePopover from './AppearancePopover.vue'
 import FollowBadge from './FollowBadge.vue'
 import LeaderPanel from './LeaderPanel.vue'
+import LiveValue from './LiveValue.vue'
 import MicIndicator from './MicIndicator.vue'
 import RecordingPanel from './RecordingPanel.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
+import ScoreBar from './ScoreBar.vue'
 import ScoreLockButton from './ScoreLockButton.vue'
 import ScoreMixer from './ScoreMixer.vue'
 import ScorePage from './ScorePage.vue'
+import ScorePanel from './ScorePanel.vue'
 import ScoreSpeedTrainer from './ScoreSpeedTrainer.vue'
 import { stampName } from './ScoreStamps.vue'
 import ScoreStartTone from './ScoreStartTone.vue'
+import ScoreStatus from './ScoreStatus.vue'
 import SetlistBar from './SetlistBar.vue'
 import SetlistEditor from './SetlistEditor.vue'
+import TempoPopover from './TempoPopover.vue'
+import ZoomPopover from './ZoomPopover.vue'
 import { useAnnotations } from '../composables/useAnnotations.js'
 import { useAutoScroll } from '../composables/useAutoScroll.js'
+import { useBarLayout } from '../composables/useBarLayout.js'
 import { useConversionStatus } from '../composables/useConversionStatus.js'
 import { useFollowSession } from '../composables/useFollowSession.js'
 import { useIntonation } from '../composables/useIntonation.js'
 import { useLeaders } from '../composables/useLeaders.js'
 import { useLoop } from '../composables/useLoop.js'
+import { useMeasureNavigation } from '../composables/useMeasureNavigation.js'
 import { useMetronome } from '../composables/useMetronome.js'
 import { useMicrophone } from '../composables/useMicrophone.js'
 import { useMyPart } from '../composables/useMyPart.js'
@@ -1056,6 +701,7 @@ import { usePerformanceMode } from '../composables/usePerformanceMode.js'
 import { usePlayback } from '../composables/usePlayback.js'
 import { useRecorder } from '../composables/useRecorder.js'
 import { useScoreFacts } from '../composables/useScoreFacts.js'
+import { NO_RECTS, useScoreSession } from '../composables/useScoreSession.js'
 import { useSetlist } from '../composables/useSetlist.js'
 import { useSpeedTrainer } from '../composables/useSpeedTrainer.js'
 import { useStartTone } from '../composables/useStartTone.js'
@@ -1063,21 +709,16 @@ import { useViewerPreferences } from '../composables/useViewerPreferences.js'
 import { useWakeLock } from '../composables/useWakeLock.js'
 import { useZoom } from '../composables/useZoom.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
-import { HIGHLIGHT_PRESETS, normalizeHighlightColor } from '../lib/highlightStyle.js'
 import { resolveKey } from '../lib/keyMap.js'
 import { browserFileUrl } from '../lib/micAccess.js'
 import { channelsOfPart } from '../lib/panLayout.js'
-import { MAX_MANUAL_OFFSET_MS, MIN_MANUAL_OFFSET_MS } from '../lib/playbackTime.js'
-import { formatMeasureWithMark, resolveJumpTarget } from '../lib/scoreFacts.js'
 import {
-	buildTimeline,
 	findElementAtPoint,
-	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
-import { createScoreSync } from '../lib/scoreSync.js'
 import { MODE_TONIC, MODE_VOICE } from '../lib/startTone.js'
+import { formatTime, progressPercent } from '../lib/viewerFormat.js'
 
 // MuseScores eigene Vorgabe für Partituren ohne Tempoangabe (docs/architecture.md
 // M8: metadata.tempo kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als
@@ -1100,38 +741,29 @@ function readInitialState(key) {
 	}
 }
 
-// Ab dieser Breite (px) passen Transport UND Werkzeuge nebeneinander.
-// Gerechnet, nicht geraten: 9 Icon-Knoepfe zu 44px (Touch-Zielgroesse, siehe
-// das Override von --default-clickable-area im CSS) plus Wiedergabe,
-// Tempoanzeige, Taktfeld, Suchlauf und Zwischenraeume ergeben rund 780px.
-// Darunter braeche die Reihe um - auf einem Telefon (360-412px) auf drei
-// Zeilen, rund 18% der Bildschirmhoehe.
-const COMPACT_BAR_WIDTH_PX = 700
-
-// Wie lange die Leiste im Vollbild stehen bleibt, bevor sie sich waehrend der
-// Wiedergabe zur Fortschrittslinie zusammenzieht.
-const BAR_IDLE_MS = 3000
-
 export default {
 	name: 'ScoreViewer',
 
 	components: {
+		AppearancePopover,
 		BookmarkOutline,
 		FollowBadge,
 		LeaderPanel,
+		LiveValue,
 		MicIndicator,
 		Microphone,
 		RecordingPanel,
 		ScorePage,
+		ScorePanel,
 		ScoreMixer,
 		ScoreAnnotations,
+		ScoreBar,
 		ScoreLockButton,
 		ScoreSpeedTrainer,
 		ScoreStartTone,
+		ScoreStatus,
 		NcButton,
 		NcTextField,
-		NcLoadingIcon,
-		NcEmptyContent,
 		NcNoteCard,
 		NcPopover,
 		NcCheckboxRadioSwitch,
@@ -1143,21 +775,16 @@ export default {
 		CommentTextOutline,
 		FormatAlignMiddle,
 		Repeat,
-		AlertCircleOutline,
-		ArrowExpandHorizontal,
-		FitToPage,
 		Fullscreen,
 		FullscreenExit,
 		Metronome,
 		CrosshairsGps,
-		DotsHorizontal,
-		Magnify,
-		Palette,
-		Refresh,
 		AccountGroup,
 		PlaylistPlus,
 		SetlistBar,
 		SetlistEditor,
+		TempoPopover,
+		ZoomPopover,
 	},
 
 	props: {
@@ -1196,21 +823,13 @@ export default {
 	emits: ['ready', 'pieceChange'],
 
 	/**
-	 * Zerlegung von ScoreViewer.vue in Composables - schrittweise, ein
-	 * Bereich nach dem anderen.
+	 * Die Bereiche des Viewers als Composables, hier verdrahtet.
 	 *
-	 * Der Zustand, den mehrere Bereiche teilen (Zeitachsen, etag, Dauer,
-	 * Zeitquelle), zieht dafuer aus `data()` hierher. Das ist die Bruecke,
-	 * die den Umbau ueberhaupt schrittweise moeglich macht: Vue 3 legt
-	 * setup()-Rueckgaben auf der Instanz aus und entpackt Refs dabei, der
-	 * bestehende Options-API-Code kann also unveraendert `this.timeline`
-	 * lesen und `this.durationMs = x` schreiben, waehrend die Composables
-	 * dieselben Refs direkt benutzen.
-	 *
-	 * `clock` bewusst als shallowRef: dahinter haengt ein AudioContext samt
-	 * Synthesizer (lib/player.js). Tiefe Reaktivitaet darauf waere sinnlos
-	 * teuer, und niemand verlaesst sich auf Reaktivitaet INNERHALB des
-	 * Objekts - nur darauf, dass der Austausch der Zeitquelle auffaellt.
+	 * Vue 3 legt setup()-Rueckgaben auf der Instanz aus und entpackt Refs
+	 * dabei - der Options-API-Teil weiter unten liest also `this.timeline`
+	 * und schreibt `this.showMixer = x`, waehrend die Composables dieselben
+	 * Refs direkt benutzen. Der Zustand der offenen Partitur, den fast alle
+	 * teilen, liegt in useScoreSession.js.
 	 *
 	 * @param props
 	 */
@@ -1221,43 +840,42 @@ export default {
 		// SoundFont ueber den Stueckwechsel erhalten. Alles, was an der
 		// Datei haengt, liest deshalb hier, nicht an der Prop.
 		const activeFileId = ref(props.fileid)
-		const timeline = shallowRef(null)
-		const measuresTimeline = shallowRef(null)
-		const currentEtag = shallowRef(null)
-		const durationMs = shallowRef(0)
-		const clock = shallowRef(null)
-		// meta.json - fuer die Partiturfakten (Tonarten, Studierbuchstaben).
-		const scoreMeta = shallowRef(null)
+		const session = useScoreSession()
+		const { timeline, measuresTimeline, systemRectsByPage, currentEtag, durationMs, clock, scoreMeta } = session
 
 		// Einzeln und unter ihren eigenen Namen zurueckgegeben, nicht als
 		// verschachteltes Objekt: Vue entpackt Refs nur auf der OBERSTEN Ebene
 		// der setup()-Rueckgabe. `annotationsApi.visible` waere im Template ein
-		// Ref-Objekt statt eines Wertes - und so bleiben Template und
-		// Aufrufstellen unveraendert, der Umbau ist also wirklich nur ein
-		// Umzug.
-		// `onReady` behaelt bewusst das $nextTick aus dem frueheren
-		// pollStatus(): loadScore() misst am Ende die Seitenbreite fuer das
-		// Zoom-Preset, die Seiten muessen dafuer schon gerendert sein.
-		let onScoreReady = async () => {}
+		// Ref-Objekt statt eines Wertes.
+		// `onReady` wartet einen Tick: load() misst am Ende die Seitenbreite
+		// fuer das Zoom-Preset, die Seiten muessen dafuer schon gerendert sein.
 		const conversion = useConversionStatus({
 			fileId: () => activeFileId.value,
-			onReady: (body) => onScoreReady(body),
+			onReady: async (body) => {
+				await nextTick()
+				await session.load(body)
+			},
 		})
-		const setOnScoreReady = (fn) => {
-			onScoreReady = fn
-		}
 
 		// rootEl/scrollEl als Funktionen statt als Refs: die Elemente existieren
-		// erst im Zustand "ready" (v-if im Template), ein Ref waere beim
-		// Anlegen des Composables noch leer.
-		const vm = getCurrentInstance()
-		const scrollElement = () => vm?.proxy?.$refs?.scroll ?? null
+		// erst nach dem Einhaengen, das Scroll-Element sogar erst im Zustand
+		// "ready" (v-if im Template) - beim Anlegen der Composables sind beide
+		// Template-Refs noch leer.
+		const root = ref(null)
+		const scroll = ref(null)
+		const rootElement = () => root.value
+		const scrollElement = () => scroll.value
 		const zoomApi = useZoom({
-			rootEl: () => vm?.proxy?.$el ?? null,
+			rootEl: rootElement,
 			scrollEl: scrollElement,
 		})
 		const autoScroll = useAutoScroll({ scrollEl: scrollElement })
 		const playback = usePlayback({ clock, durationMs, defaultTempoBpm: DEFAULT_TEMPO_BPM })
+		const bar = useBarLayout({
+			rootEl: rootElement,
+			isFullscreen: () => zoomApi.isFullscreen.value,
+			isPlaying: () => playback.isPlaying.value,
+		})
 
 		const metronome = useMetronome({
 			measuresTimeline: () => measuresTimeline.value,
@@ -1289,8 +907,7 @@ export default {
 		const leaders = useLeaders({ fileId: () => activeFileId.value })
 
 		// Nach „Meine Stimme" und den Leitungen: Welche Stimmnotiz jemand
-		// sieht, haengt an beidem (lib/annotationFilter.js). Die Stimmen der
-		// Partitur liegen (noch) in data() - daher der Weg ueber die Instanz.
+		// sieht, haengt an beidem (lib/annotationFilter.js).
 		const annotations = useAnnotations({
 			fileId: () => activeFileId.value,
 			timeline: () => timeline.value,
@@ -1298,14 +915,13 @@ export default {
 			currentEtag: () => currentEtag.value,
 			durationMs: () => durationMs.value,
 			seek: (timeMs) => clock.value?.seek(timeMs),
-			parts: () => vm?.proxy?.scoreParts ?? [],
+			parts: () => session.scoreParts.value,
 			myPartId: () => myPart.myPartId.value,
 			isLeader: () => leaders.isLeader.value,
 		})
 
 		// Der Speed-Trainer zaehlt an den Loop-Durchlaeufen, braucht aber selbst
-		// den Loop-Zustand - der Rueckruf wird deshalb nachgereicht, wie
-		// setOnScoreReady oben.
+		// den Loop-Zustand - der Rueckruf wird deshalb nachgereicht.
 		let onLoopWrap = () => {}
 		const loop = useLoop({
 			measuresTimeline: () => measuresTimeline.value,
@@ -1331,21 +947,44 @@ export default {
 		// Viewer (onKeydown), nur zusaetzlich am document - siehe dort.
 		// `following` kommt aus „Folgt mir", das erst weiter unten entsteht,
 		// weil es selbst die Policy von hier braucht - der Rueckruf wird deshalb
-		// nachgereicht, wie setOnScoreReady oben.
+		// nachgereicht.
+		// Die beiden Rueckrufe in den Options-Teil sind die letzten Wege ueber
+		// die Instanz: Tastaturkuerzel und das Schliessen beim Einschalten
+		// greifen auf fast jeden Bereich des Viewers zu - sie gehoeren in die
+		// Orchestrierung, nicht in ein eigenes Composable.
+		const vm = getCurrentInstance()
 		let isFollowing = () => false
 		const performance = usePerformanceMode({
-			rootEl: () => vm?.proxy?.$el ?? null,
+			rootEl: rootElement,
 			onKeydown: (event) => vm?.proxy?.onKeydown(event),
 			onEnter: () => vm?.proxy?.onPerformanceEnter(),
 			following: () => isFollowing(),
 		})
 
+		// Der Mixer als Karte ueber dem Notenbild. `showMixer` ist der
+		// Schalter; zu sehen ist die Karte nur mit echter Wiedergabe UND
+		// aufgelösten Kanälen - ohne beides bliebe eine leere Karte über dem
+		// Notenbild stehen.
+		const showMixer = ref(false)
+		const showMixerPanel = computed(() => playback.hasRealPlayer.value && showMixer.value && playback.mixerChannels.value.length > 0)
+
+		/**
+		 * Die Stimmauswahl oeffnen - wenn der Anfangston oder die Intonation
+		 * keine Stimme fand. Sie steckt im Mixer („Meine Stimme" je Zeile);
+		 * eine zweite Auswahl fuer dieselbe Aussage waere eine Fehlerquelle
+		 * (siehe `focusMyPart` in data()).
+		 */
+		function openVoiceSelection() {
+			if (!performance.can('mixer')) {
+				return
+			}
+			showMixer.value = true
+		}
+
 		const paging = usePaging({
 			scrollEl: scrollElement,
 			pages: autoScroll.pages,
-			measureRects: (pageIndex) => (measuresTimeline.value
-				? Object.values(measuresTimeline.value.elements).filter((rect) => rect.page === pageIndex)
-				: []),
+			measureRects: (pageIndex) => systemRectsByPage.value[pageIndex] ?? [],
 			onManualScroll: autoScroll.noteManualScroll,
 		})
 
@@ -1368,7 +1007,26 @@ export default {
 			mixerChannels: () => playback.mixerChannels.value,
 			myPartId: () => myPart.myPartId.value,
 			permitted: () => performance.can('tone'),
-			onNeedPart: () => vm?.proxy?.openVoiceSelection(),
+			onNeedPart: openVoiceSelection,
+		})
+
+		// Taktanzeige und Sprung nach Takten. Eigenes Navigieren loest das
+		// Folgen einer Leitung - „Folgt mir" entsteht aber erst weiter unten,
+		// weil es selbst die Sprungfunktionen von hier braucht; der Rueckruf
+		// wird deshalb nachgereicht, wie `isFollowing` oben.
+		let noteNavigation = () => {}
+		const navigation = useMeasureNavigation({
+			measuresTimeline: () => measuresTimeline.value,
+			durationMs: () => durationMs.value,
+			displayTimeMs: () => playback.displayTimeMs.value,
+			currentElid: () => session.currentElid.value,
+			currentEtag: () => currentEtag.value,
+			clock: () => clock.value,
+			marks: () => scoreFacts.marks.value,
+			totalMeasures: () => session.totalMeasures.value,
+			can: performance.can,
+			onNavigate: (kind) => noteNavigation(kind),
+			forceAutoScrollFor: session.forceAutoScrollFor,
 		})
 
 		// Die Schalter der Administration - fehlen sie, ist alles aus.
@@ -1383,16 +1041,17 @@ export default {
 			standalone: () => readInitialState('standalone')?.directEditing === true,
 			ready: () => !!clock.value && !!measuresTimeline.value,
 			permitted: (action) => performance.can(action),
-			seekToMeasure: (measure) => vm?.proxy?.followSeek(measure) ?? null,
+			seekToMeasure: navigation.followSeek,
 			setLoop: (from, to) => loop.setRange(from, to),
 			clearLoop: () => loop.clear(),
 			playTone: () => startTone.startToneFor(),
-			currentPosition: () => vm?.proxy?.followPosition() ?? null,
+			currentPosition: navigation.followPosition,
 			currentLoop: () => (loop.active.value
 				? { from: Number(loop.fromMeasure.value), to: Number(loop.toMeasure.value) }
 				: null),
 		})
 		isFollowing = () => follow.following.value
+		noteNavigation = follow.noteNavigation
 
 		const standalonePage = readInitialState('standalone')?.directEditing === true
 		const setlist = useSetlist({
@@ -1423,7 +1082,7 @@ export default {
 			mixerChannels: () => playback.mixerChannels.value,
 			myPartId: () => myPart.myPartId.value,
 			stereoMyPart: () => preferences.stereoMyPart.value,
-			mixerOpen: () => vm?.proxy?.showMixerPanel ?? false,
+			mixerOpen: () => showMixerPanel.value,
 			applyChannelVolumes: playback.applyChannelVolumes,
 			applyChannelPans: playback.applyChannelPans,
 		})
@@ -1459,6 +1118,24 @@ export default {
 			maxSeconds: () => features.maxRecordingSeconds,
 		})
 
+		// Ob sich die Notenzeilen ueberhaupt Stimmen zuordnen lassen -
+		// gemeldet von der ersten geladenen Seite (ScorePage.vue).
+		const staffMappingOk = ref(false)
+		// Die Stimme, die als „meine" gilt, als Index in meta.parts - also in
+		// derselben Reihenfolge, in der die Notenzeilen im System stehen.
+		const myPartIndex = computed(() => {
+			if (myPart.myPartId.value === null) {
+				return null
+			}
+			const index = session.scoreParts.value.findIndex((part) => String(part.id) === String(myPart.myPartId.value))
+			return index === -1 ? null : index
+		})
+		// Die Notenzeile der eigenen Stimme fuer die Intonation (`st-N`, M10) -
+		// nur, wo die Zeilen sich den Stimmen zuordnen lassen (eine Zeile je
+		// Stimme, siehe lib/staffBands.js). Sonst bleibt es bei Nadel und
+		// Liste, statt die Zeile der Nachbarstimme zu faerben.
+		const intonationStaff = computed(() => (staffMappingOk.value && myPartIndex.value !== null ? myPartIndex.value : null))
+
 		const intonation = useIntonation({
 			microphone,
 			clock: () => clock.value,
@@ -1469,13 +1146,52 @@ export default {
 			notes: () => scoreFacts.parsed.value?.notes ?? null,
 			myChannels,
 			events: () => timeline.value?.events ?? [],
-			myStaff: () => vm?.proxy?.intonationStaff ?? null,
+			myStaff: () => intonationStaff.value,
 			measureOf: (ms) => resolveMeasurePosition(measuresTimeline.value, ms, durationMs.value)?.measureNumber ?? null,
 			loadAudio: recorder.loadAudio,
 		})
 
+		session.connect({
+			applyMetadata: playback.applyMetadata,
+			loadAnnotations: annotations.load,
+			ensureMidi: scoreFacts.ensureMidi,
+			restoreZoom: zoomApi.restore,
+			observeViewport: zoomApi.observeViewport,
+			useRealPlayer: playback.useRealPlayer,
+			setNoSoundFontConfigured: playback.setNoSoundFontConfigured,
+			useSilentClock: playback.useSilentClock,
+			updateAutoScroll: autoScroll.update,
+			onError: (message) => {
+				conversion.state.value = 'error'
+				conversion.errorMessage.value = message
+			},
+			sampleTime: playback.sampleTime,
+			displayTimeMs: () => playback.displayTimeMs.value,
+			currentTimeMs: () => playback.currentTimeMs.value,
+			wrapLoop: loop.wrapIfDue,
+			tickMetronome: metronome.tick,
+			stopPolling: conversion.stop,
+			destroyMetronome: metronome.destroy,
+			destroyPlayback: playback.destroy,
+			stopZoomObserver: zoomApi.stop,
+		})
+
 		return {
+			root,
+			scroll,
+			showMixer,
+			showMixerPanel,
+			openVoiceSelection,
+			staffMappingOk,
+			myPartIndex,
 			activeFileId,
+			compactBar: bar.compact,
+			toolsOpen: bar.toolsOpen,
+			barCollapsed: bar.collapsed,
+			showBar: bar.show,
+			scheduleBarCollapse: bar.scheduleCollapse,
+			observeBarWidth: bar.observe,
+			stopBarLayout: bar.stop,
 			standalonePage,
 			setlist: setlist.setlist,
 			setlistActive: setlist.active,
@@ -1496,8 +1212,6 @@ export default {
 			applySavedSetlist: setlist.applySaved,
 			loadSetlistOffers: setlist.loadOffers,
 			acceptSetlistOffer: setlist.acceptOffer,
-			restoreZoom: zoomApi.restore,
-			setOnScoreReady,
 			zoom: zoomApi.zoom,
 			zoomFollowsWidth: zoomApi.followsWidth,
 			isFullscreen: zoomApi.isFullscreen,
@@ -1512,13 +1226,11 @@ export default {
 			onWheel: zoomApi.onWheel,
 			onPageLoaded: zoomApi.onPageLoaded,
 			applyZoomPreset: zoomApi.applyPreset,
-			setUpViewportObserver: zoomApi.observeViewport,
 			toggleFullscreen: zoomApi.toggleFullscreen,
 			onFullscreenChange: zoomApi.onFullscreenChange,
 			onTouchStart: zoomApi.onTouchStart,
 			onTouchMove: zoomApi.onTouchMove,
 			onTouchEnd: zoomApi.onTouchEnd,
-			stopZoomObserver: zoomApi.stop,
 			resetZoom: zoomApi.reset,
 			setPageRef: autoScroll.setPageRef,
 			updateAutoScroll: autoScroll.update,
@@ -1528,17 +1240,14 @@ export default {
 			resetAutoScroll: autoScroll.reset,
 			metronomeEnabled: metronome.enabled,
 			metronomeBeats: metronome.beats,
-			updateMetronome: metronome.tick,
 			startCountIn: metronome.startCountIn,
 			clearCountIn: metronome.clearCountIn,
-			destroyMetronome: metronome.destroy,
 			resetMetronome: metronome.reset,
 			loopFromMeasure: loop.fromMeasure,
 			loopToMeasure: loop.toMeasure,
 			loopActive: loop.active,
 			loopMarkers: loop.markers,
 			toggleLoop: loop.toggle,
-			loopWrapIfDue: loop.wrapIfDue,
 			setLoopFromMeasure: loop.setFromCurrentMeasure,
 			resetLoop: loop.reset,
 			trainerStartBpm: speedTrainer.startBpm,
@@ -1587,18 +1296,12 @@ export default {
 			presetList: playback.presetList,
 			soundFontLoading: playback.soundFontLoading,
 			soundFontLoadPercent: playback.soundFontLoadPercent,
-			applyScoreMetadata: playback.applyMetadata,
-			setUpSilentClock: playback.useSilentClock,
-			setUpRealPlayer: playback.useRealPlayer,
 			skipSoundFontLoad: playback.skipSoundFontLoad,
-			setNoSoundFontConfigured: playback.setNoSoundFontConfigured,
 			togglePlay: playback.toggle,
 			onSeekInput: playback.onSeekInput,
 			onTempoBpmInput: playback.onTempoBpmInput,
 			onVolumesChanged: playback.applyChannelVolumes,
 			onProgramChanged: playback.setProgram,
-			samplePlaybackTime: playback.sampleTime,
-			destroyPlayback: playback.destroy,
 			resetPlayback: playback.reset,
 			myPartId: myPart.myPartId,
 			loadMyPart: myPart.load,
@@ -1642,6 +1345,9 @@ export default {
 			intonationLive: intonation.live,
 			intonationNeedle: intonation.needle,
 			intonationMarks: intonation.marks,
+			systemRectsByPage,
+			NO_RECTS,
+			intonationLiveMarks: intonation.liveMarks,
 			intonationAnalysis: intonation.analysis,
 			intonationAnalyzing: intonation.analyzing,
 			intonationProgress: intonation.progress,
@@ -1685,7 +1391,6 @@ export default {
 			errorText: conversion.errorText,
 			pollStatus: conversion.poll,
 			requestReconvert: conversion.reconvert,
-			stopPolling: conversion.stop,
 			resetConversion: conversion.reset,
 			timeline,
 			measuresTimeline,
@@ -1693,6 +1398,28 @@ export default {
 			durationMs,
 			clock,
 			scoreMeta,
+			pageUrls: session.pageUrls,
+			scoreParts: session.scoreParts,
+			totalMeasures: session.totalMeasures,
+			rendererBackend: session.rendererBackend,
+			mscoreVersion: session.mscoreVersion,
+			canReconvert: session.canReconvert,
+			midiUrl: session.midiUrl,
+			cursorRect: session.cursorRect,
+			currentElid: session.currentElid,
+			resetSession: session.reset,
+			measureInput: navigation.input,
+			marksOpen: navigation.marksOpen,
+			currentAnchor: navigation.currentAnchor,
+			jumpToMeasure: navigation.jumpToMeasure,
+			jumpToMeasureInput: navigation.jumpToInput,
+			jumpRelativeMeasure: navigation.jumpRelative,
+			jumpToMark: navigation.jumpToMark,
+			onMeasureFieldFocus: navigation.onFieldFocus,
+			onMeasureFieldBlur: navigation.onFieldBlur,
+			resetMeasureNavigation: navigation.reset,
+			cleanupSession: session.cleanup,
+			forceAutoScrollFor: session.forceAutoScrollFor,
 			annotations: annotations.annotations,
 			listedAnnotations: annotations.listed,
 			annotationError: annotations.error,
@@ -1706,7 +1433,6 @@ export default {
 			rehearsalMarks: scoreFacts.marks,
 			ensureScoreMidi: scoreFacts.ensureMidi,
 			resetScoreFacts: scoreFacts.reset,
-			loadAnnotations: annotations.load,
 			onAnnotationCreate: annotations.create,
 			onAnnotationUpdate: annotations.update,
 			onAnnotationDelete: annotations.remove,
@@ -1721,28 +1447,10 @@ export default {
 			// Siehe emits: genau einmal, egal wie oft der Zustand danach noch
 			// wechselt.
 			readyGemeldet: false,
-			// Zaehlt jeden reset(): Ein loadScore(), das nach einem await eine
-			// andere Zahl vorfindet, gehoert zu einem Stueck, das nicht mehr
-			// offen ist (Stueckwechsel mitten im Laden).
-			loadGeneration: 0,
 			// Der Setlisten-Editor: 'edit' | 'new' | null (zu).
 			setlistEditorMode: null,
 			// Der Aufklapper „Aufnahme und Intonation".
 			showPractice: false,
-			// score.mid dieser Partitur - die Intonation laedt es nach, wenn
-			// ohne Ton niemand sonst es geholt hat (useScoreFacts.ensureMidi).
-			midiUrl: null,
-			// Bis wann das Nachfuehren nach einem Sprung der Leitung auch
-			// gegen manuelles Blaettern gilt (followSeek).
-			followScrollUntil: 0,
-			pageUrls: [],
-			cursorRect: null,
-			// Zeitquelle: entweder lib/player.js (echte Wiedergabe, sobald ein
-			// SoundFont konfiguriert ist) oder lib/silentClock.js (Platzhalter) -
-			// beide erfüllen dieselbe Schnittstelle, diese Komponente muss den
-			// Unterschied nur für die Tempo-/Mixer-Zusatzfunktionen kennen
-			// (hasRealPlayer).
-			showMixer: false,
 			// Welche Stimme "meine" ist (`myPartId`, aus useMyPart in setup())
 			// wird ueber "Meine Stimme" im Mixer gesetzt (ScoreMixer.vue).
 			// Dieselbe Wahl steuert Lautstaerke UND Markierung im Notenbild;
@@ -1750,165 +1458,10 @@ export default {
 			// Fehlerquelle.
 			focusMyPart: false,
 			showNoteText: false,
-			scoreParts: [],
-			// Ob sich die Notenzeilen ueberhaupt Stimmen zuordnen lassen -
-			// gemeldet von der ersten geladenen Seite (ScorePage.vue).
-			staffMappingOk: false,
-			sync: null,
-			timeDisplayHandle: null,
-			// Autoscroll (siehe scrollPlan.js) und Kopfangaben. Der Partiturtitel
-			// steht nicht in der Leiste - Nextclouds Viewer zeigt den Dateinamen
-			// ohnehin in seiner eigenen Kopfzeile, und die Leiste braucht den
-			// Platz fuer Bedienelemente.
-			totalMeasures: 0,
-			// Für die Probenarbeit: zeigt die laufende Taktnummer und nimmt das
-			// Sprungziel entgegen (ein Feld statt Anzeige + Eingabe) - siehe
-			// measureFieldFocused. Text, weil es mit Studierbuchstaben auch
-			// „47 (C+3)" zeigt und „C" annimmt.
-			measureInput: '1',
-			// Solange das Taktfeld den Fokus hat, wird measureInput nicht mehr
-			// von der Wiedergabe nachgeführt: sonst überschriebe der nächste
-			// Takt die gerade getippte Zahl.
-			measureFieldFocused: false,
-			// Der Aufklapper mit den Studierbuchstaben.
-			marksOpen: false,
-			// Für Notizen: private und geteilte.
-			currentElid: null,
-			// Womit diese Darstellung erzeugt wurde: der Konvertierungsweg aus
-			// dem Statusendpunkt ('sidecar' | 'local' | null fuer aeltere
-			// Datensaetze) und - davon unabhaengig - die Version, mit der die
-			// Partitur geschrieben wurde (meta.json). Rein zum Anzeigen,
-			// nichts im Viewer verzweigt danach (E3).
-			rendererBackend: null,
-			mscoreVersion: null,
-			// Ob diese Nutzerin die Partitur neu konvertieren lassen darf -
-			// kommt aus dem Statusendpunkt, nicht aus einer eigenen Annahme
-			// ueber Freigaben.
-			canReconvert: false,
-			// Die Leiste. `compactBar` haengt an der GEMESSENEN Breite, nicht
-			// an einer Media Query: Der Viewer sitzt mal in Nextclouds Viewer,
-			// mal im eigenen Modal, mal im Vollbild - massgeblich ist die
-			// Breite, die er tatsaechlich hat, nicht die des Fensters. Und die
-			// Umschaltung ist strukturell (Popovers in einem eigenen Streifen
-			// statt daneben), das kann CSS allein nicht leisten.
-			compactBar: false,
-			toolsOpen: false,
-			barCollapsed: false,
-			barIdleHandle: null,
-			barObserver: null,
 		}
 	},
 
 	computed: {
-		/** Die Farbvorschlaege - der Name dazu wird erst hier uebersetzt (E4). */
-		highlightPresets() {
-			return HIGHLIGHT_PRESETS
-		},
-
-		/**
-		 * Womit diese Seiten gesetzt wurden, als ein Satz.
-		 *
-		 * Der aufgezeichnete Weg DIESER Konvertierung, nicht die aktuelle
-		 * Einstellung der Instanz: Nach einem Wechsel stammt eine gecachte
-		 * Partitur weiterhin vom alten Weg, und genau dann wird die Frage
-		 * gestellt. `null` heisst "vor Einfuehrung der Aufzeichnung
-		 * konvertiert" - eine ehrliche Luecke statt einer Vermutung.
-		 *
-		 * Bewusst OHNE Versionsnummer des Konvertierers: Die einzige
-		 * Versionsangabe, die hier vorliegt, ist `meta.mscoreVersion` - und
-		 * die ist die Version, mit der die PARTITUR geschrieben wurde, nicht
-		 * die des Konvertierers (nachgeprueft: sie stimmt mit
-		 * `<programVersion>` in der .mscz ueberein, nicht mit dem
-		 * Engine-Release). Sie steht deshalb als eigene Zeile daneben, mit
-		 * ihrer eigenen Beschriftung.
-		 */
-		rendererText() {
-			if (this.rendererBackend === 'local') {
-				return this.t('scoreview-engine on this server (MuseScore as WebAssembly)')
-			}
-			if (this.rendererBackend === 'sidecar') {
-				return this.t('Sidecar container (MuseScore 4)')
-			}
-			if (this.rendererBackend === 'client') {
-				// Kein gespeicherter Wert wie die beiden oben, sondern eine
-				// Aussage ueber DIESE Sitzung: Auf diesem Weg wird nichts
-				// gecacht, die Darstellung ist gerade eben hier entstanden.
-				return this.t('this browser (MuseScore as WebAssembly)')
-			}
-			return this.t('Unknown – converted by an earlier version of the app.')
-		},
-
-		/**
-		 * Was gerade passiert, waehrend im Browser konvertiert wird.
-		 *
-		 * Die Engine meldet keinen echten Fortschritt - nur die Seitenschleife
-		 * ist zaehlbar. Wichtiger als eine Prozentzahl ist ohnehin die Stufe
-		 * davor: Beim ersten Oeffnen laedt der Browser rund 14 MB Engine, und
-		 * das soll dastehen, statt als Stille zu erscheinen.
-		 *
-		 * @return {string} leer, wenn serverseitig konvertiert wurde
-		 */
-		conversionProgressText() {
-			const stand = this.clientProgress
-			if (!stand) {
-				// Serverseitig konvertiert: Hier steht sonst nichts, weil es
-				// nichts zu melden gibt. Dauert es ungewoehnlich lange, ist
-				// genau dieses Schweigen die Fehlinformation - dann steht hier
-				// der haeufigste Grund, waehrend der Kreisel weiterlaeuft.
-				// Noch kein Urteil: Das faellt erst mit der Frist in
-				// useConversionStatus.js.
-				return this.longWait
-					? this.t('This is taking longer than usual. If it never finishes, check that background job processing (cron) is running on this server.')
-					: ''
-			}
-			if (stand.phase === 'source') {
-				return this.t('Loading score…')
-			}
-			if (stand.phase === 'engine') {
-				return this.t('Loading the conversion engine (about 14 MB, once per browser)…')
-			}
-			if (stand.phase === 'layout') {
-				return this.t('Laying out the score…')
-			}
-			if (stand.phase === 'pages') {
-				return this.t('Page {n} of {total}', { n: stand.page, total: stand.of })
-			}
-			return ''
-		},
-
-		// Musikalischer Anker der aktuellen Wiedergabeposition ("+ An aktueller
-		// Stelle") - null solange measuresTimeline/durationMs noch nicht
-		// geladen sind.
-		// Auf der Anzeigezeit, nicht der rohen: Die Taktnummer, die hier
-		// herauskommt, steht in der Leiste und ist der Anker einer neuen
-		// Notiz - beides bezieht sich auf die Stelle, die gerade klingt.
-		currentAnchor() {
-			if (!this.measuresTimeline) {
-				return null
-			}
-			const position = resolveMeasurePosition(this.measuresTimeline, this.displayTimeMs, this.durationMs)
-			if (!position) {
-				return null
-			}
-			return { ...position, elid: this.currentElid, anchorEtag: this.currentEtag }
-		},
-
-		// Für das Taktfeld in der Leiste (zugleich das Sprungfeld) - null vor
-		// dem ersten berechneten Anker (currentAnchor braucht measuresTimeline).
-		currentMeasureNumber() {
-			return this.currentAnchor ? this.currentAnchor.measureNumber : null
-		},
-
-		/**
-		 * Was das Taktfeld zeigt: „47 (C+3)" mit Studierbuchstaben,
-		 * sonst die Zahl.
-		 */
-		measureDisplay() {
-			return this.currentMeasureNumber === null
-				? null
-				: formatMeasureWithMark(this.currentMeasureNumber, this.rehearsalMarks)
-		},
-
 		setlistTitle() {
 			return this.setlist?.title ?? ''
 		},
@@ -1921,22 +1474,8 @@ export default {
 			return this.armedStamp ? stampName(this.armedStamp.stamp) : ''
 		},
 
-		// Der Mixer braucht echte Wiedergabe UND aufgelöste Kanäle - ohne
-		// beides bliebe eine leere Karte über dem Notenbild stehen.
 		partCount() {
 			return this.scoreParts.length
-		},
-
-		/**
-		 * Die Stimme, die als „meine" gilt, als Index in meta.parts - also in
-		 * derselben Reihenfolge, in der die Notenzeilen im System stehen.
-		 */
-		myPartIndex() {
-			if (this.myPartId === null) {
-				return null
-			}
-			const index = this.scoreParts.findIndex((part) => String(part.id) === String(this.myPartId))
-			return index === -1 ? null : index
 		},
 
 		/**
@@ -1946,10 +1485,6 @@ export default {
 		 */
 		canFocusMyPart() {
 			return this.myPartIndex !== null && this.staffMappingOk
-		},
-
-		showMixerPanel() {
-			return this.hasRealPlayer && this.showMixer && this.mixerChannels.length > 0
 		},
 
 		// --- Leiste ---------------------------------------------------------
@@ -1972,39 +1507,13 @@ export default {
 
 		/** Fuer die eingefahrene Leiste, die nur noch die Position zeigt. */
 		playbackPercent() {
-			if (!(this.durationMs > 0)) {
-				return 0
-			}
-			return Math.min(100, (this.displayTimeMs / this.durationMs) * 100)
-		},
-
-		minAudioOffsetMs() {
-			return MIN_MANUAL_OFFSET_MS
-		},
-
-		maxAudioOffsetMs() {
-			return MAX_MANUAL_OFFSET_MS
-		},
-
-		/**
-		 * Die Notenzeile der eigenen Stimme fuer die Intonation (`st-N`, M10) -
-		 * nur, wo die Zeilen sich den Stimmen zuordnen lassen (eine Zeile je
-		 * Stimme, siehe lib/staffBands.js). Sonst bleibt es bei Nadel und
-		 * Liste, statt die Zeile der Nachbarstimme zu faerben.
-		 */
-		intonationStaff() {
-			return this.staffMappingOk && this.myPartIndex !== null ? this.myPartIndex : null
+			return progressPercent(this.displayTimeMs, this.durationMs)
 		},
 
 		/** „Im Browser oeffnen" (E8): Nextclouds Kurzlink auf diese Datei. */
 		browserUrl() {
 			return browserFileUrl(window.location.origin, getRootUrl(), this.activeFileId)
 		},
-
-		automaticLatencyRounded() {
-			return Math.round(this.automaticLatencyMs)
-		},
-
 	},
 
 	watch: {
@@ -2032,14 +1541,6 @@ export default {
 				// Eine andere Partitur faengt von vorn an - auch mit dem
 				// Melden.
 				this.readyGemeldet = false
-				// Rueckruf VOR dem ersten poll() setzen, nicht in created():
-				// dieser Watcher ist `immediate` und laeuft damit noch vor
-				// created(). Ein sehr schnelles "ready" liefe sonst in den
-				// leeren Vorgabe-Rueckruf aus setup().
-				this.setOnScoreReady(async (body) => {
-					await this.$nextTick()
-					await this.loadScore(body)
-				})
 				this.reset()
 				this.pollStatus()
 				this.loadMyPart()
@@ -2053,40 +1554,6 @@ export default {
 
 		setlistCurrent() {
 			this.announcePiece()
-		},
-
-		// Leiste einfahren waehrend der Wiedergabe - als Watcher statt in
-		// togglePlay() verdrahtet, damit JEDER Weg, der die Wiedergabe startet
-		// (Tastaturkuerzel, Einzaehler-Ende, Loop-Neustart), automatisch erfasst
-		// ist. Das Wachhalten des Bildschirms haengt am selben Zustand, steht
-		// aber in useWakeLock.js (setup()), weil dort auch der
-		// Aufführungsmodus zaehlt.
-		isPlaying(playing) {
-			if (playing) {
-				this.scheduleBarCollapse()
-			} else {
-				// Angehalten wird bedient - dann gehoert die Leiste hin.
-				this.showBar()
-			}
-		},
-
-		// Die eingefahrene Leiste gibt es nur im Vollbild: Nur dort ist der
-		// Platz das eigentliche Thema, und nur dort gibt es keine
-		// Nextcloud-Umgebung drumherum, in der ein leerer Streifen irritierte.
-		isFullscreen(fullscreen) {
-			if (fullscreen) {
-				this.scheduleBarCollapse()
-			} else {
-				this.showBar()
-			}
-		},
-
-		// Taktfeld der Wiedergabe nachführen, solange niemand darin tippt
-		// (Anzeige und Eingabe sind dasselbe Feld).
-		measureDisplay(text) {
-			if (text !== null && !this.measureFieldFocused) {
-				this.measureInput = text
-			}
 		},
 
 		// Nach einem Zoomwechsel steht das aktuelle System woanders - ohne
@@ -2118,17 +1585,15 @@ export default {
 	},
 
 	beforeUnmount() {
-		this.cleanup()
+		// Dieselbe Reihenfolge wie in reset(): Aufnahme und Intonation vor dem
+		// Abbau der Wiedergabe, solange deren Kontext noch lebt.
 		this.destroyRecorder()
 		this.destroyIntonation()
+		this.cleanupSession()
 		this.turnMicOff()
 		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
 		this.$el.removeEventListener('keydown', this.onKeydown)
-		this.stopBarObserver()
-		if (this.barIdleHandle) {
-			clearTimeout(this.barIdleHandle)
-			this.barIdleHandle = null
-		}
+		this.stopBarLayout()
 	},
 
 	methods: {
@@ -2138,31 +1603,6 @@ export default {
 		// (Template/computed), nicht einmalig beim Modulimport.
 		t(text, vars) {
 			return translate('scoreview', text, vars)
-		},
-
-		/**
-		 * Der Name einer Farbvorschlags-Kachel, fuer Vorlesewerkzeuge.
-		 *
-		 * @param {string} id Kennung aus HIGHLIGHT_PRESETS
-		 * @return {string}
-		 */
-		presetLabel(id) {
-			const names = {
-				red: this.t('Red'),
-				orange: this.t('Orange'),
-				magenta: this.t('Magenta'),
-				violet: this.t('Violet'),
-				green: this.t('Green'),
-				blue: this.t('Blue'),
-			}
-			return names[id] ?? id
-		},
-
-		// Der Farbwaehler feuert waehrend des Ziehens laufend - das Speichern
-		// ist deshalb verzoegert (useViewerPreferences), die Anzeige nicht:
-		// die Partitur faerbt sich beim Ziehen mit.
-		onHighlightColorInput(event) {
-			this.highlightColor = normalizeHighlightColor(event.target.value)
 		},
 
 		/**
@@ -2177,18 +1617,6 @@ export default {
 			if (partId === null) {
 				this.focusMyPart = false
 			}
-		},
-
-		/**
-		 * Der Anfangston fand keine Stimme: die Stimmauswahl oeffnen.
-		 * Sie steckt im Mixer („Meine Stimme" je Zeile) - eine zweite Auswahl
-		 * fuer dieselbe Aussage waere eine Fehlerquelle (siehe data()).
-		 */
-		openVoiceSelection() {
-			if (!this.can('mixer')) {
-				return
-			}
-			this.showMixer = true
 		},
 
 		toggleStartToneMode() {
@@ -2364,17 +1792,13 @@ export default {
 		},
 
 		/**
-		 * Die Taktrechtecke einer Seite - sie liefern ScorePage die
-		 * Systemgrenzen (siehe lib/staffBands.js).
+		 * Die Position fuer eine neue Notiz, erst im Moment des Klicks gelesen
+		 * (siehe ScoreAnnotations.vue, Prop `currentAnchor`).
 		 *
-		 * @param {number} pageIndex 0-indiziert
-		 * @return {Array<object>}
+		 * @return {?object}
 		 */
-		systemRectsForPage(pageIndex) {
-			if (!this.measuresTimeline) {
-				return []
-			}
-			return Object.values(this.measuresTimeline.elements).filter((rect) => rect.page === pageIndex)
+		readCurrentAnchor() {
+			return this.currentAnchor
 		},
 
 		/**
@@ -2390,232 +1814,28 @@ export default {
 		},
 
 		reset() {
-			this.loadGeneration++
 			// Vor dem Abbau der Wiedergabe: Eine laufende Aufnahme wird noch
 			// abgeschlossen und gespeichert, solange ihr Kontext lebt.
 			this.resetRecorder()
 			this.resetIntonation()
-			this.midiUrl = null
-			this.cleanup()
+			// Baut die Wiedergabe ab und vergisst die geladene Konvertierung
+			// (useScoreSession.js) - ein noch laufendes Laden gilt ab hier
+			// als veraltet.
+			this.resetSession()
 			this.resetStartTone()
 			this.resetSpeedTrainer()
-			this.scoreMeta = null
 			this.resetConversion()
-			this.pageUrls = []
-			this.cursorRect = null
 			this.resetPlayback()
 			this.showMixer = false
 			this.resetAutoScroll()
-			this.totalMeasures = 0
-			this.scoreParts = []
 			this.focusMyPart = false
 			this.staffMappingOk = false
-			this.pageDimensions = {}
-			this.timeline = null
-			this.measuresTimeline = null
-			this.measureInput = '1'
+			this.resetMeasureNavigation()
 			this.resetScoreFacts()
 			this.resetLoop()
 			this.resetZoom()
-			this.measureFieldFocused = false
 			this.resetAnnotations()
-			this.currentEtag = null
-			this.currentElid = null
-			this.rendererBackend = null
-			this.mscoreVersion = null
-			this.canReconvert = false
 			this.resetMetronome()
-		},
-
-		cleanup() {
-			this.stopPolling()
-			this.sync = null
-			this.destroyMetronome()
-			if (this.timeDisplayHandle) {
-				cancelAnimationFrame(this.timeDisplayHandle)
-				this.timeDisplayHandle = null
-			}
-			this.destroyPlayback()
-			this.stopZoomObserver()
-		},
-
-		async loadScore({ files, soundFontUrl, renderer, canReconvert }) {
-			const mine = this.loadGeneration
-			const stale = () => mine !== this.loadGeneration
-			try {
-				const [timingRes, measuresRes, metaRes] = await Promise.all([
-					axios.get(files.timingJson),
-					axios.get(files.measuresJson),
-					axios.get(files.metaJson),
-				])
-				if (stale()) {
-					return
-				}
-				const timeline = buildTimeline(timingRes.data)
-				this.timeline = timeline
-				this.measuresTimeline = buildTimeline(measuresRes.data)
-				this.pageUrls = files.pages
-				this.currentEtag = files.etag
-				this.scoreMeta = metaRes.data
-				this.applyScoreMetadata(metaRes.data)
-				// Fuer die Zuordnung Notenzeile -> Stimme: Reihenfolge UND
-				// Anzahl aus meta.json, nicht aus dem Mixer - der laesst die
-				// Metronomspur weg und zaehlt damit anders (siehe mixerLayout.js).
-				this.scoreParts = metaRes.data.parts ?? []
-				// Herkunft der Darstellung (E3). Zwei verschiedene Aussagen,
-				// die leicht verwechselt werden: `renderer.backend` ist der
-				// Konvertierungsweg, `meta.mscoreVersion` die Version, mit der
-				// die Partitur GESCHRIEBEN wurde - siehe rendererText().
-				this.rendererBackend = renderer?.backend ?? null
-				this.mscoreVersion = metaRes.data.mscoreVersion ?? null
-				this.canReconvert = canReconvert === true
-				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
-				this.loadAnnotations()
-				// Die Studierbuchstaben kommen auf dem Sidecar-Weg nur aus dem MIDI
-				// - und das laedt sonst nur, wer Ton hat (useScoreFacts).
-				this.ensureScoreMidi(files.midi)
-				this.midiUrl = files.midi
-				// Startzoom "Seitenbreite" statt fester Faktor 1: die Seite hat
-				// eine echte Breite (ScorePage.vue), ein fester Faktor 1 hieße auf
-				// einem Telefon 900px Seitenbreite neben 390px Bildschirm. Erst
-				// nach $nextTick, damit .scoreview-pages die Seiten schon enthält
-				// und seine endgültige Breite (inkl. Scrollbalken) steht.
-				await this.$nextTick()
-				if (stale()) {
-					return
-				}
-				// Das zuletzt gewaehlte Preset, nicht immer „Seitenbreite": Beim
-				// Stueckwechsel einer Setliste bleibt der Zoom.
-				this.restoreZoom()
-				this.setUpViewportObserver()
-
-				if (soundFontUrl) {
-					await this.setUpRealPlayer(files.midi, soundFontUrl, timeline)
-					if (stale()) {
-						return
-					}
-				} else {
-					this.setNoSoundFontConfigured()
-					this.setUpSilentClock(timeline)
-				}
-
-				this.sync = createScoreSync(timeline, (rect) => {
-					this.cursorRect = rect
-					// Nachführen statt nur beim Seitenwechsel zu springen. Nach
-					// einem Sprung der Leitung auch dann, wenn gerade von Hand
-					// geblaettert wurde: Blaettern loest das Folgen nicht, der
-					// Sprung soll also sichtbar werden (followSeek).
-					this.updateAutoScroll(rect, Date.now() < this.followScrollUntil)
-				})
-
-				this.pumpTimeDisplay()
-			} catch (err) {
-				if (stale()) {
-					return
-				}
-				this.state = 'error'
-				this.errorMessage = err.message
-			}
-		},
-
-		/**
-		 * DIE Zeitschleife des Viewers - die einzige: Cursor, Notiz-Anker,
-		 * Loop und Metronom brauchen alle dieselbe Zeitquelle und denselben
-		 * Takt.
-		 *
-		 * Reihenfolge ist nicht beliebig: erst die Zeit abgreifen, dann Cursor
-		 * und Notiz-Anker daraus ableiten, dann Loop und Metronom - die
-		 * späteren Schritte lesen die Zeitwerte.
-		 *
-		 * **Zwei Zeiten, und hier fällt die Zuordnung.** `samplePlaybackTime()`
-		 * legt beide an (usePlayback.js): `currentTimeMs` ist die rohe Zeit der
-		 * Audiouhr, `displayTimeMs` das, was gerade zu HÖREN ist - um die
-		 * Ausgabelatenz zurückgerechnet, über Bluetooth bis zu 300 ms. Der
-		 * Cursor bekommt die Anzeigezeit; Loop und Metronom bekommen die rohe,
-		 * weil beide gegen dieselbe Audiouhr terminieren bzw. springen. Ein
-		 * pauschaler Abzug schon in der Zeitquelle wäre deshalb falsch - die
-		 * ausführliche Begründung steht in lib/playbackTime.js.
-		 */
-		pumpTimeDisplay() {
-			const step = () => {
-				if (this.clock) {
-					this.samplePlaybackTime()
-					// Eine Auflösung für beides: der Cursor braucht das Rechteck,
-					// eine Notiz das elid (currentAnchor) - so wird nicht zweimal
-					// nach demselben elid gesucht.
-					this.currentElid = this.sync?.update(this.displayTimeMs) ?? null
-					// Loop (Kernfunktion für Probenarbeit): sobald das Ende
-					// erreicht/überschritten ist, zurück zum Anfang - hier statt in
-					// silentClock.js/player.js geprüft, weil beide Zeitquellen
-					// dieselbe kleine seek()-Schnittstelle erfüllen und Looping keine
-					// Eigenschaft der Zeitquelle selbst ist.
-					//
-					// Mit der ROHEN Zeit: So springt der Ton rechtzeitig, und der
-					// Cursor springt (auf der Anzeigezeit) genau dann, wenn der
-					// Sprung hörbar wird. Mit der Anzeigezeit käme der Rücksprung
-					// um die Ausgabelatenz zu spät - man hörte über das
-					// Loop-Ende hinaus.
-					this.loopWrapIfDue(this.currentTimeMs)
-					// Ebenfalls die rohe Zeit: Der Klick wird über die Uhr des
-					// AudioContext terminiert (metronomeClick.js) und geht damit
-					// durch dieselbe Ausgabelatenz wie die Musik. Mit der
-					// Anzeigezeit käme er um genau diese Latenz zu spät - der
-					// Fehler wäre verdoppelt statt behoben.
-					this.updateMetronome(this.currentTimeMs)
-				}
-				this.timeDisplayHandle = requestAnimationFrame(step)
-			}
-			step()
-		},
-
-		jumpToMeasure(measureNumber) {
-			if (!this.measuresTimeline || !this.clock || !this.can('seek')) {
-				return
-			}
-			const timeMs = findMeasureStartTime(this.measuresTimeline, Number(measureNumber))
-			if (timeMs !== null) {
-				this.clock.seek(timeMs)
-			}
-		},
-
-		/**
-		 * Ein Sprung der Leitung („Folgt mir"). Nicht ueber jumpToMeasure():
-		 * Das fragt can('seek'), und im Aufführungsmodus soll der Sprung
-		 * trotzdem ankommen, solange gefolgt wird - ob er darf,
-		 * entscheidet useFollowSession ueber `followJump`. Und es meldet kein
-		 * eigenes Navigieren, das das Folgen loesen wuerde.
-		 *
-		 * @param {number} measureNumber
-		 * @return {?number} die Zielzeit, oder null ohne Partitur oder Takt
-		 */
-		followSeek(measureNumber) {
-			if (!this.measuresTimeline || !this.clock) {
-				return null
-			}
-			const timeMs = findMeasureStartTime(this.measuresTimeline, Number(measureNumber))
-			if (timeMs === null) {
-				return null
-			}
-			// Der Sequencer rueckt nach dem Suchlauf noch auf das naechste
-			// Ereignis vor - das Fenster deckt das Nachfuehren bis dahin ab.
-			this.followScrollUntil = Date.now() + 1500
-			this.clock.seek(timeMs)
-			return timeMs
-		},
-
-		/**
-		 * Die eigene Stelle fuer die Leitung: Takt, und der Studierbuchstabe,
-		 * wenn der Takt genau einer ist (die Anzeige „C" statt „C+3").
-		 *
-		 * @return {?{measure:number, mark:?string}}
-		 */
-		followPosition() {
-			const measure = this.currentMeasureNumber
-			if (!measure) {
-				return null
-			}
-			const mark = this.rehearsalMarks.find((m) => m.measure === measure)
-			return { measure, mark: mark ? mark.text : null }
 		},
 
 		sendFollowPosition() {
@@ -2631,20 +1851,6 @@ export default {
 		sendFollowMark(mark) {
 			this.jumpToMeasure(mark.measure)
 			return this.sendFollowPositionTo({ measure: mark.measure, mark: mark.text })
-		},
-
-		/**
-		 * Die Eingabe des Taktfelds anspringen: „47", „C" oder „C+3" - die
-		 * Form der Anzeige laesst sich also unveraendert eintippen
-		 * (resolveJumpTarget). Unbekanntes tut nichts, statt irgendwohin zu
-		 * springen.
-		 */
-		jumpToMeasureInput() {
-			const target = resolveJumpTarget(this.measureInput, this.rehearsalMarks, this.totalMeasures || null)
-			if (target !== null && this.can('seek')) {
-				this.followNavigation('measure')
-				this.jumpToMeasure(target.measure)
-			}
 		},
 
 		/** Eigener Loop loest das Folgen. */
@@ -2663,36 +1869,6 @@ export default {
 		onAnnotationJumpToOwn(annotation) {
 			this.followNavigation('annotationJump')
 			this.onAnnotationJumpTo(annotation)
-		},
-
-		/**
-		 * Ein Chip ist eine Entscheidung - danach geht der Aufklapper zu.
-		 * Offen gelassen gab er beim spaeteren Schliessen den Fokus an seinen
-		 * Knopf zurueck, und wer inzwischen ins Taktfeld tippte, verlor dabei
-		 * die Eingabe (gemessen: je nach Zeitpunkt).
-		 *
-		 * @param {{measure:number}} mark
-		 */
-		jumpToMark(mark) {
-			this.marksOpen = false
-			if (this.can('seek')) {
-				this.followNavigation('mark')
-			}
-			this.jumpToMeasure(mark.measure)
-		},
-
-		// Beim Hineintippen den ganzen Inhalt markieren: „47 (C+3)" will
-		// niemand ergaenzen, sondern ersetzen.
-		onMeasureFieldFocus(event) {
-			this.measureFieldFocused = true
-			event?.target?.select?.()
-		},
-
-		onMeasureFieldBlur() {
-			this.measureFieldFocused = false
-			if (this.measureDisplay !== null) {
-				this.measureInput = this.measureDisplay
-			}
 		},
 
 		// Tastaturkürzel für die Probe - greifen, wenn der Viewer den Fokus
@@ -2741,15 +1917,6 @@ export default {
 			commands[binding.command]?.()
 		},
 
-		jumpRelativeMeasure(delta) {
-			const current = this.currentAnchor?.measureNumber
-			if (!current || !this.can('seek')) {
-				return
-			}
-			this.followNavigation('measure')
-			this.jumpToMeasure(Math.max(1, current + delta))
-		},
-
 		// Umkehrung von M4: Klick auf eine Note springt dorthin -
 		// ScorePage.vue liefert nur die Klickposition in SVG-Einheiten, die
 		// eigentliche Element-/Zeit-Auflösung passiert hier mit der vollen
@@ -2781,22 +1948,35 @@ export default {
 			}
 		},
 
-		formatTime(ms) {
-			const totalSeconds = Math.floor(ms / 1000)
-			const minutes = Math.floor(totalSeconds / 60)
-			const seconds = totalSeconds % 60
-			return `${minutes}:${String(seconds).padStart(2, '0')}`
+		// Fuers Template - eine reine Funktion aus lib/viewerFormat.js.
+		formatTime,
+
+		/**
+		 * Die Position fuer die eingefahrene Leiste - als Methode, damit
+		 * ScoreBar eine gleichbleibende Funktion bekommt statt eines Werts,
+		 * der sich in jedem Frame aendert (gelesen nur in LiveValue).
+		 *
+		 * @return {number}
+		 */
+		readPlaybackPercent() {
+			return this.playbackPercent
 		},
 
 		/**
-		 * Eine Millisekundenangabe der Betriebsdiagnose - `null` heisst
-		 * "der Browser sagt dazu nichts" und ist etwas anderes als 0.
+		 * Die Betriebsdiagnose und die erkannte Latenz fuer die Aufklapper -
+		 * als Methoden, damit die Kindkomponenten eine gleichbleibende
+		 * Funktion bekommen statt eines Werts, der sich in jedem Frame
+		 * aendert (siehe TempoPopover.vue, AppearancePopover.vue).
 		 *
-		 * @param {?number} ms
-		 * @return {string}
+		 * @return {object}
 		 */
-		formatMs(ms) {
-			return ms === null || !Number.isFinite(ms) ? '–' : `${Math.round(ms)} ms`
+		readAudioDiagnostics() {
+			return this.audioDiagnostics
+		},
+
+		/** @return {number} */
+		readAutomaticLatencyMs() {
+			return this.automaticLatencyMs
 		},
 
 		// --- Leiste -----------------------------------------------------------
@@ -2814,59 +1994,11 @@ export default {
 			}
 			this.onWheel(event)
 		},
-
-		/**
-		 * Die Leiste ausfahren und die Ruhefrist neu starten.
-		 */
-		showBar() {
-			this.barCollapsed = false
-			this.scheduleBarCollapse()
-		},
-
-		/**
-		 * Die Leiste nach einer Ruhefrist einfahren - aber nur im Vollbild und
-		 * nur waehrend der Wiedergabe. Ausserhalb davon wird bedient, und eine
-		 * Leiste, die dabei verschwindet, waere eine Zumutung.
-		 */
-		scheduleBarCollapse() {
-			if (this.barIdleHandle) {
-				clearTimeout(this.barIdleHandle)
-				this.barIdleHandle = null
-			}
-			if (!this.isFullscreen || !this.isPlaying) {
-				return
-			}
-			this.barIdleHandle = setTimeout(() => {
-				this.barIdleHandle = null
-				this.barCollapsed = true
-				this.toolsOpen = false
-			}, BAR_IDLE_MS)
-		},
-
-		/**
-		 * Die Leistenbreite beobachten (siehe `compactBar` in data()).
-		 * Beobachtet wird das Wurzelelement, nicht die Leiste selbst: Deren
-		 * Breite haengt an ihrem Inhalt, das waere ein Kreisverkehr.
-		 */
-		observeBarWidth() {
-			this.stopBarObserver()
-			if (typeof ResizeObserver === 'undefined') {
-				return
-			}
-			this.barObserver = new ResizeObserver(([entry]) => {
-				this.compactBar = entry.contentRect.width < COMPACT_BAR_WIDTH_PX
-			})
-			this.barObserver.observe(this.$el)
-		},
-
-		stopBarObserver() {
-			this.barObserver?.disconnect()
-			this.barObserver = null
-		},
-
 	},
 }
 </script>
+
+<style scoped src="./scoreviewPopover.css"></style>
 
 <style scoped>
 /*
@@ -2914,129 +2046,12 @@ export default {
 	}
 }
 
-.scoreview-status {
-	padding: 3rem 1rem;
-	text-align: center;
-	color: var(--color-text-maxcontrast);
-}
-
-.scoreview-status-detail {
-	margin-top: 0.5rem;
-	font-size: 0.9em;
-}
-
-.scoreview-error {
-	color: var(--color-error);
-}
-
-.scoreview-error-detail {
-	display: inline-block;
-	text-align: start;
-	color: var(--color-text-maxcontrast);
-	font-size: 0.9em;
-}
-
-.scoreview-error-detail pre {
-	white-space: pre-wrap;
-	overflow-wrap: break-word;
-}
-
 .scoreview-hint {
 	margin-bottom: 8px;
 }
 
-/*
- * Zwei Streifen: Transport (immer) und Werkzeuge (auf schmalen Schirmen nur
- * auf Abruf). Auf breiten Schirmen stehen beide nebeneinander und ergeben
- * dieselbe eine Zeile wie zuvor.
- */
-.scoreview-bar {
-	flex: 0 0 auto;
-	display: flex;
-	align-items: center;
-	gap: 6px;
-	padding: 4px 8px;
-	border-bottom: 1px solid var(--color-border);
-	background: var(--color-main-background);
-}
-
-.scoreview-bar-transport,
-.scoreview-bar-tools {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-
-/* Der Transport bekommt den Platz, den der Suchlauf braucht; die Werkzeuge
-   sind so breit, wie sie sind. */
-.scoreview-bar-transport {
-	flex: 1 1 auto;
-	min-width: 0;
-}
-
-.scoreview-bar-tools {
-	flex: 0 0 auto;
-}
-
-/*
- * Schmal: die Werkzeuge unter den Transport, und nur, wenn sie geholt wurden.
- * Sie duerfen dann umbrechen - im aufgeklappten Zustand ist Hoehe kein
- * Problem, dauerhaft war sie es.
- */
-.scoreview-bar--compact {
-	flex-direction: column;
-	align-items: stretch;
-}
-
-.scoreview-bar--compact .scoreview-bar-tools {
-	flex-wrap: wrap;
-	justify-content: flex-start;
-	padding-block-start: 4px;
-	border-block-start: 1px solid var(--color-border);
-}
-
 .scoreview-play {
 	flex: 0 0 auto;
-}
-
-/* Der Punkt am „Mehr"-Knopf: ein aktives Werkzeug muss sichtbar bleiben,
-   auch wenn sein Schalter im Menue steckt. */
-.scoreview-more-icon {
-	position: relative;
-	display: inline-flex;
-}
-
-.scoreview-more-dot {
-	position: absolute;
-	inset-block-start: -2px;
-	inset-inline-end: -2px;
-	inline-size: 8px;
-	block-size: 8px;
-	border-radius: 50%;
-	background: var(--color-primary-element);
-}
-
-/*
- * Die eingefahrene Leiste im Vollbild. Bewusst als Knopf und nicht als reine
- * Linie: Sie ist anzutippen, und Vorlesewerkzeuge sollen das auch so
- * ankuendigen.
- */
-.scoreview-bar-line {
-	flex: 0 0 auto;
-	display: block;
-	inline-size: 100%;
-	block-size: 8px;
-	padding: 0;
-	border: none;
-	border-radius: 0;
-	background: var(--color-background-dark);
-	cursor: pointer;
-}
-
-.scoreview-bar-line-fill {
-	display: block;
-	block-size: 100%;
-	background: var(--color-primary-element);
 }
 
 .scoreview-seek {
@@ -3069,14 +2084,6 @@ export default {
  * einem schmalen Rahmen stecken kann. Bei Studierbuchstaben (breiteres Feld
  * plus Knopf) geht dazu die Gesamtzahl der Takte.
  */
-.scoreview-bar-transport {
-	container-type: inline-size;
-}
-
-.scoreview-bar--compact .scoreview-bar-transport {
-	gap: 4px;
-}
-
 @container (max-width: 400px) {
 	.scoreview-seek {
 		display: none;
@@ -3148,160 +2155,8 @@ export default {
 	white-space: nowrap;
 }
 
-.scoreview-tempo-button {
-	font-variant-numeric: tabular-nums;
-}
-
 .scoreview-tone-mode {
 	white-space: nowrap;
-}
-
-/* Popover-Inhalte (Loop, Tempo/Metronom, Zoom) - eine Spalte, breit genug
-   für die längste Beschriftung, aber schmal genug, um nicht das halbe
-   Notenbild zu verdecken. */
-.scoreview-popover {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	padding: 12px;
-	min-width: 260px;
-	max-width: 320px;
-}
-
-.scoreview-popover-row {
-	display: flex;
-	gap: 8px;
-}
-
-.scoreview-popover-label {
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-	color: var(--color-text-maxcontrast);
-}
-
-.scoreview-popover-group {
-	border: none;
-	margin: 0;
-	padding: 0;
-}
-
-.scoreview-popover-group legend {
-	color: var(--color-text-maxcontrast);
-	padding: 0 0 4px 0;
-}
-
-/* Erklaerung unter einem Regler - sie wird einmal gelesen, wenn unklar ist,
-   was der Regler tut, und steht danach nur noch da. */
-.scoreview-popover-hint {
-	color: var(--color-text-maxcontrast);
-	font-size: 0.85em;
-	line-height: 1.3;
-}
-
-/*
- * Die Betriebsdiagnose. Zugeklappt, weil sie nur gebraucht wird, wenn etwas
- * nicht stimmt - und dann vollstaendig, nicht haeppchenweise.
- */
-.scoreview-diagnostics {
-	color: var(--color-text-maxcontrast);
-	font-size: 0.85em;
-	line-height: 1.35;
-}
-
-.scoreview-diagnostics summary {
-	cursor: pointer;
-	padding-block: 4px;
-}
-
-.scoreview-diagnostics-list {
-	margin: 0;
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-}
-
-.scoreview-diagnostics-list dt {
-	font-weight: bold;
-}
-
-.scoreview-diagnostics-list dd {
-	margin: 0 0 4px 0;
-	font-variant-numeric: tabular-nums;
-}
-
-.scoreview-diagnostics-note {
-	display: block;
-	opacity: 0.8;
-}
-
-/*
- * Die Farbvorschlaege als Kacheln. Gross genug fuer einen Finger auf Glas
- * (das Tablet am Notenstaender ist der Hauptfall) und quadratisch statt rund
- * - eine Farbflaeche liest sich als Farbprobe, ein Punkt als Schalter.
- */
-.scoreview-swatches {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px;
-}
-
-.scoreview-swatch {
-	inline-size: 34px;
-	block-size: 34px;
-	border: 2px solid transparent;
-	border-radius: 6px;
-	padding: 0;
-	cursor: pointer;
-	/* Der Rahmen der Auswahl liegt AUSSERHALB der Farbflaeche (box-shadow
-	   statt eines dickeren border): ein hineinwachsender Rahmen wuerde die
-	   Farbprobe selbst verkleinern, und ausgerechnet bei der gewaehlten
-	   Farbe. */
-	box-shadow: none;
-}
-
-.scoreview-swatch--active {
-	border-color: var(--color-main-background);
-	box-shadow: 0 0 0 2px var(--color-main-text);
-}
-
-/*
- * Der freie Farbwaehler. Feste Hoehe, damit er neben den Kacheln nicht
- * unterschiedlich hoch ausfaellt - Browser bemassen `input[type=color]`
- * jeweils eigen.
- */
-.scoreview-color-input {
-	inline-size: 100%;
-	block-size: 34px;
-	padding: 2px;
-	cursor: pointer;
-}
-
-/*
- * Die Herkunftsangabe. Kleiner und zurueckgenommen: Sie wird einmal gelesen,
- * wenn etwas anders aussieht als erwartet, und steht danach nur noch da.
- */
-.scoreview-origin {
-	margin: 0;
-	padding-block-start: 8px;
-	border-block-start: 1px solid var(--color-border);
-	color: var(--color-text-maxcontrast);
-	font-size: 0.9em;
-	line-height: 1.35;
-}
-
-.scoreview-origin-label {
-	display: block;
-	font-weight: bold;
-}
-
-.scoreview-origin-note {
-	display: block;
-	padding-block-start: 4px;
-}
-
-.scoreview-origin-action {
-	margin-block-start: 8px;
 }
 
 .scoreview-body {
@@ -3370,29 +2225,5 @@ export default {
 	/* Nur die Karten selbst fangen Klicks - der Zwischenraum gehört weiter
 	   dem Notenbild darunter (Klick auf eine Note springt dorthin). */
 	pointer-events: none;
-}
-
-.scoreview-panel {
-	pointer-events: auto;
-	box-sizing: border-box;
-	background: var(--color-main-background);
-	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius-large, 8px);
-	box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-	padding: 8px 12px 12px 12px;
-	max-height: 100%;
-	overflow-y: auto;
-}
-
-.scoreview-panel-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-}
-
-.scoreview-panel-head h3 {
-	margin: 0;
-	font-size: 1.1em;
 }
 </style>

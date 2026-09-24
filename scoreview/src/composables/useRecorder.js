@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
-import { ref, shallowRef, watch } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { createGeneration } from '../lib/generation.js'
 import { captureToScoreMs, playbackSchedule, tempoAfterListening } from '../lib/recordingAlign.js'
 import { encodeWav, WAV_SAMPLE_RATE } from '../lib/wavCodec.js'
@@ -88,6 +88,15 @@ export function useRecorder({
 	const confirmReplace = ref(false)
 	/** Nicht gespeichert: {wav: ArrayBuffer, meta, error} */
 	const pending = shallowRef(null)
+	/**
+	 * Die ungespeicherte Aufnahme nur bei ihrer eigenen Partitur zeigen. Sie
+	 * ueberlebt einen Stueckwechsel in der Setliste bewusst (zurueck zum Stueck,
+	 * und „Erneut speichern" geht weiter) - angezeigt beim naechsten Stueck
+	 * wertete „Analysieren" sie aber gegen dessen Noten aus.
+	 */
+	const pendingHere = computed(() => (pending.value && String(pending.value.meta.fileId) === String(fileId())
+		? pending.value
+		: null))
 	/** Welche Aufnahme gerade mitlaeuft: id, PENDING oder null. */
 	const listening = ref(null)
 	const recordingVolume = ref(1)
@@ -579,6 +588,14 @@ export function useRecorder({
 		}
 	}
 
+	// Raeumt sich selbst ab, wenn der Besitzer geht - ScoreViewer ruft den
+	// Abbau zwar ausdruecklich (in fester Reihenfolge, siehe beforeUnmount),
+	// aber eine vergessene Zeile dort liesse sonst eine laufende Aufnahme offen. Doppelt
+	// aufgerufen schadet der Abbau nicht.
+	if (getCurrentScope()) {
+		onScopeDispose(destroy)
+	}
+
 	return {
 		recordings,
 		error,
@@ -587,7 +604,7 @@ export function useRecorder({
 		withAccompaniment,
 		countIn,
 		confirmReplace,
-		pending,
+		pending: pendingHere,
 		listening,
 		recordingVolume,
 		accompanimentVolume,
