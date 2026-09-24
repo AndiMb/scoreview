@@ -4,6 +4,67 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.10.2] – 2026-09-24
+
+### Behoben
+
+- **Der lokale Konvertierungsweg lief unter PHP 8.1 und 8.2 nie.** Die App las
+  den Exitcode von `node` über `proc_close()`, nachdem `proc_get_status()` den
+  beendeten Prozess schon eingesammelt hatte – vor PHP 8.3 liefert
+  `proc_close()` dann `-1`. `node --version` galt damit immer als gescheitert,
+  die Voreinstellung fand nie eine Node-Laufzeit, und der Rückfall im Browser
+  verdeckte das still. Der Exitcode kommt jetzt aus `proc_get_status()`; ein
+  Test mit echtem Prozess läuft in der PHP-8.1-Achse der CI mit.
+- **Eine späte Statusantwort lud nach einem Stückwechsel noch einmal.**
+  Schaltete die Setliste weiter oder schloss man den Viewer, während der
+  Statusabruf lief, lud dessen Antwort die gerade offene Partitur ein zweites
+  Mal und startete bei „wird konvertiert“ einen zweiten Abfragestrang samt
+  zweiter Zeitschleife. Dasselbe Rennen ließ Notizen des vorigen Stücks im
+  nächsten erscheinen. Beide verwerfen überholte Antworten jetzt.
+- **Ein ausgelasteter Sidecar schaltete alle auf den Browser um.** Der Sidecar
+  begrenzt seine Warteschlange jetzt (`SCOREVIEW_MAX_QUEUED`) und antwortet
+  darüber mit 503; die App versucht es dann später erneut, statt die Partitur
+  als gescheitert zu führen oder den Rückfall auszulösen. Erst nach 20
+  Versuchen endet es mit einem eigenen Fehler (`sidecar_busy`).
+- **Wiedergabe:** Scheiterte der Aufbau des Players, blieb sein AudioContext
+  offen, und ein unlesbares MIDI ließ die Ladeanzeige für immer stehen (jetzt
+  mit Frist). Ein abgestürzter Worker der Intonation ließ „Auswertung läuft“
+  stehen; eine verworfene Auswertung rechnete im Hintergrund weiter und hielt
+  die Live-Nadel auf. Eine ungespeicherte Aufnahme erscheint nur noch bei
+  ihrer eigenen Partitur – „Analysieren“ wertete sie sonst gegen die Noten des
+  nächsten Stücks aus.
+- **Ein Settings-POST ohne ein Feld überschrieb die Einstellung** – ohne
+  `conversionBackend` wechselte er still auf den Sidecar, ohne
+  `eagerConversion` schaltete er die Sofortkonvertierung ab. Fehlende Felder
+  bleiben jetzt unverändert.
+- **Der Speicherdeckel für Aufnahmen ließ sich mit parallelen Uploads
+  überschreiten.** Die Summen werden nach dem Speichern erneut geprüft.
+- **Aufräumen:** Die gemerkte Stimmwahl („Meine Stimme“) blieb nach dem Löschen
+  einer Partitur für immer in den Nutzereinstellungen; der Sidecar ließ nach
+  einem Zeitlimit Xvfb-Sperrdateien liegen und konnte zwei Läufe auf dieselbe
+  Displaynummer setzen.
+
+### Sicherheit
+
+- **Delegierte Admins konnten auf dem Server Programme starten.** Wer die
+  ScoreView-Einstellungen delegiert bekommen hatte, durfte den Pfad zu `node`
+  setzen, den der Server anschließend ausführt, und Adressen, die er selbst
+  abruft. Diese vier Felder ändert jetzt nur noch die Gruppe `admin`, und
+  geänderte Werte werden geprüft ([S9](docs/architecture.md#s9-was-programme-startet-oder-adressen-abruft-stellt-nur-ein-voller-admin-ein)).
+- **Drosselung und Obergrenzen:** „Folgt mir“ starten, beenden und beitreten
+  sowie Notizen anlegen und ändern sind gedrosselt; je Person und Partitur gibt
+  es höchstens 500 Notizen. Die Personensuche für Leitungen prüft weniger
+  fremde Dateibäume, der lokale Konverter deckelt seine Ausgabe, und das
+  Sidecar-Image ist per Digest und Prüfsumme festgelegt.
+
+### Geändert
+
+- **Beim Abspielen rendert der Viewer nicht mehr in jedem Frame ganz neu.**
+  Zeitanzeige, Seekbar und Positionslinie hängen allein an der Zeit, alle
+  Seiten bekommen stabile Props, und die Live-Intonation färbt nicht mehr bei
+  jedem Rahmen alle ausgewerteten Noten neu.
+- Index auf `scoreview_annotations(user_id)` für das Löschen eines Kontos.
+
 ## [1.10.1] – 2026-09-24
 
 ### Behoben

@@ -365,10 +365,10 @@ Passwort ändert oder ihr Konto deaktiviert wird.
 | Schlüssel | Wo | Bedeutung |
 |---|---|---|
 | `conversion_backend` | Verwaltung | `local` (Voreinstellung) oder `sidecar` |
-| `node_path` | Verwaltung | Pfad zu `node`; leer = übliche Orte durchsuchen (Weg A) |
-| `soundfont_fetch_url` | Verwaltung | Adresse, von der der Server das SoundFont einmalig holt; leer = voreingestellte Adresse (Weg A) |
-| `sidecar_url` | Verwaltung | Adresse des Konvertierungsdienstes (Weg B) |
-| `sidecar_secret` | Verwaltung | Shared Secret, als sensibel geführt und in `occ config:list` ausgeblendet (Weg B) |
+| `node_path` | Verwaltung¹ | Pfad zu `node`; leer = übliche Orte durchsuchen (Weg A). Absolut, Programmname `node` oder `nodejs` (auch `node20`, `.exe`) |
+| `soundfont_fetch_url` | Verwaltung¹ | Adresse, von der der Server das SoundFont einmalig holt; leer = voreingestellte Adresse (Weg A) |
+| `sidecar_url` | Verwaltung¹ | Adresse des Konvertierungsdienstes (Weg B) |
+| `sidecar_secret` | Verwaltung¹ | Shared Secret, als sensibel geführt und in `occ config:list` ausgeblendet (Weg B) |
 | `soundfont_url` | Verwaltung | Übersteuerung: Der Browser lädt direkt von dieser Adresse |
 | `eager_conversion` | Verwaltung | Beim Hochladen sofort konvertieren statt beim ersten Öffnen |
 | `local_timeout` | nur `occ` | Zeitgrenze eines lokalen Konvertierungslaufs in Sekunden (Vorgabe 120) |
@@ -385,6 +385,12 @@ Passwort ändert oder ihr Konto deaktiviert wird.
 | `max_recording_bytes_per_user` | Verwaltung (MB), `occ` (Bytes) | Speicher für Aufnahmen je Person (Vorgabe 200 MB, 10 MB–100 GB) |
 | `max_recording_bytes_total` | Verwaltung (MB), `occ` (Bytes) | Speicher für Aufnahmen auf der ganzen Instanz (Vorgabe 5 GB, 100 MB–10 TB) |
 | `companion_secret` | nur `occ` | Geheimnis der Begleit-Token, sensibel geführt; löschen widerruft alle ([oben](#begleit-token-der-mobilen-apps)) |
+
+¹ Auf der Verwaltungsseite nur für Mitglieder der Gruppe `admin` änderbar,
+nicht für Gruppen, an die die ScoreView-Einstellungen delegiert sind – der
+Server startet diesen Pfad als Programm bzw. ruft diese Adressen selbst ab
+([S9](architecture.md#s9-was-programme-startet-oder-adressen-abruft-stellt-nur-ein-voller-admin-ein)).
+Per `occ` gesetzt, gilt die Einschränkung nicht.
 
 ## Prüfen, ob alles läuft
 

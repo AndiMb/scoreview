@@ -51,6 +51,11 @@ Daraus abgeleitet:
   aller fünf. Die DOM-Last wächst damit nicht mit der Länge der Partitur.
 - **Bedienung:** 30 Zoom-Änderungen in 485–493 ms (~16 ms pro Änderung) bei
   ~5500–6400 Knoten. Auf Desktop-Hardware flüssig.
+- **Warteschlange des Sidecars:** Höchstens `SCOREVIEW_MAX_QUEUED` (Vorgabe
+  30) Aufträge warten; darüber antwortet er 503 mit `Retry-After`, und die App
+  versucht es später erneut, statt die Partitur als gescheitert zu markieren.
+  Hergeleitet aus der 300-s-Frist bei rund 10 s je Auftrag. Ein wartender
+  Auftrag verfällt nach `SCOREVIEW_PENDING_MAX_AGE_SECONDS` (Vorgabe 3600 s).
 - **Upload-Limit** (`SCOREVIEW_MAX_UPLOAD_BYTES`, Default 200 MB) liegt weit
   jenseits echter Partituren (größte Testdatei: 114 KB) und schützt nur gegen
   pathologische Uploads. Die App lehnt schon vorher ab: `max_score_bytes`,
@@ -259,7 +264,12 @@ Daraus folgt für den Betrieb:
 - **Die mobilen Apps fragen immer ab.** `notify_push` meldet sich über eine
   Sitzung an, die die Direct-Editing-Seite nicht hat.
 - **Ohne laufende Sitzung** fragt ein Gerät nur alle 15 s, ob eine begonnen hat.
-  Wer den Viewer vor der Leitung öffnet, folgt also erst nach bis zu 15 s.
+  Wer den Viewer vor der Leitung öffnet, folgt also erst nach bis zu 15 s. In
+  einem Tab im Hintergrund fragt es dann gar nicht und holt die Frage beim
+  Zurückkehren sofort nach.
+- **Starten, Beenden und Beitreten sind auf je 30 Aufrufe je Minute
+  begrenzt**, das Senden der Stelle auf 120. Mobile Apps zählen dabei je
+  IP-Adresse (siehe unten bei der Leitung).
 - **Mehrere Webserver ohne verteilten Cache:** Der lokale Cache gilt dann
   höchstens eine Sekunde, danach liest der nächste Aufruf die Datenbank –
   ein Lesezugriff je Sekunde und Datei (siehe
@@ -274,6 +284,14 @@ Daraus folgt für den Betrieb:
   begrenzt.** Anfragen aus den mobilen Apps sind für Nextclouds Begrenzung
   anonym und zählen je IP-Adresse – ein ganzer Chor hinter einem NAT teilt sich
   dieses Kontingent. Gesucht wird ohnehin nur von Leitungen.
+
+### Notizen
+
+- **Höchstens 500 Notizen je Person und Partitur**, alle Sichtbarkeiten und
+  Stempel zusammen; darüber antwortet der Server 409. Zwei gleichzeitige
+  Anfragen können die Grenze um eine Notiz überschreiten.
+- **Anlegen und Ändern sind auf je 60 Aufrufe je Minute begrenzt** – wer
+  Stempel sehr schnell hintereinander setzt, bekommt kurz „Zu viele Änderungen“.
 
 ### Setliste
 

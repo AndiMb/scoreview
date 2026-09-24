@@ -239,8 +239,9 @@ Aufnahme antwortet 404, nicht 403.
 
 ### Aufräumen
 
-`CleanupOrphansJob` räumt Cache-Einträge, Notizen, Leitungen, Folgesitzungen und
-Aufnahmen gelöschter Dateien ab. Das geschieht bewusst erst, wenn die Datei
+`CleanupOrphansJob` räumt Cache-Einträge, Notizen, Leitungen, Folgesitzungen,
+Aufnahmen und die gemerkte Stimmwahl („Meine Stimme“, `my_part.<fileId>` in den
+Nutzereinstellungen) gelöschter Dateien ab. Das geschieht bewusst erst, wenn die Datei
 auch aus dem Papierkorb verschwunden ist – eine Wiederherstellung aus dem
 Papierkorb soll nichts davon verlieren. Nur den Cache nimmt schon
 `Listener\NodeDeletedListener` beim Verschieben in den Papierkorb weg: Er ist
@@ -271,20 +272,28 @@ Aufbau:
   `src/settings.js` für die Verwaltung. Dazu ein vierter, der keine Seite ist:
   `src/worklets/captureWorklet.js`, das Aufnahme-Worklet (siehe
   [Mikrofon](#mikrofon)).
-- `src/components/` – `ScoreViewer.vue` als Rahmen, dazu `ScorePage.vue`,
-  `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreStamps.vue`,
-  `ScoreModal.vue`, `StandaloneFrame.vue`, `AdminSettings.vue` und die
-  Bedienteile der Probe- und Konzertfunktionen (Tabelle unten).
-- `src/composables/` – der Zustand des Viewers, nach Themen getrennt:
-  Konvertierungsstatus, Notizen, Zoom, Autoscroll, Metronom, Loop, Wiedergabe,
-  und je eines für jede Funktion der Tabelle unten.
+- `src/components/` – `ScoreViewer.vue` als Rahmen und Orchestrierung, dazu
+  `ScorePage.vue`, `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreStamps.vue`,
+  `ScoreModal.vue`, `StandaloneFrame.vue`, `AdminSettings.vue`, die Teile der
+  Oberfläche des Viewers (`ScoreBar.vue` für die Gestalt der Leiste,
+  `ScoreStatus.vue`, `ScorePanel.vue` als Rahmen der Seitenkarten, die
+  Popover für Tempo, Zoom und Darstellung) und die Bedienteile der Probe- und
+  Konzertfunktionen (Tabelle unten). `LiveValue.vue` liest die
+  Wiedergabezeit an Stelle des Viewers: Was sich mit jedem Frame ändert, hängt
+  nur an diesem kleinen Teilbaum, der Viewer selbst rendert beim Abspielen
+  nicht mit.
+- `src/composables/` – der Zustand des Viewers, nach Themen getrennt: die
+  offene Partitur mit Laden, Zurücksetzen und Zeitschleife (`useScoreSession`),
+  Taktnavigation, Gestalt der Leiste, Konvertierungsstatus, Notizen, Zoom,
+  Autoscroll, Metronom, Loop, Wiedergabe, und je eines für jede Funktion der
+  Tabelle unten.
 - `src/lib/` – **reine Logik ohne DOM, ohne `AudioContext`, ohne Nextcloud** und
   damit ohne Browser testbar: `scoreLayout.js`, `mixerLayout.js`,
   `timingSync.js`, `scrollPlan.js`, `metronome.js`, `svgSanitizer.js`,
   `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`,
   `playbackTime.js`, `audioHealth.js`, `directToken.js`, `mobileBridge.js`,
   `svgIndex.js`, `highlightStyle.js`, `staffBands.js`, `generation.js`,
-  `assetVersion.js`, für den Rückfall im Browser `clientConversion.js` und
+  `assetVersion.js`, `viewerFormat.js`, `viewerTexts.js`, für den Rückfall im Browser `clientConversion.js` und
   `artifactUrls.js` ([E7](#e7-konvertierung-im-browser-als-rückfall)) und die
   Module der Tabelle unten. Neue Logik gehört hierhin, nicht in die Komponenten.
 
@@ -546,7 +555,7 @@ Antworten, die zu einem schon verlassenen Stück gehören.
 Die Regeln, die die Probe- und Konzertfunktionen und die eigenständige Seite
 ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)) verbindlich
 einhalten. Die Begründungen stehen ausführlich an den verlinkten Stellen; hier
-steht, was nicht aufgeweicht werden darf. Im Code sind sie als `S1`…`S8`
+steht, was nicht aufgeweicht werden darf. Im Code sind sie als `S1`…`S9`
 referenziert.
 
 ### S1: Begleit-Token sind an Zweck, Datei und Direct-Editing-Token gebunden
@@ -597,9 +606,14 @@ Was ohne Sitzung erreichbar ist, darf nicht unbegrenzt Arbeit auslösen:
   und die Datei lässt sich im Texteditor beliebig füllen. Die Suche nach
   Listen, die eine Partitur enthalten, sieht höchstens 20 Listen je Ordner an.
 - Die Nutzersuche für Leitungen und die schreibenden Routen (Aufnahme
-  hochladen, „Folgt mir“ steuern, Setliste speichern und anlegen) tragen
+  hochladen, „Folgt mir“ starten, steuern, beenden und beitreten, Notiz
+  anlegen und ändern, Setliste speichern und anlegen) tragen
   `#[UserRateLimit]` **und** `#[AnonRateLimit]`: Anfragen mit Token sind für
   Nextclouds Drosselung anonym, weil sie vor der eigenen Middleware läuft.
+- Die Nutzersuche für Leitungen prüft höchstens 30 Treffer auf Dateizugriff –
+  jede Prüfung richtet den Dateibaum einer anderen Person ein.
+- Eine Person hat je Partitur höchstens 500 Notizen (409), denn wer nur lesen
+  darf, darf trotzdem private Notizen anlegen, auch mit Token.
 
 ### S5: Aufnahmen haben eigene Speichergrenzen
 
@@ -632,6 +646,20 @@ Wer eine Datei nicht sieht, bekommt auf jedem Endpunkt 404, auch beim Lesen;
 fremde Aufnahmen antworten ebenfalls 404. Erst wer sie sieht, aber nicht darf,
 bekommt 403. Sonst ließe sich abtasten, welche fileIds es gibt
 ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)).
+
+### S9: Was Programme startet oder Adressen abruft, stellt nur ein voller Admin ein
+
+Nextcloud kann Verwaltungsseiten an Gruppen delegieren
+(`#[AuthorizedAdminSetting]`). Vier Einstellungen reichen aber über die App
+hinaus: `node_path` wird als Programm gestartet, `sidecar_url` und
+`soundfont_fetch_url` ruft der Server selbst ab, und `sidecar_secret` öffnet
+den Konvertierungsdienst. Aus „darf ScoreView einstellen“ würde damit
+Codeausführung bzw. ein Abruf beliebiger Adressen im internen Netz. Ändern
+darf diese Felder deshalb nur, wer in der Gruppe `admin` ist
+(`SettingsController::update`, 403); unverändert mitgeschickt stören sie
+nicht, damit delegierte Admins den Rest der Seite weiter speichern können.
+Geänderte Werte werden außerdem geprüft: `node_path` leer oder absolut mit
+dem Programmnamen `node`/`nodejs`, die Adressen nur `http(s)` mit Host.
 
 ## Entwurfsentscheidungen
 
