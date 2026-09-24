@@ -24,10 +24,12 @@ Umriss erneut – je nach Notendichte 35–70 % der Dateigröße.
 Daraus abgeleitet:
 
 - **Konvertierungsdauer über den Sidecar ≈ 6 s pro Seite + 2 s Grundlast**
-  (lineare Regression über die drei Messpunkte). Daran hängt der Default von
-  `MSCORE_TIMEOUT_SECONDS` (600 s, rechnerisch rund 100 Seiten). Wer sehr große
-  Partituren erwartet, rechnet mit `Seitenzahl × 6 s + Puffer` hoch. Die Zahl
-  hängt spürbar von der CPU ab – Größenordnung, keine Garantie.
+  (lineare Regression über die drei Messpunkte). Die App wartet auf dem
+  Sidecar-Weg fest höchstens 300 s ab dem Einreichen (`ConvertScoreJob`),
+  rechnerisch rund 50 Seiten; `MSCORE_TIMEOUT_SECONDS` des Sidecars (Vorgabe
+  600 s) liegt darüber und greift nur, wenn er kleiner gesetzt ist. Wer sehr
+  große Partituren erwartet, rechnet mit `Seitenzahl × 6 s + Puffer` hoch. Die
+  Zahl hängt spürbar von der CPU ab – Größenordnung, keine Garantie.
 - **Lokal sind rund 0,45 s davon Grundlast** – Prozessstart plus Instanziierung
   des Wasm-Moduls. Die eigentliche Konvertierung dauert 0,4–0,8 s, also
   etwa 0,1 s pro Seite. Der lokale Weg gewinnt vor allem, weil er keine
@@ -51,7 +53,8 @@ Daraus abgeleitet:
   ~5500–6400 Knoten. Auf Desktop-Hardware flüssig.
 - **Upload-Limit** (`SCOREVIEW_MAX_UPLOAD_BYTES`, Default 200 MB) liegt weit
   jenseits echter Partituren (größte Testdatei: 114 KB) und schützt nur gegen
-  pathologische Uploads.
+  pathologische Uploads. Die App lehnt schon vorher ab: `max_score_bytes`,
+  Vorgabe 100 MB, auf beiden Wegen.
 
 **Die Messreihe stammt von 1–5-seitigen Partituren.** Alles darüber ist
 Hochrechnung.
@@ -222,7 +225,7 @@ tatsächlich an der früheren Zeitfenster-Heuristik lag, steht aus.**
 **Offlinebetrieb.** Im Probenraum ist WLAN oft schlecht oder gar nicht vorhanden.
 Die Artefakte sind unveränderlich und aggressiv cachebar, was günstig ist – aber
 Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
-~24 MB (Vorgabe) bzw. ~40 MB (aus dem Sidecar). Ob die App ohne Netz brauchbar ist, ist ungeprüft.
+~23 MB (Vorgabe) bzw. ~40 MB (aus dem Sidecar). Ob die App ohne Netz brauchbar ist, ist ungeprüft.
 
 ## Probe- und Konzertfunktionen
 

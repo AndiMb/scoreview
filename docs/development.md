@@ -88,7 +88,9 @@ Das Image neu bauen und den Container ersetzen:
 docker build -t scoreview-musescore-cli sidecar/
 docker rm -f scoreview-sidecar
 docker run -d --name scoreview-sidecar --network scoreview-net \
-  -e SCOREVIEW_SIDECAR_SECRET="<secret>" scoreview-musescore-cli
+  -e SCOREVIEW_SIDECAR_SECRET="<secret>" \
+  --memory=2g --pids-limit=512 \
+  scoreview-musescore-cli
 ```
 
 `--network` nicht vergessen – ohne das Flag startet der Container fehlerfrei, ist
@@ -118,8 +120,10 @@ meldet die Version als „unbekannt“, weil er sie aus der URL liest. Vor einem
 Release gehört dort wieder die Release-URL hin, gefolgt von `npm install`
 (aktualisiert `resolved` und `integrity` im Lockfile) und dem Selbsttest. Eine neue MuseScore-Version heißt: in
 [AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) das
-Submodul heben, das Korpus-Gate bestehen, ein Release setzen, hier die URL
-hochziehen, `npm install` laufen lassen und den Selbsttest prüfen. Die Datei `converter/selftest-score.mscz` ist eine Kopie von
+Submodul heben, das Korpus-Gate bestehen und ein Release setzen. Den Rest
+schlägt `.github/workflows/engine-release.yml` vor (siehe [CI](#ci)); von Hand
+bleiben die Stellen im Text, die die MuseScore-Version nennen – der Pull
+Request führt sie als Checkliste. Die Datei `converter/selftest-score.mscz` ist eine Kopie von
 `sidecar/testdata/repeat-test.mscz` – dieselbe Partitur, die auch der Sidecar
 für seinen Selbsttest benutzt; sie enthält Wiederholung, Volta und D.C., damit
 M7 überhaupt prüfbar ist. Daneben konvertiert der Selbsttest
@@ -132,19 +136,30 @@ Engine gelieferten Felder `keySigs` (c-Moll, Wechsel nach D-Dur) und
 
 `.github/workflows/ci.yml` fährt alle Sprachen des Repos: Frontend (Build,
 vitest, ESLint, Stylelint, l10n-Vollständigkeit), Backend (Syntaxprüfung,
-Codingstandard, PHPUnit über mehrere PHP-Versionen), lokaler Konverter (echte
-Konvertierung mit der scoreview-engine, auf Node 18 und 22) und Sidecar (pytest über
-mehrere Python-Versionen). Was lokal grün ist, ist es dort in aller Regel auch.
+Codingstandard, PHPUnit an Unter- und Obergrenze aus `info.xml`: PHP 8.1 gegen
+OCP 31, PHP 8.5 gegen OCP 35), lokaler Konverter (echte Konvertierung mit der
+scoreview-engine, auf Node 18 und 22) und Sidecar (pytest auf Python 3.10 und
+3.12). Was lokal grün ist, ist es dort in aller Regel auch.
 
-Dazu ein eigener Job, der `appinfo/info.xml` gegen das Schema des App Stores
-validiert. Der Store lehnt beim Hochladen ab, was nicht passt – also erst
-nach dem Tag, wenn die Version schon vergeben ist.
+Dazu drei eigene Jobs: einer validiert `appinfo/info.xml` gegen das Schema des
+App Stores – der Store lehnt beim Hochladen ab, was nicht passt, also erst nach
+dem Tag, wenn die Version schon vergeben ist. Einer prüft, dass der Engine-Pin
+in `converter/package.json` und `MUSESCORE_VERSION` in `sidecar/Dockerfile`
+dieselbe MuseScore-Version nennen. Und einer meldet bekannte
+Sicherheitslücken (`npm audit --audit-level=high`, `composer audit`); damit
+eine neue Meldung auch ohne Commit auffällt, läuft die CI zusätzlich jeden
+Montagmorgen.
 
 `.github/dependabot.yml` hält die Abhängigkeiten wöchentlich aktuell, in vier
 getrennten Bäumen (App, lokaler Konverter, PHP-Dev-Pakete, Sidecar) plus den
 GitHub Actions; jeder dieser Pull Requests läuft durch dieselbe CI. Für
 `scoreview-engine` greift das nicht – die Abhängigkeit hängt an einer
-Release-URL, und die kennt keine Registry. Dieser Sprung bleibt Handarbeit.
+Release-URL, und die kennt keine Registry. Das übernimmt
+`.github/workflows/engine-release.yml`: Es schaut täglich nach einem neuen
+Engine-Release und öffnet dann einen Pull Request, der den Pin samt Lockfile
+hebt und, falls die MuseScore-Version mitspringt, im selben Zug die beiden
+`ARG`s in `sidecar/Dockerfile`. Die CI stößt es für diesen Branch selbst an;
+Gate ist der Konverter-Job.
 
 ## Übersetzungen
 
@@ -261,7 +276,7 @@ zwei Posten, die zur Laufzeit niemand braucht:
 
 | Posten | Größe | Warum entbehrlich |
 |---|---|---|
-| Browser-Bundles der Engine | 0,4 MB | Der Konverter läuft unter Node, nicht im Browser |
+| `scoreview.js` der Engine | 0,2 MB | Die globale Variante des Browser-Bundles; der Rückfall im Browser lädt `scoreview.mjs` als Modul ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)), und das geht mit |
 | `@librescore/fonts` | 4,2 MB | Nur für chinesische, japanische und koreanische Liedtexte; nachrüstbar über `cjk_font_dir` (siehe [Grenzwerte](limits.md#bekannte-lücken)) |
 
 Das Paket bleibt damit unter den 20 MB. Die Action bricht ab, wenn der

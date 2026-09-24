@@ -40,7 +40,8 @@ ein Neurendern und einen Re-Upload derselben Partitur.
 
 **Auf dem Tablet am Notenständer.** Touch-Bedienung, Pinch-Zoom und ein
 Bildschirm, der während der Wiedergabe nicht schlafen geht. Im
-**Aufführungsmodus** wirken nur noch Blättern und Zoom – ein versehentlicher
+**Aufführungsmodus** wirken nur noch Blättern, Zoom und der Wechsel zum nächsten
+Stück – ein versehentlicher
 Tipp löst nichts aus –, und `Bild↓`/`Bild↑` oder ein Bluetooth-Pedal blättern so
 weiter, dass keine Zeile verloren geht. Auf Wunsch helle Noten auf dunklem
 Grund, eingebettete Bilder bleiben dabei unverändert.
@@ -134,12 +135,14 @@ occ app:enable scoreview
 ```
 
 Mehr ist für die Konvertierung nicht nötig: Voreingestellt ist der lokale Weg,
-und was er braucht, liegt im App-Paket. Das SoundFont holt der Server beim
+und was er außer einer Node.js-Laufzeit braucht, liegt im App-Paket. Das SoundFont holt der Server beim
 ersten Abspielen selbst (~23 MB, FluidR3Mono_GM) – auch dafür ist nichts
 einzutragen.
 
-Wer stattdessen den Sidecar fahren will, startet ihn zusätzlich und wählt ihn
-unter **Einstellungen → Verwaltung → ScoreView** aus:
+Wer stattdessen den Sidecar fahren will, startet ihn zusätzlich, wählt ihn
+unter **Einstellungen → Verwaltung → ScoreView** aus und erlaubt Nextcloud den
+Zugriff auf lokale Adressen (`allow_local_remote_servers`, siehe
+[Anleitung](docs/installation.md#weg-b-sidecar)):
 
 ```sh
 docker build -t scoreview-musescore-cli sidecar/

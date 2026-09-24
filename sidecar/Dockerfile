@@ -105,5 +105,5 @@ WORKDIR /opt/scoreview-sidecar
 # SCOREVIEW_MAX_CONCURRENT, unabhaengig von den HTTP-Threads.
 #
 # --timeout grosszuegig: /selftest laesst eine echte Konvertierung laufen
-# (~6s gemessen) und /soundfont schiebt rund 40 MB durch die Leitung.
+# (~8 s gemessen) und /soundfont schiebt rund 40 MB durch die Leitung.
 ENTRYPOINT ["sh", "-c", "exec gunicorn --workers 1 --threads 8 --timeout 300 --graceful-timeout 30 --access-logfile - --bind 0.0.0.0:${PORT:-8765} wsgi:app"]

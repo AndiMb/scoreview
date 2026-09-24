@@ -8,8 +8,8 @@ ScoreView** steht (Betriebsdiagnose) und ob der Fall in
 
 ## Bevor du Code schickst
 
-Einmal die drei Testläufe des Repos grün bekommen – dieselben, die auch die CI
-fährt:
+Einmal die Testläufe des Repos grün bekommen – App, Sidecar und lokaler
+Konverter, dieselben, die auch die CI fährt:
 
 ```sh
 cd scoreview
@@ -33,11 +33,14 @@ in [docs/development.md](docs/development.md).
 - **Neue Logik gehört nach `scoreview/src/lib/`** – ohne DOM, ohne
   `AudioContext`, ohne Nextcloud und damit ohne Browser testbar. Nicht in die
   Komponenten.
-- **Das Frontend kennt nur die HTTP-API der App.** Es darf nirgends erfahren,
-  über welchen Weg konvertiert wurde – oder dass es zwei gibt
-  ([E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)). Genau
-  deshalb bleibt ein Wechsel des Konvertierungswegs ein reiner
-  Backend-Austausch.
+- **Das Frontend kennt nur die HTTP-API der App.** Es verzweigt nirgends
+  danach, über welchen Weg konvertiert wurde
+  ([E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)) –
+  dass der Viewer den Weg anzeigt, ist eine Angabe für Menschen, kein `if`.
+  Genau deshalb bleibt ein Wechsel des Konvertierungswegs ein reiner
+  Backend-Austausch. Die einzige Verzweigung ist der Rückfall im Browser
+  ([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall)), und
+  die sitzt in einem einzigen `if` in `useConversionStatus.js`.
 - **UI-Strings sind Englisch**, Deutsch ist eine gepflegte Übersetzung. Nach
   jedem neuen `t()`-Aufruf `npm run l10n:extract` laufen lassen, sonst schlägt
   `npm test` fehl.

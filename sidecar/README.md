@@ -39,10 +39,11 @@ fehlerfrei, und die Betriebsdiagnose meldet nur „Konvertierungsdienst nicht
 erreichbar". Beide Container müssen in dasselbe benutzerdefinierte Netz; der
 Netzname hängt von der Installation ab, deshalb steht hier ein Beispiel und kein
 fertiger Befehl. Einrichtung siehe
-[Installation](../docs/installation.md#1a-weg-a-sidecar-starten).
+[Installation](../docs/installation.md#1b-weg-b-sidecar-starten).
 
 Der Port muss nur dann nach außen veröffentlicht werden (`-p 8765:8765`), wenn
-etwas anderes als Nextcloud selbst zugreift.
+etwas anderes als Nextcloud selbst zugreift – etwa ein Nextcloud auf einer
+anderen Maschine (siehe [Bereitstellung](#bereitstellung)).
 
 ## Konfiguration
 
@@ -57,12 +58,14 @@ Alle Variablen außer dem Secret sind optional.
 | `SCOREVIEW_MAX_CONCURRENT` | `2` | Gleichzeitig laufende Konvertierungen |
 | `SCOREVIEW_JOBS_DIR` | `/tmp/scoreview-jobs` | Arbeitsverzeichnis für laufende Jobs |
 | `SCOREVIEW_SOUNDFONT_PATH` | automatische Suche | Welches SoundFont `GET /soundfont` ausliefert |
+| `PORT` | `8765` | Port, auf dem gunicorn im Container lauscht |
 
-**Zum Timeout:** Eine Konvertierung braucht gemessen rund **5,4 s pro
-gerenderter Seite** plus etwa 1 s Grundlast. 600 s decken damit rechnerisch
-~110 Seiten ab. Wer sehr große Partituren erwartet, rechnet mit
-`Seitenzahl × 5,4 s + Puffer` hoch; die Zahl hängt spürbar von der CPU ab und ist
-als Größenordnung zu lesen, nicht als Garantie. Siehe
+**Zum Timeout:** Eine Konvertierung braucht gemessen rund **6 s pro
+gerenderter Seite** plus etwa 2 s Grundlast. Die engere Grenze setzt allerdings
+die App: Sie wartet ab dem Einreichen höchstens 300 s (`ConvertScoreJob`),
+rechnerisch rund 50 Seiten. Die 600 s hier greifen deshalb nur, wenn sie
+kleiner gesetzt werden. Die Zahl hängt spürbar von der CPU ab und ist als
+Größenordnung zu lesen, nicht als Garantie. Siehe
 [Grenzwerte](../docs/limits.md).
 
 **Zum SoundFont:** Ohne Angabe wird der erste vorhandene Kandidat genommen, in
@@ -87,7 +90,8 @@ beliebige, nicht vertrauenswürdige `.mscz`-Uploads los. Deshalb:
   `scoreview`-Nutzer im Image).
 - `--memory` und `--pids-limit` sind für den Produktivbetrieb empfohlen.
 - Alle Endpunkte außer `/health` verlangen das Shared Secret.
-- Wer den Dienst über eine Maschinengrenze hinweg betreibt, braucht TLS davor.
+- Wer den Dienst über eine Maschinengrenze hinweg betreibt, braucht TLS davor
+  (siehe [Bereitstellung](#bereitstellung)).
 
 `--network none` ist **nicht** möglich: Derselbe Container bedient die HTTP-API,
 über die die Konvertierung überhaupt erst eingereicht wird. Eine echte
@@ -158,7 +162,7 @@ defekte `.mscz` landet sichtbar auf `status: error`, statt zu hängen.
   `MUSESCORE_VERSION`/`MUSESCORE_BUILD`-ARGs im Dockerfile einmal aufrufen, bevor
   das Image produktiv geht. Die Verwaltungsseite in Nextcloud hat dafür einen
   Knopf. Der Selbsttest läuft **nicht** automatisch beim Containerstart: Eine
-  echte Konvertierung dauert ~7–8 s, das würde jeden Start verzögern und einen
+  echte Konvertierung der Minipartitur dauert gemessen ~8 s, das würde jeden Start verzögern und einen
   sonst benutzbaren Sidecar bei einem Teilproblem gar nicht hochkommen lassen.
 
 ### SoundFont
@@ -226,7 +230,9 @@ Zwei unabhängige Mechanismen:
   Der Job-Status lebt nur im Prozessspeicher; nach einem Neustart ist die Job-ID
   unbekannt, und `SCOREVIEW_JOBS_DIR` kann verwaiste Arbeitsverzeichnisse
   enthalten. Bei Bedarf manuell:
-  `docker exec scoreview-sidecar rm -rf /tmp/scoreview-jobs/*`.
+  `docker exec scoreview-sidecar sh -c 'rm -rf /tmp/scoreview-jobs/*'` – das
+  `sh -c` ist nötig, weil `docker exec` keine Shell startet und den `*` sonst
+  niemand im Container auflöst.
 
 Ein neustartsicherer Job-Zustand ist bewusst nicht eingebaut: Nextcloud sieht
 einen fehlenden oder fehlgeschlagenen Job nach einem Sidecar-Neustart und
@@ -234,27 +240,38 @@ einen fehlenden oder fehlgeschlagenen Job nach einem Sidecar-Neustart und
 
 ## Bereitstellung
 
-Der Sidecar ist Pflicht, also ist seine Installation die eigentliche Hürde für
-alle, die kein Docker neben Nextcloud betreiben können oder wollen. Vier Wege mit
-ihren echten Kosten:
+Der Sidecar ist **nicht** Pflicht. Voreingestellt ist der lokale Weg, der nur
+eine Node-Laufzeit auf dem Nextcloud-Server braucht; kann der Server keinen der
+beiden Wege ausführen, konvertiert der Browser als Rückfall
+([E3](../docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api),
+[E7](../docs/architecture.md#e7-konvertierung-im-browser-als-rückfall)). Wer
+sich für den Sidecar entscheidet, hat vier Wege, ihn bereitzustellen – mit ihren
+echten Kosten:
 
-1. **Docker-Container neben Nextcloud** – der dokumentierte Standardweg, siehe
-   oben.
+1. **Docker-Container neben Nextcloud** – der dokumentierte Weg, siehe oben.
 2. **Separater Host.** Funktioniert unverändert, der Sidecar spricht ohnehin nur
    HTTP; `sidecar_url` zeigt dann auf eine andere Maschine. Voraussetzung sind
-   TLS und ein echtes Secret. Das kommt dem
+   TLS und ein echtes Secret: den Port dort nur lokal binden
+   (`-p 127.0.0.1:8765:8765`) und über einen TLS-Reverse-Proxy veröffentlichen,
+   dessen Upload-Limit die größten Partituren durchlässt und dessen Timeout
+   großzügig bemessen ist – Nextcloud wartet bis zu 120 s auf eine Antwort,
+   `GET /soundfont` überträgt rund 40 MB. Liegt der Host unter einer privaten
+   IP oder einem internen Namen, braucht Nextcloud zusätzlich
+   `allow_local_remote_servers` (siehe
+   [Installation](../docs/installation.md#weg-b-sidecar)). Das kommt dem
    High-Performance-Backend-Muster anderer Nextcloud-Apps am nächsten.
 3. **Nativ auf dem Nextcloud-Host** (systemd-Service plus venv). Kein Docker
    nötig, aber MuseScore muss samt Qt- und X-Abhängigkeiten auf den Host –
-   genau das, was der Container heute kapselt. Realistisch nur mit einem
+   genau das, was der Container kapselt. Wer das vermeiden will, ist mit dem
+   lokalen Weg besser bedient. Realistisch nur mit einem
    distributionsspezifischen Paket oder dem AppImage plus `xvfb`. Die Härtung
    (eigener Nutzer, Speicher- und PID-Limit) müsste über systemd-Direktiven
    nachgebaut werden (`User=`, `MemoryMax=`, `TasksMax=`, `PrivateTmp=`,
    `ProtectSystem=strict`).
 4. **AppAPI/ExApp.** Installation über die Nextcloud-UI, Nextcloud verwaltet den
-   Container. Löst die Hürde für Instanzen, die AppAPI anbieten – verschiebt sie
-   für alle anderen. Braucht ein eigenes Manifest, ein registriertes Image und
-   eine Umstellung von „Admin trägt URL und Secret ein" auf „AppAPI vergibt
+   Container. Nimmt den Betreibern von Instanzen, die AppAPI anbieten, die
+   Container-Einrichtung ab – allen anderen nicht. Braucht ein eigenes
+   Manifest, ein registriertes Image und eine Umstellung von „Admin trägt URL und Secret ein" auf „AppAPI vergibt
    beides". **Nicht umgesetzt.**
 
 ## CLI-Modus für manuelles Debugging

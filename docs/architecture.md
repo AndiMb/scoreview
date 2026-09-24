@@ -32,7 +32,8 @@ greift nur, wo sonst gar nichts liefe.
 .mscz in Nextcloud Files
    |
    |  Öffnen im Viewer stößt die Konvertierung an; ein Datei-Listener
-   |  invalidiert nur den Cache, er konvertiert nicht selbst
+   |  reiht nur mit eager_conversion vorab ein - invalidiert wird
+   |  allein über den Schlüssel (fileId, etag)
    v
 Konvertierung - einer von zwei Wegen, gleiche Artefakte (E3)
    |
@@ -65,10 +66,10 @@ Browser
 
 **Leitprinzip: Das Frontend kennt ausschließlich die HTTP-API der App.** Es
 verzweigt an keiner Stelle danach, welcher Konvertierungsweg gelaufen ist. Genau
-deshalb konnte der zweite Weg
-([E3](#e3-zwei-konvertierungswege-hinter-einer-api)) ein reiner Backend-Austausch
-bleiben, ohne eine einzige Zeile im Viewer. Diese Trennung bitte nicht
-aufweichen. Der Statusendpunkt *nennt* den Weg inzwischen (`renderer.backend`),
+deshalb ist der Wechsel zwischen den beiden Wegen
+([E3](#e3-zwei-konvertierungswege-hinter-einer-api)) ein reiner Backend-Austausch,
+ohne eine einzige Zeile im Viewer. Diese Trennung bitte nicht
+aufweichen. Der Statusendpunkt *nennt* den Weg (`renderer.backend`),
 und der Viewer *zeigt* ihn an – das ist eine Angabe für Menschen, keine
 Verzweigung; was der Viewer tut, hängt weiterhin allein an den Artefakten.
 
@@ -99,7 +100,7 @@ Direct-Editing-Token im Header `X-ScoreView-Token` aus, für weitere Dateien
 einer Setliste zusätzlich mit einem Begleit-Token in `X-ScoreView-Companion`.
 Welche Routen das annehmen, entscheidet das Attribut `#[DirectTokenOrSession]`;
 geprüft wird es in `Middleware\DirectAccessMiddleware`. Ohne Header verhält
-sich jede Route exakt wie vorher. Die Spalte „Token“ unten nennt, was eine
+sich jede Route wie eine gewöhnliche Route mit Sitzung. Die Spalte „Token“ unten nennt, was eine
 Route mit Token annimmt; Einzelheiten in
 [E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps).
 
@@ -241,7 +242,9 @@ Aufnahme antwortet 404, nicht 403.
 `CleanupOrphansJob` räumt Cache-Einträge, Notizen, Leitungen, Folgesitzungen und
 Aufnahmen gelöschter Dateien ab. Das geschieht bewusst erst, wenn die Datei
 auch aus dem Papierkorb verschwunden ist – eine Wiederherstellung aus dem
-Papierkorb soll nichts davon verlieren. Folgesitzungen ohne Lebenszeichen
+Papierkorb soll nichts davon verlieren. Nur den Cache nimmt schon
+`Listener\NodeDeletedListener` beim Verschieben in den Papierkorb weg: Er ist
+regenerierbar, das nächste Öffnen baut ihn neu auf. Folgesitzungen ohne Lebenszeichen
 der Leitung (30 min) entfernt er unabhängig davon. `UserDeletedListener`
 löscht beim Löschen eines Kontos dessen Notizen, Ernennungen, geleitete
 Sitzungen und Aufnahmen. Zeilen und WAV-Dateien der Aufnahmen verschwinden
@@ -280,8 +283,10 @@ Aufbau:
   `timingSync.js`, `scrollPlan.js`, `metronome.js`, `svgSanitizer.js`,
   `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`,
   `playbackTime.js`, `audioHealth.js`, `directToken.js`, `mobileBridge.js`,
-  `svgIndex.js`, `highlightStyle.js`, `staffBands.js` und die Module der
-  Tabelle unten. Neue Logik gehört hierhin, nicht in die Komponenten.
+  `svgIndex.js`, `highlightStyle.js`, `staffBands.js`, `generation.js`,
+  `assetVersion.js`, für den Rückfall im Browser `clientConversion.js` und
+  `artifactUrls.js` ([E7](#e7-konvertierung-im-browser-als-rückfall)) und die
+  Module der Tabelle unten. Neue Logik gehört hierhin, nicht in die Komponenten.
 
 `ScoreViewer.vue` ist auf allen drei Seiten dieselbe Komponente und weiß
 nicht, über welche sie geladen wurde. Was den Seiten eigen ist – das
@@ -388,7 +393,7 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | Aufführungsmodus, Blättern per Taste/Pedal | `interactionPolicy.js`, `pagingPlan.js`, `keyMap.js` | `usePerformanceMode`, `usePaging`, `useWakeLock` | `ScoreLockButton.vue` |
 | Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | `leaders.js` | `useLeaders` | `LeaderPanel.vue` |
 | Stimmnotizen, Stempel, Studierbuchstaben | `annotationFilter.js`, `stampLayout.js`, `scoreFacts.js` | `useAnnotations`, `useScoreFacts` | `ScoreStamps.vue`, `StampSymbol.vue` |
-| „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
+| „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js`, `leaderQueue.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
 | Setliste ([E11](#e11-die-setliste-als-markdown-datei)) | `setlistNav.js`, `setlistEdit.js`, `soundFontCache.js` | `useSetlist` | `SetlistBar.vue`, `SetlistEditor.vue` |
 | Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js` | `useMicrophone`, `useRecorder`, `useIntonation` | `MicIndicator.vue`, `RecordingPanel.vue` |
 | Schalter der Verwaltung | `featureFlags.js` | – | – |
@@ -516,6 +521,7 @@ Update einen alten Stand im Browser-Cache ablöst:
 |---|---|---|---|
 | `spessasynth_processor.min.js`, `scoreview-capture-worklet.js` | `audioWorklet.addModule(url)` | `generateFilePath()` | `?v=<App-Version>`, beim Bauen aus `info.xml` (`assetVersion.js`) |
 | Tonhöhen-Worker, Teile von `@nextcloud/dialogs` | webpack-Nachladen (`new Worker(new URL(…))`, `import()`) | `__webpack_public_path__`, zur Laufzeit gesetzt (`publicPath.js`) | Inhalts-Hash als `?v=` im Dateinamen der Teile |
+| scoreview-engine (`scoreview.mjs`, `.lib.wasm`, `.lib.data`), nur für [E7](#e7-konvertierung-im-browser-als-rückfall) | nativer `import(engineUrl)`; `.wasm`/`.data` fordert der Glue relativ zu seiner eigenen URL an | `GET /api/engine/{version}/{name}` (`EngineController`) | Engine-Version im **Pfad** – ein `?v=` am Glue erbten die Geschwister nicht; eine fremde Version antwortet 404 |
 
 Die Laufzeit-Adresse ist nötig, weil die Vorgabe von
 `@nextcloud/webpack-vue-config` fest `/apps/scoreview/js/` lautet – liegt die App
@@ -600,7 +606,8 @@ Was ohne Sitzung erreichbar ist, darf nicht unbegrenzt Arbeit auslösen:
 Aufnahmen liegen in `IAppData` und zählen deshalb **nicht** gegen die Quota der
 Nutzerin. Die App zieht ihre eigenen Grenzen: Anzahl je Person und Partitur,
 Länge, Bytes je Person und Bytes auf der ganzen Instanz; beim Erreichen
-antwortet der Server 507 bzw. 413 mit klarer Meldung. Die Werte stehen in
+antwortet der Server 409 (Anzahl), 413 (Länge) bzw. 507 (Bytes) mit klarer
+Meldung. Die Werte stehen in
 [Installation](installation.md).
 
 ### S6: Pfade einer Setliste bleiben im Nutzerordner
@@ -634,7 +641,7 @@ werden.
 
 ### E1: MIDI statt MP3 als Audioartefakt
 
-Der Sidecar liefert MIDI, die Synthese passiert im Browser (SoundFont + Web
+Die Konvertierung liefert MIDI, auf beiden Wegen, die Synthese passiert im Browser (SoundFont + Web
 Audio). Ein vorgerenderter Stereo-Mixdown kann drei Ziele prinzipiell nicht
 erfüllen: Lautstärke einzelner Stimmen (unmöglich), Instrumentenwechsel
 (kombinatorisch nicht vorrenderbar), Tempoänderung (nur mit Time-Stretching und
@@ -694,7 +701,7 @@ eigenen Build nachziehen lässt.
 
 **Warum es den lokalen Weg gibt.** Der Sidecar setzt voraus, dass der Betreiber
 einen zweiten Container betreiben kann. Das schließt Instanzen ohne Docker aus –
-und war der Grund, warum ScoreView auf verwalteten Instanzen gar nicht lief.
+allein mit dem Sidecar liefe ScoreView auf verwalteten Instanzen gar nicht.
 
 **Warum er die Voreinstellung ist.** Er ist der einzige, der nach `app:enable`
 schon fertig ist: Was er braucht, liegt im App-Paket, die Node-Laufzeit findet
@@ -778,7 +785,7 @@ entfällt (`converter/lib/artifacts.mjs`).
 
 Dieses „derselbe" ist eine Zusage, keine Beobachtung: Die eine Version steht als
 Release-URL in `converter/package.json`, die andere als `ARG MUSESCORE_VERSION`
-in `sidecar/Dockerfile`, und nichts zwang sie bisher zusammen. Laufen sie
+in `sidecar/Dockerfile`, und von sich aus hält nichts sie zusammen. Laufen sie
 auseinander, legt dieselbe Partitur je nach Weg ein anderes Layout hin, ohne
 dass ein Test anschlägt. Der Job `versionen` in `ci.yml` vergleicht beide
 Angaben deshalb bei jedem Lauf, und `engine-release.yml` hebt sie nur gemeinsam:
@@ -1069,10 +1076,10 @@ erzeugt keine Partituren, ein Eintrag „Neue Partitur“ führte nirgendwohin.
 
 **Die Auswahl läuft allein über den Mimetype.** Die Krücke aus E6 hat in der
 App keine Entsprechung – ohne registrierten Mimetype bleibt der Menüpunkt aus.
-Dass er stimmt, besorgt die App inzwischen selbst
-([E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)); vorher hing dieser
-Einstieg an einer Handreichung des Betreibers und war auf verwaltetem Hosting
-überhaupt nicht erreichbar.
+Dass er stimmt, besorgt die App selbst
+([E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)); ohne das hinge
+dieser Einstieg an einer Handreichung des Betreibers und wäre auf verwaltetem
+Hosting überhaupt nicht erreichbar.
 
 **Und er hängt am ⋮-Menü, nicht am Antippen.** Nachgesehen in
 nextcloud/android, `FileOperationsHelper.openFile()`: Kann irgendeine
@@ -1101,7 +1108,8 @@ auch mobil, und dort Eingestelltes gilt am Rechner weiter. Ein Begleit-Token
 
 Für den Sitzungsfall holt die Middleware die CSRF-Prüfung nach, die
 `#[PublicPage]`/`#[NoCSRFRequired]` sonst abschalteten – dort, wo die Route
-sie vorher hatte. Was eine Anfrage vorgelegt hat, hält
+sie als gewöhnliche Sitzungsroute hätte (abschaltbar über
+`csrfInSession: false`, etwa für Artefakte und SoundFont). Was eine Anfrage vorgelegt hat, hält
 `Middleware\DirectAccessContext` fest, ein je Anfrage geteilter Träger: Die
 meisten Controller brauchen das nicht, weil der gesetzte Nutzer und ihr
 Dateibaum entscheiden; das Schreiben einer Setliste braucht es (unten, und

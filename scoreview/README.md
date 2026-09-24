@@ -9,20 +9,22 @@ Repository: <https://github.com/AndiMb/scoreview>
 
 ## Kurz zur Einrichtung
 
-Konvertiert wird auf einem von zwei gleichwertigen Wegen: über einen
-**MuseScore-Sidecar** – einen Konvertierungsdienst als eigener Container neben
-Nextcloud – oder **lokal** durch die Node.js-Laufzeit des Servers, für die
-MuseScore als WebAssembly in `converter/` beiliegt. Einer der beiden muss
-stehen, sonst läuft die App nicht.
+Konvertiert wird auf einem von zwei gleichwertigen Wegen: **lokal** durch die
+Node.js-Laufzeit des Servers (ab Version 18), für die MuseScore als
+WebAssembly in `converter/` beiliegt – das ist die Voreinstellung –, oder über
+einen **MuseScore-Sidecar**, einen Konvertierungsdienst als eigener Container
+neben Nextcloud. Kann der Server keinen von beiden ausführen, konvertiert
+ersatzweise der Browser der Nutzerin.
 
 ```sh
 occ app:enable scoreview
 ```
 
-Danach unter **Einstellungen → Verwaltung → ScoreView** den Weg wählen: für den
-Sidecar Adresse und Secret eintragen, für den lokalen Weg eine
-SoundFont-Download-URL. Zwei einmalige Schritte fehlen dann noch: die
-Mimetype-Registrierung für `.mscz` und Background-Jobs im Modus `cron`.
+Für den lokalen Weg ist danach nichts einzustellen; das SoundFont holt der
+Server beim ersten Abspielen selbst. Wer den Sidecar nutzt, wählt ihn unter
+**Einstellungen → Verwaltung → ScoreView** und trägt Adresse und Secret ein.
+Den Mimetype für `.mscz` trägt die App selbst ein; einmalig nötig bleibt nur,
+dass Background-Jobs im Modus `cron` laufen.
 
 **Vollständige Anleitung:**
 <https://github.com/AndiMb/scoreview/blob/master/docs/installation.md>
@@ -42,6 +44,7 @@ schon zur Ursache; sonst hilft
 | `l10n/` | Übersetzungen; Quellstrings sind Englisch |
 | `templates/`, `img/`, `appinfo/` | Nextcloud-Standardlayout |
 | `tests/` | PHPUnit gegen OCP-Mocks |
+| `tools/` | Prüfung und Extraktion der Übersetzungen (`npm run l10n:extract`) |
 
 Die Dateien `appinfo/mimetypemapping.json` und `appinfo/mimetypealiases.json`
 sind **Vorlage, keine wirksame Konfiguration**: Nextcloud lädt sie nicht aus

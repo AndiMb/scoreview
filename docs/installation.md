@@ -50,7 +50,7 @@ laufen. In einer Container-Installation davor `docker exec -u www-data
 ## 1a. Weg A: Node.js bereitstellen
 
 Für den lokalen Weg ist nichts zu bauen und nichts zu starten – der Konverter
-liegt fertig im App-Paket (`scoreview/converter/`, rund 21 MB). Nötig ist nur
+liegt fertig im App-Paket (`scoreview/converter/`, rund 15 MB). Nötig ist nur
 eine Node.js-Laufzeit, die der Nextcloud-Prozess starten darf:
 
 ```sh
@@ -112,8 +112,12 @@ findet die Wege unter
 
 ## 2. App installieren
 
-Über den Nextcloud App Store, oder das Verzeichnis `scoreview/` als
-`apps/scoreview` ablegen. Danach:
+Über den Nextcloud App Store, oder das Archiv `scoreview.tar.gz` eines
+[GitHub-Releases](https://github.com/AndiMb/scoreview/releases) nach `apps/`
+entpacken, sodass `apps/scoreview` entsteht. Ein Git-Checkout von `scoreview/`
+genügt nicht: Frontend-Bundle (`js/`) und Konverter-Engine
+(`converter/node_modules`) sind nicht eingecheckt, sie entstehen erst beim Bauen
+([Entwicklung](development.md)). Danach:
 
 ```sh
 occ app:enable scoreview
@@ -151,7 +155,9 @@ occ config:app:set scoreview sidecar_secret --value="<secret>" --sensitive
 Nextcloud blockiert ausgehende Anfragen an lokale und interne Hostnamen
 (SSRF-Schutz). Ohne die folgende Einstellung schlägt jeder Sidecar-Aufruf mit
 „violates local access rules" fehl – dieselbe Einstellung brauchen auch
-Collabora- und OnlyOffice-Integrationen:
+Collabora- und OnlyOffice-Integrationen. Das gilt ebenso für einen Sidecar auf
+einem anderen Host, solange er unter einer privaten IP oder einem internen
+Namen erreichbar ist:
 
 ```sh
 occ config:system:set allow_local_remote_servers --value=true --type=boolean
@@ -260,7 +266,7 @@ aus dem Netz geladen. Der Browser spricht dabei nie mit dem Sidecar; die App leg
 die Datei in ihrem IAppData-Cache ab und liefert sie selbst aus.
 
 Der erste Abruf nach einer Neuinstallation überträgt das SoundFont einmal zum
-Browser: ~24 MB bei Weg A (`FluidR3Mono_GM`), ~40 MB bei Weg B
+Browser: ~23 MB bei Weg A (`FluidR3Mono_GM`), ~40 MB bei Weg B
 (`MuseScore_General_Lite` aus dem Sidecar-Image). Danach greifen der serverseitige Cache und `Cache-Control: immutable`.
 
 Das Feld **SoundFont-URL** ist etwas anderes: eine Übersteuerung, bei der der
@@ -342,8 +348,8 @@ Das Mikrofon braucht einen sicheren Kontext, also HTTPS (oder `localhost`).
 Für Setlisten stellt die App aus der Seite der mobilen Apps heraus kurzlebige
 Begleit-Token aus (höchstens 12 h,
 [E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps)). Das
-Geheimnis dafür entsteht beim ersten Gebrauch. Alle ausgegebenen Token auf
-einmal widerrufen heißt, es zu verwerfen:
+Geheimnis dafür legt die App bei Installation und Update an. Alle ausgegebenen
+Token auf einmal widerrufen heißt, es zu verwerfen:
 
 ```sh
 occ config:app:delete scoreview companion_secret

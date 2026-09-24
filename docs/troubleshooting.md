@@ -2,8 +2,9 @@
 
 Nach Symptom sortiert. Erste Anlaufstelle bei jedem Problem ist
 **Einstellungen → Verwaltung → ScoreView**: Die Betriebsdiagnose dort zeigt
-Sidecar-Erreichbarkeit, SoundFont-Zustand, Alter des letzten Cron-Laufs und die
-Zahl der Konvertierungen je Status.
+Sidecar-Erreichbarkeit, den Zustand des lokalen Wegs (Prozessstart, Node.js,
+Engine-Paket), einen aktiven Rückfall im Browser, SoundFont-Zustand, Alter des
+letzten Cron-Laufs und die Zahl der Konvertierungen je Status.
 
 ## Eine `.mscz`-Datei bietet nur „Herunterladen" an
 
@@ -282,8 +283,8 @@ dem der Server nicht konvertiert (siehe die beiden Abschnitte davor). Solange
 er besteht, gilt für jede Nutzerin:
 
 - Jedes Gerät lädt beim ersten Öffnen einmal rund 14 MB Konverter.
-- Nichts wird zwischengespeichert: Jede Partitur wird bei jedem Öffnen neu
-  gesetzt, auf jedem Gerät.
+- Nichts wird auf Dauer zwischengespeichert: Jede Partitur wird nach jedem
+  Neuladen der Seite neu gesetzt, auf jedem Gerät.
 - Der Schalter „sofort konvertieren" ist wirkungslos, der Selbsttest prüft
   weiterhin nur den Serverweg.
 
@@ -315,6 +316,23 @@ Browser entstehen:
   dieses Dokument noch die engere CSP, und ein Neuladen genügt. Bleibt es
   dabei, in der Browser-Konsole nach `securitypolicyviolation` sehen: Ein
   blockierter Web Worker meldet sich **nur** dort und sonst nirgends.
+
+## „scoreview-engine: engine initialisation failed" beim Konvertieren im Browser
+
+Steht als technisches Detail unter „Die Partitur konnte nicht konvertiert
+werden", bei jedem Öffnen und durch kein Neuladen zu beheben. Der Browser hält
+dann einen Engine-Teil (`.wasm`) einer früheren Engine-Fassung im Cache und
+setzt ihn unter die neue. Ab 1.10.1 trägt die Engine-Route die Version im Pfad
+(`/api/engine/{version}/{name}`); ein solcher Cache wird damit nicht mehr
+getroffen und heilt sich von selbst. **Abhilfe: den Server mindestens auf
+1.10.1 bringen** – am Gerät ist nichts zu tun. Betroffen ist vor allem die
+Android-App, deren WebView ihren Cache nicht von selbst räumt.
+
+Dass der Browser überhaupt konvertiert, heißt, der Server kann es nicht
+([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)). Den Grund
+nennt die Betriebsdiagnose, häufig ist es eine fehlende Node.js-Laufzeit (siehe
+[oben](#der-lokale-konvertierungsweg-läuft-nicht) und
+[Installation](installation.md#1a-weg-a-nodejs-bereitstellen)).
 
 ## „Kein Ton: …" über der Notenansicht
 
@@ -350,7 +368,7 @@ aus der Automatik, bei unangetastetem Regler).
 
 Bleibt trotzdem ein Versatz, nennt der Kopfhörer seine Verzögerung nicht
 selbst, und genau dieser Anteil fehlt der Automatik. Abhilfe:
-**Tempo/Metronom → „Bild und Ton abgleichen"**. Den Regler bei laufender
+**Tempo und Metronom → „Bild und Ton abgleichen"**. Den Regler bei laufender
 Wiedergabe verschieben, bis die hervorgehobene Note zum Gehörten passt. Der
 Wert wird pro Gerät gemerkt – am Telefon mit Kopfhörern also ein anderer als am
 Rechner.
@@ -376,7 +394,7 @@ sie bei 0, liegt es an der Latenz und der Abschnitt darüber gilt.
 
 Bei Aussetzern hilft, die Last zu senken: andere Tabs schließen, das Notenbild
 kleiner zoomen (weniger DOM je Seite), oder die Partitur ohne Ton lesen
-(„Weiter ohne Ton" beim Laden). Eine kleinere SoundFont-Datei senkt die Last
+(„Ohne Ton fortfahren" beim Laden). Eine kleinere SoundFont-Datei senkt die Last
 ebenfalls, siehe [Installation](installation.md#soundfont).
 
 ## Die Konvertierung schlägt fehl
@@ -388,11 +406,13 @@ daneben. Die Fehlercodes:
 |---|---|---|
 | `sidecar_unreachable` | Dienst nicht erreichbar | siehe oben |
 | `sidecar_rejected` | Datei abgelehnt (z. B. Secret, Größe) | Secret und `SCOREVIEW_MAX_UPLOAD_BYTES` prüfen |
-| `too_large` | Partitur überschreitet das Limit | Limit anheben oder Partitur teilen |
-| `timeout` | Konvertierung nicht rechtzeitig fertig | Sidecar: `MSCORE_TIMEOUT_SECONDS` anheben – rund 5,4 s pro Seite einplanen, siehe [Grenzwerte](limits.md). Lokal: `local_timeout` (Vorgabe 120 s) |
+| `too_large` | Partitur überschreitet das Limit | `max_score_bytes` (Vorgabe 100 MB) anheben oder Partitur teilen |
+| `timeout` | Konvertierung nicht rechtzeitig fertig | Sidecar: Die App wartet ab dem Einreichen fest höchstens 300 s – bei rund 6 s pro Seite etwa 50 Seiten, siehe [Grenzwerte](limits.md). `MSCORE_TIMEOUT_SECONDS` (Vorgabe 600 s) anzuheben hilft deshalb nicht; bricht der Sidecar selbst ab, heißt das `conversion_failed`. Lokal: `local_timeout` (Vorgabe 120 s) |
 | `conversion_failed` | MuseScore selbst ist gescheitert | Datei in MuseScore öffnen; oft eine defekte `.mscz`. Auf dem lokalen Weg steht die Ausgabe des Konverters im `nextcloud.log` |
 | `no_pages` | Konvertierung lief, lieferte aber keine Seite | Selbsttest auslösen; deutet auf ein Problem im Image hin |
 | `local_unavailable` | Lokaler Weg gewählt, aber nicht lauffähig | siehe [oben](#der-lokale-konvertierungsweg-läuft-nicht) |
+| `stale` | Ein Lauf wurde nie abgeschlossen | siehe [oben](#die-konvertierung-kommt-nicht-voran) |
+| `client_too_large`, `client_engine_unavailable` | Nur beim Rückfall im Browser | siehe [oben](#der-viewer-meldet-diese-partitur-konnte-in-diesem-browser-nicht-gesetzt-werden) |
 | `unknown` | Alles andere | `nextcloud.log` auf die Exception prüfen |
 
 ## Der Viewer zeigt eine veraltete Fassung der Partitur
@@ -402,7 +422,7 @@ Zwei Ursachen, die sich ähnlich anfühlen und getrennt zu behandeln sind.
 **Serverseitig** bleibt eine fertige Konvertierung liegen, solange niemand die
 Datei anfasst – auch wenn eine neuere Fassung der App sie besser setzen würde
 oder die Herkunft noch „unbekannt" meldet. Der Knopf **„Neu konvertieren"** im
-Aufklapper der Anzeigeeinstellungen verwirft sie und lässt sie neu erzeugen; er
+Aufklapper „Darstellung" verwirft sie und lässt sie neu erzeugen; er
 erscheint nur mit Schreibrecht auf die Datei. Für alle Partituren einer Instanz
 auf einmal ist `CURRENT_FORMAT_VERSION` der Hebel (siehe
 [Architektur](architecture.md#konvertierung-und-cache)).

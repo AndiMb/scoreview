@@ -67,10 +67,10 @@ SPOS_TO_SVG_SCALE = 12
 
 # E1: the browser synthesizes the MIDI itself and needs a SoundFont
 # to do it. This image already contains a General MIDI SoundFont (MuseScore
-# cannot render audio without one), and the sidecar is a hard requirement
-# anyway (E3) - so serving it from here means an operator does not have to
-# find, license and host a 40 MB SF3 somewhere reachable by every browser
-# just to get sound. The PHP side caches it once and re-serves it
+# cannot render audio without one) - so on the sidecar path, serving it from
+# here means an operator does not have to find, license and host a 40 MB SF3
+# somewhere reachable by every browser just to get sound. (The local path
+# has no image to take it from and downloads one instead, see E1.) The PHP side caches it once and re-serves it
 # same-origin (see Service\SoundFontService), which also keeps the fetch
 # free of CORS and of a CSP connect-src exception.
 #

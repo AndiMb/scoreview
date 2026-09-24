@@ -13,6 +13,8 @@ lokal liegen.
 Eine der zwei committeten Ausnahmen: selbst erstellt, lizenzklar, fünf Takte, eine
 Stimme. `../selftest-score.mscz` ist eine Kopie davon und wird ins Image gebacken
 – sie ist die Partitur, die `GET /selftest` konvertiert.
+`scoreview/converter/selftest-score.mscz` ist dieselbe Kopie für den Selbsttest
+des lokalen Konvertierungswegs.
 
 Struktur: Takt 1 (Wiederholungsanfang) · Takt 2 (Volta 1, Wiederholungsende) ·
 Takt 3 (Volta 2) · Takt 4 („Fine") · Takt 5 („D.C. al Fine"). Damit deckt sie

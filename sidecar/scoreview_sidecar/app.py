@@ -77,7 +77,7 @@ def create_app(start_reaper: bool = True) -> Flask:
     # Konvertierung gegen die mitgelieferte Minipartitur laufen und prueft
     # das Ergebnis auf die Merkmale, an denen ein Formatwechsel zuerst
     # auffiele. Absichtlich KEIN Test beim Containerstart: das wuerde jeden
-    # Start um ~6s verzoegern und einen an sich benutzbaren Sidecar bei
+    # Start um ~8 s verzoegern und einen an sich benutzbaren Sidecar bei
     # einem Teilproblem gar nicht erst hochkommen lassen.
     @app.get("/selftest")
     def selftest():
