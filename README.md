@@ -39,10 +39,44 @@ ein Neurendern und einen Re-Upload derselben Partitur.
 ![Notiz an Takt 5, verankert an der musikalischen Position](docs/img/annotations.png)
 
 **Auf dem Tablet am Notenständer.** Touch-Bedienung, Pinch-Zoom und ein
-Bildschirm, der während der Wiedergabe nicht schlafen geht.
+Bildschirm, der während der Wiedergabe nicht schlafen geht. Im
+**Aufführungsmodus** wirken nur noch Blättern und Zoom – ein versehentlicher
+Tipp löst nichts aus –, und `Bild↓`/`Bild↑` oder ein Bluetooth-Pedal blättern so
+weiter, dass keine Zeile verloren geht. Auf Wunsch helle Noten auf dunklem
+Grund, eingebettete Bilder bleiben dabei unverändert.
+
+**Üben.** Der **Anfangston** spielt, solange man den Knopf hält, den Ton der
+eigenen Stimme an der aktuellen Stelle oder den Grundton der Tonart. „Meine
+Stimme“ merkt sich die App je Partitur und legt sie auf Wunsch rechts ins
+Stereobild, die übrigen links. Der **Speed-Trainer** steigert das Tempo mit
+jedem Loop-Durchlauf bis zum Zieltempo.
+
+**In der Chorprobe.** Wer eine Partitur besitzt, kann **Leitungen** ernennen.
+Sie setzen **Stimmnotizen** und **Stempel** (Atemzeichen, Zäsur, Dynamik …),
+die jede Stimme hervorgehoben und die übrigen zurückgenommen sieht. Die
+Taktnavigation versteht **Studierbuchstaben**: „C“ und „C+3“ springen dorthin.
+Mit **„Folgt mir“** schickt die Leitung Stelle, Loop und Anfangston an alle
+Geräte im Raum – wer selbst navigiert, löst sich und kommt mit einem Tipp
+zurück.
+
+**Im Konzert.** Eine **Setliste** ist eine Datei `*.setlist.md` in Files, eine
+Liste von Links auf Partituren, im Texteditor oder in ScoreView bearbeitbar.
+Im Viewer geht es von Stück zu Stück, ohne dass Aufführungsmodus, Zoom oder
+SoundFont neu geladen werden.
+
+**Sich selbst hören.** **Eigene Aufnahmen**, synchron zu Cursor und Begleitung
+abspielbar, hört nur, wer sie gemacht hat. Die **Rückmeldung zur Intonation**
+zeigt beim Singen eine Nadel am Cursor und danach die Stellen, die zu hoch oder
+zu tief waren. Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt
+zeigt wofür.
+
+Alles davon geht auch in den mobilen Nextcloud-Apps – bis auf das Mikrofon in
+der Android-App, dort über „Im Browser öffnen“. Die Verwaltung kann „Folgt mir“,
+Aufnahme und Intonation einzeln abschalten; was die Funktionen kosten und wo sie
+enden, steht in [docs/limits.md](docs/limits.md#probe--und-konzertfunktionen).
 
 Tastatur im Viewer: `Leertaste` Start/Stopp · `←` `→` Takt zurück/vor · `L` Loop
-· `+` `−` Zoom · `0` Seitenbreite.
+· `+` `−` Zoom · `0` Seitenbreite · `Bild↓` `Bild↑` blättern.
 
 Oberfläche auf Deutsch und Englisch.
 

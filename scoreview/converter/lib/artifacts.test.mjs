@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkPromises, toPositions } from './artifacts.mjs'
+import { checkPromises, checkScoreFacts, toPositions } from './artifacts.mjs'
 
 /**
  * Diese Umformung ist die Stelle, an der der lokale Konvertierungsweg das
@@ -174,5 +174,51 @@ describe('checkPromises', () => {
 		expect(checkPromises(result).problems).toEqual([
 			expect.stringContaining('nicht auf ihrer Segmentposition'),
 		])
+	})
+})
+
+describe('checkScoreFacts', () => {
+	/**
+	 * So liefert die Engine die Testpartitur keys-marks-test.mscz - gemessen
+	 * an scoreview-engine 4.7.5, Schluesselreihenfolge wie im Original.
+	 */
+	const engineMeta = () => ({
+		measures: 5,
+		keySigs: [
+			{ concertKey: -3, measure: 1, mode: 'minor', tick: 0 },
+			{ concertKey: 2, measure: 4, mode: 'major', tick: 5760 },
+		],
+		rehearsalMarks: [
+			{ measure: 1, text: 'A', tick: 0 },
+			{ measure: 3, text: 'B', tick: 3840 },
+			{ measure: 4, text: 'C', tick: 5760 },
+		],
+	})
+
+	it('nimmt c-Moll, den Wechsel nach D-Dur und A/B/C ab', () => {
+		expect(checkScoreFacts(engineMeta())).toEqual({
+			problems: [],
+			details: { keySigs: 2, rehearsalMarks: 3 },
+		})
+	})
+
+	it('meldet eine Engine ohne die Felder - der Fall Stock-MuseScore', () => {
+		const { problems } = checkScoreFacts({ measures: 5 })
+		expect(problems).toEqual([
+			expect.stringContaining('keySigs'),
+			expect.stringContaining('rehearsalMarks'),
+		])
+	})
+
+	it('erkennt ein verlorenes Moll (mode null wie bei "unknown")', () => {
+		const meta = engineMeta()
+		meta.keySigs[0].mode = null
+		expect(checkScoreFacts(meta).problems).toEqual([expect.stringContaining('c-Moll')])
+	})
+
+	it('erkennt Buchstaben mit Markup oder im falschen Takt', () => {
+		const meta = engineMeta()
+		meta.rehearsalMarks[1] = { measure: 2, text: '<b>B</b>', tick: 1920 }
+		expect(checkScoreFacts(meta).problems).toEqual([expect.stringContaining('A@1,<b>B</b>@2,C@4')])
 	})
 })

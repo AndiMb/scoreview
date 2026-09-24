@@ -94,8 +94,8 @@ export default {
 		t,
 
 		/**
-		 * A3: Der Ladebildschirm der App verschwindet erst, wenn hier wirklich
-		 * etwas steht - Notenbild oder Fehlermeldung. Frueher gerufen laege er
+		 * Der Ladebildschirm der App verschwindet erst, wenn hier wirklich
+		 * etwas steht - Notenbild oder Fehlermeldung. Vorzeitig gerufen laege er
 		 * bei laufender Konvertierung minutenlang ueber einem leeren Viewer,
 		 * und nach zehn Sekunden meldete die App zusaetzlich einen Timeout.
 		 */

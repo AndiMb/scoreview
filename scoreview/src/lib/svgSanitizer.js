@@ -1,8 +1,7 @@
 // Echte SVG-Bereinigung vor dem Einbetten ins DOM (v-html in ScorePage.vue).
 //
-// Ersetzt die frühere regexbasierte `sanitizeSvg()` aus scoreLayout.js. Der
-// Wechsel ist NICHT kosmetisch, sondern das Ergebnis einer Messung: die alte
-// Regex-Fassung liess 9 von 15 geprüften Umgehungsmustern durch, darunter
+// DOMPurify statt einer Regex-Bereinigung. Das ist NICHT kosmetisch, sondern
+// das Ergebnis einer Messung: eine Regex-Fassung liess 9 von 15 geprüften Umgehungsmustern durch, darunter
 // `onload=x()` OHNE Anführungszeichen, `javascript:`-URLs in `href`/
 // `xlink:href`, `<foreignObject>` mit eingebettetem `<iframe>`, ein
 // ungeschlossenes `<script>` sowie `<use href="http://…">` auf eine fremde

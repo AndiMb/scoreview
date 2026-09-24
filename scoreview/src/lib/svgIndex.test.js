@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest'
-import { buildSegmentIndex, setHighlight } from './svgIndex.js'
+import { buildNoteIndex, buildSegmentIndex, pickNoteheads, setHighlight } from './svgIndex.js'
 
 /** Ein Ausschnitt in der Form, die MuseScore mit M10 liefert. */
 function svg(inhalt) {
@@ -81,5 +81,42 @@ describe('setHighlight', () => {
 	it('bleibt still, wenn die elid im Notenbild nicht vorkommt', () => {
 		// Der Normalfall bei einer Wiederholung auf einer anderen Seite (M7).
 		expect(setHighlight(index, 99, [], 'is-sounding')).toEqual([])
+	})
+})
+
+describe('buildNoteIndex', () => {
+	it('trennt die Koepfe eines Segments nach Notenzeile und kennt die Stimme', () => {
+		const root = svg(`
+			<path class="Note seg-5 st-0 vc-0" d="M0 0" />
+			<path class="Note seg-5 st-1 vc-0" d="M0 0" />
+			<path class="Note seg-5 st-1 vc-1" d="M0 0" />
+			<path class="Stem seg-5 st-1 vc-0" d="M0 0" />
+			<g class="Note seg-6 st-1 vc-0"><g transform="translate(1 2)"><use fill="#000000" /></g></g>
+		`)
+		const index = buildNoteIndex(root)
+		expect([...index.keys()].sort()).toEqual(['5:0', '5:1', '6:1'])
+		expect(index.get('5:1').map((e) => e.voice)).toEqual([0, 1])
+		expect(index.get('6:1')[0].node.tagName.toLowerCase()).toBe('g')
+	})
+
+	it('bleibt ohne Zeilenkennung leer (Sidecar-Weg)', () => {
+		const root = svg('<path class="Note seg-5" d="M0 0" /><path class="Note" d="M0 0" />')
+		expect(buildNoteIndex(root).size).toBe(0)
+	})
+})
+
+describe('pickNoteheads', () => {
+	const knoten = (y) => ({ node: { y }, voice: 0 })
+	const yOf = (node) => node.y
+
+	it('waehlt im Divisi nach Rang von oben', () => {
+		const eintraege = [knoten(30), knoten(10)]
+		expect(pickNoteheads(eintraege, 0, 2, yOf)).toEqual([{ y: 10 }])
+		expect(pickNoteheads(eintraege, 1, 2, yOf)).toEqual([{ y: 30 }])
+	})
+
+	it('nimmt alle, wenn die Zahl nicht passt, statt den falschen', () => {
+		expect(pickNoteheads([knoten(30), knoten(10)], 0, 1, yOf)).toHaveLength(2)
+		expect(pickNoteheads([], 0, 1, yOf)).toEqual([])
 	})
 })

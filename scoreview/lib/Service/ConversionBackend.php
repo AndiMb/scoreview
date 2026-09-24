@@ -25,7 +25,7 @@ use OCP\IAppConfig;
  *
  * Dass ein Update trotzdem keine laufende Installation umstellt, sorgt
  * Migration\Version000100Date20260903120000: Wer einen Sidecar eingerichtet
- * hat, bekommt den bisher nur impliziten Wert einmalig ausdruecklich
+ * hat, bekommt den sonst nur impliziten Wert einmalig ausdruecklich
  * eingetragen.
  */
 class ConversionBackend {

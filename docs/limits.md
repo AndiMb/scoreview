@@ -92,10 +92,11 @@ Wiederholungen und Volten funktionieren gemessen korrekt.
 stammen von Chorsätzen bis fünf Seiten.
 
 **Die Bedienung auf Telefonbreite.** Dass der Viewer in den mobilen Apps
-überhaupt läuft, ist gemessen (siehe unten); ob Mixer und Notizen auf 360 dp
-brauchbar sind, ist es **nicht**. Die Bedienleiste ist seit 1.8.0 auf
-Telefonbreite einzeilig, alles Weitere steckt im Überlaufmenü. Ein eigener
-Telefon-Modus wäre ein eigenes Vorhaben.
+überhaupt läuft, ist gemessen (siehe unten). Die Bedienleiste ist auf
+Telefonbreite einzeilig – Play, Taktfeld, Anfangston, Schloss und „Mehr“, alles
+Weitere steckt im Überlaufmenü –, geprüft in einem Chromium bei 360 × 780 px,
+nicht am Gerät. Mixer, Notizen und der Setlisten-Editor sind dort benutzbar,
+nicht bequem. Ein eigener Telefon-Modus wäre ein eigenes Vorhaben.
 
 **Die WebView der mobilen Apps.** Gemessen auf einem Samsung Galaxy S23 mit der
 Nextcloud-Android-App, Instanz über `adb reverse` als `http://localhost:8134`:
@@ -171,7 +172,9 @@ Notenkopf wird nur eingefärbt, wo das SVG die Kennungen aus
 trägt – das tut der lokale Konvertierungsweg, nicht der Sidecar mit seinem
 Stock-AppImage. Dort bleibt es beim Band, ohne Fehlermeldung: Die Einstellung
 „klingende Noten einfärben" ist dann zwar wählbar, fällt aber still auf das Band
-zurück. Wirkung: dieselbe Bedienung, weniger Führung im Notenbild.
+zurück. Wirkung: dieselbe Bedienung, weniger Führung im Notenbild. Dasselbe
+gilt für die farbigen Notenköpfe der Intonation (siehe
+[Mikrofon, Aufnahme und Intonation](#mikrofon-aufnahme-und-intonation)).
 
 **Die Version des Konvertierers wird nicht aufgezeichnet.** Der Viewer nennt den
 Konvertierungs*weg* jeder Darstellung, aber nicht, welche MuseScore- bzw.
@@ -221,6 +224,173 @@ Die Artefakte sind unveränderlich und aggressiv cachebar, was günstig ist – 
 Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
 ~40 MB. Ob die App ohne Netz brauchbar ist, ist ungeprüft.
 
+## Probe- und Konzertfunktionen
+
+### „Folgt mir“
+
+Gemessen an der Testinstanz (Docker Desktop, 12 vCPU, SQLite im WAL-Modus,
+Apache prefork), ohne `notify_push`, Abfrageabstand 800 ms:
+
+| Messung | Ergebnis |
+|---|---|
+| Tipp der Leitung → Sprung auf dem Folgegerät (Browser, drei Folgegeräte) | p50 **595 ms**, p95 **945 ms** |
+| Zwei Tipps der Leitung auf verschiedene Studierbuchstaben, Abstand 11–65 ms bzw. 74–263 ms (je 20×, drei Folgegeräte) | Leitung, Server und alle Folgegeräte **20/20** am zweiten; der erste ist nie zuletzt angekommen |
+| Last: 40 Geräte gegen den echten Endpunkt, Leitung schreibt alle 3 s | p95 Ende-zu-Ende **771 ms**, 0 Fehler, 0 „database is locked“, **2,0–2,8 Kerne** |
+| CPU je Abfrage | rund **50 ms**, fast alles für den Start von Nextcloud; Datei- und Cache-Zugriff sind ein kleiner Teil |
+
+Daraus folgt für den Betrieb:
+
+- **Ohne Push kostet eine Folgesitzung etwa 50 ms CPU je Gerät und Abfrage**,
+  bei 40 Geräten also 2–3 Kerne für die Dauer der Probe. Auf einem kleinen
+  Server (2–4 Kerne) ist das zu viel; die Betriebsdiagnose rät ab 20 Geräten
+  zu `notify_push`. Ein größeres `follow_poll_ms` senkt die Last linear und
+  verzögert die Sprünge entsprechend.
+- **Über echtes WLAN kommt die Rundlaufzeit dazu.** Die Zahlen oben stammen aus
+  einem Netz ohne Funkstrecke; realistisch ist ein p95 knapp über einer
+  Sekunde. Einzelne Ausreißer von 2–4 s traten in der Lastmessung etwa alle
+  2–3 Minuten auf (Ursache ungeklärt, vermutlich Docker/WSL oder Apache
+  prefork).
+- **Mit `notify_push`** holt jedes Gerät den Zustand nur bei einer Änderung.
+  Dieser Weg ist **nur per Unit-Test geprüft** – die Testinstanz hat kein
+  `notify_push`. Eine Latenzmessung damit steht aus.
+- **Die mobilen Apps fragen immer ab.** `notify_push` meldet sich über eine
+  Sitzung an, die die Direct-Editing-Seite nicht hat.
+- **Ohne laufende Sitzung** fragt ein Gerät nur alle 15 s, ob eine begonnen hat.
+  Wer den Viewer vor der Leitung öffnet, folgt also erst nach bis zu 15 s.
+- **Mehrere Webserver ohne verteilten Cache:** Der lokale Cache gilt dann
+  höchstens eine Sekunde, danach liest der nächste Aufruf die Datenbank –
+  ein Lesezugriff je Sekunde und Datei (siehe
+  [E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+
+### Leitung
+
+- **Eine Leitung kraft Schreibrecht erscheint nicht in der Liste der
+  Leitungen** (Dateien ohne Eigentümerin, etwa in Gruppenordnern). Sie hat die
+  Rolle trotzdem; die Liste zeigt die Eigentümerin und die Ernannten.
+- **Die Suche nach Personen zum Ernennen ist auf 30 Aufrufe je Minute
+  begrenzt.** Anfragen aus den mobilen Apps sind für Nextclouds Begrenzung
+  anonym und zählen je IP-Adresse – ein ganzer Chor hinter einem NAT teilt sich
+  dieses Kontingent. Gesucht wird ohnehin nur von Leitungen.
+
+### Setliste
+
+- **Grenzen:** höchstens 256 KB und 200 Einträge je Setliste. Aus einer
+  Partitur heraus („Weg 2“) sucht der Viewer nur im Ordner dieser Partitur und
+  nimmt höchstens 20 Setlisten. Die Auswahl um die Partitur für den Editor
+  reicht bis Tiefe 2, mit höchstens 200 Treffern und 100 besuchten Ordnern.
+- **Rohe Pfade werden nicht %-dekodiert** – nur Linkziele. Wer in einen rohen
+  Pfad `%20` schreibt, meint damit wörtlich `%20`.
+- **Eine nicht eingerückte Zeile direkt nach einem Eintrag beendet die Liste.**
+  Bewusst abweichend von CommonMark
+  ([E11](architecture.md#e11-die-setliste-als-markdown-datei)); wer darunter
+  weiterschreiben will, lässt eine Leerzeile oder rückt ein.
+- **Absolute Pfade gelten im Baum der jeweiligen Leserin.** In einer geteilten
+  Liste zeigt `/Chor/Kyrie.mscz` bei jeder, die sie liest, auf ihre eigene
+  Datei dieses Namens – oder auf keine. Relative Pfade sind für geteilte
+  Listen deshalb die bessere Wahl.
+- **Nextclouds Viewer zeigt nach einem Stückwechsel weiter den ursprünglichen
+  Dateinamen** in seiner Kopfzeile, wenn die Setliste aus einer Partitur
+  heraus geöffnet wurde. Die Setlisten-Leiste nennt das richtige Stück.
+- **Ein Pedal oder eine Taste für „nächstes Stück“ gibt es nicht.** Pedale
+  blättern innerhalb eines Stücks; der Wechsel geht über die Setlisten-Leiste.
+- **Mobil nur über eine Partitur.** Die Apps bieten für `*.setlist.md` Text an,
+  nicht ScoreView; eine Setliste öffnet sich dort über eine ihrer Partituren.
+  Im Editor lassen sich mobil nur Stücke aus dem Ordner der offenen Partitur
+  hinzufügen, und über ein Stück aus der Liste heraus (Begleit-Token) nur
+  umordnen und entfernen – Nextclouds Dateiauswahl braucht eine Sitzung.
+
+### Mikrofon, Aufnahme und Intonation
+
+**Gemessener Versatz einer Aufnahme**, in Chromium mit einer Datei als
+Mikrofon, nach dem Ausgleich beider Latenzen:
+
+| gegen | Versatz |
+|---|---|
+| den Cursor | **+42 … +52 ms** (die Aufnahme liegt später) |
+| die Begleitung | **−22 … 0 ms** |
+
+spessasynth gleicht eine Abweichung seiner eigenen Zeit erst ab 50 ms nach;
+darunter bleibt sie stehen, und das betrifft den Cursor ebenso. An echten
+Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
+
+- **Das Einschwingen ist nicht gemessen.** Die Intonation verwirft die
+  ersten **100 ms** jeder Note (`skipAttackMs`); ob das für Laienstimmen
+  reicht, steht aus.
+- **Die Referenzstimmung ist fest: a' = 440 Hz.** Ein Chor, der als Ganzes
+  absinkt, wird gegen 440 bewertet, nicht gegen sich selbst.
+- **Oktaven werden gefaltet.** Ein Tenor, der die Altstimme eine Oktave tiefer
+  singt, singt sie richtig; eine Oktave daneben fällt also nicht auf.
+- **Farbige Notenköpfe nur auf dem lokalen Konvertierungsweg**, und nur, wo
+  jede Stimme eine eigene Notenzeile hat. Sonst bleibt es ohne Fehlermeldung
+  bei der Nadel und der Liste der Problemstellen
+  ([M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)).
+- **Bei Wiederholungen zeigt die Färbung den zuletzt bewerteten Durchgang.**
+  Derselbe Notenkopf steht für beide Durchgänge
+  ([M7](architecture.md#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)).
+- **Das Tempo der Aufnahme übernimmt die Begleitung beim Start des
+  Abhörens** – eine Aufnahme lässt sich nicht strecken. Eine spätere Änderung
+  des Tempos während des Abhörens wird nicht nachgeführt.
+- **Uploads brauchen eine Webserver-Grenze von mindestens ~20 MB** (bei nginx
+  `client_max_body_size`). Eine Aufnahme von 10 min wiegt rund 19 MB; darunter
+  scheitert das Speichern mit 413 vom Webserver, bevor die App die Anfrage
+  sieht ([Installation](installation.md#probe-und-konzert)).
+- **Ein Upload belegt Platz im temporären Verzeichnis, nicht im
+  `memory_limit`.** Der Rumpf geht ab 2 MB in eine Zwischendatei
+  (`php://temp`), geprüft wird nur der Kopf, und IAppData schreibt aus dem
+  Strom. Bei der größten erlaubten Aufnahme (`max_recording_seconds` = 3600,
+  rund 115 MB) braucht das temporäre Verzeichnis also je gleichzeitigem
+  Upload so viel Platz; was darüber liegt, lehnt die App mit 413 ab, bevor
+  sie es annimmt.
+- **Die Obergrenze je Partitur hält auch bei gleichzeitigen Uploads, die
+  Speichergrenzen nur ungefähr.** Nach dem Einfügen zählt die App nach: Mit
+  bestätigtem Ersetzen geht die nächstälteste, ohne nimmt der später
+  eingetroffene Upload seine Aufnahme zurück (bei exakt gleichzeitigen können
+  es beide sein). Die Grenzen für den Speicher je Person und der Instanz kann
+  ein gleichzeitiger Upload um höchstens seine eigene Größe überschreiten.
+- **Eine Mikrofon-Erlaubnis gilt innerhalb von Files für alle Skripte dort**,
+  wie bei Talk. Die App gibt das Mikrofon nur auf Seiten unter `/apps/files`
+  frei; feiner als je Dokument lässt sich eine Richtlinie nicht setzen.
+- **Nicht gespeicherte Aufnahmen überleben kein Neuladen der Seite.** Scheitert
+  das Speichern, bleibt die Aufnahme im Speicher und lässt sich erneut
+  speichern – bis die Seite neu geladen wird. Das steht in der Oberfläche.
+
+### Partiturfakten und Stempel
+
+- **Auf dem Sidecar-Weg kein Dur/Moll beim Grundton.** Stock-MuseScore schreibt
+  keine Tonarten in `meta.json`, und im MIDI ist das Moll-Byte immer 0
+  ([M11](architecture.md#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen)).
+  Der Anfangston „Grundton“ spielt dort die Dur-Tonika der Vorzeichnung –
+  in c-Moll also es statt c. Studierbuchstaben kommen auf beiden Wegen.
+- **Mehrtaktpausen:** Die Taktzählung der Engine weicht dann von der des
+  Viewers ab. Der Viewer nimmt Buchstaben und Tonarten in diesem Fall aus dem
+  MIDI und übernimmt den Modus aus der Engine nur, wo er eindeutig ist
+  ([E12](architecture.md#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)).
+- **Stimmstempel stehen über dem System, wenn sich Zeilen und Stimmen nicht
+  zuordnen lassen** – etwa sechs Stimmen auf fünf Notenzeilen. Der Stempel ist
+  dann da, aber nicht an der Zeile seiner Stimme.
+
+### Mobil
+
+- **Kein Mikrofon in der Android-App.** Ihre WebView gibt es nicht frei
+  (Quellcode: kein `RECORD_AUDIO`, kein `onPermissionRequest`), und ScoreView
+  kann das nicht ändern. Aufnahme und Intonation gehen dort über „Im Browser
+  öffnen“. Für die iOS-App spricht der Quellcode dafür, dass es mit einer
+  Systemrückfrage bei jedem Öffnen geht; gemessen ist es nicht.
+- **„Im Browser öffnen“ ist am Android- und am iOS-Gerät ungeprüft**, ebenso,
+  ob ein Pedal in der WebView den Fokus bekommt.
+- **Ein Wechsel des Begleit-Geheimnisses wirkt nach bis zu 3 s**, solange der
+  Server den alten Wert noch aus APCu liest.
+
+### Offene Prüfungen
+
+Umgesetzt und im Browser geprüft, aber **nicht am Gerät**:
+
+- alle Gerätetests der mobilen Apps zu Setliste, Leiten, Folgen und Mikrofon
+  (Android über `adb reverse`, siehe oben; ein iOS-Gerät fehlt ganz);
+- das Wachhalten des Bildschirms im Aufführungsmodus und beim Folgen – ohne
+  Fenster nur gegen eine nachgebaute `navigator.wakeLock` geprüft;
+- eine ganze Probe mit echten Stimmen, echtem WLAN und `notify_push`.
+
 ## Was die App bewusst nicht tut
 
 - **Kein serverseitiges Rendern auf verwaltetem Hosting.** Der lokale
@@ -243,10 +413,21 @@ Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
   ein zweites serverseitiges Layout.
 - **Kein Bearbeiten von Partituren.** ScoreView zeigt und spielt; es korrigiert
   nichts in der `.mscz`.
+- **Keine Aufnahmen für andere.** Eine Aufnahme hört nur, wer sie gemacht hat;
+  sie liegt in den App-Daten, nicht in Files, und lässt sich nicht teilen.
+- **Kein Long-Polling für „Folgt mir“.** Jedes wartende Gerät belegte einen
+  PHP-Worker; abgefragt wird kurz, beschleunigt durch `notify_push`, wo es
+  eingerichtet ist ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+- **Kein Direct Editor für Markdown.** ScoreView erschiene sonst in den
+  mobilen Apps bei jeder `.md`-Datei; Setlisten öffnen sich dort über eine
+  Partitur.
 - **Keine eigene Seite in Nextcloud.** Eingestiegen wird ausschließlich aus
-  Files – über Nextclouds Viewer oder über die Dateiaktion auf der Endung
-  ([E6](architecture.md#e6-zwei-einstiege--mimetype-und-dateiendung));
-  `/apps/scoreview/` antwortet bewusst 404.
+  Files – über Nextclouds Viewer, die Dateiaktion auf der Endung oder die auf
+  `*.setlist.md`
+  ([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste))
+  – und aus den mobilen Apps über Direct Editing; `/apps/scoreview/`
+  antwortet bewusst 404. Setlisten sind Dateien in Files, keine eigene
+  Verwaltung der App.
 - **Kein Stift-/Freihand-Layer.** Notizen sind Text an einem musikalischen Anker.
   Freie Striche wären eine zweite Datenart, deren Anker ein Pfad statt eines
   Punktes sein müsste – und die anders als Text ein Neurendern der Partitur

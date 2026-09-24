@@ -10,7 +10,7 @@ lokal liegen.
 
 ## `repeat-test.musicxml` / `repeat-test.mscz`
 
-Die einzige committete Ausnahme: selbst erstellt, lizenzklar, fünf Takte, eine
+Eine der zwei committeten Ausnahmen: selbst erstellt, lizenzklar, fünf Takte, eine
 Stimme. `../selftest-score.mscz` ist eine Kopie davon und wird ins Image gebacken
 – sie ist die Partitur, die `GET /selftest` konvertiert.
 
@@ -34,3 +34,16 @@ als Sprunganweisung, sondern nur als Text – ein echter Sprungtest bräuchte ei
 in der MuseScore-GUI angelegte Jump/Marker-Struktur. Deshalb bleibt der
 D.C.-Fall ungeprüft, siehe
 [M7](../../docs/architecture.md#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht).
+
+## `keys-marks-test.mscz`
+
+Die zweite Ausnahme, ebenfalls selbst erstellt: `repeat-test.mscz` mit zwei
+Zusätzen im MSCX – eine Tonart c-Moll (`concertKey` −3, `mode` minor) in
+Takt 1 und ein Wechsel nach D-Dur (2, major) in Takt 4, dazu die
+Studierbuchstaben A, B und C in den Takten 1, 3 und 4.
+
+`scoreview/converter/keys-marks-test.mscz` ist eine Kopie davon. Der
+Selbsttest des lokalen Konvertierungswegs (`node convert.mjs --selftest`)
+prüft an ihr die Felder `keySigs` und `rehearsalMarks`, die nur die
+scoreview-engine in `meta.json` schreibt. Der Sidecar kennt sie nicht
+(Stock-MuseScore) und benutzt die Datei deshalb nicht.

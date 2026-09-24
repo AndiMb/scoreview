@@ -169,7 +169,7 @@ jedem Wechsel der MuseScore-Version einmal auslösen.
 Damit eine `.mscz` als `application/x-musescore` gilt, **trägt die App den
 Mimetype selbst ein** – bei der Installation, bei jedem Update und nach jedem
 Upload erneut
-([E6](architecture.md#e6-zwei-einstiege--mimetype-und-dateiendung)). Dafür
+([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)). Dafür
 braucht es weder `occ` noch Schreibzugriff auf `config/`; auf verwaltetem
 Hosting funktioniert es genauso.
 
@@ -268,6 +268,91 @@ erreichbar sein und CORS erlauben; den Host trägt die App automatisch in die
 `connect-src`-Richtlinie ein. Ein leeres Feld bedeutet: die App liefert selbst
 aus.
 
+## Probe und Konzert
+
+Leitung, „Folgt mir“, eigene Aufnahmen und die Rückmeldung zur Intonation
+sind nach der Installation eingeschaltet und brauchen nichts weiter. Unter
+**Einstellungen → Verwaltung → ScoreView → Probe und Konzert** lassen sie
+sich einzeln abschalten; eine abgeschaltete Funktion verschwindet aus dem
+Viewer, und ihre Endpunkte antworten 404. Drei Dinge sind trotzdem zu wissen.
+
+### `notify_push` für „Folgt mir“ (empfohlen)
+
+Ohne Push fragt jedes Folgegerät während einer Sitzung alle 800 ms beim Server
+nach. Das kostet rund 50 ms CPU je Gerät und Abfrage – bei 40 Sängerinnen 2–3
+Kerne für die Dauer der Probe ([Grenzwerte](limits.md#folgt-mir)). Mit der App
+[`notify_push`](https://github.com/nextcloud/notify_push) schickt der Server
+bei jeder Änderung ein Ereignis, und die Geräte fragen nur noch dann.
+ScoreView braucht dafür keine eigene Einstellung: Ist `notify_push`
+installiert und eingerichtet, wird es benutzt, sonst wird abgefragt.
+
+```sh
+occ app:install notify_push
+occ notify_push:setup   # führt durch Dienst und Reverse-Proxy
+```
+
+Die Betriebsdiagnose zeigt unter **„Folgt mir“**, ob Push greift, und rät ab
+etwa 20 Folgegeräten zur Installation. Wo `notify_push` nicht in Frage kommt,
+senkt ein größeres **Abfrageintervall** (`follow_poll_ms`, 500–3000 ms) die
+Last – um den Preis späterer Sprünge. Die mobilen Apps fragen immer ab, auch
+mit `notify_push`.
+
+Einen Cron-Lauf braucht „Folgt mir“ nicht: Alles geschieht in den Anfragen
+selbst.
+
+### Uploadgröße für Aufnahmen
+
+Eine Aufnahme wird als eine WAV-Datei hochgeladen, bei der Vorgabe von höchstens
+600 s rund 19 MB. Der Webserver vor Nextcloud muss Anfragen dieser Größe
+annehmen – bei nginx `client_max_body_size` mindestens `20M` (Nextclouds
+empfohlene nginx-Konfiguration setzt ohnehin mehr). Die PHP-Grenzen
+`upload_max_filesize`/`post_max_size` spielen keine Rolle, die App liest den
+Rumpf selbst und zieht ihre eigene Grenze. Wer `max_recording_seconds` anhebt,
+rechnet mit etwa 32 KB je Sekunde.
+
+Aufnahmen liegen in den App-Daten (IAppData) und zählen gegen **kein**
+Kontingent der Nutzerinnen. Deshalb hat die App eigene Grenzen, einstellbar in
+der Verwaltung (dort in MB) oder per `occ` (in Bytes):
+
+```sh
+occ config:app:set scoreview max_recordings_per_score --value 5
+occ config:app:set scoreview max_recording_seconds --value 600
+occ config:app:set scoreview max_recording_bytes_per_user --value 209715200    # 200 MB
+occ config:app:set scoreview max_recording_bytes_total --value 5368709120      # 5 GB
+```
+
+Werte außerhalb der erlaubten Spanne werden beim Lesen begrenzt (siehe
+Tabelle unten).
+
+### Mikrofon
+
+Nextcloud sperrt das Mikrofon auf jeder Seite per `Feature-Policy`. ScoreView
+gibt es auf den Seiten unter `/apps/files` und auf der Seite für die mobilen
+Apps frei, und nur, solange Aufnahme oder Intonation eingeschaltet sind –
+Dashboard, Talk und alles Übrige bleiben unberührt. Eine erteilte Erlaubnis
+des Browsers gilt dann innerhalb von Files für alle Skripte dort, wie bei Talk.
+Wer das nicht will, schaltet Aufnahme und Intonation ab; die Freigabe entfällt
+damit.
+
+Das Mikrofon braucht einen sicheren Kontext, also HTTPS (oder `localhost`).
+
+### Begleit-Token der mobilen Apps
+
+Für Setlisten stellt die App aus der Seite der mobilen Apps heraus kurzlebige
+Begleit-Token aus (höchstens 12 h,
+[E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps)). Das
+Geheimnis dafür entsteht beim ersten Gebrauch. Alle ausgegebenen Token auf
+einmal widerrufen heißt, es zu verwerfen:
+
+```sh
+occ config:app:delete scoreview companion_secret
+```
+
+Beim nächsten Gebrauch entsteht ein neues; nach spätestens 3 s greift der
+Wechsel überall. Eine abgewiesene Anfrage lässt die Seite selbst neue Token
+holen, solange ihr Direct-Editing-Token noch gilt. Die Token einer einzelnen Person verfallen außerdem, wenn sie ihr
+Passwort ändert oder ihr Konto deaktiviert wird.
+
 ## Einstellungen im Überblick
 
 | Schlüssel | Wo | Bedeutung |
@@ -283,6 +368,16 @@ aus.
 | `cjk_font_dir` | nur `occ` | Verzeichnis mit Zusatzfonts für CJK-Liedtexte, außerhalb der App (Weg A) |
 | `max_score_bytes` | nur `occ` | Obergrenze der Dateigröße (Vorgabe 100 MB) |
 | `client_max_score_bytes` | nur `occ` | Obergrenze für die Konvertierung **im Browser**, deutlich kleiner (Vorgabe 10 MB). Geprüft, bevor der Browser die Engine lädt |
+| `feature_follow_session` | Verwaltung | Leitung und „Folgt mir“ (Vorgabe an) |
+| `feature_recording` | Verwaltung | Eigene Aufnahmen (Vorgabe an) |
+| `feature_intonation` | Verwaltung | Rückmeldung zur Intonation (Vorgabe an) |
+| `feature_score_follower` | nur `occ` | Vorgesehen für das Mitverfolgen per Mikrofon, noch ohne Funktion (Vorgabe aus) |
+| `follow_poll_ms` | Verwaltung | Abfrageintervall von „Folgt mir“ ohne Push in ms (Vorgabe 800, erlaubt 500–3000) |
+| `max_recordings_per_score` | Verwaltung | Aufnahmen je Person und Partitur (Vorgabe 5, 1–50) |
+| `max_recording_seconds` | Verwaltung | Höchstlänge einer Aufnahme in Sekunden (Vorgabe 600, 10–3600) |
+| `max_recording_bytes_per_user` | Verwaltung (MB), `occ` (Bytes) | Speicher für Aufnahmen je Person (Vorgabe 200 MB, 10 MB–100 GB) |
+| `max_recording_bytes_total` | Verwaltung (MB), `occ` (Bytes) | Speicher für Aufnahmen auf der ganzen Instanz (Vorgabe 5 GB, 100 MB–10 TB) |
+| `companion_secret` | nur `occ` | Geheimnis der Begleit-Token, sensibel geführt; löschen widerruft alle ([oben](#begleit-token-der-mobilen-apps)) |
 
 ## Prüfen, ob alles läuft
 

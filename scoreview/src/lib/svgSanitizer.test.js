@@ -183,7 +183,7 @@ describe('sanitizeSvg - Kennungen je Seite eindeutig machen', () => {
 		expect(out.match(/url\(#p2-v\)/g)).toHaveLength(3)
 	})
 
-	it('laesst ohne Praefix alles wie bisher', () => {
+	it('laesst ohne Praefix alles unveraendert', () => {
 		expect(sanitizeSvg(seite)).toMatch(/id="g0"/)
 	})
 })

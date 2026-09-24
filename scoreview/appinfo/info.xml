@@ -38,6 +38,16 @@ Tastaturkürzel; Mixer mit Lautstärke/Mute/Solo pro Stimme, „meine Stimme"-Pr
 Tempo in BPM und Metronom; Notizen an musikalischen Ankern (privat oder
 geteilt, überstehen einen Re-Upload); Touch-Bedienung mit Pinch-Zoom für das
 Tablet am Notenständer.
+
+Für Üben, Chorprobe und Konzert: Anfangston der eigenen Stimme oder Grundton
+der Tonart, eigene Stimme im Stereobild, Speed-Trainer im Loop, helle Noten auf
+dunklem Grund, Aufführungsmodus mit Blättern per Taste oder Pedal;
+Leitungsrolle je Partitur mit Stimmnotizen, Probenstempeln und
+Studierbuchstaben in der Navigation; „Folgt mir" - die Leitung schickt Stelle,
+Loop und Anfangston an alle Geräte (mit notify_push unter einer Sekunde);
+Setlisten als Markdown-Datei mit Stückwechsel im Viewer; eigene Aufnahmen, die
+nur die Aufnehmende hört, und Rückmeldung zur Intonation beim Singen. Bis auf
+das Mikrofon in der Android-App geht das auch in den mobilen Nextcloud-Apps.
 	]]></description>
 	<description lang="en"><![CDATA[
 ScoreView displays MuseScore scores (.mscz) directly from Files - as faithful
@@ -68,8 +78,19 @@ keyboard shortcuts; a mixer with per-voice volume/mute/solo, a "my voice"
 preset, tempo in BPM and a metronome; annotations anchored to musical
 position (private or shared, surviving a re-upload); touch controls with
 pinch-zoom for a tablet on the music stand.
+
+For practice, choir rehearsal and concert: the starting note of your own voice
+or the key note, your own voice in the stereo image, a speed trainer in the
+loop, light notes on a dark background, a performance mode with page turning by
+key or pedal; a leader role per score with voice notes, rehearsal stamps and
+rehearsal marks in the navigation; "Follow me" - the leader sends position,
+loop and starting note to every device (below one second with notify_push);
+setlists as a Markdown file with piece changes inside the viewer; own
+recordings only the person recording can hear, and intonation feedback while
+singing. Apart from the microphone in the Android app, this also works in
+the Nextcloud mobile apps.
 	]]></description>
-	<version>1.9.3</version>
+	<version>1.10.0</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>
@@ -100,12 +121,14 @@ pinch-zoom for a tablet on the music stand.
 	<repair-steps>
 		<!-- Beide Schluessel, weil OC\Installer sie getrennt ausfuehrt:
 		     `install` nur bei der Erstinstallation, `post-migration` nur, wenn
-		     schon eine Version dastand. Der Schritt ist wiederholbar. -->
+		     schon eine Version dastand. Beide Schritte sind wiederholbar. -->
 		<post-migration>
 			<step>OCA\ScoreView\Migration\RegisterScoreMimetype</step>
+			<step>OCA\ScoreView\Migration\GenerateCompanionSecret</step>
 		</post-migration>
 		<install>
 			<step>OCA\ScoreView\Migration\RegisterScoreMimetype</step>
+			<step>OCA\ScoreView\Migration\GenerateCompanionSecret</step>
 		</install>
 	</repair-steps>
 	<settings>

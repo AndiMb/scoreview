@@ -2,6 +2,7 @@
 	<div
 		ref="root"
 		class="score-page"
+		:class="{ 'score-page--dark': noteTheme === 'dark' }"
 		:style="pageStyle"
 		@pointerdown="onPointerDown"
 		@click="onClick">
@@ -69,9 +70,13 @@
 			v-for="marker in pageMarkers"
 			:key="marker.id"
 			class="score-page-marker"
-			:class="{ 'score-page-marker--shared': marker.visibility === 'shared' }"
+			:class="{
+				'score-page-marker--shared': marker.visibility === 'shared',
+				'score-page-marker--parts': marker.visibility === 'parts',
+				'score-page-marker--dimmed': marker.dimmed,
+			}"
 			:style="marker.style"
-			:title="t('Note')"
+			:title="marker.voices.length ? t('Note for {voices}', { voices: marker.voices.join(', ') }) : t('Note')"
 			@click.stop="$emit('markerClick', marker.id)" />
 		<!--
 			Der Notiztext im Notenbild: „In Takt 10 bitte forte" muss beim
@@ -82,17 +87,53 @@
 			v-for="label in pageNoteLabels"
 			:key="`text-${label.id}`"
 			class="score-page-note"
-			:class="{ 'score-page-note--shared': label.visibility === 'shared' }"
+			:class="{
+				'score-page-note--shared': label.visibility === 'shared',
+				'score-page-note--parts': label.visibility === 'parts',
+				'score-page-note--dimmed': label.dimmed,
+			}"
 			:style="label.style"
 			@click.stop="$emit('markerClick', label.id)">
+			<!-- Die Zielstimme vorneweg - eine Stimmnotiz ohne sie liest sich
+				wie eine Anweisung an alle. -->
+			<strong v-if="label.voices.length">{{ label.voices.join(', ') }}:</strong>
 			{{ label.content }}
 		</div>
+		<!--
+			Stempel als Zeichen im Notenbild, nicht als Marker mit
+			Aufklapptext: Ein Atemzeichen muss man beim Singen sehen, nicht
+			suchen. Ueber dem Notenbild, damit es nicht darunter verschwindet.
+		-->
+		<ScoreStamps
+			:stamps="pageStamps"
+			:systems="staffSystems"
+			:mappable="staffMappingPossible"
+			:viewBox="viewBox"
+			@stampClick="(id) => $emit('markerClick', id)" />
 		<!--
 			Sichtbare Loop-Bereichsmarkierung - zwei schmale, farbige Flaggen an
 			Start-/Ende-Takt statt eines vollflächigen Bereichs: measures.json
 			liefert nur Punktkoordinaten je Takt (M4), keine Taktbreite, ein
 			Vollbereich wäre also erfunden.
 		-->
+		<!--
+			Die Live-Nadel der Intonation am Cursor, ueber der eigenen
+			Zeile, wo sie sich zuordnen laesst: -50 … +50 Cent, links zu tief,
+			rechts zu hoch. Ueber dem Notenbild, aber klein - sie soll neben
+			den Noten stehen, nicht auf ihnen.
+		-->
+		<div
+			v-if="needleStyle"
+			class="score-page-needle"
+			:class="`score-page-needle--${needle.cls}`"
+			:style="needleStyle"
+			role="status"
+			:aria-label="needleLabel">
+			<span class="score-page-needle-track" aria-hidden="true">
+				<span v-if="needle.cents !== null" class="score-page-needle-pointer" :style="{ left: needlePercent + '%' }" />
+			</span>
+			<span class="score-page-needle-text">{{ needleText }}</span>
+		</div>
 		<div
 			v-for="marker in pageLoopMarkers"
 			:key="marker.id"
@@ -106,9 +147,11 @@
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import ScoreStamps from './ScoreStamps.vue'
+import { formatCents } from '../lib/intonation.js'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
 import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, stavesOfPart } from '../lib/staffBands.js'
-import { buildSegmentIndex, setHighlight } from '../lib/svgIndex.js'
+import { buildNoteIndex, buildSegmentIndex, pickNoteheads, setHighlight } from '../lib/svgIndex.js'
 import { sanitizeSvg } from '../lib/svgSanitizer.js'
 
 // Wie weit der Zeiger zwischen pointerdown und click wandern darf, damit es
@@ -139,7 +182,7 @@ const UNLOAD_MARGIN_PX = 2400
 export default {
 	name: 'ScorePage',
 
-	components: { NcButton },
+	components: { NcButton, ScoreStamps },
 
 	props: {
 		svgUrl: {
@@ -176,6 +219,14 @@ export default {
 		// Notiz-Marker: {id, page, x, y, w, h} in SVG-Einheiten, unabhängig
 		// von der Seite gefiltert - siehe pageMarkers.
 		markers: {
+			type: Array,
+			default: () => [],
+		},
+
+		// Stempel aus useAnnotations (stamps), aller Seiten - gefiltert und
+		// gesetzt wird hier bzw. in ScoreStamps.vue, weil erst die Seite ihre
+		// Notenzeilen kennt.
+		stamps: {
 			type: Array,
 			default: () => [],
 		},
@@ -228,6 +279,28 @@ export default {
 		highlightMode: {
 			type: String,
 			default: 'notes',
+		},
+
+		// 'light' oder 'dark' (lib/noteTheme.js resolveNoteTheme). Die Farben
+		// selbst kommen als CSS-Variablen vom Viewer; hier haengt nur die
+		// Klasse, an der die Umfaerbe-Regeln greifen.
+		noteTheme: {
+			type: String,
+			default: 'light',
+		},
+
+		// Intonation: Notenkoepfe, die dreifarbig markiert werden -
+		// {elid, staff, rank, size, cls} aus lib/intonation.js noteMarks().
+		// Wirkt nur, wo das SVG `st-` traegt (M10).
+		noteMarks: {
+			type: Array,
+			default: () => [],
+		},
+
+		// Die Live-Nadel: {cents, cls} oder null.
+		needle: {
+			type: Object,
+			default: null,
 		},
 	},
 
@@ -299,6 +372,52 @@ export default {
 		 * Taktrechtecke), bleibt es beim einen Rechteck ueber das System. Ohne
 		 * diesen Rueckfall waere der Cursor dort ganz verschwunden.
 		 */
+		/**
+		 * Wo die Nadel steht: an der x-Position des Cursors, ueber der eigenen
+		 * Zeile im aktuellen System - sonst ueber dem Cursor-Rechteck.
+		 */
+		needleStyle() {
+			const rect = this.cursorRect
+			const box = this.viewBox
+			if (!this.needle || !rect || !box || rect.page !== this.pageIndex) {
+				return null
+			}
+			let top = rect.y
+			if (this.partsMappable) {
+				const system = this.staffSystems.find((s) => rect.y < s.bottom + 1 && rect.y + rect.h > s.top - 1)
+				const band = system?.staves[this.myPartIndex]
+				if (band) {
+					top = band.top - (band.bottom - band.top) * 1.6
+				}
+			}
+			return {
+				left: `${((rect.x - box.minX) / box.width) * 100}%`,
+				top: `${((top - box.minY) / box.height) * 100}%`,
+			}
+		},
+
+		needlePercent() {
+			const c = Math.max(-50, Math.min(50, this.needle?.cents ?? 0))
+			return 50 + c
+		},
+
+		needleText() {
+			if (!this.needle || this.needle.cls === 'rest') {
+				return '–'
+			}
+			return this.needle.cents === null ? '?' : formatCents(this.needle.cents)
+		},
+
+		needleLabel() {
+			if (!this.needle || this.needle.cls === 'rest') {
+				return this.t('Rest')
+			}
+			if (this.needle.cents === null) {
+				return this.t('Not evaluable')
+			}
+			return this.t('{cents} cents', { cents: formatCents(this.needle.cents) })
+		},
+
 		cursorBands() {
 			const rect = this.cursorRect
 			const box = this.viewBox
@@ -369,11 +488,17 @@ export default {
 				.map((m) => ({
 					id: m.id,
 					visibility: m.visibility,
+					dimmed: m.dimmed === true,
+					voices: m.voices ?? [],
 					style: {
 						left: `${((m.x - box.minX) / box.width) * 100}%`,
 						top: `${((m.y - box.minY) / box.height) * 100}%`,
 					},
 				}))
+		},
+
+		pageStamps() {
+			return this.stamps.filter((s) => s.page === this.pageIndex)
 		},
 
 		/**
@@ -414,6 +539,8 @@ export default {
 						id: m.id,
 						content: m.content,
 						visibility: m.visibility,
+						dimmed: m.dimmed === true,
+						voices: m.voices ?? [],
 						style: {
 							left: `${links}%`,
 							top: `${zeile}%`,
@@ -456,6 +583,10 @@ export default {
 		highlightMode() {
 			this.applyHighlight()
 		},
+
+		noteMarks() {
+			this.applyNoteMarks()
+		},
 	},
 
 	created() {
@@ -468,6 +599,10 @@ export default {
 		 */
 		this.segmentIndex = null
 		this.highlighted = []
+		// Dasselbe fuer die Intonation: Karte `elid:staff` -> Notenkoepfe
+		// und die gerade gefaerbten Knoten mit ihrer Klasse.
+		this.noteIndex = null
+		this.marked = []
 	},
 
 	mounted() {
@@ -563,8 +698,35 @@ export default {
 			const svg = this.$refs.root?.querySelector('.score-page-svg')
 			this.segmentIndex = buildSegmentIndex(svg)
 			this.highlighted = []
+			this.noteIndex = buildNoteIndex(svg)
+			this.marked = []
 			// Die Seite kann mitten in der Wiedergabe nachgeladen worden sein.
 			this.applyHighlight()
+			this.applyNoteMarks()
+		},
+
+		/**
+		 * Die Intonation in die Notenkoepfe: alte Klassen ab, neue an.
+		 * Eine Markierung, deren Segment nicht auf dieser Seite steht, findet
+		 * hier schlicht keinen Knoten.
+		 */
+		applyNoteMarks() {
+			for (const { node, cls } of this.marked) {
+				node.classList?.remove(cls)
+			}
+			this.marked = []
+			if (!this.noteIndex || this.noteIndex.size === 0) {
+				return
+			}
+			const yOf = (node) => node.getBoundingClientRect?.().top ?? 0
+			for (const mark of this.noteMarks) {
+				const nodes = pickNoteheads(this.noteIndex.get(`${mark.elid}:${mark.staff}`), mark.rank, mark.size, yOf)
+				const cls = `scoreview-intonation-${mark.cls}`
+				for (const node of nodes) {
+					node.classList?.add(cls)
+					this.marked.push({ node, cls })
+				}
+			}
 		},
 
 		/** Haengt die Hervorhebung auf das gerade klingende Segment um. */
@@ -613,6 +775,8 @@ export default {
 			this.segmentIndex = null
 			this.highlighted = []
 			this.notesHighlighted = false
+			this.noteIndex = null
+			this.marked = []
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid: "Klick auf eine Note springt
@@ -704,7 +868,8 @@ export default {
 	/* Breite kommt aus pageStyle (Zoom) - hier bewusst KEIN width/max-width,
 	   sonst wäre der Zoom wieder an der Containerbreite gedeckelt. */
 	margin: 0 auto 16px auto;
-	background: #fff;
+	/* Das Papier - im Dunkelmodus der dunkle Grund (lib/noteTheme.js). */
+	background: var(--scoreview-page, #fff);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 	cursor: pointer;
 }
@@ -786,6 +951,34 @@ export default {
 }
 
 /*
+ * Dunkelmodus der Noten: Die Druckfarbe wird umgefaerbt, das SVG selbst
+ * bleibt unangetastet. Bewusst KEIN `filter: invert()` - das machte aus einem
+ * eingebetteten Foto (`<image>`) ein Negativ. Umgefaerbt wird nur,
+ * was MuseScore schwarz bzw. weiss zeichnet; Elemente ohne eigene Fuellung
+ * erben sie vom `<svg>`, farbige Elemente der Partitur bleiben farbig.
+ *
+ * `:where()` haelt die Spezifitaet bei null Zusatzpunkten: Die Hervorhebung
+ * weiter unten (`path.scoreview-sounding` usw.) und das Ausblenden des
+ * weissen Hintergrundrechtecks oben muessen gegen diese Regeln gewinnen,
+ * sonst leuchtete im Dunkeln keine Note mehr auf.
+ */
+.score-page--dark .score-page-svg :deep(svg) {
+	fill: var(--scoreview-ink);
+}
+
+.score-page--dark .score-page-svg :deep(:where([fill="#000000"])) {
+	fill: var(--scoreview-ink);
+}
+
+.score-page--dark .score-page-svg :deep(:where([stroke="#000000"])) {
+	stroke: var(--scoreview-ink);
+}
+
+.score-page--dark .score-page-svg :deep(:where([fill="#ffffff"])) {
+	fill: var(--scoreview-page);
+}
+
+/*
  * Rechteck statt Ellipse (Nutzer-Feedback: eine hochskalierte Ellipse
  * ragte deutlich über das eigentliche System hinaus). Das Overlay liegt
  * hinter dem Notenbild (siehe .score-page-svg oben) und darf den
@@ -862,6 +1055,81 @@ export default {
 	fill: var(--scoreview-highlight, #d32f2f);
 }
 
+/*
+ * Intonation: gruen, gelb, rot, und grau fuer „nicht auswertbar".
+ * Nach der Hervorhebung des Klingenden notiert, damit eine bewertete Note
+ * ihre Farbe auch dann behaelt, wenn der Cursor darueber laeuft.
+ */
+.score-page-svg :deep(path.scoreview-intonation-green),
+.score-page-svg :deep(.scoreview-intonation-green [fill]:not([fill="none"])) {
+	fill: var(--scoreview-intonation-green, #2e7d32);
+}
+
+.score-page-svg :deep(path.scoreview-intonation-yellow),
+.score-page-svg :deep(.scoreview-intonation-yellow [fill]:not([fill="none"])) {
+	fill: var(--scoreview-intonation-yellow, #f9a825);
+}
+
+.score-page-svg :deep(path.scoreview-intonation-red),
+.score-page-svg :deep(.scoreview-intonation-red [fill]:not([fill="none"])) {
+	fill: var(--scoreview-intonation-red, #d32f2f);
+}
+
+.score-page-svg :deep(path.scoreview-intonation-na),
+.score-page-svg :deep(.scoreview-intonation-na [fill]:not([fill="none"])) {
+	fill: var(--scoreview-intonation-na, #9e9e9e);
+}
+
+.score-page-needle {
+	position: absolute;
+	z-index: 4;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	inline-size: 64px;
+	padding: 2px 4px;
+	border-radius: var(--border-radius, 4px);
+	background: var(--color-main-background);
+	box-shadow: 0 0 4px var(--color-box-shadow, rgba(0, 0, 0, 0.3));
+	font-size: 12px;
+	font-weight: bold;
+	pointer-events: none;
+	transform: translate(-50%, -100%);
+}
+
+.score-page-needle-track {
+	position: relative;
+	inline-size: 100%;
+	block-size: 6px;
+	border-radius: 3px;
+	background: linear-gradient(to right, #d32f2f 0 25%, #2e7d32 25% 75%, #d32f2f 75% 100%);
+}
+
+.score-page-needle-pointer {
+	position: absolute;
+	inset-block: -3px;
+	inline-size: 3px;
+	background: var(--color-main-text);
+	transform: translateX(-50%);
+}
+
+.score-page-needle--green .score-page-needle-text {
+	color: #2e7d32;
+}
+
+.score-page-needle--yellow .score-page-needle-text {
+	color: #b26a00;
+}
+
+.score-page-needle--red .score-page-needle-text {
+	color: #d32f2f;
+}
+
+.score-page-needle--na .score-page-needle-text,
+.score-page-needle--rest .score-page-needle-text {
+	color: var(--color-text-maxcontrast);
+}
+
 .score-page-svg :deep(polyline.scoreview-sounding),
 .score-page-svg :deep(line.scoreview-sounding),
 .score-page-svg :deep(.scoreview-sounding [stroke]:not([stroke="none"])) {
@@ -876,8 +1144,9 @@ export default {
  */
 .score-page-mystaff {
 	position: absolute;
-	background: rgba(255, 193, 7, 0.18);
-	border-inline-start: 3px solid rgba(255, 152, 0, 0.75);
+	/* Im Dunkeln etwas kraeftiger, sonst verschwaende er im Grund (lib/noteTheme.js). */
+	background: var(--scoreview-mystaff, rgba(255, 193, 7, 0.18));
+	border-inline-start: 3px solid var(--scoreview-mystaff-edge, rgba(255, 152, 0, 0.75));
 	border-radius: 3px;
 	pointer-events: none;
 }
@@ -893,7 +1162,10 @@ export default {
  */
 .score-page-dimmed {
 	position: absolute;
-	background: var(--color-main-background, #fff);
+	/* Die Farbe des Papiers, nicht der Oberflaeche: Im Dunkelmodus der Noten
+	   bei hellem Nextcloud-Theme laege sonst ein weisser Schleier auf dunklem
+	   Grund. */
+	background: var(--scoreview-page, var(--color-main-background, #fff));
 	opacity: 0.78;
 	pointer-events: none;
 	z-index: 2;
@@ -924,6 +1196,16 @@ export default {
 	background: var(--color-success-hover, #d8f0d8);
 }
 
+.score-page-note--parts {
+	background: var(--color-warning-hover, #fdefd4);
+}
+
+/* Stimmnotizen ohne gewaehlte Stimme: da, aber zurueckgenommen. */
+.score-page-note--dimmed,
+.score-page-marker--dimmed {
+	opacity: 0.45;
+}
+
 .score-page-loop-marker {
 	position: absolute;
 	width: 3px;
@@ -932,12 +1214,14 @@ export default {
 }
 
 .score-page-loop-marker--start {
-	background: var(--color-success, #2e7d32);
+	/* Eigene Farben je Notenmodus statt der Nextcloud-Statusfarben - warum,
+	   steht in lib/noteTheme.js. */
+	background: var(--scoreview-loop-start, #2e7d32);
 	box-shadow: 2px 0 0 rgba(46, 125, 50, 0.3);
 }
 
 .score-page-loop-marker--end {
-	background: var(--color-error, #c62828);
+	background: var(--scoreview-loop-end, #c62828);
 	box-shadow: -2px 0 0 rgba(198, 40, 40, 0.3);
 }
 
@@ -957,8 +1241,12 @@ export default {
 	/* stylelint-disable-next-line csstools/use-logical */
 	margin-left: -7px;
 	margin-top: -7px;
-	background: var(--color-warning, orange);
-	border: 2px solid #fff;
+	/* Eigene Farbe je Notenmodus statt `--color-warning` - warum, steht in
+	   lib/noteTheme.js. */
+	background: var(--scoreview-marker, #bf7900);
+	/* Der Rand in Papierfarbe hebt den Punkt von den Noten ab - auf dunklem
+	   Grund waere ein weisser Ring heller als die Noten selbst. */
+	border: 2px solid var(--scoreview-page, #fff);
 	border-radius: 50%;
 	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 	cursor: pointer;
@@ -967,11 +1255,19 @@ export default {
 
 /*
  * Geteilte Notizen bekommen eine eigene Farbe ("eigene und geteilte
- * Notizen unterscheidbar, Markerfarbe") - dieselbe Primärfarbe wie der
- * linke Akzentbalken in ScoreAnnotations.vue, damit Notenbild und Liste
- * dieselbe Sprache sprechen.
+ * Notizen unterscheidbar, Markerfarbe") - bei Standard-Theme dieselbe
+ * Primaerfarbe wie der linke Akzentbalken in ScoreAnnotations.vue, damit
+ * Notenbild und Liste dieselbe Sprache sprechen.
  */
 .score-page-marker--shared {
-	background: var(--color-primary-element, #0082c9);
+	/* Je Notenmodus, nicht die Primaerfarbe des Themes - warum, steht in
+	   lib/noteTheme.js. */
+	background: var(--scoreview-marker-shared, #00679e);
+}
+
+/* Stimmnotizen: die Farbe der Leitung, bei Standard-Theme dieselbe wie ihr
+   Abzeichen in ScoreAnnotations.vue - hier aber an das Papier gebunden. */
+.score-page-marker--parts {
+	background: var(--scoreview-marker-parts, #664700);
 }
 </style>

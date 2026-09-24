@@ -119,3 +119,90 @@ export function setHighlight(index, elid, previous, className) {
 
 	return treffer
 }
+
+/** Praefixe der Notenzeile und der Stimme im class-Attribut (M10). */
+const STAFF_PREFIX = 'st-'
+const VOICE_PREFIX = 'vc-'
+
+/**
+ * Karte `elid:staff` -> Notenkoepfe, fuer die Intonation (D2): Dort wird
+ * nicht das ganze klingende Segment eingefaerbt, sondern nur die Note der
+ * EIGENEN Stimme - und in einem Chorsatz stehen im selben Segment die Koepfe
+ * aller Stimmen. `st-` (Notenzeile) trennt sie, `vc-` (Stimme in der Zeile)
+ * wird mitgegeben, damit zwei Stimmen auf einer Zeile unterscheidbar bleiben.
+ *
+ * Nur `Note` - Hals, Faehnchen und Vorzeichen gehoeren zum Akkord, nicht zu
+ * einem einzelnen Ton, und eine gruen gefaerbte Halslinie ueber zwei Koepfen
+ * verschiedener Farbe waere eine falsche Aussage.
+ *
+ * Ohne `st-` (Sidecar-Weg, aeltere Konvertierung) bleibt die Karte leer, und
+ * die Intonation bleibt bei Nadel und Liste.
+ *
+ * @param {Element|null} root
+ * @return {Map<string, Array<{node:Element, voice:?number}>>} Schluessel `${elid}:${staff}`
+ */
+export function buildNoteIndex(root) {
+	const index = new Map()
+	if (!root || typeof root.querySelectorAll !== 'function') {
+		return index
+	}
+	for (const node of root.querySelectorAll('.Note')) {
+		const tokens = (node.getAttribute('class') || '').split(/\s+/)
+		let elid = null
+		let staff = null
+		let voice = null
+		for (const token of tokens) {
+			if (token.startsWith(SEGMENT_PREFIX)) {
+				elid = kennzahl(token, SEGMENT_PREFIX)
+			} else if (token.startsWith(STAFF_PREFIX)) {
+				staff = kennzahl(token, STAFF_PREFIX)
+			} else if (token.startsWith(VOICE_PREFIX)) {
+				voice = kennzahl(token, VOICE_PREFIX)
+			}
+		}
+		if (elid === null || staff === null) {
+			continue
+		}
+		const key = `${elid}:${staff}`
+		const bisher = index.get(key)
+		if (bisher) {
+			bisher.push({ node, voice })
+		} else {
+			index.set(key, [{ node, voice }])
+		}
+	}
+	return index
+}
+
+/**
+ * @param {string} token
+ * @param {string} prefix
+ * @return {?number}
+ */
+function kennzahl(token, prefix) {
+	const zahl = Number(token.slice(prefix.length))
+	return Number.isInteger(zahl) && zahl >= 0 ? zahl : null
+}
+
+/**
+ * Welche Koepfe zu einer Markierung gehoeren: Stehen im Segment auf dieser
+ * Zeile genau so viele Koepfe wie die eigene Stimme dort Toene hat, der
+ * Rang von oben nach unten; sonst alle (etwa eine zweite Stimme auf derselben
+ * Zeile - dann lieber beide Koepfe gefaerbt als den falschen).
+ *
+ * @param {Array<{node:Element, voice:?number}>} entries aus buildNoteIndex()
+ * @param {number} rank 0 = hoechster Ton der eigenen Stimme an dieser Stelle
+ * @param {number} size wie viele Toene die eigene Stimme dort hat
+ * @param {function(Element): number} yOf vertikale Lage eines Knotens
+ * @return {Element[]}
+ */
+export function pickNoteheads(entries, rank, size, yOf) {
+	if (!entries || entries.length === 0) {
+		return []
+	}
+	if (entries.length === size && size > 1) {
+		const sortiert = [...entries].sort((a, b) => yOf(a.node) - yOf(b.node))
+		return sortiert[rank] ? [sortiert[rank].node] : []
+	}
+	return entries.map((e) => e.node)
+}

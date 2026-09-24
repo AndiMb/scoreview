@@ -1,6 +1,8 @@
 import { createApp } from 'vue'
 import AdminSettings from './components/AdminSettings.vue'
 
+import './publicPath.js'
+
 // Eigenes Bundle statt Inline-<script> im PHP-Template: Nextclouds
 // Content-Security-Policy blockt Inline-Scripts ohne Nonce, ein per
 // Util::addScript geladenes Bundle bekommt die Nonce automatisch.

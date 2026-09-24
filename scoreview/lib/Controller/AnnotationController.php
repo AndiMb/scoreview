@@ -9,6 +9,7 @@ use OCA\ScoreView\Db\Annotation;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\AnnotationService;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\LeaderService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -22,15 +23,18 @@ use OCP\IL10N;
 use OCP\IRequest;
 
 /**
- * Notizen: privat und geteilt. fileId wird wie in
+ * Notizen: privat, geteilt und fuer Stimmen (B2), dazu Stempel (B3). fileId wird wie in
  * ConversionController ausschliesslich ueber UserFileResolver aufgeloest
  * (Zugriffskontrolle ueber den Dateibaum), die eigentliche Annotation-Zeile
  * zusaetzlich ueber (id, fileId) in AnnotationService/-Mapper geprueft -
- * bei privaten Notizen gegen die userId (Owner-only, wie bisher), bei
+ * bei privaten Notizen gegen die userId (nur die Autorin), bei
  * geteilten gegen `PERMISSION_UPDATE` am aufgeloesten Node (siehe
  * canWriteShared() - wer die Datei bearbeiten darf, darf auch geteilte
  * Notizen dazu anlegen/aendern/loeschen, unabhaengig davon, wer sie
- * urspruenglich angelegt hat).
+ * urspruenglich angelegt hat). Stimmnotizen (`parts`) haengen an der
+ * Leitungsrolle (LeaderService::isLeader) statt am Schreibrecht - eine
+ * Chorleitung muss die Partitur nicht bearbeiten duerfen, um ihrem Tenor
+ * etwas zu sagen.
  */
 class AnnotationController extends Controller {
 	/**
@@ -47,12 +51,25 @@ class AnnotationController extends Controller {
 	/** Die Breite der Spalte - siehe validateAnchorEtag(). */
 	private const MAX_ANCHOR_ETAG_LENGTH = 64;
 
+	/**
+	 * Grenzen fuer die Zielstimmen einer Stimmnotiz. Die Spalte ist TEXT und
+	 * wird wie `content` bei jedem Oeffnen mit ausgeliefert; ohne Grenze
+	 * truege eine einzelne Notiz beliebig viel. 64 Stimmen deckt jede
+	 * Chor- und Orchesterpartitur; MuseScore vergibt Stimmen-IDs als kurze
+	 * Zahlen, 64 Zeichen sind dafuer reichlich, 128 fuer einen Stimmnamen
+	 * ebenfalls.
+	 */
+	private const MAX_TARGET_PARTS = 64;
+	private const MAX_PART_ID_LENGTH = 64;
+	private const MAX_PART_NAME_LENGTH = 128;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
 		private AnnotationService $annotationService,
 		private ConversionService $conversionService,
 		private IL10N $l,
+		private LeaderService $leaders,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -80,27 +97,56 @@ class AnnotationController extends Controller {
 		return new JSONResponse($this->annotationService->listForFile($fileId, $userId, $currentMeasureCount));
 	}
 
+	/**
+	 * @param string $kind 'text' oder 'stamp'; Unbekanntes gilt als 'text'
+	 * @param ?string $stamp Code aus Annotation::STAMPS, nur bei 'stamp'
+	 * @param ?array $targetParts `[{id, name}]`, nur bei Sichtbarkeit 'parts'
+	 */
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
-	public function create(int $fileId, int $measureNumber, float $fraction, string $content, ?int $elid = null, ?string $anchorEtag = null, string $visibility = Annotation::VISIBILITY_PRIVATE): JSONResponse {
+	public function create(int $fileId, int $measureNumber, float $fraction, string $content = '', ?int $elid = null, ?string $anchorEtag = null, string $visibility = Annotation::VISIBILITY_PRIVATE, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?array $targetParts = null): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
 		if ($node === null || $userId === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
-		$fehler = $this->validateContent($content) ?? $this->validateAnchorEtag($anchorEtag);
+		// Ein unbekannter Typ wird zur Textnotiz - der engere Fall: Sie
+		// braucht Text, ein Tippfehler endet also als 400 statt als Stempel
+		// ohne Bild.
+		$kind = $kind === Annotation::KIND_STAMP ? Annotation::KIND_STAMP : Annotation::KIND_TEXT;
+		$fehler = ($kind === Annotation::KIND_STAMP ? $this->validateStamp($stamp, $content) : $this->validateContent($content))
+			?? $this->validateAnchorEtag($anchorEtag);
 		if ($fehler !== null) {
 			return $fehler;
+		}
+		if ($kind === Annotation::KIND_TEXT) {
+			$stamp = null;
 		}
 		// Unbekannte Werte defensiv auf 'private' abbilden statt sie
 		// ungeprueft in die Spalte zu schreiben - visibility steuert
 		// Sichtbarkeit fuer ALLE mit Dateizugriff, ein Tippfehler im Client
 		// darf hier nicht versehentlich "geteilt" bedeuten.
-		$visibility = $visibility === Annotation::VISIBILITY_SHARED ? Annotation::VISIBILITY_SHARED : Annotation::VISIBILITY_PRIVATE;
+		$visibility = in_array($visibility, [Annotation::VISIBILITY_SHARED, Annotation::VISIBILITY_PARTS], true)
+			? $visibility
+			: Annotation::VISIBILITY_PRIVATE;
 		if ($visibility === Annotation::VISIBILITY_SHARED && !$this->canWriteShared($node)) {
 			return new JSONResponse(['error' => $this->l->t('You do not have permission to create shared notes for this file.')], Http::STATUS_FORBIDDEN);
+		}
+		// Die Rolle wird nur gefragt, wo sie etwas entscheidet - bei einer
+		// privaten Notiz sieht ohnehin niemand sonst, von wem sie ist.
+		$byLeader = $visibility !== Annotation::VISIBILITY_PRIVATE && $this->leaders->isLeader($node, $userId);
+		$targetPartsJson = null;
+		if ($visibility === Annotation::VISIBILITY_PARTS) {
+			// Serverseitig geprueft, nicht nur im Client ausgeblendet (E9).
+			if (!$byLeader) {
+				return new JSONResponse(['error' => $this->l->t('Only leaders can address notes to voices.')], Http::STATUS_FORBIDDEN);
+			}
+			$targetPartsJson = $this->normalizeTargetParts($targetParts);
+			if ($targetPartsJson === null) {
+				return new JSONResponse(['error' => $this->l->t('Choose at least one voice.')], Http::STATUS_BAD_REQUEST);
+			}
 		}
 
 		// Anker in den Bereich zwingen, den die Anzeige voraussetzt: Takte
@@ -117,27 +163,42 @@ class AnnotationController extends Controller {
 		$measureNumber = max(1, $measureNumber);
 		$fraction = is_finite($fraction) ? min(1.0, max(0.0, $fraction)) : 0.0;
 
-		$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content, $visibility);
+		$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content, $visibility, $kind, $stamp, $targetPartsJson, $byLeader);
 		return new JSONResponse($this->annotationService->serialize($annotation, $userId), Http::STATUS_CREATED);
 	}
 
+	/**
+	 * @param ?array $targetParts neue Zielstimmen einer Stimmnotiz, null =
+	 *                            unveraendert
+	 */
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
-	public function update(int $fileId, int $id, string $content): JSONResponse {
+	public function update(int $fileId, int $id, string $content = '', ?array $targetParts = null): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
 		if ($node === null || $userId === null) {
 			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
-		$fehler = $this->validateContent($content);
+		// Nur die Laenge hier: Ob der Text leer sein darf, haengt an der Art
+		// der Notiz (ein Stempel darf), und die kennt erst der Service.
+		$fehler = $this->validateContentLength($content);
 		if ($fehler !== null) {
 			return $fehler;
 		}
+		$targetPartsJson = null;
+		if ($targetParts !== null) {
+			$targetPartsJson = $this->normalizeTargetParts($targetParts);
+			if ($targetPartsJson === null) {
+				return new JSONResponse(['error' => $this->l->t('Choose at least one voice.')], Http::STATUS_BAD_REQUEST);
+			}
+		}
 
 		try {
-			$annotation = $this->annotationService->updateContent($id, $fileId, $userId, $this->canWriteShared($node), $content);
+			$annotation = $this->annotationService->updateContent($id, $fileId, $userId, $this->canWriteShared($node), $content, $this->leaders->isLeader($node, $userId), $targetPartsJson);
+		} catch (\InvalidArgumentException) {
+			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
 		} catch (\RuntimeException) {
 			return new JSONResponse(['error' => $this->l->t('You do not have permission to change this note.')], Http::STATUS_FORBIDDEN);
 		}
@@ -159,7 +220,7 @@ class AnnotationController extends Controller {
 		}
 
 		try {
-			$deleted = $this->annotationService->delete($id, $fileId, $userId, $this->canWriteShared($node));
+			$deleted = $this->annotationService->delete($id, $fileId, $userId, $this->canWriteShared($node), $this->leaders->isLeader($node, $userId));
 		} catch (\RuntimeException) {
 			return new JSONResponse(['error' => $this->l->t('You do not have permission to change this note.')], Http::STATUS_FORBIDDEN);
 		}
@@ -180,12 +241,70 @@ class AnnotationController extends Controller {
 		if (trim($content) === '') {
 			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
 		}
+		return $this->validateContentLength($content);
+	}
+
+	private function validateContentLength(string $content): ?JSONResponse {
 		// mb_strlen, nicht strlen: gezaehlt werden Zeichen, sonst haette eine
 		// Notiz mit Umlauten weniger Platz als eine ohne.
 		if (mb_strlen($content) > self::MAX_CONTENT_LENGTH) {
 			return new JSONResponse(['error' => $this->l->t('Note is too long.')], Http::STATUS_BAD_REQUEST);
 		}
 		return null;
+	}
+
+	/**
+	 * Ein Stempel braucht einen Code aus der festen Liste; sein Text ist ein
+	 * freiwilliger Zusatz und nur in der Laenge begrenzt.
+	 *
+	 * @return ?JSONResponse null, wenn der Stempel in Ordnung ist
+	 */
+	private function validateStamp(?string $stamp, string $content): ?JSONResponse {
+		if ($stamp === null || !in_array($stamp, Annotation::STAMPS, true)) {
+			return new JSONResponse(['error' => $this->l->t('Unknown stamp.')], Http::STATUS_BAD_REQUEST);
+		}
+		return $this->validateContentLength($content);
+	}
+
+	/**
+	 * Die Zielstimmen als geprueftes JSON `[{id, name}]`.
+	 *
+	 * Jede Stimme kommt mit ID UND Namen: Ob MuseScores Stimmen-ID einen
+	 * Re-Upload uebersteht, ist nicht belegt - der Client ordnet zuerst ueber
+	 * die ID, dann ueber den Namen zu (lib/annotationFilter.js). Doppelte
+	 * Eintraege fallen weg, damit die Grenze nicht mit Wiederholungen
+	 * ausgeschoepft wird.
+	 *
+	 * @param mixed $targetParts
+	 * @return ?string null, wenn keine gueltige Stimme uebrig bleibt oder die
+	 *                 Liste die Grenzen sprengt
+	 */
+	private function normalizeTargetParts(mixed $targetParts): ?string {
+		if (!is_array($targetParts) || count($targetParts) === 0 || count($targetParts) > self::MAX_TARGET_PARTS) {
+			return null;
+		}
+		$result = [];
+		$seen = [];
+		foreach ($targetParts as $part) {
+			if (!is_array($part)) {
+				return null;
+			}
+			$id = $part['id'] ?? null;
+			$name = $part['name'] ?? '';
+			if (is_int($id)) {
+				$id = (string)$id;
+			}
+			if (!is_string($id) || $id === '' || mb_strlen($id) > self::MAX_PART_ID_LENGTH
+				|| !is_string($name) || mb_strlen($name) > self::MAX_PART_NAME_LENGTH) {
+				return null;
+			}
+			if (isset($seen[$id])) {
+				continue;
+			}
+			$seen[$id] = true;
+			$result[] = ['id' => $id, 'name' => $name];
+		}
+		return json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 	}
 
 	/**

@@ -13,6 +13,7 @@ import {
 } from '../lib/playbackTime.js'
 import { createPlayer } from '../lib/player.js'
 import { createSilentClock } from '../lib/silentClock.js'
+import { createSoundFontCache } from '../lib/soundFontCache.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -35,10 +36,18 @@ const DURATION_PADDING_MS = 2000
 const MIN_TEMPO_FACTOR = 0.5
 const MAX_TEMPO_FACTOR = 1.5
 
+// Auf Modulebene, nicht je Viewer: Der Stueckwechsel einer Setliste baut
+// den AudioContext neu auf, und selbst ein neu geoeffneter Viewer auf
+// derselben Seite soll die ~40 MB nicht noch einmal laden (E11,
+// lib/soundFontCache.js).
+const soundFontCache = createSoundFontCache()
+
 /**
  * Die Zeitquelle und alles, was unmittelbar an ihr hängt: SoundFont holen,
- * Player oder stummen Platzhalter aufsetzen, Transport, Tempo, Mixerkanäle
- * und das Wachhalten des Bildschirms.
+ * Player oder stummen Platzhalter aufsetzen, Transport, Tempo und
+ * Mixerkanäle. Das Wachhalten des Bildschirms hängt seit dem
+ * Aufführungsmodus nicht mehr an der Wiedergabe allein und steht deshalb in
+ * useWakeLock.js.
  *
  * Siebtes und letztes Composable aus der Zerlegung von `ScoreViewer.vue` -
  * und das größte, weil diese
@@ -68,10 +77,10 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	const displayTimeMs = ref(0)
 	const isPlaying = ref(false)
 	const hasRealPlayer = ref(false)
-	// Warum es keinen Ton gibt, im Klartext für die Nutzerin - vorher stand
-	// hier pauschal "nicht konfiguriert", auch wenn in Wahrheit der
-	// SoundFont-Abruf oder der Synthesizer gescheitert war. Genau das machte
-	// "die App gibt keinen Ton aus" von außen undiagnostizierbar.
+	// Warum es keinen Ton gibt, im Klartext für die Nutzerin - nicht pauschal
+	// "nicht konfiguriert", wenn in Wahrheit der SoundFont-Abruf oder der
+	// Synthesizer gescheitert ist. Eine Pauschalmeldung machte "die App gibt
+	// keinen Ton aus" von außen undiagnostizierbar.
 	const playbackError = ref('')
 	// Faktor auf playbackRate (die Zeitachse bleibt davon unberührt), nur
 	// Anzeige und Eingabe sind BPM.
@@ -80,6 +89,15 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	const tempoGuessed = ref(false)
 	const mixerChannels = shallowRef([])
 	const presetList = shallowRef([])
+	// Die Bytes von score.mid, sobald der echte Player sie geholt hat - fuer
+	// die Partiturfakten (Anfangston, lib/midiNotes.js). So wird das MIDI nur
+	// einmal geladen; im stummen Modus bleibt es null, dort gibt es auch
+	// keinen Ton, der es braeuchte - also keine zusaetzliche Anfrage.
+	const midiData = shallowRef(null)
+	// Zaehlt Tempoeingriffe VON HAND (Regler). Der Speed-Trainer beobachtet
+	// ihn und endet beim ersten - setTempoBpm() zaehlt bewusst nicht
+	// mit, sonst beendete sich der Trainer mit seinem eigenen Schritt.
+	const manualTempoChanges = ref(0)
 	// SoundFont-Ladefortschritt (~40MB, "das wird auf dem Tablet zuerst
 	// wehtun") statt stummem Warten - getrennt vom permanenten
 	// playbackError (der bedeutet "geht nicht", hier heißt es "noch nicht").
@@ -107,8 +125,13 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	const dropouts = createDropoutCounter()
 	const frameMeter = createFrameRateMeter()
 
-	let abortController = null
-	let wakeLockSentinel = null
+	// Zaehlt jeden Abbau (destroy): Ein Aufbau, der nach einem await eine
+	// andere Zahl vorfindet, gehoert zu einem Stueck, das nicht mehr offen
+	// ist - seit der Setliste wechselt die Partitur im selben Viewer, und ein
+	// spaet fertig gewordener Player des alten Stuecks darf die Uhr des neuen
+	// nicht ueberschreiben.
+	let generation = 0
+	let soundFontUrlInFlight = null
 	// metadata.tracks/parts - für den zweiten resolveMixerChannels()-Aufruf
 	// aufgehoben, sobald die echten MIDI-Kanäle bekannt sind.
 	let metaTracks = null
@@ -147,9 +170,10 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	 *
 	 * @param {string} url
 	 * @param {AbortSignal} signal
+	 * @param {(percent: number) => void} report Fortschritt 0..100
 	 * @return {Promise<ArrayBuffer>}
 	 */
-	async function fetchSoundFont(url, signal) {
+	async function fetchSoundFont(url, signal, report) {
 		const res = await fetch(url, { signal })
 		if (!res.ok) {
 			// Die app-eigene Route antwortet im Fehlerfall mit {"error": "…"}
@@ -171,7 +195,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 			}
 			chunks.push(value)
 			received += value.length
-			soundFontLoadPercent.value = Math.round((received / total) * 100)
+			report(Math.round((received / total) * 100))
 		}
 		const buffer = new Uint8Array(received)
 		let offset = 0
@@ -188,24 +212,54 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	 * @param {object} timeline Rückfall-Zeitachse für den stummen Modus
 	 */
 	async function useRealPlayer(midiUrl, soundFontUrl, timeline) {
-		abortController = new AbortController()
+		const own = generation
+		const current = () => own === generation
 		soundFontLoading.value = true
 		soundFontLoadPercent.value = 0
+		soundFontUrlInFlight = soundFontUrl
 		try {
+			// Der Abruf gehoert dem Cache, nicht diesem Aufbau: Ein
+			// Stueckwechsel mitten im Laden bricht ihn nicht ab, das naechste
+			// Stueck wartet auf denselben (lib/soundFontCache.js). Abbrechen
+			// kann nur „ohne Ton weiter" (skipSoundFontLoad).
 			const [midiRes, soundFontBuffer] = await Promise.all([
 				axios.get(midiUrl, { responseType: 'arraybuffer' }),
-				fetchSoundFont(soundFontUrl, abortController.signal),
+				soundFontCache.get(soundFontUrl, (report) => {
+					const controller = new AbortController()
+					return {
+						promise: fetchSoundFont(soundFontUrl, controller.signal, report),
+						abort: () => controller.abort(),
+					}
+				}, (percent) => {
+					if (current()) {
+						soundFontLoadPercent.value = percent
+					}
+				}),
 			])
+			if (!current()) {
+				return
+			}
+			// Eine Kopie fuer die Partiturfakten, BEVOR der Player das Original
+			// bekommt: Er reicht es an sein Worklet weiter, und ein dabei
+			// uebertragener Puffer waere hier danach leer.
+			midiData.value = midiRes.data.slice(0)
 			const player = await createPlayer(midiRes.data, soundFontBuffer)
+			if (!current()) {
+				player.destroy?.()
+				return
+			}
 			clock.value = player
 			hasRealPlayer.value = true
 			durationMs.value = player.durationMs
 			presetList.value = player.getPresetList() ?? []
 			// Jetzt mit den echten, aus dem geladenen MIDI gelesenen Kanälen neu
-			// auflösen (siehe mixerLayout.js) - vorher stand dort nur die
+			// auflösen (siehe mixerLayout.js) - bis hierhin gilt nur die
 			// Index-Näherung, weil getTrackChannels() ein geladenes MIDI braucht.
 			mixerChannels.value = resolveMixerChannels(metaTracks, metaParts, player.getTrackChannels())
 		} catch (err) {
+			if (!current()) {
+				return
+			}
 			if (err.name === 'AbortError') {
 				// "Noten ohne Ton"-Weg - bewusster Nutzerwunsch, kein Fehler.
 				playbackError.value = t('Sound loading skipped.')
@@ -222,8 +276,10 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 			// Verfügung - sie ist auch im stummen Modus die richtige.
 			useSilentClock(timeline)
 		} finally {
-			soundFontLoading.value = false
-			abortController = null
+			if (current()) {
+				soundFontLoading.value = false
+				soundFontUrlInFlight = null
+			}
 		}
 	}
 
@@ -232,7 +288,9 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	 * den stummen Platzhalter zurück, statt die restlichen ~40 MB abzuwarten.
 	 */
 	function skipSoundFontLoad() {
-		abortController?.abort()
+		if (soundFontUrlInFlight) {
+			soundFontCache.abort(soundFontUrlInFlight)
+		}
 	}
 
 	function setNoSoundFontConfigured() {
@@ -284,14 +342,53 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	 * @param {Event} event
 	 */
 	function onTempoBpmInput(event) {
-		const bpm = Number(event.target.value)
+		manualTempoChanges.value++
+		setTempoBpm(Number(event.target.value))
+	}
+
+	/**
+	 * Das Tempo in BPM setzen - fuer den Speed-Trainer, der es je
+	 * Loop-Durchlauf anhebt. Dieselben Grenzen wie der Regler.
+	 *
+	 * @param {number} bpm
+	 */
+	function setTempoBpm(bpm) {
 		const factor = baseTempoBpm.value > 0 ? bpm / baseTempoBpm.value : 1
 		tempo.value = Math.min(MAX_TEMPO_FACTOR, Math.max(MIN_TEMPO_FACTOR, factor))
 		clock.value?.setTempo?.(tempo.value)
 	}
 
+	/**
+	 * Das Tempo einer Aufnahme wiederherstellen, um sie synchron abzuhoeren
+	 * (useRecorder.js): Eine Aufnahme laesst sich nicht strecken, also folgt
+	 * der Sequencer ihr. Dieselben Grenzen wie der Regler.
+	 *
+	 * @param {number} factor
+	 */
+	function setTempoFactor(factor) {
+		tempo.value = Math.min(MAX_TEMPO_FACTOR, Math.max(MIN_TEMPO_FACTOR, Number(factor) || 1))
+		clock.value?.setTempo?.(tempo.value)
+	}
+
+	/**
+	 * Pegel der Begleitung 0..1 (lib/player.js) - im stummen Modus gibt es
+	 * keine, dann wirkungslos.
+	 *
+	 * @param {number} value
+	 */
+	function setAccompanimentGain(value) {
+		clock.value?.setAccompanimentGain?.(value)
+	}
+
 	function applyChannelVolumes(volumes) {
 		clock.value?.applyChannelVolumes?.(volumes)
+	}
+
+	/**
+	 * @param {Map<number, number>} pans siehe lib/panLayout.js
+	 */
+	function applyChannelPans(pans) {
+		clock.value?.applyChannelPans?.(pans)
 	}
 
 	function setProgram({ channel, program }) {
@@ -382,40 +479,6 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		setManualOffsetMs(Number(event.target.value))
 	}
 
-	// --- Wake Lock --------------------------------------------------------
-	// "Ein Display, das mitten im Satz ausgeht, macht die ganze uebrige Arbeit
-	// wertlos." Die API ist nicht ueberall verfuegbar (Firefox ohne Flag,
-	// manche iOS-Versionen), deshalb durchweg defensiv: ohne sie bleibt die
-	// App exakt so nutzbar wie vorher, nur ohne Wachhalte-Effekt.
-
-	async function requestWakeLock() {
-		if (!navigator.wakeLock || wakeLockSentinel) {
-			return
-		}
-		try {
-			wakeLockSentinel = await navigator.wakeLock.request('screen')
-			// Das Sentinel wird vom Browser selbst geloest, wenn der Tab in den
-			// Hintergrund wechselt - beim Zurueckkehren waehrend laufender
-			// Wiedergabe erneut anfordern, sonst bliebe der Bildschirm nach
-			// einem Tab-Wechsel ungeschuetzt, obwohl isPlaying weiterhin true ist.
-			wakeLockSentinel.addEventListener('release', () => {
-				wakeLockSentinel = null
-				if (isPlaying.value && document.visibilityState === 'visible') {
-					requestWakeLock()
-				}
-			})
-		} catch (err) {
-			// z.B. Permissions-Policy verbietet Wake Lock im umgebenden iframe.
-			// eslint-disable-next-line no-console
-			console.error('ScoreView: Bildschirm konnte nicht wachgehalten werden.', err)
-		}
-	}
-
-	function releaseWakeLock() {
-		wakeLockSentinel?.release?.()
-		wakeLockSentinel = null
-	}
-
 	/**
 	 * Der AudioContext der Wiedergabe, solange es einen gibt - fuer den
 	 * Metronomklick (lib/metronomeClick.js) und fuer die Betriebsdiagnose.
@@ -454,13 +517,14 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	})
 
 	function destroy() {
-		abortController?.abort()
-		abortController = null
+		// Kein Abbruch des SoundFont-Abrufs: Er fuellt den Cache fuer das
+		// naechste Stueck. Nur dieser Aufbau hoert auf, auf ihn zu warten.
+		generation++
+		soundFontUrlInFlight = null
 		// Gibt den AudioContext frei (siehe lib/player.js) - der silentClock
 		// hat kein destroy(), daher der Guard.
 		clock.value?.destroy?.()
 		clock.value = null
-		releaseWakeLock()
 	}
 
 	function reset() {
@@ -486,6 +550,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		playbackError.value = ''
 		mixerChannels.value = []
 		presetList.value = []
+		midiData.value = null
 		baseTempoBpm.value = defaultTempoBpm
 		tempoGuessed.value = false
 		soundFontLoading.value = false
@@ -515,6 +580,8 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		maxTempoBpm,
 		mixerChannels,
 		presetList,
+		midiData,
+		manualTempoChanges,
 		soundFontLoading,
 		soundFontLoadPercent,
 		applyMetadata,
@@ -526,11 +593,13 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		seek,
 		onSeekInput,
 		onTempoBpmInput,
+		setTempoBpm,
+		setTempoFactor,
+		setAccompanimentGain,
 		applyChannelVolumes,
+		applyChannelPans,
 		setProgram,
 		sampleTime,
-		requestWakeLock,
-		releaseWakeLock,
 		destroy,
 		reset,
 	}

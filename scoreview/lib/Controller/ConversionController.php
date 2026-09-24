@@ -311,7 +311,7 @@ class ConversionController extends Controller {
 
 	/**
 	 * Es gibt (noch) nichts Fertiges - und jetzt entscheidet sich, wer weiter
-	 * arbeitet. Kann der Server konvertieren, wird wie bisher ein Job
+	 * arbeitet. Kann der Server konvertieren, wird ein Job
 	 * eingereiht und der Viewer wartet. Kann er es nicht, waere das Warten
 	 * endlos: Dann uebernimmt der Browser (Service\ClientFallback).
 	 */

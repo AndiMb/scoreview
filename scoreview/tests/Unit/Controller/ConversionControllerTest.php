@@ -22,7 +22,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Hier faellt die Rechteentscheidung fuer jede Partitur - bisher ungeprueft.
+ * Hier faellt die Rechteentscheidung fuer jede Partitur - deshalb eigens geprueft.
  *
  * Drei Zusagen, die dieser Controller allein traegt:
  *

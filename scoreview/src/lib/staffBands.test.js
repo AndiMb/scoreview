@@ -37,6 +37,41 @@ describe('extractStaffLines', () => {
 	it('vertraegt ein SVG ganz ohne Notenlinien', () => {
 		expect(extractStaffLines('<svg></svg>')).toEqual([])
 	})
+
+	// Die Form der Engine (lokaler Weg, M10), wie sie eine SATB-Seite
+	// ausliefert: Klasse an der Gruppe, Lage als Transformation.
+	const engineZeile = (st, y) => `<g class="StaffLines st-${st} vc-0">
+<g transform="matrix(1 0 0 1 1345.086 ${y})">
+${[0, 82.677, 165.354, 248.031, 330.709].map((dy) => `<polyline points="0,${dy} 7873.422,${dy}" fill="none" stroke="#000000" stroke-width="10.335" stroke-linejoin="bevel"/>`).join('\n')}
+</g>
+</g>`
+
+	it('liest auch die Engine-Form mit Transformation', () => {
+		const linien = extractStaffLines(engineZeile(0, 1303.268))
+		expect(linien).toHaveLength(5)
+		expect(linien[0]).toEqual({ y: 1303.268, left: 1345.086, right: 1345.086 + 7873.422 })
+		expect(linien[4].y).toBeCloseTo(1303.268 + 330.709)
+	})
+
+	it('liest in der Engine-Form nur bis zum Ende der Gruppe', () => {
+		// Eine Polyline hinter der Gruppe (Bogen, Hilfslinie) ist keine Notenlinie.
+		const svg = engineZeile(0, 1000) + '<g class="Slur"><polyline points="0,0 50,50"/></g><polyline points="1,1 2,2"/>'
+		expect(extractStaffLines(svg)).toHaveLength(5)
+	})
+
+	it('verrechnet verschachtelte Transformationen', () => {
+		const svg = '<g class="StaffLines" transform="translate(100, 50)"><g transform="matrix(2 0 0 2 10 20)"><polyline points="0,5 30,5"/></g></g>'
+		expect(extractStaffLines(svg)).toEqual([{ y: 50 + 20 + 10, left: 110, right: 170 }])
+	})
+
+	it('findet in der Engine-Form die Zeilen und Systeme einer SATB-Seite', () => {
+		const svg = [1303.268, 2494.176, 3525.434, 4834.499].map((y, i) => engineZeile(i, y)).join('\n')
+		const bands = findStaffBands(svg)
+		expect(bands).toHaveLength(4)
+		const systems = groupBandsIntoSystems(bands, [{ page: 0, x: 1345, y: 1303.27, w: 7873, h: 3862 }])
+		expect(systems).toHaveLength(1)
+		expect(canMapStavesToParts(systems, 4)).toBe(true)
+	})
 })
 
 describe('findStaffBands', () => {

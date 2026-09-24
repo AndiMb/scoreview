@@ -61,4 +61,92 @@ class ViewerPreferencesTest extends TestCase {
 			$preferences->set('anna', '#00FF00', 'bar'),
 		);
 	}
+	// --- Stereobild und Dunkelmodus ----------------------------------------
+
+	public function testKenntNurDieDreiNotenThemes(): void {
+		$this->assertSame('dark', ViewerPreferences::normalizeTheme('dark'));
+		$this->assertSame('light', ViewerPreferences::normalizeTheme(' light '));
+		$this->assertSame('auto', ViewerPreferences::normalizeTheme('auto'));
+		$this->assertSame('auto', ViewerPreferences::normalizeTheme('sepia'));
+	}
+
+	public function testLiestStereobildUndDunkelmodusMitVorgaben(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnCallback(
+			fn (string $user, string $app, string $key, string $default): string => match ($key) {
+				ViewerPreferences::KEY_STEREO_MY_PART => '1',
+				ViewerPreferences::KEY_NOTE_THEME => 'kaputt',
+				default => $default,
+			},
+		);
+		$werte = (new ViewerPreferences($config))->get('anna');
+
+		$this->assertTrue($werte['stereoMyPart']);
+		$this->assertSame('auto', $werte['noteTheme']);
+		$this->assertSame(ViewerPreferences::DEFAULT_COLOR, $werte['highlightColor']);
+	}
+
+	/**
+	 * Das Stereobild ist aus, solange niemand es einschaltet - auch
+	 * ohne Sitzung (Anfangszustand einer fremden Seite).
+	 */
+	public function testStereobildIstVoreingestelltAus(): void {
+		$preferences = new ViewerPreferences($this->createMock(IConfig::class));
+		$this->assertFalse($preferences->defaults()['stereoMyPart']);
+		$this->assertSame('auto', $preferences->defaults()['noteTheme']);
+	}
+
+	public function testSpeichertNurMitgeschickteAnzeigewerte(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->expects($this->once())->method('setUserValue')
+			->with('anna', Application::APP_ID, ViewerPreferences::KEY_NOTE_THEME, 'light');
+		$preferences = new ViewerPreferences($config);
+
+		$this->assertSame(['noteTheme' => 'light'], $preferences->setDisplay('anna', null, 'light'));
+	}
+
+	// --- Meine Stimme je Partitur ------------------------------------------
+
+	public function testSpeichertMeineStimmeJeDatei(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->expects($this->once())->method('setUserValue')
+			->with('anna', Application::APP_ID, 'my_part.42', '3');
+		$preferences = new ViewerPreferences($config);
+
+		$this->assertSame('3', $preferences->setMyPart('anna', 42, ' 3 '));
+	}
+
+	/**
+	 * „Keine Stimme" loescht den Eintrag, statt fuer jede je geoeffnete
+	 * Partitur einen leeren Wert liegen zu lassen.
+	 */
+	public function testKeineStimmeLoeschtDenEintrag(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->expects($this->never())->method('setUserValue');
+		$config->expects($this->exactly(2))->method('deleteUserValue')
+			->with('anna', Application::APP_ID, 'my_part.42');
+		$preferences = new ViewerPreferences($config);
+
+		$this->assertNull($preferences->setMyPart('anna', 42, null));
+		$this->assertNull($preferences->setMyPart('anna', 42, '   '));
+	}
+
+	public function testLiestMeineStimmeUndVerwirftUnbrauchbares(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnMap([
+			['anna', Application::APP_ID, 'my_part.1', '', 'Tenor-1'],
+			['anna', Application::APP_ID, 'my_part.2', '', ''],
+			['anna', Application::APP_ID, 'my_part.3', '', str_repeat('x', 65)],
+		]);
+		$preferences = new ViewerPreferences($config);
+
+		$this->assertSame('Tenor-1', $preferences->getMyPart('anna', 1));
+		$this->assertNull($preferences->getMyPart('anna', 2));
+		$this->assertNull($preferences->getMyPart('anna', 3), 'zu lang');
+	}
+
+	public function testNimmtKeineSteuerzeichenInDieStimmenId(): void {
+		$this->assertNull(ViewerPreferences::normalizePartId("1\n2"));
+		$this->assertSame(str_repeat('x', 64), ViewerPreferences::normalizePartId(str_repeat('x', 64)));
+	}
 }

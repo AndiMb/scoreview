@@ -59,7 +59,7 @@ class ConvertScoreJob extends QueuedJob {
 	 * (200 MB), damit die Ablehnung hier passiert - mit eigenem Fehlercode
 	 * statt als undurchsichtiges 413 von dort.
 	 */
-	private const DEFAULT_MAX_BYTES = 100 * 1024 * 1024;
+	public const DEFAULT_MAX_BYTES = 100 * 1024 * 1024;
 
 	public function __construct(
 		ITimeFactory $time,

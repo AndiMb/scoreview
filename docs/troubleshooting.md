@@ -9,7 +9,7 @@ Zahl der Konvertierungen je Status.
 
 Fast immer ein Mimetype-Problem. Den Mimetype trägt die App seit 1.9.2 selbst
 ein – bei Installation, Update und nach jedem Upload
-([E6](architecture.md#e6-zwei-einstiege--mimetype-und-dateiendung)). Bleibt er
+([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)). Bleibt er
 falsch, sind drei Dinge zu prüfen, in dieser Reihenfolge:
 
 1. **Lief das Update der App?** Der Repair-Step hängt an `occ upgrade`; ohne
@@ -109,6 +109,99 @@ Folgeanfragen nicht durch. Sie weisen sich mit einem Token im Header
 | `401 no_session` | Weder Sitzung noch Token – der Header fehlt |
 | `401 token_expired` | Token abgelaufen oder verbraucht; die App holt daraufhin einen frischen. Direct-Editing-Token gelten 12 h und sind für `edit()` Einmal-Token – ein Neuladen der WebView von Hand läuft deshalb in die Fehlerseite der App |
 | `403 token_file_mismatch` | Der Token gehört zu einer anderen Partitur |
+| `403 token_folder_mismatch` | Eine neue Setliste soll außerhalb des Ordners der geöffneten Partitur entstehen – mit Token geht das nur dort |
+| `403 direct_token_required` | Begleit-Token gibt es nur gegen das Direct-Editing-Token der Seite, nicht aus einer Sitzung und nicht aus einem anderen Begleit-Token |
+| `401 companion_expired`, `companion_revoked`, `companion_invalid` | Das Begleit-Token eines Setlisten-Stücks ist abgelaufen (12 h), widerrufen (Passwortwechsel, Deaktivieren, neues `companion_secret`) oder passt nicht mehr zum Direct-Editing-Token. Die Seite holt sich selbst ein neues; bleibt es dabei, die Partitur in der App neu öffnen |
+| `403 companion_purpose`, `companion_not_allowed` | Ein Begleit-Token an einer Route, für die es nicht gedacht ist – ein Fehler der Seite, kein Bedienfehler |
+| `401 user_disabled` | Das Konto ist deaktiviert |
+
+## „Das Mikrofon ist hier nicht verfügbar“
+
+Aufnahme und Intonation brauchen das Mikrofon; die Meldung erscheint, wenn der
+Browser es verweigert. Mit ihr kommt der Knopf **„Im Browser öffnen“**, der
+dieselbe Partitur in einem neuen Browserfenster öffnet. Die Ursachen, in dieser
+Reihenfolge:
+
+1. **In der Nextcloud-App für Android** geht das Mikrofon grundsätzlich nicht –
+   ihre WebView gibt es nicht frei, und von ScoreView aus ist daran nichts zu
+   ändern ([Grenzwerte](limits.md#mobil)). „Im Browser öffnen“ ist dort der
+   vorgesehene Weg.
+2. **Die Erlaubnis wurde verweigert.** Im Browser über das Schloss- bzw.
+   Einstellungssymbol neben der Adresse für diese Seite wieder erlauben.
+3. **Die Seite erlaubt kein Mikrofon.** Nextcloud sperrt es per
+   `Feature-Policy`, die App gibt es nur unter `/apps/files` frei und nur,
+   solange Aufnahme oder Intonation eingeschaltet sind. Prüfen:
+
+   ```sh
+   curl -sI -u <Nutzerin> https://<instanz>/apps/files/ | grep -i feature-policy
+   ```
+
+   Dort muss `microphone 'self'` stehen, nicht `microphone 'none'`. Steht
+   `'none'` da, sind beide Funktionen in der Verwaltung ausgeschaltet – oder
+   ein Reverse-Proxy setzt eine eigene Richtlinie.
+4. **Kein sicherer Kontext.** Über schlichtes `http://` (außer `localhost`) gibt
+   es kein Mikrofon.
+
+Die anderen Meldungen – „Es wurde kein Mikrofon gefunden“, „… wird von einer
+anderen Anwendung benutzt“ – meinen das Gerät, nicht die Seite.
+
+## Ein Klick auf eine Setliste öffnet den Texteditor
+
+Eine `*.setlist.md` ist Markdown, und Markdown öffnet in Files sonst im
+Texteditor. ScoreView nimmt den Klick über die Reihenfolge der Dateiaktionen
+an sich ([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)).
+Öffnet trotzdem Text:
+
+- **Heißt die Datei wirklich auf `.setlist.md`?** `Konzert.md` ist keine
+  Setliste, `Konzert.setlist.md` schon.
+- **Sind Frontend und App aktuell?** Nach einem Update einmal hart neu laden
+  (`Strg`+`Umschalt`+`R`).
+- **Eine neue Nextcloud-Version kann die Reihenfolge der Aktionen anders
+  auswerten.** Der Eintrag **„Als Setliste öffnen“** im Menü (⋯) der Datei
+  bleibt der Ausweg.
+
+In den mobilen Apps ist das kein Fehler: Sie bieten für Markdown Text an.
+Dort öffnet man eine Partitur aus der Liste, und ScoreView bietet die
+Setlisten aus demselben Ordner an ([Grenzwerte](limits.md#setliste)).
+
+## „Folgt mir“ kommt auf einem Gerät nicht an
+
+Cron spielt hier **keine** Rolle – alles läuft in den Anfragen selbst.
+
+- **Folgt das Gerät überhaupt?** Eigenes Navigieren (Takteingabe, Klick auf
+  eine Note, Suchlauf, Loop) löst es von der Leitung; das Abzeichen zeigt
+  dann „Folgt … nicht“ und den Knopf „Zurück zur Leitung“. Blättern und Zoom lösen es nicht.
+- **Hat es die Sitzung schon bemerkt?** Ohne laufende Sitzung fragt ein Gerät
+  nur alle 15 s nach. Wer vor dem Start geöffnet hat, wartet also bis zu 15 s.
+- **Steht die Verbindung?** Das Abzeichen zeigt „getrennt“, wenn eine Abfrage
+  nicht innerhalb von 5 s beantwortet wird. Nach einem Funkloch holt das Gerät von selbst den
+  letzten Stand; ein Anfangston, der dabei älter als 2 s geworden ist, wird
+  bewusst nicht mehr gespielt.
+- **Ist die Seite im Hintergrund?** Im Takt fragt nur eine sichtbare Seite ab.
+- **Sieht das Gerät die Datei?** Folgen setzt Dateizugriff voraus; ohne ihn
+  antwortet der Server 404.
+- **Kommen die Sprünge spät?** Ohne `notify_push` bestimmt `follow_poll_ms` die
+  Verzögerung; mit `notify_push` zeigt die Betriebsdiagnose, ob Push wirklich
+  greift – ist der Dienst hinter dem Reverse-Proxy nicht erreichbar, fallen die
+  Geräte stillschweigend aufs Abfragen zurück. Die mobilen Apps fragen immer ab.
+- **Mehrere Webserver?** Ohne verteilten Cache (Redis) sieht jedes Gerät
+  Änderungen bis zu einer Sekunde später
+  ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+
+## Eine Aufnahme lässt sich nicht speichern
+
+Die Aufnahme bleibt dann im Speicher des Browsers, lässt sich abhören und über
+„Erneut speichern“ noch einmal hochladen – bis die Seite neu geladen wird. Die
+Meldung nennt den Grund:
+
+| Antwort | Bedeutung | Was hilft |
+|---|---|---|
+| `409` | Die Höchstzahl an Aufnahmen für diese Partitur ist erreicht | die älteste ersetzen (die App fragt) oder eine löschen |
+| `413` mit Meldung der App | Die Aufnahme ist länger als `max_recording_seconds` | kürzer aufnehmen oder die Grenze anheben |
+| `413` ohne Meldung der App (Seite des Webservers) | Der Webserver nimmt so große Anfragen nicht an | `client_max_body_size` (nginx) auf mindestens `20M`, siehe [Installation](installation.md#uploadgröße-für-aufnahmen) |
+| `507` „… all the storage allowed per person“ | Der Speicher je Person ist voll | ältere Aufnahmen löschen, oder `max_recording_bytes_per_user` anheben |
+| `507` „… storage for recordings on this server is full“ | Der Speicher der Instanz für Aufnahmen ist voll | `max_recording_bytes_total` anheben |
+| `404` | Die Partitur ist nicht (mehr) erreichbar, oder die Aufnahme gehört jemand anderem | – |
 
 ## Die Konvertierung kommt nicht voran
 
@@ -348,3 +441,9 @@ irreführend.
 Abhilfe: App-Version in `appinfo/info.xml` erhöhen und `occ upgrade` laufen
 lassen (der übliche Weg), oder den lokalen Cache leeren – im Container-Setup am
 einfachsten per Neustart des Nextcloud-Containers.
+
+Im Betrieb kann dasselbe Bild nach einem App-Update auftreten, wenn die Dateien
+ausgetauscht wurden, `occ upgrade` aber nicht lief: Dann antworten die Routen,
+die die neue Fassung mitbringt, mit 404 – etwa die von „Folgt mir“, Setlisten
+oder Aufnahmen, während die Partitur selbst sich öffnen lässt. `occ upgrade`
+behebt das und legt zugleich die neuen Tabellen an.

@@ -6,12 +6,15 @@ namespace OCA\ScoreView\AppInfo;
 
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\ScoreView\Listener\AddCspListener;
+use OCA\ScoreView\Listener\AddFeaturePolicyListener;
+use OCA\ScoreView\Listener\CompanionRevocationListener;
 use OCA\ScoreView\Listener\FilesLoadAdditionalScriptsListener;
 use OCA\ScoreView\Listener\NodeDeletedListener;
 use OCA\ScoreView\Listener\RegisterDirectEditorListener;
 use OCA\ScoreView\Listener\ScoreFileListener;
 use OCA\ScoreView\Listener\ScoreMimetypeListener;
 use OCA\ScoreView\Listener\UserDeletedListener;
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Middleware\DirectAccessMiddleware;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
@@ -22,6 +25,9 @@ use OCP\Files\Events\Node\NodeCreatedEvent;
 use OCP\Files\Events\Node\NodeDeletedEvent;
 use OCP\Files\Events\Node\NodeWrittenEvent;
 use OCP\Security\CSP\AddContentSecurityPolicyEvent;
+use OCP\Security\FeaturePolicy\AddFeaturePolicyEvent;
+use OCP\User\Events\PasswordUpdatedEvent;
+use OCP\User\Events\UserChangedEvent;
 use OCP\User\Events\UserDeletedEvent;
 
 class Application extends App implements IBootstrap {
@@ -78,11 +84,25 @@ class Application extends App implements IBootstrap {
 		// Controller dieser App sehen, und sie ruehrt dort nichts an, was das
 		// Attribut nicht traegt.
 		$context->registerMiddleware(DirectAccessMiddleware::class);
+		// Was die Middleware ueber den Ausweis herausfindet, lesen die
+		// Controller aus derselben Instanz. Ausdruecklich geteilt statt dem
+		// Auto-Wiring ueberlassen: Bekaeme ein Controller eine eigene, saehe
+		// er die Voreinstellung - und die ist die Sitzung ohne Grenze.
+		$context->registerService(DirectAccessContext::class, static fn () => new DirectAccessContext(), true);
 
 		// Lockert die CSP fuer WASM-Audiodekodierung und den konfigurierten
 		// SoundFont-Host - siehe Listener\AddCspListener fuer den vollen
 		// Grund (beides empirisch als CSP-Blocker gefunden).
 		$context->registerEventListener(AddContentSecurityPolicyEvent::class, AddCspListener::class);
+
+		// Das Mikrofon auf der Files-Seite, nur wenn eine Funktion es braucht
+		// (Listener\AddFeaturePolicyListener, S3 in docs/architecture.md).
+		$context->registerEventListener(AddFeaturePolicyEvent::class, AddFeaturePolicyListener::class);
+
+		// Widerruf der Begleit-Token der mobilen Seite ueber die Epoche der
+		// Nutzerin (Service\CompanionTokenService).
+		$context->registerEventListener(PasswordUpdatedEvent::class, CompanionRevocationListener::class);
+		$context->registerEventListener(UserChangedEvent::class, CompanionRevocationListener::class);
 	}
 
 	public function boot(IBootContext $context): void {

@@ -149,3 +149,28 @@ export function computeVoiceFocusVolumes(allChannels, focusChannels, { loud = 12
 	}
 	return result
 }
+
+/**
+ * „Meine Stimme" als Mixerzustand: welche Bedienzeile hervorgehoben ist und
+ * welche Lautstaerken dazu gehoeren. Eine Stelle fuer beide Wege, auf denen
+ * die Wahl ankommt - der Klick im Mixer und die serverseitig gemerkte Stimme
+ * beim Oeffnen (useMyPart.js). Ohne sie hiesse „Meine Stimme" nach dem
+ * Oeffnen zwar markiert, klaenge aber nicht so.
+ *
+ * @param {MixerChannel[]} channels
+ * @param {?string} partId
+ * @return {?{key:string, volumes:Map<number, number>}} null ohne Stimme oder ohne passende Zeile
+ */
+export function voiceFocusForPart(channels, partId) {
+	if (partId === null || partId === undefined) {
+		return null
+	}
+	const group = resolveMixerGroups(channels).find((g) => g.partId !== null && g.partId !== undefined && String(g.partId) === String(partId))
+	if (!group) {
+		return null
+	}
+	return {
+		key: group.key,
+		volumes: computeVoiceFocusVolumes(channels.map((ch) => ch.channel), group.channels),
+	}
+}

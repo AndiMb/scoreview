@@ -24,7 +24,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { cpus } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
-import { checkPromises, toPositions } from './lib/artifacts.mjs'
+import { checkPromises, checkScoreFacts, toPositions } from './lib/artifacts.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
@@ -164,8 +164,8 @@ async function convert(msczPath, fontVerzeichnis) {
 		meta: await score.metadata(),
 	}
 
-	// Kein score.destroy(): dieser Prozess konvertiert genau eine Partitur und
-	// endet danach, der Prozessabbau gibt die Wasm-Instanz samt Heap frei. Wer
+	// Kein score.destroy(): dieser Prozess konvertiert genau eine Partitur (der
+	// Selbsttest zwei winzige) und endet danach, der Prozessabbau gibt die Wasm-Instanz samt Heap frei. Wer
 	// hier je mehrere Partituren nacheinander laedt, braucht den Aufruf - mit
 	// ihm bleibt der Speicher flach (gemessen: fuenf Durchlaeufe, rund 105 MB
 	// unveraendert), ohne ihn waechst er je Partitur.
@@ -213,11 +213,19 @@ async function main() {
 			// pruefbar (siehe checkPromises).
 			svgs: converted.pages,
 		})
+		// Zweite, ebenso selbst erstellte Partitur fuer die Partiturfakten der
+		// Engine (Tonarten mit Dur/Moll, Studierbuchstaben). Nur meta.json wird
+		// gebraucht; die Engine ist schon geladen, der Lauf kostet deshalb
+		// wenig. Eine eigene Datei statt einer erweiterten selftest-score.mscz:
+		// Die ist zugleich die Partitur des Sidecar-Selbsttests, und der laeuft
+		// auf Stock-MuseScore, das diese Felder nicht kennt.
+		const fakten = checkScoreFacts((await convert(join(HERE, 'keys-marks-test.mscz'), fontVerzeichnis)).meta)
+		problems.push(...fakten.problems)
 		stdoutWrite(JSON.stringify({
 			ok: problems.length === 0,
 			error: problems.length > 0 ? problems.join('; ') : null,
 			problems,
-			details: { musescoreVersion: await museScoreVersion(), seconds, ...details },
+			details: { musescoreVersion: await museScoreVersion(), seconds, ...details, scoreFacts: fakten.details },
 		}) + '\n')
 		return
 	}

@@ -36,3 +36,26 @@ export function needsOwnFileAction(node) {
 
 	return istMscz && node.mime !== MSCZ_MIME
 }
+
+// ---------------------------------------------------------------------------
+// Setlisten (E6, E11)
+// ---------------------------------------------------------------------------
+// Eine Setliste ist eine gewoehnliche Markdown-Datei mit eigener Endung - den
+// Mimetype `text/markdown` teilt sie mit jeder anderen `.md`. Erkannt wird sie
+// deshalb am Namen, und nur daran: Eine `Notizen.md` bleibt Sache von Text.
+
+export const SETLIST_EXTENSION = '.setlist.md'
+
+/**
+ * @param {object} node Ein Knoten aus @nextcloud/files (`basename`, `type`)
+ * @return {boolean}
+ */
+export function isSetlistFile(node) {
+	if (!node || (node.type !== undefined && node.type !== 'file')) {
+		return false
+	}
+	// Nur `basename`: `extension` liefert bei zwei Punkten nur `.md` - genau
+	// der Teil, den die Setliste mit jeder Notiz teilt.
+	const basename = typeof node.basename === 'string' ? node.basename.toLowerCase() : ''
+	return basename.length > SETLIST_EXTENSION.length && basename.endsWith(SETLIST_EXTENSION)
+}

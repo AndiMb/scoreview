@@ -45,6 +45,55 @@ return [
 		['name' => 'annotation#update', 'url' => '/api/scores/{fileId}/annotations/{id}', 'verb' => 'PUT'],
 		['name' => 'annotation#destroy', 'url' => '/api/scores/{fileId}/annotations/{id}', 'verb' => 'DELETE'],
 
+		// „Meine Stimme" je Partitur - lesend und schreibend, weil der Wert je
+		// Datei gilt und der Anfangszustand der Seite die Datei noch nicht
+		// kennt (Controller\MyPartController).
+		['name' => 'my_part#show', 'url' => '/api/scores/{fileId}/my-part', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'my_part#update', 'url' => '/api/scores/{fileId}/my-part', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
+
+		// Leitungen einer Partitur (B1, Controller\LeaderController). Die
+		// Kennung im DELETE darf alles enthalten, was Nextcloud in einer UID
+		// zulaesst (auch Punkt, @ und Leerzeichen) - nur kein '/', das die
+		// Route ohnehin trennt.
+		['name' => 'leader#index', 'url' => '/api/scores/{fileId}/leaders', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'leader#create', 'url' => '/api/scores/{fileId}/leaders', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'leader#destroy', 'url' => '/api/scores/{fileId}/leaders/{uid}', 'verb' => 'DELETE', 'requirements' => ['fileId' => '\d+', 'uid' => '[^/]+']],
+		// Vorschlaege zum Ernennen - eigene, token-faehige Suche statt der
+		// OCS-Sharee-API, die eine Sitzung verlangt (Service\LeaderService::candidates).
+		['name' => 'leader#candidates', 'url' => '/api/scores/{fileId}/leader-candidates', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+
+		// „Folgt mir" (C, Controller\FollowController): EIN Zustand je Datei,
+		// gelesen per GET ?since=<version> (204, wenn sich nichts geaendert
+		// hat), geschrieben nur von Leitungen. /join meldet ein Geraet fuer
+		// Push an (notify_push, optional).
+		['name' => 'follow#show', 'url' => '/api/scores/{fileId}/follow', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'follow#create', 'url' => '/api/scores/{fileId}/follow', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'follow#update', 'url' => '/api/scores/{fileId}/follow', 'verb' => 'PATCH', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'follow#destroy', 'url' => '/api/scores/{fileId}/follow', 'verb' => 'DELETE', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'follow#join', 'url' => '/api/scores/{fileId}/follow/join', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+
+		// Eigene Aufnahmen (D1, Controller\RecordingController): nur fuer die
+		// Aufnehmende, fremd heisst 404 (V7). Der Upload kommt roh als
+		// audio/wav, die Angaben zum Zeitabgleich in der Query.
+		['name' => 'recording#index', 'url' => '/api/scores/{fileId}/recordings', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'recording#create', 'url' => '/api/scores/{fileId}/recordings', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'recording#show', 'url' => '/api/scores/{fileId}/recordings/{id}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+', 'id' => '\d+']],
+		['name' => 'recording#destroy', 'url' => '/api/scores/{fileId}/recordings/{id}', 'verb' => 'DELETE', 'requirements' => ['fileId' => '\d+', 'id' => '\d+']],
+
+		// Setlisten (E, Controller\SetlistController). Eine Setliste ist eine
+		// eigene Datei `*.setlist.md` in Files (V3) - die Routen lesen und
+		// schreiben sie, `/api/scores/{fileId}/…` fragen von der offenen
+		// Partitur aus (Weg 2 und die Auswahl fuer den Editor).
+		['name' => 'setlist#show', 'url' => '/api/setlists/{fileId}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'setlist#update', 'url' => '/api/setlists/{fileId}', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'setlist#create', 'url' => '/api/setlists', 'verb' => 'POST'],
+		['name' => 'setlist#forScore', 'url' => '/api/scores/{fileId}/setlists', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'setlist#candidates', 'url' => '/api/scores/{fileId}/score-candidates', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		// Begleit-Token fuer die mobile Seite (Entwurf §15): nur mit dem
+		// Direct-Editing-Token der Partitur, nur fuer eine Liste daneben, die
+		// sie enthaelt. POST, weil jede Antwort neue Token erzeugt.
+		['name' => 'setlist#tokens', 'url' => '/api/scores/{fileId}/setlists/{setlistId}/tokens', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+', 'setlistId' => '\d+']],
+
 		// Anzeigeeinstellungen der einzelnen Nutzerin (Hervorhebung im
 		// Notenbild). Nur schreibend - gelesen werden sie aus dem
 		// Anfangszustand der Files-Seite, siehe Controller\PreferenceController.

@@ -10,8 +10,8 @@ ScoreView besteht aus diesen Teilen:
 
 | Teil | Wo | Aufgabe |
 |---|---|---|
-| Nextcloud-App | `scoreview/lib/` (PHP) | Konvertierung anstoßen, Ergebnis cachen, Artefakte ausliefern, Notizen verwalten |
-| Viewer | `scoreview/src/` (Vue 3) | Notenseiten anzeigen, MIDI im Browser synthetisieren, Cursor führen |
+| Nextcloud-App | `scoreview/lib/` (PHP) | Konvertierung anstoßen, Ergebnis cachen, Artefakte ausliefern, Notizen, Leitungen, „Folgt mir“, Setlisten und Aufnahmen verwalten |
+| Viewer | `scoreview/src/` (Vue 3) | Notenseiten anzeigen, MIDI im Browser synthetisieren, Cursor führen, Mikrofon auswerten |
 | Sidecar | `sidecar/` (Python + MuseScore 4) | `.mscz` übersetzen – im eigenen Container |
 | Lokaler Konverter | `scoreview/converter/` (Node + scoreview-engine: MuseScore als WebAssembly) | dasselbe, ohne Container |
 
@@ -57,8 +57,10 @@ Browser
    |- SVG-Seiten anzeigen ............. Zoom · Vollbild · Autoscroll
    |- MIDI clientseitig synthetisieren  Tempo · Mixer · Metronom
    |- Cursor-Overlay über spos/12-Koordinaten
-   |- Taktnavigation über mpos
-   +- Notizen an musikalischen Ankern (eigene Tabellen)
+   |- Taktnavigation über mpos, Studierbuchstaben aus meta.json/MIDI (E12)
+   |- Notizen und Stempel an musikalischen Ankern (eigene Tabellen)
+   |- „Folgt mir“: Zustand einer Leitung, abgefragt oder per Push (E10)
+   +- Mikrofon: Aufnahmen (IAppData), Intonation (nur im Browser)
 ```
 
 **Leitprinzip: Das Frontend kennt ausschließlich die HTTP-API der App.** Es
@@ -77,37 +79,58 @@ Verzweigung; was der Viewer tut, hängt weiterhin allein an den Artefakten.
 Alle Routen liegen unter `/apps/scoreview/api/` und stehen in
 `scoreview/appinfo/routes.php`. Die App hat bewusst **keine eigene Seite** und
 keinen Navigationseintrag; `/apps/scoreview/` antwortet 404. Eingestiegen wird
-auf drei Wegen, und alle drei zeigen **dieselbe Komponente**:
+auf vier Wegen, und alle vier zeigen **dieselbe Komponente**:
 
 1. **Nextclouds Viewer**, am Mimetype `application/x-musescore` – der
    reguläre Weg im Browser.
 2. **Eine eigene Dateiaktion auf der Endung**, wo der Mimetype nicht
-   registriert ist ([E6](#e6-zwei-einstiege-mimetype-und-dateiendung)).
-3. **Eine eigenständige Seite über Nextclouds Direct Editing**, für die
+   registriert ist ([E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)).
+3. **Eine Dateiaktion auf `*.setlist.md`**, die den Viewer mit einer Setliste
+   öffnet ([E11](#e11-die-setliste-als-markdown-datei)).
+4. **Eine eigenständige Seite über Nextclouds Direct Editing**, für die
    mobilen Apps, die keine Skripte der Dateien-Seite laden
    ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)). Auch sie hat
    keine eigene Route – sie wird unter `/apps/files/directEditing/{token}`
    ausgeliefert.
 
-Der dritte Weg bringt eine zweite Art Ausweis mit: Seine Seite kommt **ohne
+Der vierte Weg bringt eine zweite Art Ausweis mit: Seine Seite kommt **ohne
 Sitzungscookie** an, ihre Folgeanfragen weisen sich mit einem
-Direct-Editing-Token im Header `X-ScoreView-Token` aus. Welche Routen das
-annehmen, entscheidet das Attribut `#[DirectTokenOrSession]`; geprüft wird es
-in `Middleware\DirectAccessMiddleware`. Ohne Header verhält sich jede Route
-exakt wie vorher.
+Direct-Editing-Token im Header `X-ScoreView-Token` aus, für weitere Dateien
+einer Setliste zusätzlich mit einem Begleit-Token in `X-ScoreView-Companion`.
+Welche Routen das annehmen, entscheidet das Attribut `#[DirectTokenOrSession]`;
+geprüft wird es in `Middleware\DirectAccessMiddleware`. Ohne Header verhält
+sich jede Route exakt wie vorher. Die Spalte „Token“ unten nennt, was eine
+Route mit Token annimmt; Einzelheiten in
+[E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps).
 
-| Route | Zweck |
-|---|---|
-| `GET /api/scores/{fileId}/status` | Konvertierungsstatus, Seitenzahl, Metadaten |
-| `GET /api/scores/{fileId}/artifact/{name}` | Ein Artefakt aus dem Cache (`page-N`, `midi`, `timing`, `measures`, `meta`) |
-| `GET /api/scores/{fileId}/source` | Die `.mscz` selbst – nur für die Konvertierung im Browser ([E7](#e7-konvertierung-im-browser-als-rückfall)) |
-| `GET /api/engine/{name}` | Die drei Dateien der scoreview-engine, für denselben Weg (**ohne Anmeldung** – appeigene Bauartefakte, für alle dieselben Bytes; ein nativer `import()` kann keinen Ausweis tragen) |
-| `POST /api/scores/{fileId}/reconvert` | Verwirft die gespeicherte Konvertierung und lässt sie neu erzeugen (nur mit Schreibrecht auf die Datei) |
-| `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe |
-| `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen |
-| `POST /api/preferences` | Anzeigeeinstellungen der Nutzerin (nur schreibend – gelesen aus dem Anfangszustand der Files-Seite) |
-| `POST /api/settings` | Admin-Einstellungen speichern |
-| `GET /api/health`, `POST /api/selftest` | Betriebsdiagnose, Sidecar-Selbsttest (nur Admins) |
+| Route | Zweck | Token |
+|---|---|---|
+| `GET /api/scores/{fileId}/status` | Konvertierungsstatus, Seitenzahl, Metadaten | ja |
+| `GET /api/scores/{fileId}/artifact/{name}` | Ein Artefakt aus dem Cache (`page-N`, `midi`, `timing`, `measures`, `meta`) | ja |
+| `GET /api/scores/{fileId}/source` | Die `.mscz` selbst – nur für die Konvertierung im Browser ([E7](#e7-konvertierung-im-browser-als-rückfall)) | ja |
+| `GET /api/engine/{name}` | Die drei Dateien der scoreview-engine, für denselben Weg (**ohne Anmeldung** – appeigene Bauartefakte, für alle dieselben Bytes; ein nativer `import()` kann keinen Ausweis tragen) | – |
+| `POST /api/scores/{fileId}/reconvert` | Verwirft die gespeicherte Konvertierung und lässt sie neu erzeugen (nur mit Schreibrecht auf die Datei) | – |
+| `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe | ja |
+| `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen und Stempel; Sichtbarkeit `parts` nur für Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | ja |
+| `GET\|PUT /api/scores/{fileId}/my-part` | „Meine Stimme“ je Partitur und Nutzerin | ja |
+| `GET\|POST /api/scores/{fileId}/leaders`, `DELETE …/leaders/{uid}` | Leitungen lesen, ernennen, abberufen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | ja |
+| `GET /api/scores/{fileId}/leader-candidates?q=` | Nutzersuche für die Ernennung, nur Leitungen, 30 Aufrufe je Minute | ja |
+| `GET\|POST\|PATCH\|DELETE /api/scores/{fileId}/follow`, `POST …/follow/join` | „Folgt mir“: Zustand lesen (alle mit Dateizugriff), Sitzung führen (Leitung), für Push anmelden ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | ja |
+| `GET\|POST /api/scores/{fileId}/recordings`, `GET\|DELETE …/recordings/{id}` | Eigene Aufnahmen – nur die eigenen, fremde antworten 404 | ja |
+| `GET\|PUT /api/setlists/{fileId}` | Setliste lesen (aufgelöst aus Sicht der Nutzerin) und schreiben ([E11](#e11-die-setliste-als-markdown-datei)) | Setlisten-Begleit-Token; schreibend nur mit Einträgen um die Partitur herum |
+| `POST /api/setlists` | Neue Setliste anlegen | nur im Ordner der Token-Datei, ohne Begleit-Token |
+| `GET /api/scores/{fileId}/setlists` | Setlisten im Ordner der Partitur, die sie enthalten | ja, ohne Begleit-Token |
+| `GET /api/scores/{fileId}/score-candidates` | Partituren um die offene herum, für den Setlisten-Editor | ja, ohne Begleit-Token |
+| `POST /api/scores/{fileId}/setlists/{setlistId}/tokens` | Begleit-Token für die Stücke einer Setliste ausgeben | **nur** Direct-Editing-Token |
+| `POST /api/preferences` | Anzeigeeinstellungen der Nutzerin (nur schreibend – gelesen aus dem Anfangszustand der Seite) | ja, ohne Begleit-Token |
+| `POST /api/settings` | Admin-Einstellungen speichern | – |
+| `GET /api/health`, `POST /api/selftest` | Betriebsdiagnose, Sidecar-Selbsttest (nur Admins) | – |
+
+Die Endpunkte von „Folgt mir“, Aufnahme und Intonation hängen an je einem
+Schalter der Verwaltung (`FeatureConfig`). Ist er aus, antworten sie 404, und
+der Viewer zeigt nichts davon – wer eine Funktion nicht nutzt, bemerkt sie
+nicht, auch nicht als zusätzliche Anfrage. Die Leitungsrolle hängt an keinem
+Schalter: Auf ihr bauen Stimmnotizen ebenso auf wie „Folgt mir“.
 
 Gültige Artefaktnamen sind eine Allowlist in `ConversionService`, kein
 Dateipfad. Die Route selbst schränkt nur die Zeichenklasse ein, damit ein
@@ -175,7 +198,10 @@ Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 | Tabelle | Inhalt |
 |---|---|
 | `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version`, `backend` |
-| `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag` |
+| `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag`, `kind`, `stamp`, `target_parts`, `by_leader` |
+| `scoreview_leaders` | `file_id`, `user_id`, `appointed_by`, `created_at` – ernannte Leitungen; die Eigentümerin steht nie darin ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) |
+| `scoreview_follow` | `file_id` (Primärschlüssel: höchstens eine Sitzung je Datei), `leader_uid`, `started_at`, `heartbeat_at`, `version`, `state` ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) |
+| `scoreview_recordings` | `file_id`, `user_id`, `created_at`, `duration_ms`, `size_bytes`, `score_start_ms`, `tempo_factor`, `with_accompaniment` – die WAV selbst liegt in IAppData |
 
 `backend` hält fest, welcher Konvertierungsweg **diese** Darstellung erzeugt hat
 (`sidecar`, `local`, oder `NULL` für Datensätze aus der Zeit vor der Spalte).
@@ -191,14 +217,37 @@ Anker gesetzt wurde.
 Geteilte Notizen hängen an den **Dateirechten**, nicht an einer eigenen
 Rechteverwaltung: Wer eine Notiz sieht, sieht die Datei; wer sie ändern darf,
 braucht `PERMISSION_UPDATE`. Fehlt das Schreibrecht, antwortet der Controller
-403, statt die Bedienelemente nur auszublenden.
+403, statt die Bedienelemente nur auszublenden. Eine dritte Sichtbarkeit,
+`parts`, richtet sich an bestimmte Stimmen und ist Leitungen vorbehalten
+([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)). Ausgeliefert wird sie an
+alle mit Dateizugriff; welche Stimme sie sieht, hervorgehoben oder
+zurückgenommen, entscheidet der Browser (`annotationFilter.js`). Die Zielstimme
+steht doppelt darin, als Part-ID und als Name, weil nicht belegt ist, dass
+MuseScores Part-ID einen Re-Upload übersteht. Ein **Stempel** (`kind = stamp`)
+ist eine Notiz mit einem Symbol aus einer festen Liste (Atemzeichen, Zäsur,
+Dynamik, Fermate …) statt Text; `by_leader` wird beim Anlegen festgehalten,
+damit eine abberufene Leitung ihre Hinweise behält.
+
+Aufnahmen liegen in IAppData unter `recordings/<uid>/<fileId>/<id>.wav`, nicht
+in Files: Nur die Aufnehmende hört sie, und in Files tauchten sie in Freigaben,
+Suche und Kontingent der Partitur-Eigentümerin auf. Weil IAppData gegen **kein**
+Kontingent zählt, hat die App eigene Grenzen – je Partitur (Anzahl), je
+Aufnahme (Länge), je Person und für die ganze Instanz (Bytes); beim Erreichen
+antwortet der Server 409, 413 oder 507 mit einer lesbaren Meldung. Eine fremde
+Aufnahme antwortet 404, nicht 403.
 
 ### Aufräumen
 
-`CleanupOrphansJob` räumt Cache-Einträge und Notizen gelöschter Dateien und
-Konten ab. Notizen werden bewusst erst entfernt, wenn die Datei auch aus dem
-Papierkorb verschwunden ist – eine Wiederherstellung aus dem Papierkorb soll die
-Notizen nicht verlieren.
+`CleanupOrphansJob` räumt Cache-Einträge, Notizen, Leitungen, Folgesitzungen und
+Aufnahmen gelöschter Dateien ab. Das geschieht bewusst erst, wenn die Datei
+auch aus dem Papierkorb verschwunden ist – eine Wiederherstellung aus dem
+Papierkorb soll nichts davon verlieren. Folgesitzungen ohne Lebenszeichen
+der Leitung (30 min) entfernt er unabhängig davon. `UserDeletedListener`
+löscht beim Löschen eines Kontos dessen Notizen, Ernennungen, geleitete
+Sitzungen und Aufnahmen. Zeilen und WAV-Dateien der Aufnahmen verschwinden
+dabei immer zusammen (`RecordingStorage`), und ein leer gewordener Ordner
+`recordings/<uid>/` geht mit – entschieden an der Tabelle, weil `ISimpleFolder`
+keine Unterordner auflistet.
 
 ## Browserseite
 
@@ -211,23 +260,28 @@ Einstellungsseite.
 
 Aufbau:
 
-- Drei Webpack-Einträge, drei Seiten: `src/viewer.js` für die Dateien-Seite
-  (Viewer-Handler **und** Dateiaktion, [E6](#e6-zwei-einstiege-mimetype-und-dateiendung)),
+- Drei Webpack-Einträge für drei Seiten: `src/viewer.js` für die Dateien-Seite
+  (Viewer-Handler **und** die beiden Dateiaktionen,
+  [E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)),
   `src/standalone.js` für die eigenständige Seite der mobilen Apps
   ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)) und
-  `src/settings.js` für die Verwaltung.
+  `src/settings.js` für die Verwaltung. Dazu ein vierter, der keine Seite ist:
+  `src/worklets/captureWorklet.js`, das Aufnahme-Worklet (siehe
+  [Mikrofon](#mikrofon)).
 - `src/components/` – `ScoreViewer.vue` als Rahmen, dazu `ScorePage.vue`,
-  `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreModal.vue`,
-  `StandaloneFrame.vue`, `AdminSettings.vue`.
+  `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreStamps.vue`,
+  `ScoreModal.vue`, `StandaloneFrame.vue`, `AdminSettings.vue` und die
+  Bedienteile der Probe- und Konzertfunktionen (Tabelle unten).
 - `src/composables/` – der Zustand des Viewers, nach Themen getrennt:
-  Konvertierungsstatus, Notizen, Zoom, Autoscroll, Metronom, Loop, Wiedergabe.
+  Konvertierungsstatus, Notizen, Zoom, Autoscroll, Metronom, Loop, Wiedergabe,
+  und je eines für jede Funktion der Tabelle unten.
 - `src/lib/` – **reine Logik ohne DOM, ohne `AudioContext`, ohne Nextcloud** und
   damit ohne Browser testbar: `scoreLayout.js`, `mixerLayout.js`,
   `timingSync.js`, `scrollPlan.js`, `metronome.js`, `svgSanitizer.js`,
   `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`,
   `playbackTime.js`, `audioHealth.js`, `directToken.js`, `mobileBridge.js`,
-  `svgIndex.js`, `highlightStyle.js`. Neue Logik gehört hierhin, nicht in die
-  Komponenten.
+  `svgIndex.js`, `highlightStyle.js`, `staffBands.js` und die Module der
+  Tabelle unten. Neue Logik gehört hierhin, nicht in die Komponenten.
 
 `ScoreViewer.vue` ist auf allen drei Seiten dieselbe Komponente und weiß
 nicht, über welche sie geladen wurde. Was den Seiten eigen ist – das
@@ -319,11 +373,264 @@ ist die `<programVersion>` der `.mscz`, nicht die Version des Konvertierers.
 Nur sichtbare Seiten werden gerendert. Eingehendes SVG läuft durch einen echten
 Sanitizer (DOMPurify), nicht durch reguläre Ausdrücke.
 
+### Probe- und Konzertfunktionen
+
+Jede Funktion folgt demselben Schnitt: die Entscheidung als reines Modul in
+`src/lib/` (getestet), die Verdrahtung in einem Composable, die Bedienung in
+einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
+
+| Funktion | Reine Logik (`src/lib/`) | Composable | Komponente |
+|---|---|---|---|
+| Anfangston der eigenen Stimme oder Grundton | `midiNotes.js`, `scoreFacts.js`, `startTone.js` | `useStartTone`, `useScoreFacts` | `ScoreStartTone.vue` |
+| „Meine Stimme“ je Partitur, eigene Stimme im Stereobild | `panLayout.js` | `useMyPart`, `useMyPartSound` | im Mixer |
+| Speed-Trainer im Loop | `speedTrainer.js` | `useSpeedTrainer` | `ScoreSpeedTrainer.vue` |
+| Helle Noten auf dunklem Grund | `noteTheme.js` | `useViewerPreferences` | Aufklapper „Darstellung“ |
+| Aufführungsmodus, Blättern per Taste/Pedal | `interactionPolicy.js`, `pagingPlan.js`, `keyMap.js` | `usePerformanceMode`, `usePaging`, `useWakeLock` | `ScoreLockButton.vue` |
+| Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | `leaders.js` | `useLeaders` | `LeaderPanel.vue` |
+| Stimmnotizen, Stempel, Studierbuchstaben | `annotationFilter.js`, `stampLayout.js`, `scoreFacts.js` | `useAnnotations`, `useScoreFacts` | `ScoreStamps.vue`, `StampSymbol.vue` |
+| „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
+| Setliste ([E11](#e11-die-setliste-als-markdown-datei)) | `setlistNav.js`, `setlistEdit.js`, `soundFontCache.js` | `useSetlist` | `SetlistBar.vue`, `SetlistEditor.vue` |
+| Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js` | `useMicrophone`, `useRecorder`, `useIntonation` | `MicIndicator.vue`, `RecordingPanel.vue` |
+| Schalter der Verwaltung | `featureFlags.js` | – | – |
+
+**Die Zeitregel gilt auch hier.** Was plant oder springt, nimmt die
+Renderzeit: der Loop-Rücksprung des Speed-Trainers, der Start einer Aufnahme,
+der Sprung, den eine Leitung schickt. Was zeigt, was gerade zu hören ist,
+nimmt die Anzeigezeit: die Position des Anfangstons („der Ton an der Stelle,
+die man sieht und hört“), die Taktangabe mit Studierbuchstabe, die Sollnote der
+Intonation bei stehender Wiedergabe, die Position, die eine Leitung an alle
+schickt. Aufnahme und Intonation gehen noch einen Schritt weiter, siehe
+[Mikrofon](#mikrofon).
+
+**Der Aufführungsmodus fragt eine Stelle.** Welche Bedienung gerade wirken darf,
+beantwortet allein `interactionPolicy.js`; im Aufführungsmodus bleiben
+Blättern, Zoom, „nächstes Stück“ und der Sprung einer Leitung. Eine Bedienung,
+die dort nicht eingetragen ist, gilt als gesperrt – wer eine neue einbaut und
+das vergisst, bekommt eine gesperrte, keine offene. Ein Pedal sendet an das
+Dokument, nicht an den Viewer; solange der Modus an ist, hängt deshalb ein
+zweiter Tastenlistener am `document`. Der Bildschirm bleibt wach, solange
+gespielt wird, der Aufführungsmodus an ist oder einer Leitung gefolgt wird.
+
+**Studierbuchstaben in der Navigation.** Die Takteingabe nimmt „47“, „C“ und
+die Form der Taktanzeige „C+3“ an, damit sich eine abgelesene Angabe
+unverändert eintippen lässt; woher die Buchstaben kommen, steht in
+[E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall).
+
+### Wiedergabe: was ein Suchlauf zurücksetzt
+
+Gemessen: Jeder Suchlauf in spessasynth – und damit jeder Loop-Rücksprung –
+setzt den Synthesizer zurück (`setTimeTo()` ruft `synth.reset()`) und spielt
+danach die Controller und Programmwechsel aus dem MIDI bis zur Zielstelle
+nach. MuseScore schreibt Lautstärke (CC7) und Panorama (CC10) an den Anfang
+jeder Spur. Ohne Gegenmaßnahme waren Mute, Solo, „Meine Stimme“, das Stereobild
+und ein im Mixer gewähltes Instrument nach dem ersten Suchlauf wieder weg.
+`player.js` sperrt deshalb, was die Nutzerin einstellt:
+
+- **Controller** über `lockController(ch, cc, true)`: Ein gesperrter
+  Controller übersteht den Reset und ignoriert die Werte aus dem MIDI. Gesetzt
+  wird in der Reihenfolge entsperren – setzen – sperren, sonst prallte der
+  eigene Wert an der eigenen Sperre ab.
+- **Instrumente** über den Systemparameter `presetLock`: Er lässt jeden
+  Programmwechsel abprallen, auch das `programChange(0)` des Resets.
+
+Ein zweites Merkmal desselben Suchlaufs: Er wirkt **asynchron**. Nach
+`seek()` stimmt die Zeit des Sequencers erst mit dem Ereignis `timechange`;
+`player.js` meldet das über `seekIsAsync`. Wer direkt nach einem Sprung die
+Position braucht – das Abhören einer Aufnahme setzt seinen Anker genau dann –,
+wartet darauf. Der stumme Platzhalter (`silentClock.js`) springt sofort und
+kennt das Ereignis nicht.
+
+Der Anfangston klingt auf einem freien Kanal – dem ersten, der keiner Spur
+gehört, nie Kanal 9 (Schlagzeug) – als Klavier und durch dieselbe
+Ausgabekette wie die Musik, also mit derselben Latenz und Lautstärke. Ein
+Tipp, der nie losgelassen wird, endet nach 8 s von selbst.
+
+### Mikrofon
+
+`useMicrophone.js` ist **die einzige Stelle mit `getUserMedia`**. Aufnahme,
+Intonation und (vorgesehen) Mitverfolgen melden sich dort an und ab; solange
+niemand angemeldet ist, ist das Mikrofon ganz aus, und die Anzeige des Browsers
+erlischt. Ein roter Punkt in der Leiste (`MicIndicator.vue`) zeigt, wofür es
+gerade läuft, und schaltet es mit einem Tipp für alle ab. Echounterdrückung,
+Rauschunterdrückung und automatische Verstärkung sind aus: Die erste zieht die
+Begleitung heraus, die zweite glättet genau die Obertöne, an denen die
+Tonhöhe hängt, die dritte pumpt.
+
+Ob das Mikrofon geht, zeigt allein der Fehler von `getUserMedia`
+(`micAccess.js`), nie der User-Agent. Die WebView der Android-App lehnt heute
+ab; ändert sie das, geht es ohne Zutun. Bis dahin führt der Knopf „Im Browser
+öffnen“ dorthin, wo es geht.
+
+**Der Aufnahmeweg ist strukturell getrennt ([S7](#s7-der-aufnahmeweg-ist-strukturell-getrennt)).** Blöcke aus dem Worklet
+bekommen nur Aufnahme und Intonation (`mayUseCapturePath`). Ein
+Mitverfolgen bekäme die Quelle für eigene Analyser, aber keine Blöcke – es
+kann also nichts speichern, auch nicht durch einen Fehler im Aufrufer.
+
+**Ein AudioContext für alles.** Die Quelle hängt am Wiedergabe-AudioContext,
+damit Zeitstempel, Latenz und Sequencer dieselbe Uhr haben. Das Worklet
+(`captureWorklet.js`) mischt auf Mono, rechnet auf 16 kHz herunter
+(`resample.js`) und schickt Blöcke von 20 ms mit ihrer Kontextzeit
+(`currentFrame`). Gespeichert wird WAV, mono, 16 kHz, 16 bit
+(`wavCodec.js`, serverseitig geprüft von `WavFormat`).
+
+**Wohin ein Sample gehört** (`recordingAlign.js`): Die Aufnahme liegt um zwei
+Anteile hinter der Partitur. Die Sängerin hört die Begleitung um die
+Ausgabelatenz verspätet und singt dazu; das Mikrofon liefert um die
+Eingangslatenz verspätet (`getSettings().latency`, wo gemeldet, plus
+`baseLatency`). Die Partiturzeit hängt über einen **Anker** an der
+Kontextuhr – ein Paar aus Kontextzeit und Partiturzeit, im selben Moment
+abgelesen –, der die Gerade des Sequencers nachbildet. `score_start_ms` wird
+um beide Anteile korrigiert gespeichert. Abgehört wird die WAV im **selben**
+AudioContext, auf die Kontextzeit des Sequencers gestartet; Cursor,
+Begleitung und Aufnahme laufen damit auf derselben Uhr. Der Restfehler steht in
+[Grenzwerte](limits.md#mikrofon-aufnahme-und-intonation).
+
+**Intonation** rechnet YIN (`pitchDetect.js`) in einem Web Worker, live und
+danach aus der gespeicherten WAV – gespeichert wird nichts zusätzlich, eine
+Verbesserung am Verfahren wirkt auch auf alte Aufnahmen. Bewertet wird der
+Median nach dem Einschwingen (100 ms), gegen a' = 440 Hz, Oktaven gefaltet;
+ein Signal ohne klare Tonhöhe ist „nicht auswertbar“ statt geschätzt.
+Notenköpfe färben sich nur, wo das SVG `st-`/`vc-` trägt
+([M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)) und
+sich Notenzeilen den Stimmen zuordnen lassen; sonst bleibt es bei Nadel und
+Problemliste.
+
+**Die Berechtigungsrichtlinie.** Nextcloud schickt jede Seite mit
+`Feature-Policy: … microphone 'none'`, und `getUserMedia` scheitert dort, bevor
+der Browser fragt. Freigegeben wird `microphone 'self'` nur, wo es gebraucht
+wird: auf der Files-Seite über `Listener\AddFeaturePolicyListener`, und nur,
+wenn es keine XHR-Antwort ist, mindestens eine Mikrofonfunktion eingeschaltet
+ist und der Pfad mit `/apps/files` beginnt; auf der eigenständigen Seite an der
+Antwort von `ScoreDirectEditor::open()`. Dashboard, Talk und alle übrigen Seiten
+behalten `'none'`. Der Grund für die Enge: Eine Erlaubnis des Browsers gilt je
+Herkunft, nach „Immer erlauben“ dürfte sonst jedes Skript auf jeder Seite der
+Instanz ohne Rückfrage aufnehmen.
+
+### Nachgeladene Dateien
+
+Nicht alles, was der Viewer lädt, geht über `Util::addScript`, und was daran
+vorbeigeht, braucht eine eigene Antwort auf zwei Fragen – woher, und wie ein
+Update einen alten Stand im Browser-Cache ablöst:
+
+| Datei | Geladen über | Woher | Cache-Busting |
+|---|---|---|---|
+| `spessasynth_processor.min.js`, `scoreview-capture-worklet.js` | `audioWorklet.addModule(url)` | `generateFilePath()` | `?v=<App-Version>`, beim Bauen aus `info.xml` (`assetVersion.js`) |
+| Tonhöhen-Worker, Teile von `@nextcloud/dialogs` | webpack-Nachladen (`new Worker(new URL(…))`, `import()`) | `__webpack_public_path__`, zur Laufzeit gesetzt (`publicPath.js`) | Inhalts-Hash als `?v=` im Dateinamen der Teile |
+
+Die Laufzeit-Adresse ist nötig, weil die Vorgabe von
+`@nextcloud/webpack-vue-config` fest `/apps/scoreview/js/` lautet – liegt die App
+wie üblich unter `custom_apps/`, liefe jedes Nachladen ins 404. Ein Worklet
+kann nichts nachladen (im `AudioWorkletGlobalScope` gibt es weder
+`importScripts` noch `fetch`); es ist deshalb ein eigener Webpack-Eintrag, der
+für sich allein steht.
+
+### Stückwechsel im Viewer
+
+Eine Setliste wechselt das Stück **im** Viewer, nicht durch ein neues
+Einhängen von außen: `ScoreViewer.vue` hält dafür seine eigene `activeFileId`,
+die `useSetlist` setzt. Nur so bleiben Aufführungsmodus, Notenfarbe und Zoom
+über den Wechsel erhalten. Der AudioContext wird dabei neu aufgebaut, das
+SoundFont (rund 40 MB) aber nicht neu geladen: `soundFontCache.js` hält es auf
+Modulebene für die Lebensdauer der Seite, teilt einen laufenden Abruf und
+merkt sich keinen Fehler. Ein Generationszähler in `usePlayback.js` verwirft
+Antworten, die zu einem schon verlassenen Stück gehören.
+
+## Sicherheitsregeln
+
+Die Regeln, die die Probe- und Konzertfunktionen und die eigenständige Seite
+([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)) verbindlich
+einhalten. Die Begründungen stehen ausführlich an den verlinkten Stellen; hier
+steht, was nicht aufgeweicht werden darf. Im Code sind sie als `S1`…`S8`
+referenziert.
+
+### S1: Begleit-Token sind an Zweck, Datei und Direct-Editing-Token gebunden
+
+Ein Begleit-Token (`Service\CompanionTokenService`) gilt nur für seinen Zweck
+(`score` oder `setlist`), nur für seine Datei und nur zusammen mit dem lebenden
+Direct-Editing-Token, aus dem es ausgegeben wurde (`dt`). Ausgegeben wird nur
+mit einem Direct-Editing-Token und nur für eine Setliste neben dessen Partitur,
+die sie enthält – nie aus einer Sitzung, nie aus einem Begleit-Token heraus
+(keine Kette). Widerrufen wird bei jeder Anfrage: hartes Ablaufdatum nach
+12 h, Epoche der Nutzerin, Konto aktiv, Datei neu aufgelöst. Token stehen nur
+im Header, nie in URL, Protokoll oder `localStorage`. Einzelheiten:
+[E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps).
+
+### S2: Schreiben mit Token nur um die Partitur herum
+
+Mit einem Token kommt in eine Setliste nichts, was nicht schon um die offene
+Partitur liegt: mit dem Direct-Editing-Token nur Dateien aus deren Ordner bis
+Tiefe 2, mit einem Begleit-Token gar nichts Neues (Umordnen und Entfernen
+bleiben), angelegt wird nur im Ordner der Token-Datei. Beliebige Pfade gibt es
+nur in der Browser-Sitzung. Sonst würde aus der Erlaubnis für eine Datei über
+eine selbst angelegte Liste und S1 eine für alle.
+
+Die Regel hängt daran, dass Middleware und Controller dieselbe
+`DirectAccessContext`-Instanz sehen. `AppInfo\Application` registriert sie
+deshalb ausdrücklich als geteilten Dienst, und der schreibende Controller lehnt
+ab, wenn die Middleware die Anfrage nicht eingeordnet hat – die Voreinstellung
+„Sitzung“ hieße „ohne Grenze“ und darf nie aus einem Verdrahtungsfehler folgen.
+
+### S3: Das Mikrofon nur, wo es gebraucht wird
+
+`microphone 'self'` gibt es nur auf der Files-Seite (keine XHR-Antwort,
+mindestens eine Mikrofonfunktion an, Pfad unter `/apps/files`) und auf der
+eigenständigen Seite; überall sonst bleibt Nextclouds `'none'`. Eine Erlaubnis
+des Browsers gilt je Herkunft – ohne diese Enge dürfte nach „Immer erlauben“
+jedes Skript auf jeder Seite der Instanz aufnehmen. Innerhalb von Files bleibt
+das Restrisiko, siehe [Grenzwerte](limits.md). Einzelheiten:
+[Mikrofon](#mikrofon).
+
+### S4: Teure Arbeit ist gedeckelt
+
+Was ohne Sitzung erreichbar ist, darf nicht unbegrenzt Arbeit auslösen:
+
+- Die Dateiauswahl für den Setlisten-Editor besucht höchstens 100 Ordner,
+  nicht nur höchstens 200 Treffer.
+- Eine Setliste hat höchstens 200 Einträge – beim Schreiben **und** beim
+  Lesen, denn jede aufgelöste Zeile kostet einen Zugriff auf den Dateibaum,
+  und die Datei lässt sich im Texteditor beliebig füllen. Die Suche nach
+  Listen, die eine Partitur enthalten, sieht höchstens 20 Listen je Ordner an.
+- Die Nutzersuche für Leitungen und die schreibenden Routen (Aufnahme
+  hochladen, „Folgt mir“ steuern, Setliste speichern und anlegen) tragen
+  `#[UserRateLimit]` **und** `#[AnonRateLimit]`: Anfragen mit Token sind für
+  Nextclouds Drosselung anonym, weil sie vor der eigenen Middleware läuft.
+
+### S5: Aufnahmen haben eigene Speichergrenzen
+
+Aufnahmen liegen in `IAppData` und zählen deshalb **nicht** gegen die Quota der
+Nutzerin. Die App zieht ihre eigenen Grenzen: Anzahl je Person und Partitur,
+Länge, Bytes je Person und Bytes auf der ganzen Instanz; beim Erreichen
+antwortet der Server 507 bzw. 413 mit klarer Meldung. Die Werte stehen in
+[Installation](installation.md).
+
+### S6: Pfade einer Setliste bleiben im Nutzerordner
+
+Pfade werden vor dem Dateibaum selbst normalisiert: `..` über die Wurzel
+hinaus, `\`, NUL und andere Steuerzeichen führen nirgendwohin; ein Eintrag mit
+Steuerzeichen oder Zeilenumbruch wird beim Schreiben abgelehnt, nicht still
+bereinigt, weil er sonst das Format bräche. Aufgelöst wird immer aus Sicht der
+Lesenden – ein absoluter Pfad in einer geteilten Liste zeigt in *ihren* Baum
+([E11](#e11-die-setliste-als-markdown-datei)).
+
+### S7: Der Aufnahmeweg ist strukturell getrennt
+
+Blöcke aus dem Aufnahme-Worklet bekommen nur Aufnahme und Intonation
+(`mayUseCapturePath` in `micAccess.js`). Eine andere Nutzung des Mikrofons
+bekäme die Quelle, aber keine Blöcke – sie kann also nichts speichern, auch
+nicht durch einen Fehler im Aufrufer.
+
+### S8: 404 vor 403
+
+Wer eine Datei nicht sieht, bekommt auf jedem Endpunkt 404, auch beim Lesen;
+fremde Aufnahmen antworten ebenfalls 404. Erst wer sie sieht, aber nicht darf,
+bekommt 403. Sonst ließe sich abtasten, welche fileIds es gibt
+([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)).
+
 ## Entwurfsentscheidungen
 
-Diese sechs Entscheidungen tragen den Aufbau. Sie sind im Code an vielen
-Stellen als `E1`…`E8` referenziert und sollten nicht ohne erneute Bewertung
-revidiert werden.
+Diese Entscheidungen tragen den Aufbau. Sie sind im Code an vielen Stellen als
+`E1`…`E12` referenziert und sollten nicht ohne erneute Bewertung revidiert
+werden.
 
 ### E1: MIDI statt MP3 als Audioartefakt
 
@@ -439,8 +746,7 @@ zeigt vier doppelte `elid`
 ([M7](#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)), der weiße
 Hintergrundpfad ist vorhanden (M9), `metadata.tracks` führt die Stimmen samt
 Metronomspur (M6). In `meta.json` ist `parts[].instrumentName` lokal *gefüllt*
-und beim Sidecar `null` – der einzige gefundene Unterschied, und keiner, den der
-Viewer liest.
+und beim Sidecar `null` – ein Unterschied, den der Viewer nicht liest.
 
 **Ein Unterschied bleibt (M10):** Auf dem lokalen Weg tragen die SVG-Elemente
 ihre Segment-, Notenzeilen- und Stimmenkennung, auf dem Sidecar-Weg nicht – die
@@ -450,6 +756,13 @@ Cursor-Band; es gibt keinen Schalter und keine Einstellung dafür. Wer die
 Hervorhebung auch im Container will, müsste dort die Engine statt MuseScore
 konvertieren lassen – und gäbe damit das beste Argument des Sidecars auf,
 nämlich echtes, per Versionswechsel aktualisierbares MuseScore.
+
+**Und einer in `meta.json`:** Tonarten mit Dur/Moll und Studierbuchstaben
+(`keySigs`, `rehearsalMarks`) schreibt ebenfalls nur die Engine. Auch hier
+entscheidet der Viewer am Inhalt, nicht am Weg: Fehlen die Felder, kommen
+Buchstaben und Tonarten aus dem MIDI, das auf beiden Wegen byteweise gleich
+ist – nur ohne Dur/Moll
+([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)).
 
 **Und einer bei den eingebetteten Bildern:** Beide Wege setzen sie, aber der
 lokale reicht die Originalbytes als Daten-URI durch, statt sie zu rastern –
@@ -579,7 +892,7 @@ deklariert 31–35, die Bibliotheksversion muss dazu passen. Für Regler
 (Lautstärke, Tempo, Zoom) gibt es keine Entsprechung; dort steht
 `<input type="range">` mit Nextcloud-CSS-Variablen.
 
-### E6: Zwei Einstiege – Mimetype und Dateiendung
+### E6: Drei Einstiege in Files – Mimetype, Dateiendung, Setliste
 
 Der reguläre Einstieg ist Nextclouds Viewer, und der wählt am **Mimetype**:
 `application/x-musescore`. Die *Zuordnung* `.mscz` → Mimetype liest Nextcloud
@@ -612,7 +925,7 @@ Ohne Wirkung bleibt das beim **Dateisymbol**: Das hängt an
 außerhalb der Reichweite einer App. Wer es haben will, registriert zusätzlich
 von Hand ([installation.md](installation.md)).
 
-Trotzdem bleibt es bei **zwei** Einstiegen: `src/viewer.js` registriert
+Trotzdem bleibt es nicht beim Viewer allein: `src/viewer.js` registriert
 zusätzlich eine **Dateiaktion auf der Endung**, die dieselbe Komponente in
 einem `NcModal` zeigt. Ihre Bedingung steht als reine Funktion in
 `src/lib/scoreFile.js` und lautet: Endung `.mscz` **und** Mimetype nicht
@@ -638,6 +951,28 @@ von `@nextcloud/files` v4, also beim bloßen Import, ganz gleich ob die
 Files-App des Servers das Objekt je ansieht. Eine Abfrage darauf ist immer
 wahr. Zwei Einträge stören nicht, weil kein Stand beide Listen liest – der
 jeweils andere bleibt unbeachtet, es gibt weiterhin genau einen Menüeintrag.
+
+Der **dritte Einstieg** ist eine zweite Dateiaktion derselben Bauart, auf
+Namen, die auf `.setlist.md` enden: „Als Setliste öffnen“ öffnet dieselbe
+Komponente im selben `NcModal`, nur mit einer Setliste
+([E11](#e11-die-setliste-als-markdown-datei)). Anders als die erste muss sie
+einer Aktion **den Klick abnehmen**, die ebenfalls zuständig ist – Markdown
+öffnet in Files sonst im Texteditor. Gemessen an
+`apps/files/src/components/FileEntryMixin.ts` (Server 34): Files sortiert die
+Aktionen nach `order` und nimmt beim Klick die erste mit gesetztem `default`.
+Die Aktion trägt deshalb `default: DefaultType.DEFAULT` und `order: -10`; die
+Viewer-Aktion hat `order: 0`, bei Gleichstand entschiede die Ladereihenfolge.
+`HIDDEN` statt `DEFAULT` gewönne den Klick ebenso, stünde aber nicht im Menü.
+Text bleibt über „Ansicht“ im Menü erreichbar, eine gewöhnliche `.md` öffnet
+unverändert im Texteditor. Weil die Sortierung zur inneren Umsetzung von Files
+gehört, ist das Verhalten eine Prüfung im Browser wert, sobald eine neue
+Nextcloud-Version erscheint – kippt es, bleibt der Menüeintrag als Ausweg.
+
+Die mobilen Apps kennen keine dieser Aktionen, und eine `*.setlist.md` hat dort
+den Mimetype `text/markdown`, für den sie Text anbieten. ScoreView meldet sich
+dafür bewusst **nicht** als Direct Editor an – es erschiene sonst bei jeder
+Markdown-Datei. Mobil öffnet eine Setliste deshalb über eine ihrer Partituren
+(siehe [E11](#e11-die-setliste-als-markdown-datei)).
 
 ### E7: Konvertierung im Browser als Rückfall
 
@@ -721,7 +1056,7 @@ nicht.
 
 Die Nextcloud-Apps für Android und iOS laden **keine Skripte der Dateien-Seite**
 und kennen Nextclouds Weboberfläche nicht. Weder der Viewer-Handler noch die
-Dateiaktion aus [E6](#e6-zwei-einstiege-mimetype-und-dateiendung) erreicht sie:
+Dateiaktionen aus [E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste) erreichen sie:
 Eine `.mscz` ließe sich dort nur herunterladen.
 
 Der einzige Haken, den die Apps anbieten, ist **Direct Editing**. Meldet der
@@ -735,7 +1070,7 @@ erzeugt keine Partituren, ein Eintrag „Neue Partitur“ führte nirgendwohin.
 **Die Auswahl läuft allein über den Mimetype.** Die Krücke aus E6 hat in der
 App keine Entsprechung – ohne registrierten Mimetype bleibt der Menüpunkt aus.
 Dass er stimmt, besorgt die App inzwischen selbst
-([E6](#e6-zwei-einstiege-mimetype-und-dateiendung)); vorher hing dieser
+([E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)); vorher hing dieser
 Einstieg an einer Handreichung des Betreibers und war auf verwaltetem Hosting
 überhaupt nicht erreichbar.
 
@@ -757,9 +1092,77 @@ im Header `X-ScoreView-Token`. `Middleware\DirectAccessMiddleware` prüft ihn
 und vergleicht **verpflichtend** die Datei: Ein Token für Partitur A darf kein
 Schlüssel für Partitur B derselben Nutzerin sein. Routen ohne `fileId`
 (SoundFont) liefern instanzweites Beiwerk, dort bleibt es bei der Gültigkeit.
-`POST /api/preferences` nimmt den Token **nicht** an: Die Route ist als einzige
-nicht dateibezogen, der Pflichtvergleich hätte dort nichts zu vergleichen –
-die Anzeigeeinstellungen wirken auf dieser Seite, werden aber nicht gespeichert.
+`POST /api/preferences` nimmt den Token ebenfalls an, obwohl die Route nicht
+dateibezogen ist: Die Kennung der Nutzerin kommt allein aus dem gesetzten
+Nutzer, nie aus der Anfrage, ein Token erreicht also nur die Einstellungen
+seiner eigenen Nutzerin. Darum gelten Hervorhebung, Notenfarbe und Stereobild
+auch mobil, und dort Eingestelltes gilt am Rechner weiter. Ein Begleit-Token
+(unten) nimmt die Route nicht an – es ist für weitere *Dateien* gedacht.
+
+Für den Sitzungsfall holt die Middleware die CSRF-Prüfung nach, die
+`#[PublicPage]`/`#[NoCSRFRequired]` sonst abschalteten – dort, wo die Route
+sie vorher hatte. Was eine Anfrage vorgelegt hat, hält
+`Middleware\DirectAccessContext` fest, ein je Anfrage geteilter Träger: Die
+meisten Controller brauchen das nicht, weil der gesetzte Nutzer und ihr
+Dateibaum entscheiden; das Schreiben einer Setliste braucht es (unten, und
+[S2](#s2-schreiben-mit-token-nur-um-die-partitur-herum)).
+
+**Weitere Dateien: Begleit-Token.** Ein Direct-Editing-Token gilt für genau
+eine Datei; eine Setliste braucht mehrere. Dafür stellt
+`Service\CompanionTokenService` eigene Token aus, und zwar nur so, dass eine
+Berechtigung für eine Datei nie mehr werden kann als das, was die Nutzerin
+ohnehin öffnen dürfte:
+
+- **Ausgabe nur mit dem Direct-Editing-Token** und nur für eine Setliste, die
+  im Ordner seiner Partitur liegt und diese Partitur enthält. Weder eine
+  Sitzung noch ein Begleit-Token kann Token ausgeben – aus einem Begleiter
+  heraus entstünde sonst eine Kette, an deren Ende jede Datei stünde.
+- **Zweck im Token:** `score` gilt für die Partitur-Routen, `setlist` nur für
+  Lesen und Schreiben der Setlisten-Datei. Ein Token für die Liste öffnet also
+  nicht deren Partitur-Routen, und ein Partitur-Token schreibt keine Liste.
+- **Schreiben mit Token nur um die Partitur herum.** Mit dem
+  Direct-Editing-Token nimmt eine Setliste als neue Einträge nur Dateien aus
+  dem Ordner der Partitur bis Tiefe 2 an, mit einem Begleit-Token gar keine –
+  dort bleiben Umordnen und Entfernen; vorhandene Einträge bleiben Wort für
+  Wort, wie sie waren. Neu angelegt wird nur im Ordner der Token-Datei
+  (`folderParam` am Attribut).
+  Sonst ließe sich über eine selbst angelegte Liste mit beliebigen Pfaden und
+  die Ausgabe von Begleit-Token aus der Erlaubnis für eine Datei eine für alle
+  machen. Beliebige Pfade gibt es nur in der Browser-Sitzung.
+- **Aufbau:** `v1.<payload>.<mac>`, die Nutzlast `{uid, fid, purpose, exp, dt,
+  ep}` als base64url-JSON, das MAC ein HMAC-SHA256 über ein Domänenpräfix und
+  die Nutzlast. Selbsttragend statt als Datenbankzeile, weil jede Anfrage der
+  Seite einen prüft und im Konzert viele Geräte gleichzeitig blättern.
+  Längengrenze vor jedem Dekodieren, Vergleich in konstanter Zeit.
+- **Widerruf, bei jeder Anfrage geprüft:** `exp` liegt hart 12 h nach der
+  Ausgabe und wird nie verlängert. `dt` ist ein gekürzter SHA-256 des
+  Direct-Editing-Tokens; die Seite schickt beide Header, und ohne ein lebendes
+  Direct-Editing-Token taugt der Begleiter nichts. `ep` ist eine Epoche je
+  Nutzerin, die bei Passwortwechsel und Deaktivieren steigt
+  (`Listener\CompanionRevocationListener`); „alle Geräte abmelden“ hat kein
+  Ereignis, das nicht auch jede gewöhnliche Abmeldung träfe. Dazu Konto
+  aktiv, Datei neu aufgelöst. Das Geheimnis (32 Byte, `sensitive`) lässt sich
+  mit `occ config:app:delete scoreview companion_secret` wechseln; das
+  widerruft alle Token auf einmal.
+- **Nie in URL, Log oder Speicher:** Token stehen nur im Header, werden nicht
+  protokolliert und liegen im Browser nur im JS-Speicher, nicht in
+  `localStorage`.
+
+`standalone.js` hält dafür eine Tabelle Datei → Begleit-Token und setzt beim
+Stückwechsel den passenden; welcher Ausweis zu welcher Anfrage gehört,
+entscheidet `directToken.js` (`ausweisFuer`).
+
+**Push gibt es dort nicht.** `notify_push` meldet sich über eine Sitzung an,
+die die Seite nicht hat. Folgegeräte in den Apps fragen deshalb immer ab
+([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)); Leiten
+geht mobil uneingeschränkt, das sind gewöhnliche Anfragen.
+
+**Das Mikrofon** gibt die Seite in ihrer eigenen Antwort frei
+(`ScoreDirectEditor::open()`, siehe [Mikrofon](#mikrofon)). Ob die WebView es
+dann an die Seite weiterreicht, liegt an der App: Die Android-App tut es nicht
+(Quellcode: kein `RECORD_AUDIO`, kein `onPermissionRequest`), dort führt „Im
+Browser öffnen“ weiter. Für iOS spricht der Quellcode dafür, gemessen ist es
+nicht.
 
 Der Token hängt an **zwei** Wegen, weil der Viewer zwei benutzt: einem
 axios-Interceptor und einem Mantel um `window.fetch` (das SoundFont holt
@@ -776,7 +1179,7 @@ Instanz dieselben Bytes, kein Nutzerinhalt, dieselbe Art Material, die
 Nextcloud unter `/apps/<app>/js/` ohnehin ohne Anmeldung ausliefert. Der Preis
 ist benannt: rund 14 MB sind ohne Konto abholbar.
 
-**Sie hat keinen Wirt.** In den beiden anderen Einstiegen stellt der Wirt das
+**Sie hat keinen Wirt.** In den übrigen Einstiegen stellt der Wirt das
 Schließkreuz – Nextclouds Viewer-App bzw. das `NcModal`. `ScoreViewer.vue` hat
 dafür weder Knopf noch Ereignis, es gäbe also keinen Weg hinaus. Deshalb eine
 schmale Kopfzeile mit Dateiname und ✕ in `StandaloneFrame.vue`. Der Rahmen
@@ -811,11 +1214,245 @@ Einstieg: Der Viewer soll nicht danach verzweigen, wie seine Seite ausgeliefert
 wurde. Dieselbe Regel deckt ein iframe mit entsprechender Permissions-Policy
 gleich mit ab.
 
+**Telefonbreite.** Die Leiste muss auf 360 px in eine Zeile passen: Play,
+Taktfeld, Anfangston, Schloss und „Mehr“. Entschieden wird das an der Breite
+des Streifens, nicht des Fensters (`@container (max-width: 400px)` in
+`ScoreViewer.vue`) – der Viewer kann auch in einem schmalen Rahmen stecken.
+Weichen muss dort der Suchlauf, den das Taktfeld daneben ohnehin trägt, und bei
+Studierbuchstaben die Gesamtzahl der Takte.
+
+### E9: Die Leitungsrolle ergänzt die Dateirechte
+
+Chorprobe und Konzert brauchen eine Rolle, die Nextcloud nicht kennt: wer
+Stimmnotizen setzen, „Folgt mir“ starten und andere zur Leitung ernennen darf.
+Sie ist **eine Ergänzung der Dateirechte, kein Ersatz**: Jede Prüfung bekommt
+eine Datei, die schon aus Sicht der handelnden Person aufgelöst ist
+(`UserFileResolver`) – wer die Datei nicht sieht, kommt gar nicht bis zur
+Rolle. Eine eigene Rechteverwaltung neben den Freigaben hätte zwei Wahrheiten
+darüber, wer eine Partitur sehen darf.
+
+Leitung ist (`Service\LeaderService`):
+
+1. **die Eigentümerin**, bei jeder Prüfung aus `$node->getOwner()` bestimmt.
+   Sie steht nie in der Tabelle und lässt sich deshalb gar nicht abberufen –
+   auch nicht durch einen versehentlichen Eintrag;
+2. **ohne Eigentümerin** (Gruppenordner und ähnliche Speicher liefern keine):
+   wer Schreibrecht hat. Irgendwer muss die erste Ernennung aussprechen
+   können, und Schreibrecht ist dort das Recht, das einer Eigentümerschaft am
+   nächsten kommt – dasselbe, das schon geteilte Notizen erlaubt. Eine
+   Leitung kraft Schreibrecht erscheint nicht in der Liste der Leitungen; die
+   zeigt die Eigentümerin und die Ernannten;
+3. **wer in `scoreview_leaders` steht** – aber nur, solange die Person die Datei
+   sieht. Verliert sie den Zugriff, verliert sie die Rolle, ohne dass der
+   Eintrag verschwindet; bekommt sie ihn zurück, ist sie wieder Leitung. Eine
+   vorübergehend entzogene Freigabe soll keine Ernennung löschen.
+
+Ernennen können nur Leitungen, und nur Personen, die die Datei sehen – eine
+Ernennung ohne Zugriff säße sonst unsichtbar in der Tabelle, bis jemand die
+Datei freigibt. Die Nutzersuche dafür (`leader-candidates`) läuft
+serverseitig über `ISearch`, liefert nur Treffer mit Dateizugriff (höchstens
+20, ab zwei Zeichen) und ist auf 30 Aufrufe je Minute begrenzt, weil jeder
+Treffer einen Blick in den Dateibaum einer anderen Nutzerin kostet. Sie ist
+eine eigene Route statt Nextclouds Sharee-API, weil die mobile Seite keine
+Sitzung hat und die Filterung auf den Dateizugriff ohnehin hierher gehört.
+
+**404 vor 403.** Wer die Datei nicht sieht, bekommt auf jedem Endpunkt 404,
+auch beim Lesen – sonst ließe sich abtasten, welche fileIds es gibt. Erst wer
+sie sieht, aber keine Leitung ist, bekommt beim Ändern 403. Dass der Viewer die
+Knöpfe gar nicht erst zeigt, ist Bequemlichkeit, keine Absicherung. Dieselbe
+Staffelung gilt für Setlisten und Aufnahmen.
+
+**Kontonamen nur an Leitungen.** Die Liste der Leitungen trägt UIDs nur für
+Leitungen, die damit jemanden abberufen; alle anderen sehen Anzeigenamen –
+sie sollen sehen, wer leitet, nicht die Kontonamen der Instanz sammeln.
+
+### E10: „Folgt mir“ – ein Zustand mit Zählern, abgefragt oder gepusht
+
+Eine Leitung schickt ihre Stelle, einen Loop und den Anfangston an alle
+Geräte, die dieselbe Partitur offen haben (`Service\FollowService`,
+`useFollowSession.js`).
+
+**Zustand statt Ereignisse.** Gespeichert wird je Datei *ein* Zustand –
+`position`, `loop` und `tone`, jeder mit eigenem Zähler `seq`, dazu eine
+`version`, die bei jeder Änderung steigt. Ein Gerät vergleicht nur die Version
+und holt bei Abweichung den ganzen Zustand; was daraus folgt, entscheidet
+`followState.js` an den Zählern. Ein Nachzügler oder ein Gerät nach einem
+Funkloch bekommt so den letzten Stand, und nichts wird nachgespielt. Ein
+Anfangston erklingt nur, wenn sein Zähler gestiegen ist **und** er nach der
+Uhr des Servers (`serverNow` in jeder Antwort) jünger als 2 s ist – ein
+verspäteter Ton in eine laufende Probe hinein ist schlimmer als keiner. Ein
+Sprung wirkt nur, solange das Gerät folgt: Eigenes Navigieren löst es,
+Blättern und Zoom nicht (sonst wäre Folgen am Notenständer nutzlos), „Zurück
+zur Leitung“ holt es wieder heran.
+
+**Die Version ist die Sitzungskennung.** Eine neue Sitzung beginnt nicht bei 1,
+sondern bei einer Zufallszahl, die zugleich als `state.session` im Zustand
+steht. Ein Gerät, das die alte Sitzung bei Version 3 verlassen hat und in der
+neuen zufällig wieder auf 3 träfe, bekäme sonst ein 204 und sähe die neue
+Sitzung nie.
+
+**Transport: abfragen, mit Push als Abkürzung.** `GET …/follow?since=<version>`
+antwortet 204, wenn sich nichts geändert hat. Während einer Sitzung und bei
+sichtbarer Seite fragt ein Gerät im Takt von `follow_poll_ms` (Vorgabe 800 ms,
+erlaubt 500–3000, in der Verwaltung einstellbar und mit jeder Antwort
+mitgeschickt, damit eine Änderung auch laufende Sitzungen erreicht), sonst
+alle 15 s („läuft eine Sitzung?“). Ist `notify_push` eingerichtet, schickt der
+Server bei jeder Änderung ein Ereignis `scoreview_follow` an die angemeldeten
+Teilnehmenden (`POST …/follow/join`), und jedes Gerät holt einmal den Zustand;
+das Abfragen tritt dann in den Hintergrund. Die Abhängigkeit ist **optional**:
+`Service\PushNotifier` nennt die Schnittstelle von notify_push nur als
+Zeichenkette und löst sie erst auf, wenn die App aktiv ist – jeder Fehler heißt
+schlicht „kein Push“. Im Browser prüft der Viewer zusätzlich, ob die
+Verbindung wirklich steht, nicht nur, ob der Server Push anbietet; sonst fragt
+er im vollen Takt. Auf der mobilen Seite gibt es keinen Push
+([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)).
+
+**Warum kein Long-Polling und keine Server-Sent Events.** Jedes wartende Gerät
+belegte einen PHP-Worker für die Dauer des Wartens; 40 Sängerinnen legten
+einen gewöhnlichen Server damit lahm. Eine kurze Abfrage kostet dagegen
+gemessen rund 50 ms CPU, fast alles für den Start von Nextcloud selbst
+([Grenzwerte](limits.md#folgt-mir)).
+
+**Lesen ohne Datenbank.** Der Stand liegt im Cache, geschrieben bei jeder
+Änderung der Leitung, gelesen bei jeder Abfrage; die Datenbank sieht nur die
+Änderungen, den Herzschlag der Leitung (60 s) und einen Fehlgriff je
+Cache-Ablauf. Welcher Cache: der verteilte, wenn einer eingerichtet ist
+(Eintrag 30 s), sonst der lokale (APCu). Der lokale gehört *einem* Webserver –
+bei mehreren ohne verteilten Cache bekäme ein Gerät auf dem einen Server 204
+auf einen Stand, den der andere längst überschrieben hat, und verlöre einen
+Sprung. Ein lokaler Eintrag gilt deshalb höchstens 1 s (geprüft an einem
+mitgespeicherten Zeitstempel, weil APCu in ganzen Sekunden rechnet); bei
+einem Webserver kostet das einen Lesezugriff je Sekunde und Datei, nicht je
+Gerät. Aus der Datenbank Gelesenes kommt nur mit `IMemcache::add` in den
+Cache, also nur, wenn dort noch nichts liegt – sonst legte eine Abfrage, die
+die alte Zeile gelesen hat, den alten Stand über den, den die Leitung gerade
+geschrieben hat.
+
+**Die Dateiprüfung bleibt bei jeder Abfrage.** Sie macht nur einen kleinen Teil
+der 50 ms aus; sie zu cachen spart kaum etwas und ließe nach einem
+Freigabeentzug ein Fenster offen.
+
+**Die Leitung sendet nacheinander, der letzte Tipp gewinnt**
+(`leaderQueue.js`). Zwei Änderungen, die gleichzeitig unterwegs wären, kämen
+in beliebiger Reihenfolge an – der ältere Sprung läge dann über dem neueren.
+Also läuft je Gerät höchstens eine Anfrage; was währenddessen getippt wird,
+geht gleich danach als *ein* PATCH hinaus: von Stelle und Loop nur der neueste
+Stand, ein Anfangston als Auslöser immer (mehrere Tontipps während einer
+Anfrage als einer). Starten und Beenden verdrängen, was vor ihnen wartete. Die
+Knöpfe bleiben dabei bedienbar – gesperrte Knöpfe verlören den zweiten Tipp
+von „B – nein, C“. Die Warteschlange hält sich selbst unter 100 Anfragen je
+Minute, unter der Grenze des Servers von 120 (dazu Herzschlag und ein zweites
+Gerät); ist das Budget erschöpft, wartet sie und sammelt weiter.
+
+**Sitzungsende:** durch eine Leitung, oder nach 30 min ohne Herzschlag – das
+wird schon beim Lesen als beendet gewertet. Eine andere Leitung übernimmt eine
+laufende Sitzung, indem sie selbst startet; allen wird das angezeigt. Es gibt
+höchstens eine Sitzung je Datei.
+
+### E11: Die Setliste als Markdown-Datei
+
+Eine Setliste ist eine Datei `*.setlist.md` in Files, keine Tabelle der App:
+Sie lässt sich teilen, verschieben, versionieren und im Texteditor von Hand
+schreiben – mit denselben Rechten wie jede andere Datei.
+
+```markdown
+# Konzert Herbst 2026
+
+Freier Text bleibt erhalten.
+
+1. [Kyrie](../Messe/Kyrie.mscz)
+2. [Ave verum](Ave%20verum.mscz)
+3. Zugabe/Abendlied.mscz
+```
+
+**Einträge sind die Elemente der ersten Liste** (`Service\SetlistFormat`),
+nummeriert oder nicht, als Link (%-kodiert wie jeder Link) oder als roher
+Pfad (dort sind Leerzeichen roh erlaubt, weil so jemand tippt). Dasselbe Stück
+darf mehrfach vorkommen. Alles andere ist freier Text. Bewusst nicht
+CommonMark in jeder Ecke: Eine nicht eingerückte Zeile direkt nach einem
+Eintrag beendet die Liste, statt als „faule Fortsetzung“ dazuzugehören;
+eingerückte Zeilen gehören zum Eintrag davor und wandern beim Umordnen mit.
+
+**Der Schreiber ersetzt nur die erste Liste.** Der übrige Text bleibt Byte für
+Byte stehen. Ein unveränderter Eintrag kommt aus dem Editor als Verweis auf
+seine Stelle in der gelesenen Datei (`origin`) zurück und wird im
+Originaltext übernommen – ein roher Pfad bleibt roh, Titel und Unterpunkte
+bleiben. Neue Einträge schreibt der Server als Link, den relativen Pfad
+rechnet er selbst aus. Weil `origin` auf Stellen der gelesenen Fassung zeigt,
+lehnt er ab (409), wenn die Datei seither im Texteditor geändert wurde.
+Zeilenumbrüche, Steuerzeichen, `\` und NUL in einem Pfad lehnt er ab.
+
+**Aufgelöst wird aus Sicht der Leserin.** Pfade sind relativ zur
+Setlisten-Datei; `..` darf den Nutzerordner nicht verlassen, sonst ist der
+Eintrag fehlend. Weil dieselbe Datei bei jeder, die sie über eine Freigabe
+hat, anders im Baum liegt, löst der Server jeden Eintrag im Baum der
+anfragenden Nutzerin auf – was eine Sängerin nicht sieht, ist für sie
+`missing` und wird beim Blättern übersprungen, für die Chorleitung aber nicht.
+Absolute Pfade werden ebenso im Baum der jeweiligen Leserin aufgelöst. Ein
+Nachschlagen per fileId aus der Sicht eines anderen Kontos gibt es bewusst
+nirgends. Noch nicht konvertierte Stücke reiht das Lesen gleich zur
+Konvertierung ein.
+
+**Drei Wege hinein.** (1) Die Dateiaktion auf `*.setlist.md`
+([E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)). (2) Aus
+einer offenen Partitur: Der Viewer bietet die Setlisten aus demselben Ordner
+an, die sie enthalten (höchstens 20 je Ordner) – das ist zugleich der einzige
+Weg in den mobilen Apps, die für Markdown Text anbieten. (3) „Neue Setliste“
+im Viewer, im Ordner der offenen Partitur. Der Editor fügt Partituren über
+Nextclouds Dateiauswahl hinzu (`@nextcloud/dialogs`, nur mit Sitzung) oder aus
+der Auswahl um die offene Partitur (`score-candidates`: ihr Ordner bis Tiefe
+2, höchstens 200 Treffer und 100 besuchte Ordner); mobil ist nur Letzteres
+möglich, mit einem Begleit-Token auch das nicht
+([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)).
+
+Das Stück wechselt im Viewer, nicht durch ein neues Einhängen (siehe
+[Stückwechsel im Viewer](#stückwechsel-im-viewer)).
+
+### E12: Partiturfakten aus der Engine, mit MIDI-Rückfall
+
+Anfangston, Studierbuchstaben in der Navigation und der Grundton brauchen
+Tonarten mit Dur/Moll und Studierbuchstaben je Takt. MuseScores
+`--score-media` liefert beides nicht in `metadata`, und im SVG steht der Text
+eines Studierbuchstabens nur als Glyphenpfad
+([M11](#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen)).
+
+**Die Engine schreibt beides in `meta.json`** – `keySigs` und `rehearsalMarks`
+([Artefaktschema](#artefaktschema)), aus dem ersten Staff, mit
+`KeySig::concertKey()`, `KeySig::mode()` und `RehearsalMark::plainText()`.
+`converter/lib/artifacts.mjs` reicht `metadata` unverändert durch, der
+Selbsttest prüft beides an `keys-marks-test.mscz` (c-Moll, Wechsel nach D-Dur,
+Buchstaben A/B/C). Der Sidecar mit Stock-MuseScore liefert die Felder nicht.
+
+**Entschieden wird am Inhalt, nicht am Weg** (`scoreFacts.fromArtifacts`), wie
+bei den Kennungen aus M10: Liefert `meta.json` ein Feld, gilt es – auch leer,
+denn „keine Buchstaben“ ist dann eine Aussage. Fehlt es, kommen Buchstaben aus
+den MIDI-Markern und Tonarten aus den Vorzeichen-Ereignissen des MIDI, das
+beide Wege byteweise gleich erzeugen, über die Zeit auf `measures.json`
+abgebildet; je Buchstabe zählt das erste Vorkommen, bei Wiederholungen also
+der erste Durchgang. Das MIDI trägt keinen Modus, der Grundton ist dann die
+Dur-Tonika – eine ehrliche Näherung, der Ton liegt immerhin in der Tonleiter.
+Gelesen wird das MIDI dafür nur, wenn es gebraucht wird; auf dem lokalen Weg
+bezahlt niemand dafür.
+
+**Mehrtaktpausen.** Die Engine zählt Takte in der notierten Kette, der Viewer
+(`measures.json`, Notizen, Takteingabe) in der dargestellten, in der eine
+Mehrtaktpause *ein* Takt ist. Gemessen: Engine „D in Takt 8“, `measures.json`
+kennt nur 6 Takte, D steht dort in Takt 6. Die Engine-Felder gelten deshalb nur,
+wenn beide Zählungen nachweislich gleich lang sind (`engineMeasuresMatch`);
+sonst kommt die Lage aus dem MIDI und landet damit von selbst in der Zählung
+des Viewers. Den Modus übernimmt der Rückfall dann aus der Engine, wo er je
+Vorzeichnung eindeutig ist.
+
+**Bestehende Partituren bekommen die Felder durch eine Neukonvertierung.**
+`CURRENT_FORMAT_VERSION` steht auf 3; ein älterer Cache-Eintrag gilt beim
+nächsten Öffnen als nicht fertig und wird neu erzeugt
+([Konvertierung und Cache](#konvertierung-und-cache)).
+
 ## Formatgrundlagen
 
 Eigenschaften des MuseScore-Exports, auf denen die Umsetzung aufbaut. Alle gegen
-das gebaute Image gemessen, nicht angenommen. Die Kennungen `M1`…`M10` sind im
-Code referenziert.
+das gebaute Image bzw. die Engine gemessen, nicht angenommen. Die Kennungen
+`M1`…`M11` sind im Code referenziert.
 
 ### M1: `--score-media` liefert alles in einem Aufruf
 
@@ -838,6 +1475,12 @@ kommt nicht in Frage.)
 
 `pngs`, `pdf` und `mxml` werden verworfen: PNG ist der mit Abstand größte Posten
 und wird durch SVG ersetzt, MusicXML braucht der Viewer nicht.
+
+`metadata` trägt bei der Engine des lokalen Wegs zwei Felder mehr, die
+Stock-MuseScore nicht kennt: `keySigs` und `rehearsalMarks`
+([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall), Form im
+[Artefaktschema](#artefaktschema)). Das `metadata` des Sidecars hat keines
+von beiden.
 
 ### M3: stdout ist nicht sauber
 
@@ -1002,6 +1645,47 @@ schwarz. `ScorePage.vue` färbt deshalb zusätzlich die Nachfahren – und dort
 genau das, was überhaupt Farbe trägt, sonst würde ein Notenhals
 (`fill="none"`) als Fläche ausgemalt.
 
+**`st-` und `vc-` werden gebraucht, wo es um eine Stimme geht.** Die
+Intonation färbt die Notenköpfe der eigenen Stimme: zum Zeitpunkt einer Note
+liefert `timing.json` das Segment, `st-` die Notenzeile darin
+(`svgIndex.js` baut dafür eine zweite Karte Segment → Zeile → Knoten). Ohne
+`st-` bleibt die Karte leer, und die Intonation bleibt bei Nadel und Liste.
+
+**Die Notenlinien stehen in der Engine-Form ebenfalls anders.** Wo die Zeilen
+liegen, liest `staffBands.js` aus den `StaffLines` – die Grundlage für
+„Meine Zeile“, die Größe der Stempel und die Zuordnung Zeile → Stimme:
+
+| | Form |
+|---|---|
+| Sidecar | `<polyline class="StaffLines" points="1489.73,2148.84 9491.34,2148.84"/>`, absolute Punkte |
+| Engine | `<g class="StaffLines st-0 vc-0"><g transform="matrix(1 0 0 1 1345.086 1303.268)"><polyline points="0,0 7873.422,0" …/></g></g>`, Klasse an der äußeren Gruppe, Lage als Transformation der inneren, Punkte relativ dazu |
+
+Beide Formen werden gelesen. Nur die erste zu kennen hieß gemessen: auf dem
+lokalen Weg 0 statt 10 Notenzeilen je Seite einer SATB-Partitur.
+
+### M11: Was MIDI und SVG über Studierbuchstaben und Tonarten tragen
+
+Gemessen an `keys-marks-test.mscz` (c-Moll, Wechsel nach D-Dur in Takt 4,
+Studierbuchstaben A/B/C, eine Wiederholung) auf beiden Wegen:
+
+- **Das MIDI trägt Studierbuchstaben als Marker (`FF 06`)** und Tonarten als
+  Vorzeichen-Ereignis (`FF 59`) – ausgerollt wie `timing.json`: Marker A, A, B,
+  C (A doppelt, weil die Wiederholung ausgerollt ist), Tonarten −3, −3, 2.
+  **Das Modus-Byte von `FF 59` ist überall 0**, also Dur, auch für c-Moll: Ob
+  Dur oder Moll gemeint ist, lässt sich dem MIDI nicht entnehmen.
+- **Das MIDI des Sidecars ist byteweise identisch** mit dem des lokalen Wegs
+  (Sidecar-Image mit MuseScore 4.7.5). Der Rückfall aus
+  [E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall) liefert auf
+  beiden Wegen also dasselbe.
+- **Im SVG stehen `RehearsalMark` und `KeySig` ohne `seg-`**, und den Text
+  eines Studierbuchstabens gibt es dort nur als Glyphenpfad. Auslesen ließe er
+  sich nur über eine Glyphenerkennung – deshalb die Felder in `meta.json`.
+- **`meta.json` des Sidecars hat weder `keySigs` noch `rehearsalMarks`.**
+- Ein MIDI-Marker liegt gerechnet oft einen Bruchteil einer Millisekunde vor
+  dem Taktanfang (Gleitkomma aus der Tempokarte), `measures.json` auf ganzen
+  Millisekunden. Ohne 1 ms Zugabe landete ein Buchstabe gelegentlich im Takt
+  davor (`scoreFacts.js`).
+
 ## Artefaktschema
 
 `timing.json` und `measures.json` haben dieselbe Form (ein gemeinsamer Parser im
@@ -1027,6 +1711,31 @@ Notenkopf-/Takt-Position auf der Seite beschreibt – unabhängig davon, wie oft
 beim Abspielen durchlaufen wird.
 
 `timing.json` treibt den Cursor, `measures.json` die Taktnavigation.
+
+`meta.json` ist das `metadata`-Objekt des Konverters, unverändert
+([M8](#m8-metadata-trägt-tempo-und-titel-tracks-ist-aber-nicht-garantiert)).
+Die Engine des lokalen Wegs ergänzt zwei Felder
+([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)):
+
+```json
+"keySigs":        [{"measure": 1, "tick": 0,    "concertKey": -3, "mode": "minor"},
+                   {"measure": 4, "tick": 5760, "concertKey":  2, "mode": "major"}],
+"rehearsalMarks": [{"measure": 1, "tick": 0,    "text": "A"},
+                   {"measure": 3, "tick": 3840, "text": "B"}]
+```
+
+- Beide stammen aus dem ersten Staff. `concertKey` ist die klingende Tonart als
+  Vorzeichenzahl (−7…7), `mode` MuseScores `KeyMode` (`major`, `minor`,
+  `dorian` …) oder `null`, wo MuseScore keinen kennt. `text` ist der
+  Studierbuchstabe ohne Formatierung.
+- `measure` ist die **notierte** Taktnummer, 1-basiert, `tick` notiert und
+  nicht ausgerollt. Ohne Mehrtaktpausen ist das dieselbe Zählung wie in
+  `measures.json`; mit ihnen nicht, siehe E12.
+- Fehlen die Felder (Sidecar, Konvertierung mit einer älteren Engine), ist das
+  kein Fehler – der Viewer nimmt dann das MIDI.
+
+Welche Fassung dieses Schemas ein Cache-Eintrag hat, hält `format_version` fest
+(`CURRENT_FORMAT_VERSION` = 3, [Konvertierung und Cache](#konvertierung-und-cache)).
 
 ## Weiter
 

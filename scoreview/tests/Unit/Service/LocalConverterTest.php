@@ -83,7 +83,7 @@ class LocalConverterTest extends TestCase {
 		// Ueber Reflection, weil die Methode privat ist und der einzige Weg
 		// dorthin ein echter Konverterlauf mit Wasm waere. Der Fall ist
 		// wortwoertlich der gemessene: Qt-Meldung, dann die Ursache, dann die
-		// Frames. Frueher stand die letzte Zeile in der Oberflaeche.
+		// Frames. Die letzte Zeile waere nur ein Frame, nicht die Ursache.
 		$stderr = "12:00:00 | ERROR | main_thread | DefaultStyle::doLoadStyle | failed load style\n"
 			. "RuntimeError: null function or function signature mismatch\n"
 			. "    at wasm://wasm/02366562:wasm-function[5328]:0x479d80\n"

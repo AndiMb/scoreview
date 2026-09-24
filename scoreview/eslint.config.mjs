@@ -25,6 +25,9 @@ export default [
 				// steht deshalb bewusst nicht hier: eine Rueckkehr zu OC.*
 				// soll der Linter melden, nicht stillschweigend durchlassen.
 				OCA: 'readonly',
+				// Beim Bauen ersetzt (DefinePlugin in webpack.config.js):
+				// die App-Version fuer das Cache-Busting der AudioWorklets.
+				SCOREVIEW_APP_VERSION: 'readonly',
 			},
 		},
 		rules: {
@@ -59,6 +62,20 @@ export default [
 		},
 		rules: {
 			'no-console': 'off',
+		},
+	},
+	{
+		// Das Aufnahme-Worklet laeuft im AudioWorkletGlobalScope, nicht im
+		// Fenster: Dort sind `sampleRate`, `currentFrame`,
+		// `AudioWorkletProcessor` und `registerProcessor` die Globals.
+		files: ['src/worklets/**/*.js'],
+		languageOptions: {
+			globals: {
+				AudioWorkletProcessor: 'readonly',
+				currentFrame: 'readonly',
+				registerProcessor: 'readonly',
+				sampleRate: 'readonly',
+			},
 		},
 	},
 	{

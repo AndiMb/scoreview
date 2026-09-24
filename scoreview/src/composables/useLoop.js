@@ -20,8 +20,12 @@ import { findMeasureStartTime } from '../lib/scoreLayout.js'
  * @param {(timeMs: number) => void} deps.seek
  * @param {(targetMs: number) => void} deps.startCountIn Einzähler vor dem Start
  * @param {() => void} deps.clearCountIn
+ * @param {() => void} [deps.onWrap] nach jedem Ruecksprung an den Anfang -
+ *   der Speed-Trainer zaehlt daran seine Durchlaeufe. Ein Rueckruf statt
+ *   einer Zaehlung in der Zeitschleife: Dort stuende sonst Trainerlogik
+ *   zwischen Cursor und Metronom.
  */
-export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCountIn, clearCountIn }) {
+export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCountIn, clearCountIn, onWrap = () => {} }) {
 	// '', nicht null: NcTextField (anders als ein natives <input>) nimmt als
 	// modelValue nur string|number entgegen und wirft bei null einen
 	// Laufzeitfehler ("Cannot read properties of null"). '' bleibt wie null
@@ -87,6 +91,39 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 	}
 
 	/**
+	 * Den Loop von außen setzen - für „Folgt mir": Die Leitung schickt einen
+	 * Bereich, und er gilt sofort, ohne dass jemand den Knopf drückt.
+	 *
+	 * Anders als toggle() weder Sprung noch Einzähler: Die Stelle schickt die
+	 * Leitung getrennt (Position), und ein Einzähler auf jedem Gerät, das
+	 * gerade nicht spielt, wäre im Probenraum ein Chor aus Klicks.
+	 *
+	 * @param {number} from erster Takt
+	 * @param {number} to letzter Takt (wird noch ganz gespielt)
+	 * @return {boolean} ob der Bereich gilt - false, wenn es die Takte nicht gibt
+	 */
+	function setRange(from, to) {
+		const measures = measuresTimeline()
+		const start = measures ? findMeasureStartTime(measures, Number(from)) : null
+		if (start === null || !(Number(to) >= Number(from))) {
+			return false
+		}
+		fromMeasure.value = Number(from)
+		toMeasure.value = Number(to)
+		startMs.value = start
+		endMs.value = findMeasureStartTime(measures, Number(to) + 1) ?? durationMs()
+		active.value = true
+		return true
+	}
+
+	/** Den Loop aufheben, falls einer gilt - die Felder bleiben stehen. */
+	function clear() {
+		if (active.value) {
+			toggle()
+		}
+	}
+
+	/**
 	 * „Loop ab aktuellem Takt" („der häufigste Fall in der Probe: man ist
 	 * schon an der Stelle") - füllt nur das Feld, aktiviert den Loop
 	 * nicht automatisch (der „bis"-Takt bleibt eine bewusste Entscheidung).
@@ -113,6 +150,23 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 		return null
 	}
 
+	/**
+	 * Pro Frame aus der Zeitschleife: am Loop-Ende zurueckspringen und den
+	 * Durchlauf melden.
+	 *
+	 * @param {number} currentTimeMs die ROHE Zeit (Begruendung in ScoreViewer.pumpTimeDisplay)
+	 * @return {boolean} ob gesprungen wurde
+	 */
+	function wrapIfDue(currentTimeMs) {
+		const target = restartTarget(currentTimeMs)
+		if (target === null) {
+			return false
+		}
+		seek(target)
+		onWrap()
+		return true
+	}
+
 	function reset() {
 		fromMeasure.value = ''
 		toMeasure.value = ''
@@ -121,5 +175,5 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 		endMs.value = null
 	}
 
-	return { fromMeasure, toMeasure, active, markers, toggle, setFromCurrentMeasure, restartTarget, reset }
+	return { fromMeasure, toMeasure, active, markers, toggle, setRange, clear, setFromCurrentMeasure, restartTarget, wrapIfDue, reset }
 }

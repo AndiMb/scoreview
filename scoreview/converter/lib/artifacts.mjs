@@ -220,3 +220,59 @@ export function checkPromises({ pages, timing, midi, meta, svgs = [] }) {
 		},
 	}
 }
+
+/**
+ * Die Partiturfakten aus der Engine (Tonarten mit Dur/Moll, Studierbuchstaben),
+ * gegen die mitgelieferte `keys-marks-test.mscz` geprueft: c-Moll ab Takt 1,
+ * D-Dur ab Takt 4, Buchstaben A/B/C in den Takten 1/3/4.
+ *
+ * Eigene Pruefung statt eines Teils von checkPromises: Die Felder gibt es nur
+ * auf diesem Weg (der Sidecar laeuft auf Stock-MuseScore und kennt sie nicht),
+ * und sie haengen an einer zweiten Partitur. Faellt eines weg, arbeitet der
+ * Viewer still mit dem MIDI-Rueckfall weiter - Buchstaben ja, Moll nein, der
+ * Anfangston im Grundtonmodus waere dann die Dur-Tonika. Das soll ein
+ * Engine-Wechsel nicht unbemerkt anrichten koennen.
+ *
+ * `meta` ist dabei unveraendert das, was die Engine liefert: convert.mjs und
+ * der Browser-Rueckfall schreiben `score.metadata()` ganz nach meta.json, es
+ * gibt also keine Umformung, die die Felder verlieren koennte - nur die
+ * Engine selbst.
+ *
+ * @param {object} meta meta.json der Testpartitur
+ * @return {{problems: string[], details: object}}
+ */
+export function checkScoreFacts(meta) {
+	const problems = []
+	const keySigs = Array.isArray(meta?.keySigs) ? meta.keySigs : null
+	const marks = Array.isArray(meta?.rehearsalMarks) ? meta.rehearsalMarks : null
+
+	if (keySigs === null) {
+		problems.push('meta.json hat keine keySigs - Dur/Moll fehlt dem Anfangston')
+	} else {
+		const erste = keySigs.find((k) => k.measure === 1)
+		if (erste?.concertKey !== -3 || erste?.mode !== 'minor') {
+			problems.push(`Tonart in Takt 1 ist nicht c-Moll: ${JSON.stringify(erste ?? null)}`)
+		}
+		const wechsel = keySigs.find((k) => k.measure === 4)
+		if (wechsel?.concertKey !== 2 || wechsel?.mode !== 'major') {
+			problems.push(`Tonartwechsel in Takt 4 ist nicht D-Dur: ${JSON.stringify(wechsel ?? null)}`)
+		}
+	}
+
+	if (marks === null) {
+		problems.push('meta.json hat keine rehearsalMarks - Studierbuchstaben kommen nur noch aus dem MIDI')
+	} else {
+		const gefunden = marks.map((m) => `${m.text}@${m.measure}`).join(',')
+		if (gefunden !== 'A@1,B@3,C@4') {
+			problems.push(`Studierbuchstaben sind nicht A/B/C in den Takten 1/3/4: ${gefunden}`)
+		}
+	}
+
+	return {
+		problems,
+		details: {
+			keySigs: keySigs?.length ?? 0,
+			rehearsalMarks: marks?.length ?? 0,
+		},
+	}
+}

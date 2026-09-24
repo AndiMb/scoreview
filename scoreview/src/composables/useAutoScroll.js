@@ -7,8 +7,8 @@ const MANUAL_SCROLL_RESUME_MS = 2500
 
 // Ab dieser Strecke (in Vielfachen der Viewporthöhe) wird gesprungen statt
 // weich gescrollt. Ein weiches Scrollen über mehrere Bildschirmhöhen ist auf
-// einem Telefon weder schön noch billig - und es war die Strecke, an der die
-// frühere Zeitfenster-Heuristik zerbrach.
+// einem Telefon weder schön noch billig - und an genau dieser Strecke zerbricht
+// eine Heuristik, die nach Zeitfenstern statt nach Strecke entscheidet.
 const BIG_JUMP_VIEWPORTS = 1.5
 
 /**
@@ -178,5 +178,15 @@ export function useAutoScroll({ scrollEl }) {
 		gestureActive = false
 	}
 
-	return { setPageRef, update, onUserGestureStart, onUserGestureEnd, noteManualScroll, reset }
+	/**
+	 * Die Seitenkomponenten, je Seitenindex - fuer das Blaettern
+	 * (usePaging.js), das dieselben Seiten ausmisst.
+	 *
+	 * @return {Array<object>}
+	 */
+	function pages() {
+		return pageRefs
+	}
+
+	return { setPageRef, pages, update, onUserGestureStart, onUserGestureEnd, noteManualScroll, reset }
 }

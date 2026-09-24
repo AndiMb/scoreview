@@ -1,7 +1,7 @@
 // Reine, DOM-freie Zuordnungslogik zwischen Wiedergabezeit und
 // Seiten-Koordinate für den Overlay-Cursor (der Cursor ist ein Overlay
 // über bekannten SVG-Koordinaten, kein Renderer-interner Zustand wie
-// beim vorherigen OSMD-Cursor).
+// bei einem Neusatz im Browser, siehe E2).
 
 import { findStepIndex } from './timingSync.js'
 
@@ -336,7 +336,7 @@ export function computePinchZoom(startDistance, currentDistance, startZoom, { mi
 }
 
 // `sanitizeSvg()` ist nicht hier, sondern in `svgSanitizer.js` (DOMPurify,
-// echtes Parsen statt Textersetzung) - eine frühere regexbasierte Fassung
-// liess 9 von 15 geprueften Umgehungsmustern durch, siehe den Kommentar
+// echtes Parsen statt Textersetzung) - gemessen liess eine regexbasierte
+// Fassung 9 von 15 geprueften Umgehungsmustern durch, siehe den Kommentar
 // dort. Diese Datei bleibt bewusst DOM-frei (CLAUDE.md), der Sanitizer
 // braucht dagegen ein DOM.

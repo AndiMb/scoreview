@@ -57,7 +57,7 @@ import NcSelect from '@nextcloud/vue/components/NcSelect'
 import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
 import Headphones from 'vue-material-design-icons/Headphones.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
-import { computeEffectiveVolumes, computeVoiceFocusVolumes, resolveMixerGroups } from '../lib/mixerLayout.js'
+import { computeEffectiveVolumes, computeVoiceFocusVolumes, resolveMixerGroups, voiceFocusForPart } from '../lib/mixerLayout.js'
 
 /**
  * UI + Zustand für Lautstärke/Mute/Solo/Instrument pro Kanal, Stimmgruppen
@@ -92,11 +92,22 @@ export default {
 			type: Array,
 			default: () => [],
 		},
+
+		// „Meine Stimme" aus dem Viewer (useMyPart.js, serverseitig gemerkt).
+		// Der Mixer zeigt sie an und stellt die Lautstaerken danach ein - auch
+		// wenn sie nicht hier gewaehlt wurde, sondern beim Oeffnen geladen.
+		myPartId: {
+			type: [String, Number],
+			default: null,
+		},
 	},
 
 	emits: ['volumesChanged', 'programChanged', 'focusChanged'],
 
 	data() {
+		// Mit gemerkter Stimme beginnt der Mixer schon im Fokus - dieselben
+		// Werte, die der Viewer beim Laden bereits an den Player gegeben hat.
+		const focus = voiceFocusForPart(this.channels, this.myPartId)
 		return {
 			// channel -> { volume, muted, solo, program }
 			//
@@ -106,17 +117,36 @@ export default {
 			// Piano" an, obwohl etwas anderes klang.
 			states: Object.fromEntries(this.channels.map((ch) => [
 				ch.channel,
-				{ volume: 127, muted: false, solo: false, program: ch.program ?? 0 },
+				{ volume: focus?.volumes.get(ch.channel) ?? 127, muted: false, solo: false, program: ch.program ?? 0 },
 			])),
 
 			// key der Gruppe mit aktivem "meine Stimme"-Preset, oder null.
-			focusedGroupKey: null,
+			focusedGroupKey: focus?.key ?? null,
 		}
 	},
 
 	computed: {
 		groups() {
 			return resolveMixerGroups(this.channels)
+		},
+	},
+
+	watch: {
+		/**
+		 * Die Stimme kam von aussen (gemerkte Wahl, die erst nach dem Oeffnen
+		 * des Mixers eintraf). Eine Wahl aus diesem Mixer selbst kommt hier
+		 * ebenfalls vorbei - dann ist sie schon eingestellt, und es passiert
+		 * nichts.
+		 *
+		 * @param {?string} partId
+		 */
+		myPartId(partId) {
+			const focus = voiceFocusForPart(this.channels, partId)
+			if ((focus?.key ?? null) === this.focusedGroupKey) {
+				return
+			}
+			this.applyFocus(focus)
+			this.emitVolumes()
 		},
 	},
 
@@ -171,19 +201,13 @@ export default {
 		// computeVoiceFocusVolumes) - der Probenfall ist "meine Stimme klar
 		// heraushören", nicht "die anderen ausblenden".
 		toggleFocus(group) {
-			const allChannels = this.channels.map((ch) => ch.channel)
-			if (this.focusedGroupKey === group.key) {
-				this.focusedGroupKey = null
-				for (const channel of allChannels) {
-					this.states[channel].volume = 127
-				}
-			} else {
-				this.focusedGroupKey = group.key
-				const volumes = computeVoiceFocusVolumes(allChannels, group.channels)
-				for (const [channel, volume] of volumes) {
-					this.states[channel].volume = volume
-				}
-			}
+			// Eine Zeile ohne Stimmen-ID (Rueckfall in resolveMixerGroups) laesst
+			// sich trotzdem hervorheben, nur nicht als „Meine Stimme" merken.
+			const focus = this.focusedGroupKey === group.key
+				? null
+				: (voiceFocusForPart(this.channels, group.partId)
+					?? { key: group.key, volumes: computeVoiceFocusVolumes(this.channels.map((ch) => ch.channel), group.channels) })
+			this.applyFocus(focus)
 			this.emitVolumes()
 			// "Meine Stimme" ist nicht nur eine Lautstaerkefrage: Wer seine
 			// Stimme heraushoert, will sie auch im Notenbild wiederfinden.
@@ -191,6 +215,17 @@ export default {
 			// Markierung im Notenbild haengt an derselben Entscheidung
 			// (ScoreViewer.vue, myPartId).
 			this.$emit('focusChanged', this.focusedGroupKey === null ? null : (group.partId ?? null))
+		},
+
+		/**
+		 * @param {?{key:string, volumes:Map<number, number>}} focus aus
+		 *   voiceFocusForPart(), null = kein Fokus (alle wieder voll)
+		 */
+		applyFocus(focus) {
+			this.focusedGroupKey = focus?.key ?? null
+			for (const ch of this.channels) {
+				this.states[ch.channel].volume = focus?.volumes.get(ch.channel) ?? 127
+			}
 		},
 
 		onProgramChange(channel, program) {

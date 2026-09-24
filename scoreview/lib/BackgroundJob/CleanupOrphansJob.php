@@ -5,15 +5,20 @@ declare(strict_types=1);
 namespace OCA\ScoreView\BackgroundJob;
 
 use OCA\ScoreView\Db\AnnotationMapper;
+use OCA\ScoreView\Db\FollowMapper;
+use OCA\ScoreView\Db\FollowSession;
+use OCA\ScoreView\Db\LeaderMapper;
 use OCA\ScoreView\Db\ScoreConversionMapper;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\RecordingStorage;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
 use OCP\Files\IRootFolder;
 use Psr\Log\LoggerInterface;
 
 /**
- * Räumt Cache und Notizen von Dateien weg, die es nicht mehr gibt.
+ * Räumt Cache, Notizen, Leitungen, „Folgt mir"-Sitzungen und Aufnahmen von
+ * Dateien weg, die es nicht mehr gibt.
  *
  * Zwei Aufgaben, die der ereignisbasierte Weg nicht abdecken kann:
  *
@@ -29,6 +34,10 @@ use Psr\Log\LoggerInterface;
  *    `occ files:cleanup`, ein direkt am Speicher entfernter Ordner - danach
  *    gibt es keinen Event mehr, der je nachkäme.
  *
+ * Dazu kommen „Folgt mir"-Sitzungen ohne Lebenszeichen der Leitung
+ * (FollowSession::TIMEOUT_SECONDS). Beim Lesen gelten sie ohnehin als
+ * beendet; hier verschwindet nur die Zeile.
+ *
  * Läuft einmal täglich; das reicht für Aufräumarbeiten und hält die
  * `getById()`-Abfragen selten. Anders als ConvertScoreJob ist das ein
  * periodischer Job ohne Argument und deshalb korrekt über
@@ -43,6 +52,9 @@ class CleanupOrphansJob extends TimedJob {
 		private ConversionService $conversionService,
 		private ScoreConversionMapper $conversionMapper,
 		private AnnotationMapper $annotationMapper,
+		private LeaderMapper $leaderMapper,
+		private FollowMapper $followMapper,
+		private RecordingStorage $recordingStorage,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -53,13 +65,19 @@ class CleanupOrphansJob extends TimedJob {
 	}
 
 	protected function run($argument): void {
+		$this->removeExpiredFollowSessions();
+
 		$fileIds = array_unique(array_merge(
 			$this->conversionMapper->findAllFileIds(),
 			$this->annotationMapper->findAllFileIds(),
+			$this->leaderMapper->findAllFileIds(),
+			$this->followMapper->findAllFileIds(),
+			$this->recordingStorage->findAllFileIds(),
 		));
 
 		$caches = 0;
 		$annotations = 0;
+		$others = 0;
 		foreach ($fileIds as $fileId) {
 			if ($this->stillExists($fileId)) {
 				continue;
@@ -68,6 +86,9 @@ class CleanupOrphansJob extends TimedJob {
 				$this->conversionService->deleteAllForFile($fileId);
 				$caches++;
 				$annotations += $this->annotationMapper->deleteByFileId($fileId);
+				$others += $this->leaderMapper->deleteByFileId($fileId);
+				$others += $this->followMapper->deleteByFileId($fileId);
+				$others += $this->recordingStorage->deleteAllForFile($fileId);
 			} catch (\Throwable $e) {
 				// Eine einzelne kaputte fileId darf den Durchlauf nicht beenden -
 				// der naechste Lauf versucht es erneut.
@@ -79,10 +100,28 @@ class CleanupOrphansJob extends TimedJob {
 			}
 		}
 
-		if ($caches > 0 || $annotations > 0) {
-			$this->logger->info('ScoreView: {caches} verwaiste Cache-Eintraege und {annotations} Notizen entfernt.', [
+		if ($caches > 0 || $annotations > 0 || $others > 0) {
+			$this->logger->info('ScoreView: {caches} verwaiste Cache-Eintraege, {annotations} Notizen und {others} Leitungen, Sitzungen und Aufnahmen entfernt.', [
 				'caches' => $caches,
 				'annotations' => $annotations,
+				'others' => $others,
+			]);
+		}
+	}
+
+	/**
+	 * Eigener try-Block: Ein Fehler hier darf das eigentliche Aufraeumen
+	 * nicht verhindern - eine abgelaufene Sitzung stoert niemanden, sie gilt
+	 * beim Lesen ohnehin als beendet.
+	 */
+	private function removeExpiredFollowSessions(): void {
+		try {
+			$cutoff = $this->time->getDateTime()->modify('-' . FollowSession::TIMEOUT_SECONDS . ' seconds');
+			$this->followMapper->deleteHeartbeatBefore($cutoff);
+		} catch (\Throwable $e) {
+			$this->logger->warning('ScoreView: Abgelaufene Folge-Sitzungen konnten nicht entfernt werden: {message}', [
+				'message' => $e->getMessage(),
+				'exception' => $e,
 			]);
 		}
 	}

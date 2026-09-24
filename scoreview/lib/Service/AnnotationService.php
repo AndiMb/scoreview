@@ -9,7 +9,7 @@ use OCA\ScoreView\Db\AnnotationMapper;
 use OCP\IUserManager;
 
 /**
- * Verwaltet Notizen (privat und geteilt). Der
+ * Verwaltet Notizen (privat, geteilt, fuer Stimmen) und Stempel. Der
  * Anker ist musikalisch (Taktnummer + Bruchteil innerhalb des Taktes, siehe
  * Migration\Version000100Date20260823130000) - diese Klasse berechnet den
  * Anker nicht selbst (das passiert clientseitig aus timing.json/
@@ -21,7 +21,14 @@ use OCP\IUserManager;
  * (`PERMISSION_UPDATE` am aufgelösten Node), die nur der Controller über
  * `UserFileResolver` kennt. Die Methoden hier nehmen die fertige
  * Berechtigungsentscheidung (`canWriteShared`) deshalb als Parameter
- * entgegen, statt sie zu erraten.
+ * entgegen, statt sie zu erraten. Dasselbe gilt fuer die Leitungsrolle
+ * (`isLeader`, LeaderService): Stimmnotizen (`parts`) duerfen nur Leitungen
+ * aendern und loeschen, und ob jemand Leitung ist, weiss der Controller.
+ *
+ * Die drei Sichtbarkeiten haben damit drei getrennte Regeln, die sich nicht
+ * vermischen: privat - nur die Autorin; geteilt - Schreibrecht an der Datei;
+ * Stimmen - Leitung. Eine Leitung ohne Schreibrecht darf also Stimmnotizen
+ * pflegen, aber keine geteilten: Die Rolle ergaenzt die Regeln der geteilten Notizen, sie ersetzt sie nicht.
  */
 class AnnotationService {
 	public function __construct(
@@ -51,7 +58,9 @@ class AnnotationService {
 	public function serialize(Annotation $a, string $currentUserId, ?int $currentMeasureCount = null): array {
 		$data = $a->jsonSerialize();
 		$data['mine'] = $a->getUserId() === $currentUserId;
-		$data['authorName'] = $a->getVisibility() === Annotation::VISIBILITY_SHARED
+		// Auch bei Stimmnotizen: Wer die Leitung ist, soll man sehen,
+		// und in einem Chor mit mehreren Leitungen auch, welche.
+		$data['authorName'] = in_array($a->getVisibility(), [Annotation::VISIBILITY_SHARED, Annotation::VISIBILITY_PARTS], true)
 			? ($this->userManager->get($a->getUserId())?->getDisplayName() ?? $a->getUserId())
 			: null;
 		if ($currentMeasureCount !== null) {
@@ -68,7 +77,12 @@ class AnnotationService {
 		return $data;
 	}
 
-	public function create(int $fileId, string $userId, int $measureNumber, float $fraction, ?int $elid, ?string $anchorEtag, string $content, string $visibility): Annotation {
+	/**
+	 * @param ?string $targetPartsJson JSON `[{id, name}]`, bereits geprueft
+	 *                                 (Controller) - nur bei `parts`
+	 * @param bool $byLeader ob die Autorin beim Anlegen Leitung ist
+	 */
+	public function create(int $fileId, string $userId, int $measureNumber, float $fraction, ?int $elid, ?string $anchorEtag, string $content, string $visibility, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?string $targetPartsJson = null, bool $byLeader = false): Annotation {
 		$now = new \DateTime();
 		$annotation = new Annotation();
 		$annotation->setFileId($fileId);
@@ -79,58 +93,98 @@ class AnnotationService {
 		$annotation->setAnchorEtag($anchorEtag);
 		$annotation->setVisibility($visibility);
 		$annotation->setContent($content);
+		$annotation->setKind($kind);
+		$annotation->setStamp($stamp);
+		$annotation->setTargetParts($targetPartsJson);
+		$annotation->setByLeader($byLeader);
 		$annotation->setCreatedAt($now);
 		$annotation->setUpdatedAt($now);
 		return $this->mapper->insert($annotation);
 	}
 
 	/**
+	 * @param bool $isLeader ob die anfragende Nutzerin Leitung ist - zaehlt
+	 *                       nur bei Stimmnotizen
+	 * @param ?string $targetPartsJson neue Zielstimmen einer Stimmnotiz;
+	 *                                 null = unveraendert, bei anderen Notizen wirkungslos
 	 * @throws \RuntimeException wenn eine geteilte Notiz ohne Schreibrecht
 	 *                           geändert werden soll (Controller macht daraus 403 - eine geteilte
 	 *                           Notiz ist für jeden mit Dateizugriff ohnehin sichtbar, es gibt also
-	 *                           nichts zu verbergen, anders als beim null-Fall unten).
+	 *                           nichts zu verbergen, anders als beim null-Fall unten). Ebenso
+	 *                           bei einer Stimmnotiz ohne Leitungsrolle - auch die sieht jede
+	 *                           Person mit Dateizugriff.
+	 * @throws \InvalidArgumentException wenn eine Textnotiz leer werden soll
+	 *                                   (Controller macht daraus 400). Ein Stempel darf ohne Text
+	 *                                   sein - erst hier bekannt, weil erst hier die Notiz geladen ist.
 	 * @return ?Annotation null, wenn die ID zu dieser Datei nicht existiert,
 	 *                     ODER eine private Notiz einer anderen Nutzerin gehört (Controller
 	 *                     macht daraus 404 - bewusst ohne Existenz zu bestätigen).
 	 */
-	public function updateContent(int $id, int $fileId, string $userId, bool $canWriteShared, string $content): ?Annotation {
+	public function updateContent(int $id, int $fileId, string $userId, bool $canWriteShared, string $content, bool $isLeader = false, ?string $targetPartsJson = null): ?Annotation {
 		$annotation = $this->mapper->findByIdAndFileId($id, $fileId);
 		if ($annotation === null) {
 			return null;
 		}
-		if ($annotation->getVisibility() === Annotation::VISIBILITY_SHARED) {
-			if (!$canWriteShared) {
-				throw new \RuntimeException('Kein Schreibrecht fuer geteilte Notizen dieser Datei.');
-			}
-		} elseif ($annotation->getUserId() !== $userId) {
+		if (!$this->mayWrite($annotation, $userId, $canWriteShared, $isLeader)) {
 			return null;
 		}
+		if ($annotation->getKind() !== Annotation::KIND_STAMP && trim($content) === '') {
+			throw new \InvalidArgumentException('Eine Textnotiz braucht Text.');
+		}
 		$annotation->setContent($content);
+		if ($targetPartsJson !== null && $annotation->getVisibility() === Annotation::VISIBILITY_PARTS) {
+			$annotation->setTargetParts($targetPartsJson);
+		}
 		$annotation->setUpdatedAt(new \DateTime());
 		return $this->mapper->update($annotation);
 	}
 
 	/**
 	 * @throws \RuntimeException wenn eine geteilte Notiz ohne Schreibrecht
-	 *                           gelöscht werden soll (siehe updateContent())
+	 *                           oder eine Stimmnotiz ohne Leitungsrolle gelöscht werden soll
+	 *                           (siehe updateContent())
 	 * @return bool false, wenn die ID zu dieser Datei nicht existiert ODER
 	 *              eine private Notiz einer anderen Nutzerin gehört (Controller macht
 	 *              daraus 404) - eigener Rückgabetyp statt null/Annotation wie bei
 	 *              updateContent(), weil "gelöscht" kein Objekt zum Zurückgeben hat.
 	 */
-	public function delete(int $id, int $fileId, string $userId, bool $canWriteShared): bool {
+	public function delete(int $id, int $fileId, string $userId, bool $canWriteShared, bool $isLeader = false): bool {
 		$annotation = $this->mapper->findByIdAndFileId($id, $fileId);
 		if ($annotation === null) {
 			return false;
 		}
-		if ($annotation->getVisibility() === Annotation::VISIBILITY_SHARED) {
-			if (!$canWriteShared) {
-				throw new \RuntimeException('Kein Schreibrecht fuer geteilte Notizen dieser Datei.');
-			}
-		} elseif ($annotation->getUserId() !== $userId) {
+		if (!$this->mayWrite($annotation, $userId, $canWriteShared, $isLeader)) {
 			return false;
 		}
 		$this->mapper->delete($annotation);
 		return true;
+	}
+
+	/**
+	 * Die Schreibregel je Sichtbarkeit, an EINER Stelle fuer Aendern und
+	 * Loeschen - was man aendern darf, darf man auch loeschen.
+	 *
+	 * @return bool false = so tun, als gaebe es die Notiz nicht (private
+	 *              Notiz einer anderen Nutzerin, Controller: 404)
+	 * @throws \RuntimeException sichtbar, aber nicht schreibbar (Controller: 403)
+	 */
+	private function mayWrite(Annotation $annotation, string $userId, bool $canWriteShared, bool $isLeader): bool {
+		$visibility = $annotation->getVisibility();
+		if ($visibility === Annotation::VISIBILITY_SHARED) {
+			if (!$canWriteShared) {
+				throw new \RuntimeException('Kein Schreibrecht fuer geteilte Notizen dieser Datei.');
+			}
+			return true;
+		}
+		if ($visibility === Annotation::VISIBILITY_PARTS) {
+			// Leitungen pflegen die Hinweise gemeinsam, auch die einer
+			// anderen oder einer inzwischen abberufenen Leitung - sonst
+			// blieben deren Hinweise unkorrigierbar stehen.
+			if (!$isLeader) {
+				throw new \RuntimeException('Stimmnotizen aendern nur Leitungen.');
+			}
+			return true;
+		}
+		return $annotation->getUserId() === $userId;
 	}
 }

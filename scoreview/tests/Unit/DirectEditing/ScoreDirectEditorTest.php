@@ -6,7 +6,9 @@ namespace OCA\ScoreView\Tests\Unit\DirectEditing;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\DirectEditing\ScoreDirectEditor;
+use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\ViewerPreferences;
+use OCP\AppFramework\Http\FeaturePolicy;
 use OCP\AppFramework\Http\NotFoundResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
@@ -27,6 +29,7 @@ class ScoreDirectEditorTest extends TestCase {
 	private IInitialState&MockObject $initialState;
 	private IRequest&MockObject $request;
 	private ViewerPreferences&MockObject $preferences;
+	private FeatureConfig&MockObject $features;
 
 	protected function setUp(): void {
 		$this->initialState = $this->createMock(IInitialState::class);
@@ -34,11 +37,13 @@ class ScoreDirectEditorTest extends TestCase {
 		$this->preferences = $this->createMock(ViewerPreferences::class);
 		$this->preferences->method('get')
 			->willReturn(['highlightColor' => '#ff0000', 'highlightMode' => 'note']);
+		$this->features = $this->createMock(FeatureConfig::class);
+		$this->features->method('forViewer')->willReturn(['followSession' => false, 'followPollMs' => 800]);
 	}
 
 	private function editor(): ScoreDirectEditor {
 		return new ScoreDirectEditor(
-			$this->initialState, $this->request, $this->preferences);
+			$this->initialState, $this->request, $this->preferences, $this->features);
 	}
 
 	public function testMeldetGenauDenPartiturMimetype(): void {
@@ -80,10 +85,34 @@ class ScoreDirectEditorTest extends TestCase {
 		$this->assertSame(42, $geliefert['standalone']['fileId']);
 		$this->assertSame('Choral.mscz', $geliefert['standalone']['fileName']);
 		$this->assertSame('abc123', $geliefert['standalone']['token']);
-		// Woran die Seite sich selbst erkennt - daran haengt, dass die
-		// Anzeigeeinstellungen dort nicht zurueckgeschrieben werden
-		// (composables/useViewerPreferences.js).
+		// Woran die Seite sich selbst erkennt - etwa fuer den Setlisten-Editor
+		// ohne Nextclouds Dateiauswahl (components/SetlistEditor.vue).
 		$this->assertTrue($geliefert['standalone']['directEditing']);
+	}
+
+	/**
+	 * S3: Das Mikrofon gibt die Seite nur frei, wenn eine Mikrofonfunktion
+	 * eingeschaltet ist - und zwar als FeaturePolicy, die Nextcloud mit der
+	 * Vorgabe zusammenfuehrt, nicht als EmptyFeaturePolicy, die sie ersetzte.
+	 */
+	public function testMikrofonNurWennEineFunktionEsBraucht(): void {
+		$this->request->method('getParam')->willReturn('t');
+		foreach ([false, true] as $braucht) {
+			$this->features = $this->createMock(FeatureConfig::class);
+			$this->features->method('forViewer')->willReturn([]);
+			$this->features->method('usesMicrophone')->willReturn($braucht);
+
+			$antwort = $this->editor()->open($this->tokenFuerDatei(7, 'x.mscz'));
+
+			$richtlinie = $antwort->getFeaturePolicy();
+			$this->assertSame(FeaturePolicy::class, get_class($richtlinie));
+			if (!$braucht) {
+				$this->assertStringContainsString("microphone 'none'", $richtlinie->buildPolicy(), 'ohne Funktion bleibt es bei der Vorgabe');
+				continue;
+			}
+			$this->assertStringContainsString("microphone 'self'", $richtlinie->buildPolicy());
+			$this->assertStringContainsString("fullscreen 'self'", $richtlinie->buildPolicy(), 'Vorgabe bleibt');
+		}
 	}
 
 	/**
@@ -110,6 +139,25 @@ class ScoreDirectEditorTest extends TestCase {
 		$this->editor()->open($token);
 
 		$this->assertSame('#00ff00', $geliefert['viewer-preferences']['highlightColor']);
+	}
+
+	/**
+	 * Eine abgeschaltete Funktion darf in der App nicht auftauchen, nur weil
+	 * der Einstieg ein anderer ist als die Files-Seite.
+	 */
+	public function testLiefertDieSchalterDerAdministrationMit(): void {
+		$token = $this->tokenFuerDatei(7, 'x.mscz');
+		$this->request->method('getParam')->willReturn('t');
+
+		$geliefert = [];
+		$this->initialState->method('provideInitialState')
+			->willReturnCallback(function (string $schluessel, $wert) use (&$geliefert): void {
+				$geliefert[$schluessel] = $wert;
+			});
+
+		$this->editor()->open($token);
+
+		$this->assertSame(['followSession' => false, 'followPollMs' => 800], $geliefert['features']);
 	}
 
 	/**

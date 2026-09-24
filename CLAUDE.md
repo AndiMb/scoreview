@@ -8,7 +8,7 @@ nicht offensichtlich ist – **die fachliche Wahrheit steht in `docs/`**.
 
 | Frage | Dokument |
 |---|---|
-| Warum ist das so gebaut? | `docs/architecture.md` – Aufbau, Entscheidungen E1–E8, Formatgrundlagen M1–M10 |
+| Warum ist das so gebaut? | `docs/architecture.md` – Aufbau, Sicherheitsregeln S1–S8, Entscheidungen E1–E12, Formatgrundlagen M1–M11 |
 | Was ist gemessen, was ist offen? | `docs/limits.md` |
 | Wie baue/teste ich? | `docs/development.md` |
 | Wie wird das installiert? | `docs/installation.md` |
@@ -155,7 +155,7 @@ misst er nur den Effektbus und meldet fälschlich „kein Ton".
   Entscheidungen, die von außen falsch aussehen. Der Bestand ist so
   geschrieben; bitte in dieser Dichte weiterführen statt sie zu verwässern.
   **Keine Prozess-Chronik im Code**: nicht „Phase 17 hat gemessen, dass …",
-  sondern „gemessen: …". Referenzen auf `E1`–`E8`/`M1`–`M10` sind erwünscht,
+  sondern „gemessen: …". Referenzen auf `S1`–`S8`/`E1`–`E12`/`M1`–`M11` sind erwünscht,
   sie zeigen auf `docs/architecture.md`.
 - Commit-Messages beschreiben Ursache und Wirkung, nicht nur den Fix. Kurze
   Betreffzeile, dann ein Fließtext-Body.
@@ -205,7 +205,9 @@ Alle ausführlich in `docs/troubleshooting.md`:
 
 `.gitignore` deckt das ab, aber bewusst wissen: Testpartituren unter
 `sidecar/testdata/` sind nicht garantiert frei lizenziert und bleiben draußen –
-einzige Ausnahme ist die selbst erstellte `repeat-test.*`. Ebenso draußen:
+Ausnahmen sind nur die selbst erstellten `repeat-test.*` und
+`keys-marks-test.mscz` (Tonarten mit Modus und Studierbuchstaben für den
+Konverter-Selbsttest). Ebenso draußen:
 `scoreview/js/` (Build-Artefakte), `node_modules/` und das lokale
 Wegwerf-Verzeichnis `spike/`.
 

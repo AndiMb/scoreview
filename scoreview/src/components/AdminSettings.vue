@@ -85,6 +85,52 @@
 					placeholder="https://…/MuseScore_General.sf3"
 					:helperText="t('Leave empty: the app delivers the SoundFont itself. Only fill in to have the browser load a different SoundFont directly - that address must then be reachable from the browser and allow CORS.')" />
 
+				<!--
+					Probe und Konzert: jede Funktion einzeln abschaltbar.
+					Das Mitverfolgen per Mikrofon fehlt hier bewusst - es ist
+					noch nicht gebaut, und ein Schalter ohne Wirkung waere eine
+					falsche Auskunft. Die Grenzen der Aufnahmen stehen gleich
+					darunter - sie sind die Antwort auf die Frage, die beim
+					Einschalten als Erste kommt: Wie viel Platz kostet das?
+				-->
+				<h3 class="scoreview-subheading">
+					{{ t('Rehearsal and concert') }}
+				</h3>
+				<NcCheckboxRadioSwitch v-model="form.featureFollowSession" type="switch" class="scoreview-field">
+					{{ t('Leaders and “Follow me” (the leader sends position, loop and starting note to all devices)') }}
+				</NcCheckboxRadioSwitch>
+				<NcTextField
+					v-if="form.featureFollowSession"
+					v-model="followPollMsText"
+					type="number"
+					class="scoreview-field"
+					:label="t('Polling interval for “Follow me” (ms)')"
+					:placeholder="String(initial.followPollMsDefault)"
+					:helperText="followPollHint" />
+				<NcCheckboxRadioSwitch v-model="form.featureRecording" type="switch" class="scoreview-field">
+					{{ t('Own recordings (only the person recording can hear them)') }}
+				</NcCheckboxRadioSwitch>
+				<!--
+					Aufnahmen liegen in den App-Daten und zaehlen gegen kein
+					Kontingent der Nutzerin (S5 in docs/architecture.md) - die
+					Speichergrenzen sind deshalb die einzigen, die es gibt.
+				-->
+				<template v-if="form.featureRecording">
+					<NcTextField
+						v-for="field in recordingLimitFields"
+						:key="field.key"
+						:modelValue="String(form[field.key])"
+						type="number"
+						class="scoreview-field"
+						:label="field.label"
+						:placeholder="String(field.limit.default)"
+						:helperText="t('Allowed: {min}–{max}. Default: {default}.', { min: field.limit.min, max: field.limit.max, default: field.limit.default })"
+						@update:modelValue="(value) => setRecordingLimit(field.key, value)" />
+				</template>
+				<NcCheckboxRadioSwitch v-model="form.featureIntonation" type="switch" class="scoreview-field">
+					{{ t('Intonation feedback while singing') }}
+				</NcCheckboxRadioSwitch>
+
 				<div class="scoreview-actions">
 					<NcButton variant="primary" type="submit" :disabled="saving">
 						<template #icon>
@@ -207,6 +253,16 @@ export default {
 				sidecarSecret: '',
 				eagerConversion: initial.eagerConversion,
 				soundFontUrl: initial.soundFontUrl,
+				// `?? true`: ein Anfangszustand aus einer Version ohne diese
+				// Felder soll beim naechsten Speichern nichts abschalten.
+				featureFollowSession: initial.featureFollowSession ?? true,
+				featureRecording: initial.featureRecording ?? true,
+				featureIntonation: initial.featureIntonation ?? true,
+				followPollMs: initial.followPollMs ?? 800,
+				maxRecordingsPerScore: initial.recordingLimits?.maxRecordingsPerScore?.value ?? 5,
+				maxRecordingSeconds: initial.recordingLimits?.maxRecordingSeconds?.value ?? 600,
+				maxRecordingMbPerUser: initial.recordingLimits?.maxRecordingMbPerUser?.value ?? 200,
+				maxRecordingMbTotal: initial.recordingLimits?.maxRecordingMbTotal?.value ?? 5120,
 			},
 
 			saving: false,
@@ -229,12 +285,64 @@ export default {
 		},
 
 		/**
-		 * Die vier Diagnosezeilen. Bewusst als computed und nicht beim Abruf
+		 * Die Diagnosezeilen. Bewusst als computed und nicht beim Abruf
 		 * zusammengebaut, damit die Beschriftungen bei einem Sprachwechsel
 		 * mitgehen und die Abruffunktion nur Daten holt.
 		 *
 		 * @return {Array<{label: string, detail: string, ok: boolean, type?: string}>}
 		 */
+		/**
+		 * NcTextField liefert Text; gespeichert wird eine Zahl. Leer oder
+		 * unlesbar heisst: die Vorgabe - begrenzt wird ohnehin auf dem Server
+		 * (Service\FeatureConfig), die Antwort traegt den echten Wert.
+		 */
+		followPollMsText: {
+			get() {
+				return String(this.form.followPollMs)
+			},
+
+			set(value) {
+				const zahl = Number.parseInt(value, 10)
+				this.form.followPollMs = Number.isFinite(zahl) ? zahl : this.initial.followPollMsDefault
+			},
+		},
+
+		/**
+		 * Die Kosten stehen dabei, sobald der Wert unter die Vorgabe geht:
+		 * gemessen kostet jede Abfrage etwa 50 ms Server-CPU, bei 40
+		 * Geraeten und 800 ms sind das rund 2,5 Kerne fuer die Dauer einer
+		 * Sitzung.
+		 *
+		 * @return {string}
+		 */
+		followPollHint() {
+			const range = t('Allowed: {min}–{max} ms. Higher means less server load, but jumps arrive later.', {
+				min: this.initial.followPollMsMin ?? 500,
+				max: this.initial.followPollMsMax ?? 3000,
+			})
+			if (this.form.followPollMs < (this.initial.followPollMsDefault ?? 800)) {
+				return range + ' ' + t('Below the default, every device costs about 50 ms of server CPU per request, only while a session is running.')
+			}
+			return range
+		},
+
+		/**
+		 * Die vier Grenzen der Aufnahmen, mit ihren Grenzen aus derselben
+		 * Quelle wie die Pruefung beim Speichern (FeatureConfig::NUMBERS).
+		 *
+		 * @return {Array<{key: string, label: string, limit: {min: number, max: number, default: number}}>}
+		 */
+		recordingLimitFields() {
+			const limits = this.initial.recordingLimits ?? {}
+			const fallback = { min: 1, max: 1, default: 1 }
+			return [
+				{ key: 'maxRecordingsPerScore', label: t('Recordings per person and score') },
+				{ key: 'maxRecordingSeconds', label: t('Maximum length of one recording (seconds)') },
+				{ key: 'maxRecordingMbPerUser', label: t('Storage for recordings per person (MB)') },
+				{ key: 'maxRecordingMbTotal', label: t('Storage for recordings on this server (MB)') },
+			].map((field) => ({ ...field, limit: limits[field.key] ?? fallback }))
+		},
+
 		/** Konvertiert dieser Server gerade gar nicht selbst? */
 		fallbackActive() {
 			return this.health?.clientFallback?.active === true
@@ -274,6 +382,12 @@ export default {
 						? t('mode {mode}, last run {age}', { mode: h.cron.mode, age: this.humanAge(h.cron.ageSeconds) })
 						: t('no run in the last 15 minutes ({age}) – conversions will stay pending', { age: this.humanAge(h.cron.ageSeconds) }),
 				},
+				...(h.follow?.enabled
+					? [{
+							label: t('“Follow me”'),
+							...this.followLine(h.follow),
+						}]
+					: []),
 				{
 					label: t('Conversions'),
 					// Nur dann ein Problem, wenn etwas haengt UND der Cron tot
@@ -319,6 +433,26 @@ export default {
 			return {
 				ok: h.sidecar.reachable,
 				detail: h.sidecar.reachable ? h.sidecar.url : (h.sidecar.error || t('not configured')),
+			}
+		},
+
+		/**
+		 * Ob „Folgt mir" Push nutzt (E10). Ohne Push ist nichts kaputt - die
+		 * Geraete fragen ab -, deshalb Hinweis statt Fehler. Er nennt die
+		 * gemessenen Kosten, damit die Entscheidung fuer notify_push
+		 * nicht auf Vermutung beruht.
+		 *
+		 * @param {object} f h.follow aus dem Health-Endpunkt
+		 * @return {{ok: boolean, detail: string, type?: string}}
+		 */
+		followLine(f) {
+			if (f.pushAvailable) {
+				return { ok: true, detail: t('notify_push is available: devices get jumps pushed instead of asking every {ms} ms.', { ms: f.pollMs }) }
+			}
+			return {
+				ok: true,
+				type: 'info',
+				detail: t('Without notify_push every following device asks every {ms} ms, costing about 50 ms of CPU per request - with 40 devices about three cores during the session. From about {n} devices, installing notify_push is recommended.', { ms: f.pollMs, n: f.recommendPushFromDevices }),
 			}
 		},
 
@@ -370,12 +504,34 @@ export default {
 			return t('{n} min ago', { n: Math.floor(seconds / 60) })
 		},
 
+		/**
+		 * Text aus dem Feld, eine Zahl im Formular. Unlesbar heisst: die
+		 * Vorgabe - begrenzt wird ohnehin auf dem Server.
+		 *
+		 * @param {string} key
+		 * @param {string} value
+		 */
+		setRecordingLimit(key, value) {
+			const zahl = Number.parseInt(value, 10)
+			const field = this.recordingLimitFields.find((f) => f.key === key)
+			this.form[key] = Number.isFinite(zahl) ? zahl : field.limit.default
+		},
+
 		async save() {
 			this.saving = true
 			this.saveState = ''
 			try {
-				await axios.post(generateUrl('/apps/scoreview/api/settings'), this.form)
+				const res = await axios.post(generateUrl('/apps/scoreview/api/settings'), this.form)
 				this.saveState = 'ok'
+				// Der Server begrenzt das Intervall - angezeigt wird, was gilt.
+				if (typeof res.data?.followPollMs === 'number') {
+					this.form.followPollMs = res.data.followPollMs
+				}
+				for (const field of this.recordingLimitFields) {
+					if (typeof res.data?.[field.key] === 'number') {
+						this.form[field.key] = res.data[field.key]
+					}
+				}
 				if (this.form.sidecarSecret !== '') {
 					this.initial.sidecarSecretSet = true
 					this.form.sidecarSecret = ''
@@ -462,5 +618,10 @@ function t(text, vars) {
 .scoreview-hint {
 	color: var(--color-text-maxcontrast);
 	max-width: 60em;
+}
+
+.scoreview-subheading {
+	margin-block: 20px 8px;
+	font-weight: bold;
 }
 </style>

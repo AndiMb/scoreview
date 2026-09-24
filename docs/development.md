@@ -31,6 +31,24 @@ Die reine Logik liegt bewusst in `src/lib/` und ist dort ohne DOM, ohne
 `AudioContext` und ohne Nextcloud testbar. **Neue Logik gehört dorthin, nicht in
 die Komponenten** – sonst ist sie nur noch im Browser prüfbar.
 
+Zwei Testdateien liegen als Binärdaten neben den Tests, beide klein und selbst
+erzeugt: `src/lib/__fixtures__/m1-test.mid` ist das MIDI von
+`keys-marks-test.mscz` (siehe [Lokaler Konverter](#lokaler-konverter)) –
+Studierbuchstaben als Marker, Tonarten, eine ausgerollte Wiederholung – und
+trägt die Tests von `midiNotes.js` und `scoreFacts.js`; `mmrest-test.mid` ist
+dieselbe Partitur mit drei leeren Takten als Mehrtaktpause vor einem vierten
+Buchstaben D und prüft den Rückfall, wenn die Taktzählung der Engine von
+`measures.json` abweicht
+([E12](architecture.md#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)).
+Wer sie neu erzeugt, nimmt `score.mid` aus `node convert.mjs <partitur> <ziel>`.
+
+**Die AudioWorklets tragen die App-Version.** `webpack.config.js` liest sie
+beim Bauen aus `appinfo/info.xml` und hängt sie als `?v=` an die Adressen, die
+`audioWorklet.addModule()` lädt
+([Nachgeladene Dateien](architecture.md#nachgeladene-dateien)). Ein Build ohne
+Versionssprung behält also dieselbe Adresse – wer am Worklet arbeitet, lädt
+hart neu.
+
 Der Viewer mountet einen eigenen zweiten Vue-Baum neben dem von Nextclouds
 Viewer (begründet in `src/viewer.js`). Wer an der UI-Basis arbeitet, muss
 deshalb **im Viewer** verifizieren, nicht auf der Einstellungsseite – dort
@@ -92,13 +110,23 @@ Verzeichnis mit ein). Alles, was die Engine selbst braucht, deckt der Selbsttest
 ab – lokal wie in CI.
 
 Welche Engine installiert wird, steht als **Release-Tarball-URL** in
-`converter/package.json`. Eine neue MuseScore-Version heißt: in
+`converter/package.json`. Zum Erproben einer lokal gebauten Engine lässt sie
+sich vorübergehend auf `file:<pfad>/scoreview-engine-<version>.tgz` stellen.
+Solange das so steht, scheitern in CI `npm ci` des Konverters und der
+Versionsvergleich mit dem Sidecar, `release.yml` bricht ab, und der Selbsttest
+meldet die Version als „unbekannt“, weil er sie aus der URL liest. Vor einem
+Release gehört dort wieder die Release-URL hin, gefolgt von `npm install`
+(aktualisiert `resolved` und `integrity` im Lockfile) und dem Selbsttest. Eine neue MuseScore-Version heißt: in
 [AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) das
 Submodul heben, das Korpus-Gate bestehen, ein Release setzen, hier die URL
 hochziehen, `npm install` laufen lassen und den Selbsttest prüfen. Die Datei `converter/selftest-score.mscz` ist eine Kopie von
 `sidecar/testdata/repeat-test.mscz` – dieselbe Partitur, die auch der Sidecar
 für seinen Selbsttest benutzt; sie enthält Wiederholung, Volta und D.C., damit
-M7 überhaupt prüfbar ist.
+M7 überhaupt prüfbar ist. Daneben konvertiert der Selbsttest
+`converter/keys-marks-test.mscz` (Kopie von
+`sidecar/testdata/keys-marks-test.mscz`) und prüft an ihr die nur von der
+Engine gelieferten Felder `keySigs` (c-Moll, Wechsel nach D-Dur) und
+`rehearsalMarks` (A/B/C).
 
 ## CI
 
@@ -156,6 +184,28 @@ Zwei Container: eine Nextcloud-Instanz und `scoreview-sidecar`, aufgesetzt wie i
 Für Tonprüfungen im Browser gilt ein Fallstrick: Der Abgriff muss den
 Ausgangsindex mitführen, sonst misst er nur den Effektbus und meldet fälschlich
 „kein Ton".
+
+**Mikrofon ohne Mikrofon.** Aufnahme und Intonation lassen sich in einem
+Chromium ohne Fenster mit einer WAV-Datei als Signalquelle prüfen:
+
+```sh
+--use-fake-ui-for-media-stream                  # Rückfrage ohne Klick bestätigen
+--use-fake-device-for-media-stream              # ein Mikrofon vortäuschen
+--use-file-for-fake-audio-capture=/pfad/zu.wav  # dessen Signal aus einer Datei
+```
+
+Ohne die dritte Angabe liefert Chromium einen Piepton. Die Seite muss dabei
+über `localhost` oder HTTPS kommen, und die Berechtigungsrichtlinie muss das
+Mikrofon freigeben
+([Troubleshooting](troubleshooting.md#das-mikrofon-ist-hier-nicht-verfügbar)).
+Eine verweigerte Erlaubnis prüft man ohne die erste Angabe, indem das Skript
+die Anfrage ablehnt.
+
+**„Folgt mir“ mit mehreren Konten.** Leitung und Folgen brauchen mindestens drei
+Konten mit Zugriff auf dieselbe Partitur (Eigentümerin, Leitung, Sängerin),
+also eine Freigabe an zwei weitere Testnutzer. `notify_push` ist in der
+schlichten Testinstanz nicht eingerichtet; dort läuft nur der Weg über
+Abfragen.
 
 ## Konventionen
 
@@ -303,7 +353,8 @@ Abbruch fehlt also auch das Viewer-Bundle in der Testinstanz, bis einmal
 vollständig gebaut wurde.
 
 **Testpartituren** unter `sidecar/testdata/` sind nicht garantiert frei
-lizenziert und bleiben draußen; einzige Ausnahme ist die selbst erstellte
-`repeat-test.*`. Ebenso draußen: `scoreview/js/` (Build-Artefakte) und
+lizenziert und bleiben draußen; Ausnahmen sind die selbst erstellten
+`repeat-test.*` und `keys-marks-test.mscz` (`.gitignore` führt beide
+ausdrücklich). Ebenso draußen: `scoreview/js/` (Build-Artefakte) und
 `node_modules/`. Das Remote ist öffentlich – vor dem Push darauf achten, dass
 weder Geheimnisse noch fremdlizenziertes Material mitgehen.

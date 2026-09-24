@@ -8,6 +8,32 @@
 		neu rendern muss.
 	-->
 	<div class="scoreview-viewer" :style="highlightStyle">
+		<!--
+			Die Setliste steht ueber allem, auch ueber „Wird konvertiert…" und
+			einem Fehler: Im Konzert muss es auch an einem Stueck vorbei
+			weitergehen, das gerade nicht geht.
+		-->
+		<SetlistBar
+			:active="setlistActive"
+			:title="setlistTitle"
+			:entries="setlistEntries"
+			:index="setlistIndex"
+			:position="setlistPosition"
+			:canEdit="setlistCanEdit"
+			:canNavigate="can('nextPiece')"
+			:canManage="can('settings')"
+			:offers="setlistOffers"
+			:offerDismissed="setlistOfferDismissed"
+			@previous="onSetlistPrevious"
+			@next="onSetlistNext"
+			@goTo="onSetlistGoTo"
+			@edit="openSetlistEditor('edit')"
+			@close="closeSetlist"
+			@accept="acceptSetlistOffer"
+			@dismiss="setlistOfferDismissed = true" />
+		<NcNoteCard v-if="setlistError" type="error" class="scoreview-hint">
+			{{ setlistError }}
+		</NcNoteCard>
 		<div v-if="state === 'converting' || state === 'loading'" class="scoreview-status">
 			<NcLoadingIcon :size="32" :name="state === 'loading' ? t('Loading…') : t('Converting…')" />
 			<!--
@@ -74,9 +100,10 @@
 					<NcButton
 						class="scoreview-play"
 						variant="primary"
+						:disabled="!can('play')"
 						:aria-label="isPlaying ? t('Pause') : t('Play')"
 						:title="isPlaying ? t('Pause') : t('Play')"
-						@click="togglePlay">
+						@click="onPlayClick">
 						<template #icon>
 							<Pause v-if="isPlaying" :size="20" />
 							<Play v-else :size="20" />
@@ -88,8 +115,9 @@
 						min="0"
 						:max="durationMs"
 						:value="displayTimeMs"
+						:disabled="!can('seek')"
 						:aria-label="t('Playback position')"
-						@input="onSeekInput">
+						@input="onSeekBarInput">
 					<span class="scoreview-time">{{ formatTime(displayTimeMs) }} / {{ formatTime(durationMs) }}</span>
 					<!--
 					Taktanzeige und Sprungfeld sind DASSELBE Feld: getrennt zeigten
@@ -101,20 +129,87 @@
 					<span class="scoreview-measure">
 						<!-- Die feste Breite sitzt am Wrapper, nicht an NcTextField
 							selbst - Begründung im CSS unten. -->
-						<span class="scoreview-measure-field">
+						<!--
+							Mit Studierbuchstaben nimmt das Feld auch „C" und
+							„C+3" an und zeigt „47 (C+3)" - deshalb dann Text statt
+							Zahl, und breiter. Ohne Buchstaben bleibt es das
+							Zahlenfeld von heute.
+						-->
+						<span class="scoreview-measure-field" :class="{ 'scoreview-measure-field--marks': rehearsalMarks.length > 0 }">
 							<NcTextField
-								v-model.number="measureInput"
-								type="number"
+								v-model="measureInput"
+								:type="rehearsalMarks.length > 0 ? 'text' : 'number'"
 								min="1"
 								:label="t('Measure')"
-								:title="t('Measure – enter a number and press Enter to jump there')"
+								:title="rehearsalMarks.length > 0
+									? t('Measure – enter a number or a rehearsal mark (C, C+3) and press Enter to jump there')
+									: t('Measure – enter a number and press Enter to jump there')"
+								:disabled="!can('seek')"
 								labelOutside
-								@focus="measureFieldFocused = true"
+								@focus="onMeasureFieldFocus"
 								@blur="onMeasureFieldBlur"
-								@keyup.enter="jumpToMeasure(measureInput)" />
+								@keyup.enter="jumpToMeasureInput" />
 						</span>
 						<span class="scoreview-measure-total">/ {{ totalMeasures || '–' }}</span>
 					</span>
+					<!--
+						Der Aufklapper „Navigation": die Studierbuchstaben als Chips.
+						Als Aufklapper statt als Leiste, weil die Leiste auf
+						Telefonbreite keinen Platz fuer eine zweite Reihe hat; und nur,
+						wenn die Partitur welche traegt.
+					-->
+					<NcPopover v-if="rehearsalMarks.length > 0 && can('seek')" v-model:shown="marksOpen">
+						<template #trigger>
+							<NcButton
+								class="scoreview-marks-button"
+								:aria-label="t('Rehearsal marks')"
+								:title="t('Rehearsal marks')">
+								<template #icon>
+									<BookmarkOutline :size="20" />
+								</template>
+							</NcButton>
+						</template>
+						<template #default>
+							<div class="scoreview-popover scoreview-marks" role="group" :aria-label="t('Rehearsal marks')">
+								<NcButton
+									v-for="mark in rehearsalMarks"
+									:key="mark.text"
+									class="scoreview-mark-chip"
+									:aria-label="t('Go to rehearsal mark {mark} (measure {n})', { mark: mark.text, n: mark.measure })"
+									:title="t('Measure {n}', { n: mark.measure })"
+									@click="jumpToMark(mark)">
+									{{ mark.text }}
+								</NcButton>
+							</div>
+						</template>
+					</NcPopover>
+					<!--
+						Anfangston und Schloss stehen im Transport, nicht in den
+						Werkzeugen: Beide werden auf Telefonbreite gebraucht,
+						und das Schloss ist im Aufführungsmodus der einzige Weg
+						hinaus - es darf nicht hinter „Mehr" verschwinden.
+					-->
+					<ScoreStartTone
+						v-if="can('tone')"
+						:mode="startToneMode"
+						:sounding="startToneSounding"
+						:toneName="startToneName"
+						:unavailableReason="startToneUnavailable"
+						@press="pressStartTone"
+						@release="releaseStartTone" />
+					<ScoreLockButton
+						:active="performanceMode"
+						:progress="performanceExitProgress"
+						@down="lockDown"
+						@cancel="cancelLockHold"
+						@lockKeydown="lockKeydown"
+						@lockKeyup="lockKeyup" />
+					<!--
+						Der rote Punkt: im Transport, nicht in den
+						Werkzeugen - er muss auch im Aufführungsmodus und bei
+						eingefahrenen Werkzeugen sichtbar und antippbar bleiben.
+					-->
+					<MicIndicator v-if="micActive" :consumers="micConsumers" @off="turnMicOff" />
 					<!--
 						Der Zugang zu den Werkzeugen auf schmalen Schirmen. Der
 						Punkt daran ist nicht Zierde: Laeuft das Metronom oder
@@ -138,7 +233,12 @@
 					</NcButton>
 				</div>
 				<div v-if="!compactBar || toolsOpen" class="scoreview-bar-tools">
-					<NcPopover>
+					<!--
+						Im Aufführungsmodus bleiben nur Zoom und Vollbild;
+						was gesperrt ist, verschwindet, statt ausgegraut
+						dazustehen - ein grauer Knopf laedt zum Antippen ein.
+					-->
+					<NcPopover v-if="can('loop')">
 						<template #trigger>
 							<NcButton :pressed="loopActive" :aria-label="t('Loop')" :title="loopActive ? t('Loop on') : t('Loop off')">
 								<template #icon>
@@ -170,12 +270,23 @@
 									wide
 									:pressed="loopActive"
 									:aria-label="loopActive ? t('Loop on') : t('Loop off')"
-									@click="toggleLoop">
+									@click="onToggleLoop">
 									<template #icon>
 										<Repeat :size="20" />
 									</template>
 									{{ loopActive ? t('Loop on') : t('Loop off') }}
 								</NcButton>
+								<ScoreSpeedTrainer
+									v-if="loopActive && hasRealPlayer"
+									v-model:startBpm="trainerStartBpm"
+									v-model:targetBpm="trainerTargetBpm"
+									v-model:stepBpm="trainerStepBpm"
+									:minBpm="minTempoBpm"
+									:maxBpm="maxTempoBpm"
+									:active="trainerActive"
+									:passes="trainerPasses"
+									:currentBpm="effectiveTempoBpm"
+									@toggle="toggleSpeedTrainer" />
 							</div>
 						</template>
 					</NcPopover>
@@ -188,7 +299,7 @@
 						Genauigkeit vorzutaeuschen, die nicht da ist. Der Regler dazu
 						liegt im Popover - er wird einmal eingestellt, nicht dauernd.
 					-->
-					<NcPopover>
+					<NcPopover v-if="can('settings')">
 						<template #trigger>
 							<NcButton
 								class="scoreview-tempo-button"
@@ -258,6 +369,7 @@
 						</template>
 					</NcPopover>
 					<NcButton
+						v-if="can('settings')"
 						:pressed="metronomeEnabled"
 						:aria-label="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
 						:title="metronomeEnabled ? t('Metronome on') : t('Metronome off')"
@@ -265,6 +377,19 @@
 						<template #icon>
 							<Metronome :size="20" />
 						</template>
+					</NcButton>
+					<!--
+						Welcher Ton der Anfangston ist: der eigene oder der
+						Grundton. Beschriftet statt nur ein Symbol - an diesem
+						Knopf entscheidet sich, was man gleich hoert.
+					-->
+					<NcButton
+						v-if="hasRealPlayer && can('tone')"
+						class="scoreview-tone-mode"
+						:aria-label="startToneMode === 'tonic' ? t('Starting note: key note of the current key. Switch to my voice') : t('Starting note: my voice. Switch to the key note')"
+						:title="startToneMode === 'tonic' ? t('Starting note: key note of the current key. Switch to my voice') : t('Starting note: my voice. Switch to the key note')"
+						@click="toggleStartToneMode">
+						{{ startToneMode === 'tonic' ? t('Key note') : t('My note') }}
 					</NcButton>
 					<NcPopover>
 						<template #trigger>
@@ -314,7 +439,7 @@
 						wurden. Beides gehoert zusammen: Es ist der Ort fuer
 						"warum sieht das so aus".
 					-->
-					<NcPopover>
+					<NcPopover v-if="can('settings')">
 						<template #trigger>
 							<NcButton :aria-label="t('Appearance')" :title="t('Appearance')">
 								<template #icon>
@@ -369,6 +494,35 @@
 										:aria-label="t('Own colour')"
 										@input="onHighlightColorInput">
 								</label>
+								<!--
+									Dunkelmodus der Noten. „Automatisch" folgt
+									dem Nextcloud-Theme; die feste Wahl uebersteuert
+									es, und beides bleibt am Konto gemerkt.
+								-->
+								<fieldset class="scoreview-popover-group">
+									<legend>{{ t('Score colours') }}</legend>
+									<NcCheckboxRadioSwitch
+										v-model="noteTheme"
+										type="radio"
+										value="auto"
+										name="scoreview-note-theme">
+										{{ t('Follow the Nextcloud theme') }}
+									</NcCheckboxRadioSwitch>
+									<NcCheckboxRadioSwitch
+										v-model="noteTheme"
+										type="radio"
+										value="light"
+										name="scoreview-note-theme">
+										{{ t('Dark notes on white') }}
+									</NcCheckboxRadioSwitch>
+									<NcCheckboxRadioSwitch
+										v-model="noteTheme"
+										type="radio"
+										value="dark"
+										name="scoreview-note-theme">
+										{{ t('Light notes on dark') }}
+									</NcCheckboxRadioSwitch>
+								</fieldset>
 								<!--
 									Die Herkunft der Darstellung (E3). Rein
 									beschreibend - der Viewer verzweigt nirgends
@@ -450,7 +604,7 @@
 						</template>
 					</NcPopover>
 					<NcButton
-						v-if="hasRealPlayer"
+						v-if="hasRealPlayer && can('mixer')"
 						:pressed="showMixer"
 						:aria-label="t('Mixer')"
 						:title="t('Mixer')"
@@ -466,7 +620,7 @@
 						die falsche Zeile markiert (siehe lib/staffBands.js).
 					-->
 					<NcButton
-						v-if="canFocusMyPart"
+						v-if="canFocusMyPart && can('settings')"
 						:pressed="focusMyPart"
 						:aria-label="t('Show only my part')"
 						:title="t('Show only my part')"
@@ -476,6 +630,7 @@
 						</template>
 					</NcButton>
 					<NcButton
+						v-if="can('settings')"
 						:pressed="showNoteText"
 						:aria-label="t('Show notes in the score')"
 						:title="t('Show notes in the score')"
@@ -485,12 +640,57 @@
 						</template>
 					</NcButton>
 					<NcButton
+						v-if="can('annotate')"
 						:pressed="showAnnotations"
 						:aria-label="t('Notes')"
 						:title="t('Notes')"
 						@click="showAnnotations = !showAnnotations">
 						<template #icon>
 							<NotebookOutline :size="20" />
+						</template>
+					</NcButton>
+					<!--
+						Aufnahme und Intonation - nur, wenn die
+						Administration eine der beiden eingeschaltet hat.
+					-->
+					<NcButton
+						v-if="(recordingEnabled || intonationEnabled) && can('settings')"
+						:pressed="showPractice"
+						:aria-label="t('Recording and intonation')"
+						:title="t('Recording and intonation')"
+						@click="showPractice = !showPractice">
+						<template #icon>
+							<Microphone :size="20" />
+						</template>
+					</NcButton>
+					<!--
+						Unter 'settings', weil Ernennen und Abberufen verwalten und
+						nichts mit dem Musizieren selbst zu tun haben - im
+						Aufführungsmodus also gesperrt wie die anderen Werkzeuge.
+					-->
+					<NcButton
+						v-if="can('settings')"
+						:pressed="showRehearsal"
+						:aria-label="t('Rehearsal')"
+						:title="t('Rehearsal')"
+						@click="showRehearsal = !showRehearsal">
+						<template #icon>
+							<AccountGroup :size="20" />
+						</template>
+					</NcButton>
+					<!--
+						„Neue Setliste" im Ordner der offenen Partitur
+						(E11) - nur, wo dort angelegt werden darf.
+						Bearbeiten sitzt an der Setlisten-Leiste selbst.
+					-->
+					<NcButton
+						v-if="can('settings') && setlistCanCreate"
+						:pressed="setlistEditorMode === 'new'"
+						:aria-label="t('New setlist')"
+						:title="t('New setlist')"
+						@click="openSetlistEditor('new')">
+						<template #icon>
+							<PlaylistPlus :size="20" />
 						</template>
 					</NcButton>
 					<!--
@@ -513,6 +713,19 @@
 				</div>
 			</div>
 			<div class="scoreview-body">
+				<!--
+					„Folgt mir": wer leitet, ob dieses Geraet folgt, ob die
+					Verbindung steht - ueber den Noten, damit es keine Hoehe kostet
+					und im Aufführungsmodus sichtbar bleibt.
+				-->
+				<FollowBadge
+					v-if="followActive"
+					class="scoreview-follow"
+					:leaderName="followLeaderName"
+					:mine="followMine"
+					:detached="!followFollowing"
+					:offline="!followConnected"
+					@resume="resumeFollow" />
 				<!--
 					Manuelles Scrollen wird an der GESTE erkannt, nicht an
 					scroll-Ereignissen (Begruendung ausfuehrlich in
@@ -576,6 +789,7 @@
 							:cursorElid="currentElid"
 							:zoom="zoom"
 							:markers="annotationMarkers"
+							:stamps="annotationStamps"
 							:loopMarkers="loopMarkers"
 							:systemRects="systemRectsForPage(i)"
 							:myPartIndex="myPartIndex"
@@ -583,8 +797,11 @@
 							:partCount="partCount"
 							:showNoteText="showNoteText"
 							:highlightMode="highlightMode"
+							:noteTheme="resolvedNoteTheme"
+							:noteMarks="intonationMarks"
+							:needle="intonationNeedle"
 							@noteClick="onNoteClick"
-							@markerClick="onAnnotationJumpToById"
+							@markerClick="onMarkerClick"
 							@staffMapping="onStaffMapping"
 							@loaded="onPageLoaded" />
 					</div>
@@ -596,7 +813,42 @@
 					nichts, wenn sie zu sind, und bleiben erreichbar, wo immer man
 					gerade liest.
 				-->
-				<div v-if="showMixerPanel || showAnnotations" class="scoreview-panels">
+				<div v-if="showMixerPanel || showAnnotations || showRehearsal || showPractice || armedStamp || setlistEditorMode" class="scoreview-panels">
+					<!--
+						Ein Stempel wartet auf den Tipp ins Notenbild. Das
+						Notizen-Panel ist dafuer zu - es laege sonst ueber den Noten,
+						in die getippt werden soll -, und dieser Hinweis sagt, was
+						der naechste Tipp tut und wie man es laesst.
+					-->
+					<section v-if="armedStamp" class="scoreview-panel scoreview-armed">
+						<span>{{ t('Tap the score where the {stamp} belongs.', { stamp: armedStampName }) }}</span>
+						<NcButton :aria-label="t('Cancel')" @click="disarmStamp">
+							<template #icon>
+								<Close :size="20" />
+							</template>
+							{{ t('Cancel') }}
+						</NcButton>
+					</section>
+					<section v-if="setlistEditorMode" class="scoreview-panel">
+						<div class="scoreview-panel-head">
+							<h3>{{ setlistEditorMode === 'new' ? t('New setlist') : t('Edit setlist') }}</h3>
+							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="setlistEditorMode = null">
+								<template #icon>
+									<Close :size="20" />
+								</template>
+							</NcButton>
+						</div>
+						<SetlistEditor
+							:key="setlistEditorMode + ':' + (setlist?.etag ?? '')"
+							:mode="setlistEditorMode"
+							:setlist="setlist"
+							:scoreFileId="standalonePage ? fileid : activeFileId"
+							:folderFileId="setlistFolderFileId"
+							:withoutFilePicker="standalonePage"
+							:noAdding="standalonePage && setlistEditorMode !== 'new'"
+							@saved="onSetlistSaved"
+							@cancel="setlistEditorMode = null" />
+					</section>
 					<section v-if="showMixerPanel" class="scoreview-panel">
 						<div class="scoreview-panel-head">
 							<h3>{{ t('Mixer') }}</h3>
@@ -606,9 +858,20 @@
 								</template>
 							</NcButton>
 						</div>
+						<!--
+							Der Anfangston kam ohne gewaehlte Stimme hierher:
+							Er raet nicht, sondern sagt, wo man sie waehlt.
+						-->
+						<NcNoteCard v-if="startToneNeedsPart" type="info">
+							{{ t('Choose your voice first: tap the voice symbol next to your part.') }}
+						</NcNoteCard>
+						<NcCheckboxRadioSwitch v-model="stereoMyPart" type="switch">
+							{{ t('My voice on the right, the others on the left') }}
+						</NcCheckboxRadioSwitch>
 						<ScoreMixer
 							:channels="mixerChannels"
 							:presetList="presetList"
+							:myPartId="myPartId"
 							@volumesChanged="onVolumesChanged"
 							@programChanged="onProgramChanged"
 							@focusChanged="onMyPartChanged" />
@@ -623,13 +886,104 @@
 							</NcButton>
 						</div>
 						<ScoreAnnotations
-							:annotations="annotations"
+							:annotations="listedAnnotations"
 							:currentAnchor="currentAnchor"
 							:error="annotationError"
+							:isLeader="isLeader"
+							:parts="scoreParts"
+							:armedStamp="armedStamp ? armedStamp.stamp : null"
 							@create="onAnnotationCreate"
 							@update="onAnnotationUpdate"
 							@delete="onAnnotationDelete"
-							@jumpTo="onAnnotationJumpTo" />
+							@jumpTo="onAnnotationJumpToOwn"
+							@armStamp="onArmStamp" />
+					</section>
+					<!--
+						Eigene Aufnahmen und Intonation. Bleibt waehrend
+						des Aufnehmens offen stehen - dort sitzt der Stopp-Knopf.
+					-->
+					<section v-if="showPractice" class="scoreview-panel">
+						<div class="scoreview-panel-head">
+							<h3>{{ t('Recording and intonation') }}</h3>
+							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="showPractice = false">
+								<template #icon>
+									<Close :size="20" />
+								</template>
+							</NcButton>
+						</div>
+						<RecordingPanel
+							v-model:withAccompaniment="recordWithAccompaniment"
+							v-model:countIn="recordCountIn"
+							v-model:recordingVolume="recordingVolume"
+							v-model:accompanimentVolume="accompanimentVolume"
+							:recordingEnabled="recordingEnabled"
+							:intonationEnabled="intonationEnabled"
+							:hasRealPlayer="hasRealPlayer"
+							:recordings="recordings"
+							:phase="recordPhase"
+							:elapsedMs="recordElapsedMs"
+							:confirmReplace="recordConfirmReplace"
+							:maxPerScore="maxRecordingsPerScore"
+							:pending="recordPending"
+							:listening="recordListening"
+							:error="recordError"
+							:micError="micError"
+							:browserUrl="browserUrl"
+							:live="intonationLive"
+							:needPart="intonationNeedPart"
+							:analysis="intonationAnalysis"
+							:analyzing="intonationAnalyzing"
+							:progress="intonationProgress"
+							:intonationError="intonationError"
+							@start="startRecording()"
+							@stop="stopRecording"
+							@replace="answerRecordReplace"
+							@retry="retryRecordSave"
+							@discard="discardPendingRecording"
+							@listen="onListenRecording"
+							@stopListening="stopListeningRecording"
+							@delete="removeRecording"
+							@analyze="onAnalyzeRecording"
+							@toggleLive="onToggleLiveIntonation"
+							@clearAnalysis="clearIntonationAnalysis"
+							@jump="onPracticeJump" />
+					</section>
+					<!--
+						Der Aufklapper „Probe": die Leitungen - hier sammelt
+						sich, was eine Probe organisiert, statt jedes Stueck davon
+						als eigenen Knopf in die Leiste zu setzen.
+					-->
+					<section v-if="showRehearsal" class="scoreview-panel">
+						<div class="scoreview-panel-head">
+							<h3>{{ t('Rehearsal') }}</h3>
+							<NcButton :aria-label="t('Close')" :title="t('Close')" @click="showRehearsal = false">
+								<template #icon>
+									<Close :size="20" />
+								</template>
+							</NcButton>
+						</div>
+						<LeaderPanel
+							:leaders="leaders"
+							:isLeader="isLeader"
+							:candidates="leaderCandidates"
+							:error="leaderError"
+							:followEnabled="followEnabled"
+							:followActive="followActive"
+							:followMine="followMine"
+							:followLeaderName="followLeaderName"
+							:followBusy="followBusy"
+							:followError="followError"
+							:marks="rehearsalMarks"
+							:loopActive="loopActive"
+							@appoint="onLeaderAppoint"
+							@revoke="onLeaderRevoke"
+							@search="onLeaderSearch"
+							@followStart="startFollow"
+							@followEnd="endFollow"
+							@followPosition="sendFollowPosition()"
+							@followMark="sendFollowMark"
+							@followLoop="sendFollowLoop"
+							@followTone="sendFollowTone" />
 					</section>
 				</div>
 			</div>
@@ -639,8 +993,10 @@
 
 <script>
 import axios from '@nextcloud/axios'
+import { loadState } from '@nextcloud/initial-state'
 import { translate } from '@nextcloud/l10n'
-import { getCurrentInstance, shallowRef } from 'vue'
+import { getRootUrl } from '@nextcloud/router'
+import { getCurrentInstance, ref, shallowRef, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
@@ -648,8 +1004,10 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcPopover from '@nextcloud/vue/components/NcPopover'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import AccountGroup from 'vue-material-design-icons/AccountGroup.vue'
 import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
 import ArrowExpandHorizontal from 'vue-material-design-icons/ArrowExpandHorizontal.vue'
+import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import CommentTextOutline from 'vue-material-design-icons/CommentTextOutline.vue'
 import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
@@ -660,26 +1018,57 @@ import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
 import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
 import Magnify from 'vue-material-design-icons/Magnify.vue'
 import Metronome from 'vue-material-design-icons/Metronome.vue'
+import Microphone from 'vue-material-design-icons/Microphone.vue'
 import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
 import Palette from 'vue-material-design-icons/Palette.vue'
 import Pause from 'vue-material-design-icons/Pause.vue'
 import Play from 'vue-material-design-icons/Play.vue'
+import PlaylistPlus from 'vue-material-design-icons/PlaylistPlus.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import Tune from 'vue-material-design-icons/Tune.vue'
+import FollowBadge from './FollowBadge.vue'
+import LeaderPanel from './LeaderPanel.vue'
+import MicIndicator from './MicIndicator.vue'
+import RecordingPanel from './RecordingPanel.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
+import ScoreLockButton from './ScoreLockButton.vue'
 import ScoreMixer from './ScoreMixer.vue'
 import ScorePage from './ScorePage.vue'
+import ScoreSpeedTrainer from './ScoreSpeedTrainer.vue'
+import { stampName } from './ScoreStamps.vue'
+import ScoreStartTone from './ScoreStartTone.vue'
+import SetlistBar from './SetlistBar.vue'
+import SetlistEditor from './SetlistEditor.vue'
 import { useAnnotations } from '../composables/useAnnotations.js'
 import { useAutoScroll } from '../composables/useAutoScroll.js'
 import { useConversionStatus } from '../composables/useConversionStatus.js'
+import { useFollowSession } from '../composables/useFollowSession.js'
+import { useIntonation } from '../composables/useIntonation.js'
+import { useLeaders } from '../composables/useLeaders.js'
 import { useLoop } from '../composables/useLoop.js'
 import { useMetronome } from '../composables/useMetronome.js'
+import { useMicrophone } from '../composables/useMicrophone.js'
+import { useMyPart } from '../composables/useMyPart.js'
+import { useMyPartSound } from '../composables/useMyPartSound.js'
+import { usePaging } from '../composables/usePaging.js'
+import { usePerformanceMode } from '../composables/usePerformanceMode.js'
 import { usePlayback } from '../composables/usePlayback.js'
+import { useRecorder } from '../composables/useRecorder.js'
+import { useScoreFacts } from '../composables/useScoreFacts.js'
+import { useSetlist } from '../composables/useSetlist.js'
+import { useSpeedTrainer } from '../composables/useSpeedTrainer.js'
+import { useStartTone } from '../composables/useStartTone.js'
 import { useViewerPreferences } from '../composables/useViewerPreferences.js'
+import { useWakeLock } from '../composables/useWakeLock.js'
 import { useZoom } from '../composables/useZoom.js'
+import { normalizeFeatures } from '../lib/featureFlags.js'
 import { HIGHLIGHT_PRESETS, normalizeHighlightColor } from '../lib/highlightStyle.js'
+import { resolveKey } from '../lib/keyMap.js'
+import { browserFileUrl } from '../lib/micAccess.js'
+import { channelsOfPart } from '../lib/panLayout.js'
 import { MAX_MANUAL_OFFSET_MS, MIN_MANUAL_OFFSET_MS } from '../lib/playbackTime.js'
+import { formatMeasureWithMark, resolveJumpTarget } from '../lib/scoreFacts.js'
 import {
 	buildTimeline,
 	findElementAtPoint,
@@ -688,11 +1077,28 @@ import {
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
 import { createScoreSync } from '../lib/scoreSync.js'
+import { MODE_TONIC, MODE_VOICE } from '../lib/startTone.js'
 
 // MuseScores eigene Vorgabe für Partituren ohne Tempoangabe (docs/architecture.md
 // M8: metadata.tempo kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als
 // Bezugswert für die BPM-Anzeige/-Eingabe, gekennzeichnet über tempoGuessed.
 const DEFAULT_TEMPO_BPM = 120
+
+/**
+ * Ein Anfangszustand der Seite, oder null. `loadState()` wirft bei einem
+ * fehlenden Schluessel - und fehlen darf er: Das Viewer-Bundle laeuft auch
+ * dort, wo niemand ihn hinterlegt hat (siehe useViewerPreferences.js).
+ *
+ * @param {string} key
+ * @return {?object}
+ */
+function readInitialState(key) {
+	try {
+		return loadState('scoreview', key)
+	} catch {
+		return null
+	}
+}
 
 // Ab dieser Breite (px) passen Transport UND Werkzeuge nebeneinander.
 // Gerechnet, nicht geraten: 9 Icon-Knoepfe zu 44px (Touch-Zielgroesse, siehe
@@ -706,19 +1112,22 @@ const COMPACT_BAR_WIDTH_PX = 700
 // Wiedergabe zur Fortschrittslinie zusammenzieht.
 const BAR_IDLE_MS = 3000
 
-// Tasten, die die Seite scrollen, ohne dass der Browser eine Zeigergeste
-// meldet. Pfeil hoch/runter fehlen bewusst: Links/rechts sind bereits mit dem
-// Taktsprung belegt, und hoch/runter blieben als einziges Paar uebrig, das
-// ohne Sonderfall scrollt.
-const SCROLL_KEYS = new Set(['PageUp', 'PageDown', 'Home', 'End', 'ArrowUp', 'ArrowDown'])
-
 export default {
 	name: 'ScoreViewer',
 
 	components: {
+		BookmarkOutline,
+		FollowBadge,
+		LeaderPanel,
+		MicIndicator,
+		Microphone,
+		RecordingPanel,
 		ScorePage,
 		ScoreMixer,
 		ScoreAnnotations,
+		ScoreLockButton,
+		ScoreSpeedTrainer,
+		ScoreStartTone,
 		NcButton,
 		NcTextField,
 		NcLoadingIcon,
@@ -745,13 +1154,31 @@ export default {
 		Magnify,
 		Palette,
 		Refresh,
+		AccountGroup,
+		PlaylistPlus,
+		SetlistBar,
+		SetlistEditor,
 	},
 
 	props: {
 		// Von OCA.Viewer übergeben (siehe registerHandler in src/viewer.js).
+		// Die Partitur, mit der der Viewer oeffnet - welche gerade offen ist,
+		// steht in `activeFileId` (Setliste, siehe setup()).
 		fileid: {
 			type: [Number, String],
 			required: true,
+		},
+
+		// Geoeffnet ueber eine Setlisten-Datei (Weg 1, E11): ihre fileId und,
+		// wenn schon gelesen, ihr Inhalt (src/viewer.js).
+		setlistId: {
+			type: [Number, String],
+			default: null,
+		},
+
+		setlistData: {
+			type: Object,
+			default: null,
 		},
 	},
 
@@ -759,14 +1186,14 @@ export default {
 	 * Feuert einmal, sobald hier wirklich etwas zu sehen ist - Notenbild ODER
 	 * Fehlermeldung. Der einzige Abnehmer ist heute die eigenstaendige Seite
 	 * (StandaloneFrame.vue): Die mobile App blendet ihren Ladebildschirm erst
-	 * darauf hin aus. Frueher gemeldet laege er bei laufender Konvertierung
+	 * darauf hin aus. Vorzeitig gemeldet laege er bei laufender Konvertierung
 	 * minutenlang ueber einem leeren Viewer, und nach zehn Sekunden meldete
-	 * die App zusaetzlich einen Timeout (A3).
+	 * die App zusaetzlich einen Timeout.
 	 *
 	 * Fuer die beiden anderen Einstiege folgenlos - ein Ereignis, das niemand
 	 * abhoert, kostet nichts.
 	 */
-	emits: ['ready'],
+	emits: ['ready', 'pieceChange'],
 
 	/**
 	 * Zerlegung von ScoreViewer.vue in Composables - schrittweise, ein
@@ -788,22 +1215,21 @@ export default {
 	 * @param props
 	 */
 	setup(props) {
+		// Die gerade offene Partitur. Anfangs die aus `fileid`; eine Setliste
+		// wechselt sie IM Viewer, statt ihn neu einhaengen zu lassen - nur so
+		// bleiben Aufführungsmodus, Dunkelmodus, Zoom und der geladene
+		// SoundFont ueber den Stueckwechsel erhalten. Alles, was an der
+		// Datei haengt, liest deshalb hier, nicht an der Prop.
+		const activeFileId = ref(props.fileid)
 		const timeline = shallowRef(null)
 		const measuresTimeline = shallowRef(null)
 		const currentEtag = shallowRef(null)
 		const durationMs = shallowRef(0)
 		const clock = shallowRef(null)
+		// meta.json - fuer die Partiturfakten (Tonarten, Studierbuchstaben).
+		const scoreMeta = shallowRef(null)
 
-		const annotations = useAnnotations({
-			fileId: () => props.fileid,
-			timeline: () => timeline.value,
-			measuresTimeline: () => measuresTimeline.value,
-			currentEtag: () => currentEtag.value,
-			durationMs: () => durationMs.value,
-			seek: (timeMs) => clock.value?.seek(timeMs),
-		})
-
-		// Einzeln und unter den bisherigen Namen zurueckgegeben, nicht als
+		// Einzeln und unter ihren eigenen Namen zurueckgegeben, nicht als
 		// verschachteltes Objekt: Vue entpackt Refs nur auf der OBERSTEN Ebene
 		// der setup()-Rueckgabe. `annotationsApi.visible` waere im Template ein
 		// Ref-Objekt statt eines Wertes - und so bleiben Template und
@@ -814,7 +1240,7 @@ export default {
 		// Zoom-Preset, die Seiten muessen dafuer schon gerendert sein.
 		let onScoreReady = async () => {}
 		const conversion = useConversionStatus({
-			fileId: () => props.fileid,
+			fileId: () => activeFileId.value,
 			onReady: (body) => onScoreReady(body),
 		})
 		const setOnScoreReady = (fn) => {
@@ -852,6 +1278,35 @@ export default {
 		// Ruecksetzen beim Dateiwechsel.
 		const preferences = useViewerPreferences()
 
+		// „Meine Stimme" je Partitur, serverseitig gemerkt - geladen im
+		// fileid-Watcher, nicht in reset(): „Neu konvertieren" setzt den
+		// Viewer zurueck, behaelt aber dieselbe Datei und damit dieselbe Wahl.
+		const myPart = useMyPart({ fileId: () => activeFileId.value })
+
+		// Die Leitungen der Partitur. Wie „Meine Stimme" im
+		// fileid-Watcher geladen: Sie haengen an der Datei, nicht an ihrer
+		// Konvertierung, und „Neu konvertieren" aendert an ihnen nichts.
+		const leaders = useLeaders({ fileId: () => activeFileId.value })
+
+		// Nach „Meine Stimme" und den Leitungen: Welche Stimmnotiz jemand
+		// sieht, haengt an beidem (lib/annotationFilter.js). Die Stimmen der
+		// Partitur liegen (noch) in data() - daher der Weg ueber die Instanz.
+		const annotations = useAnnotations({
+			fileId: () => activeFileId.value,
+			timeline: () => timeline.value,
+			measuresTimeline: () => measuresTimeline.value,
+			currentEtag: () => currentEtag.value,
+			durationMs: () => durationMs.value,
+			seek: (timeMs) => clock.value?.seek(timeMs),
+			parts: () => vm?.proxy?.scoreParts ?? [],
+			myPartId: () => myPart.myPartId.value,
+			isLeader: () => leaders.isLeader.value,
+		})
+
+		// Der Speed-Trainer zaehlt an den Loop-Durchlaeufen, braucht aber selbst
+		// den Loop-Zustand - der Rueckruf wird deshalb nachgereicht, wie
+		// setOnScoreReady oben.
+		let onLoopWrap = () => {}
 		const loop = useLoop({
 			measuresTimeline: () => measuresTimeline.value,
 			durationMs: () => durationMs.value,
@@ -859,9 +1314,189 @@ export default {
 			seek: (timeMs) => clock.value?.seek(timeMs),
 			startCountIn: (targetMs) => metronome.startCountIn(targetMs, DEFAULT_TEMPO_BPM),
 			clearCountIn: metronome.clearCountIn,
+			onWrap: () => onLoopWrap(),
+		})
+
+		const speedTrainer = useSpeedTrainer({
+			loopActive: () => loop.active.value,
+			effectiveTempoBpm: () => playback.effectiveTempoBpm.value,
+			minTempoBpm: () => playback.minTempoBpm.value,
+			maxTempoBpm: () => playback.maxTempoBpm.value,
+			setTempoBpm: playback.setTempoBpm,
+			manualTempoChanges: () => playback.manualTempoChanges.value,
+		})
+		onLoopWrap = speedTrainer.onLoopWrap
+
+		// Aufführungsmodus: die Tasten laufen ueber denselben Handler wie am
+		// Viewer (onKeydown), nur zusaetzlich am document - siehe dort.
+		// `following` kommt aus „Folgt mir", das erst weiter unten entsteht,
+		// weil es selbst die Policy von hier braucht - der Rueckruf wird deshalb
+		// nachgereicht, wie setOnScoreReady oben.
+		let isFollowing = () => false
+		const performance = usePerformanceMode({
+			rootEl: () => vm?.proxy?.$el ?? null,
+			onKeydown: (event) => vm?.proxy?.onKeydown(event),
+			onEnter: () => vm?.proxy?.onPerformanceEnter(),
+			following: () => isFollowing(),
+		})
+
+		const paging = usePaging({
+			scrollEl: scrollElement,
+			pages: autoScroll.pages,
+			measureRects: (pageIndex) => (measuresTimeline.value
+				? Object.values(measuresTimeline.value.elements).filter((rect) => rect.page === pageIndex)
+				: []),
+			onManualScroll: autoScroll.noteManualScroll,
+		})
+
+		// Tonarten und Studierbuchstaben - fuer Anfangston UND Taktnavigation
+		// aus demselben gelesenen MIDI.
+		const scoreFacts = useScoreFacts({
+			midiData: () => playback.midiData.value,
+			meta: () => scoreMeta.value,
+			measuresTimeline: () => measuresTimeline.value,
+		})
+
+		const startTone = useStartTone({
+			clock: () => clock.value,
+			hasRealPlayer: () => playback.hasRealPlayer.value,
+			parsedMidi: () => scoreFacts.parsed.value,
+			facts: () => scoreFacts.facts.value,
+			measuresTimeline: () => measuresTimeline.value,
+			displayTimeMs: () => playback.displayTimeMs.value,
+			durationMs: () => durationMs.value,
+			mixerChannels: () => playback.mixerChannels.value,
+			myPartId: () => myPart.myPartId.value,
+			permitted: () => performance.can('tone'),
+			onNeedPart: () => vm?.proxy?.openVoiceSelection(),
+		})
+
+		// Die Schalter der Administration - fehlen sie, ist alles aus.
+		const features = normalizeFeatures(readInitialState('features'))
+
+		// „Folgt mir" (C). Sprung, Loop und Ton gehen ueber eigene Wege statt
+		// ueber die Handler der Leiste: Diese melden eigenes Navigieren und
+		// loesten damit das Folgen - ein Sprung der Leitung darf das nicht.
+		const follow = useFollowSession({
+			fileId: () => activeFileId.value,
+			enabled: () => features.followSession,
+			standalone: () => readInitialState('standalone')?.directEditing === true,
+			ready: () => !!clock.value && !!measuresTimeline.value,
+			permitted: (action) => performance.can(action),
+			seekToMeasure: (measure) => vm?.proxy?.followSeek(measure) ?? null,
+			setLoop: (from, to) => loop.setRange(from, to),
+			clearLoop: () => loop.clear(),
+			playTone: () => startTone.startToneFor(),
+			currentPosition: () => vm?.proxy?.followPosition() ?? null,
+			currentLoop: () => (loop.active.value
+				? { from: Number(loop.fromMeasure.value), to: Number(loop.toMeasure.value) }
+				: null),
+		})
+		isFollowing = () => follow.following.value
+
+		const standalonePage = readInitialState('standalone')?.directEditing === true
+		const setlist = useSetlist({
+			fileId: () => activeFileId.value,
+			setFileId: (id) => {
+				activeFileId.value = id
+			},
+			standalone: () => standalonePage,
+			originFileId: () => props.fileid,
+		})
+		// Eine andere Partitur von aussen (Prop): Gehoert sie nicht zur
+		// offenen Setliste, ist die Liste vorbei.
+		watch(() => props.fileid, (neu) => {
+			activeFileId.value = neu
+			if (setlist.active.value && !setlist.entries.value.some((e) => String(e.fileId) === String(neu))) {
+				setlist.close()
+			}
+		})
+
+		// Erst hier, nach „Folgt mir": Der Watcher fragt sofort.
+		// Wach auch im Aufführungsmodus, wenn gar nichts spielt - und
+		// waehrend einer Folgesitzung: Am Notenstaender wird gesungen, nicht
+		// getippt, und ein dunkler Bildschirm verpasste den naechsten Sprung.
+		useWakeLock({ wanted: () => playback.isPlaying.value || performance.active.value || follow.active.value })
+
+		useMyPartSound({
+			hasRealPlayer: () => playback.hasRealPlayer.value,
+			mixerChannels: () => playback.mixerChannels.value,
+			myPartId: () => myPart.myPartId.value,
+			stereoMyPart: () => preferences.stereoMyPart.value,
+			mixerOpen: () => vm?.proxy?.showMixerPanel ?? false,
+			applyChannelVolumes: playback.applyChannelVolumes,
+			applyChannelPans: playback.applyChannelPans,
+		})
+
+		// Die Mikrofonstrecke (docs/architecture.md, Abschnitt Mikrofon) - eine fuer Aufnahme, Intonation und
+		// spaeter das Mitverfolgen, am AudioContext der Wiedergabe.
+		const microphone = useMicrophone({ audioContext: playback.getAudioContext })
+		const myChannels = () => channelsOfPart(playback.mixerChannels.value, myPart.myPartId.value)
+		const clockPlaying = () => clock.value?.isPlaying() ?? false
+
+		const recorder = useRecorder({
+			fileId: () => activeFileId.value,
+			enabled: () => features.recording,
+			microphone,
+			clock: () => clock.value,
+			audioContext: playback.getAudioContext,
+			isPlaying: clockPlaying,
+			playing: () => playback.isPlaying.value,
+			play: async () => {
+				await clock.value?.play()
+			},
+			pause: () => clock.value?.pause(),
+			seek: playback.seek,
+			// Derselbe Einzaehler wie vor dem Loop (useMetronome.js).
+			startCountIn: (targetMs) => metronome.startCountIn(targetMs, DEFAULT_TEMPO_BPM),
+			clearCountIn: metronome.clearCountIn,
+			currentTimeMs: () => clock.value?.getCurrentTimeMs() ?? 0,
+			tempoFactor: () => playback.tempo.value,
+			setTempoFactor: playback.setTempoFactor,
+			latencyMs: () => playback.latencyMs.value,
+			setAccompanimentGain: playback.setAccompanimentGain,
+			maxPerScore: () => features.maxRecordingsPerScore,
+			maxSeconds: () => features.maxRecordingSeconds,
+		})
+
+		const intonation = useIntonation({
+			microphone,
+			clock: () => clock.value,
+			isPlaying: clockPlaying,
+			displayTimeMs: () => playback.displayTimeMs.value,
+			latencyMs: () => playback.latencyMs.value,
+			tempoFactor: () => playback.tempo.value,
+			notes: () => scoreFacts.parsed.value?.notes ?? null,
+			myChannels,
+			events: () => timeline.value?.events ?? [],
+			myStaff: () => vm?.proxy?.intonationStaff ?? null,
+			measureOf: (ms) => resolveMeasurePosition(measuresTimeline.value, ms, durationMs.value)?.measureNumber ?? null,
+			loadAudio: recorder.loadAudio,
 		})
 
 		return {
+			activeFileId,
+			standalonePage,
+			setlist: setlist.setlist,
+			setlistActive: setlist.active,
+			setlistEntries: setlist.entries,
+			setlistIndex: setlist.index,
+			setlistPosition: setlist.position,
+			setlistCurrent: setlist.current,
+			setlistError: setlist.error,
+			setlistOffers: setlist.offers,
+			setlistOfferDismissed: setlist.offerDismissed,
+			setlistFolderFileId: setlist.folderFileId,
+			setlistCanCreate: setlist.canCreate,
+			openSetlist: setlist.open,
+			setlistNext: setlist.next,
+			setlistPrevious: setlist.previous,
+			setlistGoTo: setlist.goTo,
+			closeSetlist: setlist.close,
+			applySavedSetlist: setlist.applySaved,
+			loadSetlistOffers: setlist.loadOffers,
+			acceptSetlistOffer: setlist.acceptOffer,
+			restoreZoom: zoomApi.restore,
 			setOnScoreReady,
 			zoom: zoomApi.zoom,
 			zoomFollowsWidth: zoomApi.followsWidth,
@@ -903,9 +1538,34 @@ export default {
 			loopActive: loop.active,
 			loopMarkers: loop.markers,
 			toggleLoop: loop.toggle,
-			loopRestartTarget: loop.restartTarget,
+			loopWrapIfDue: loop.wrapIfDue,
 			setLoopFromMeasure: loop.setFromCurrentMeasure,
 			resetLoop: loop.reset,
+			trainerStartBpm: speedTrainer.startBpm,
+			trainerTargetBpm: speedTrainer.targetBpm,
+			trainerStepBpm: speedTrainer.stepBpm,
+			trainerActive: speedTrainer.active,
+			trainerPasses: speedTrainer.passes,
+			toggleSpeedTrainer: speedTrainer.toggle,
+			resetSpeedTrainer: speedTrainer.reset,
+			performanceMode: performance.active,
+			performanceExitProgress: performance.exitProgress,
+			can: performance.can,
+			lockDown: performance.lockDown,
+			cancelLockHold: performance.cancelHold,
+			lockKeydown: performance.lockKeydown,
+			lockKeyup: performance.lockKeyup,
+			pageBy: paging.page,
+			startToneMode: startTone.mode,
+			startToneSounding: startTone.sounding,
+			startToneName: startTone.lastToneName,
+			startToneNeedsPart: startTone.needPart,
+			startToneUnavailable: startTone.unavailableReason,
+			pressStartTone: startTone.press,
+			releaseStartTone: startTone.release,
+			startToneFor: startTone.startToneFor,
+			setStartToneMode: startTone.setMode,
+			resetStartTone: startTone.reset,
 			currentTimeMs: playback.currentTimeMs,
 			displayTimeMs: playback.displayTimeMs,
 			audioLatencyMs: playback.latencyMs,
@@ -938,13 +1598,85 @@ export default {
 			onVolumesChanged: playback.applyChannelVolumes,
 			onProgramChanged: playback.setProgram,
 			samplePlaybackTime: playback.sampleTime,
-			requestWakeLock: playback.requestWakeLock,
-			releaseWakeLock: playback.releaseWakeLock,
 			destroyPlayback: playback.destroy,
 			resetPlayback: playback.reset,
+			myPartId: myPart.myPartId,
+			loadMyPart: myPart.load,
+			leaders: leaders.leaders,
+			isLeader: leaders.isLeader,
+			leaderError: leaders.error,
+			leaderCandidates: leaders.candidates,
+			showRehearsal: leaders.visible,
+			loadLeaders: leaders.load,
+			resetLeaders: leaders.reset,
+			followEnabled: features.followSession,
+			recordingEnabled: features.recording,
+			intonationEnabled: features.intonation,
+			maxRecordingsPerScore: features.maxRecordingsPerScore,
+			micActive: microphone.active,
+			micConsumers: microphone.consumers,
+			micError: microphone.error,
+			turnMicOff: microphone.turnOff,
+			recordings: recorder.recordings,
+			recordPhase: recorder.phase,
+			recordElapsedMs: recorder.elapsedMs,
+			recordWithAccompaniment: recorder.withAccompaniment,
+			recordCountIn: recorder.countIn,
+			recordConfirmReplace: recorder.confirmReplace,
+			recordPending: recorder.pending,
+			recordListening: recorder.listening,
+			recordError: recorder.error,
+			recordingVolume: recorder.recordingVolume,
+			accompanimentVolume: recorder.accompanimentVolume,
+			loadRecordings: recorder.load,
+			startRecording: recorder.start,
+			stopRecording: recorder.stop,
+			answerRecordReplace: recorder.answerReplace,
+			retryRecordSave: recorder.retrySave,
+			discardPendingRecording: recorder.discardPending,
+			listenRecording: recorder.listen,
+			stopListeningRecording: recorder.stopListening,
+			removeRecording: recorder.remove,
+			resetRecorder: recorder.reset,
+			destroyRecorder: recorder.destroy,
+			intonationLive: intonation.live,
+			intonationNeedle: intonation.needle,
+			intonationMarks: intonation.marks,
+			intonationAnalysis: intonation.analysis,
+			intonationAnalyzing: intonation.analyzing,
+			intonationProgress: intonation.progress,
+			intonationError: intonation.error,
+			intonationNeedPart: intonation.needPart,
+			toggleLiveIntonation: intonation.toggleLive,
+			analyzeRecording: intonation.analyze,
+			clearIntonationAnalysis: intonation.clearAnalysis,
+			resetIntonation: intonation.reset,
+			destroyIntonation: intonation.destroy,
+			followActive: follow.active,
+			followMine: follow.mine,
+			followFollowing: follow.following,
+			followLeaderName: follow.leaderName,
+			followConnected: follow.connected,
+			followBusy: follow.busy,
+			followError: follow.error,
+			followNavigation: follow.noteNavigation,
+			resumeFollow: follow.resume,
+			startFollow: follow.start,
+			endFollow: follow.end,
+			sendFollowPositionTo: follow.sendPosition,
+			sendFollowLoop: follow.sendLoop,
+			sendFollowTone: follow.sendTone,
+			restartFollow: follow.restart,
+			onLeaderAppoint: leaders.appoint,
+			onLeaderRevoke: leaders.revoke,
+			onLeaderSearch: leaders.search,
+			saveMyPart: myPart.set,
 			highlightColor: preferences.highlightColor,
 			highlightMode: preferences.highlightMode,
 			highlightStyle: preferences.highlightStyle,
+			stereoMyPart: preferences.stereoMyPart,
+			noteTheme: preferences.noteTheme,
+			resolvedNoteTheme: preferences.resolvedNoteTheme,
 			state: conversion.state,
 			clientProgress: conversion.clientProgress,
 			longWait: conversion.langeWartezeit,
@@ -960,10 +1692,20 @@ export default {
 			currentEtag,
 			durationMs,
 			clock,
+			scoreMeta,
 			annotations: annotations.annotations,
+			listedAnnotations: annotations.listed,
 			annotationError: annotations.error,
 			showAnnotations: annotations.visible,
 			annotationMarkers: annotations.markers,
+			annotationStamps: annotations.stamps,
+			armedStamp: annotations.armedStamp,
+			armStamp: annotations.armStamp,
+			disarmStamp: annotations.disarmStamp,
+			placeArmedStamp: annotations.placeArmedStamp,
+			rehearsalMarks: scoreFacts.marks,
+			ensureScoreMidi: scoreFacts.ensureMidi,
+			resetScoreFacts: scoreFacts.reset,
 			loadAnnotations: annotations.load,
 			onAnnotationCreate: annotations.create,
 			onAnnotationUpdate: annotations.update,
@@ -979,6 +1721,20 @@ export default {
 			// Siehe emits: genau einmal, egal wie oft der Zustand danach noch
 			// wechselt.
 			readyGemeldet: false,
+			// Zaehlt jeden reset(): Ein loadScore(), das nach einem await eine
+			// andere Zahl vorfindet, gehoert zu einem Stueck, das nicht mehr
+			// offen ist (Stueckwechsel mitten im Laden).
+			loadGeneration: 0,
+			// Der Setlisten-Editor: 'edit' | 'new' | null (zu).
+			setlistEditorMode: null,
+			// Der Aufklapper „Aufnahme und Intonation".
+			showPractice: false,
+			// score.mid dieser Partitur - die Intonation laedt es nach, wenn
+			// ohne Ton niemand sonst es geholt hat (useScoreFacts.ensureMidi).
+			midiUrl: null,
+			// Bis wann das Nachfuehren nach einem Sprung der Leitung auch
+			// gegen manuelles Blaettern gilt (followSeek).
+			followScrollUntil: 0,
 			pageUrls: [],
 			cursorRect: null,
 			// Zeitquelle: entweder lib/player.js (echte Wiedergabe, sobald ein
@@ -987,11 +1743,11 @@ export default {
 			// Unterschied nur für die Tempo-/Mixer-Zusatzfunktionen kennen
 			// (hasRealPlayer).
 			showMixer: false,
-			// Welche Stimme "meine" ist - gesetzt ueber "Meine Stimme" im
-			// Mixer (ScoreMixer.vue). Dieselbe Wahl steuert Lautstaerke UND
-			// Markierung im Notenbild; zwei getrennte Bedienelemente fuer
-			// dieselbe Aussage waeren eine Fehlerquelle.
-			myPartId: null,
+			// Welche Stimme "meine" ist (`myPartId`, aus useMyPart in setup())
+			// wird ueber "Meine Stimme" im Mixer gesetzt (ScoreMixer.vue).
+			// Dieselbe Wahl steuert Lautstaerke UND Markierung im Notenbild;
+			// zwei getrennte Bedienelemente fuer dieselbe Aussage waeren eine
+			// Fehlerquelle.
 			focusMyPart: false,
 			showNoteText: false,
 			scoreParts: [],
@@ -1007,12 +1763,15 @@ export default {
 			totalMeasures: 0,
 			// Für die Probenarbeit: zeigt die laufende Taktnummer und nimmt das
 			// Sprungziel entgegen (ein Feld statt Anzeige + Eingabe) - siehe
-			// measureFieldFocused.
-			measureInput: 1,
+			// measureFieldFocused. Text, weil es mit Studierbuchstaben auch
+			// „47 (C+3)" zeigt und „C" annimmt.
+			measureInput: '1',
 			// Solange das Taktfeld den Fokus hat, wird measureInput nicht mehr
 			// von der Wiedergabe nachgeführt: sonst überschriebe der nächste
 			// Takt die gerade getippte Zahl.
 			measureFieldFocused: false,
+			// Der Aufklapper mit den Studierbuchstaben.
+			marksOpen: false,
 			// Für Notizen: private und geteilte.
 			currentElid: null,
 			// Womit diese Darstellung erzeugt wurde: der Konvertierungsweg aus
@@ -1140,6 +1899,28 @@ export default {
 			return this.currentAnchor ? this.currentAnchor.measureNumber : null
 		},
 
+		/**
+		 * Was das Taktfeld zeigt: „47 (C+3)" mit Studierbuchstaben,
+		 * sonst die Zahl.
+		 */
+		measureDisplay() {
+			return this.currentMeasureNumber === null
+				? null
+				: formatMeasureWithMark(this.currentMeasureNumber, this.rehearsalMarks)
+		},
+
+		setlistTitle() {
+			return this.setlist?.title ?? ''
+		},
+
+		setlistCanEdit() {
+			return this.setlist?.canEdit === true && !this.standalonePage
+		},
+
+		armedStampName() {
+			return this.armedStamp ? stampName(this.armedStamp.stamp) : ''
+		},
+
 		// Der Mixer braucht echte Wiedergabe UND aufgelöste Kanäle - ohne
 		// beides bliebe eine leere Karte über dem Notenbild stehen.
 		partCount() {
@@ -1185,6 +1966,8 @@ export default {
 				|| this.showNoteText
 				|| this.showAnnotations
 				|| this.showMixer
+				|| this.showRehearsal
+				|| this.showPractice
 		},
 
 		/** Fuer die eingefahrene Leiste, die nur noch die Position zeigt. */
@@ -1201,6 +1984,21 @@ export default {
 
 		maxAudioOffsetMs() {
 			return MAX_MANUAL_OFFSET_MS
+		},
+
+		/**
+		 * Die Notenzeile der eigenen Stimme fuer die Intonation (`st-N`, M10) -
+		 * nur, wo die Zeilen sich den Stimmen zuordnen lassen (eine Zeile je
+		 * Stimme, siehe lib/staffBands.js). Sonst bleibt es bei Nadel und
+		 * Liste, statt die Zeile der Nachbarstimme zu faerben.
+		 */
+		intonationStaff() {
+			return this.staffMappingOk && this.myPartIndex !== null ? this.myPartIndex : null
+		},
+
+		/** „Im Browser oeffnen" (E8): Nextclouds Kurzlink auf diese Datei. */
+		browserUrl() {
+			return browserFileUrl(window.location.origin, getRootUrl(), this.activeFileId)
 		},
 
 		automaticLatencyRounded() {
@@ -1228,7 +2026,7 @@ export default {
 			this.$nextTick(() => this.$emit('ready', neu))
 		},
 
-		fileid: {
+		activeFileId: {
 			immediate: true,
 			handler() {
 				// Eine andere Partitur faengt von vorn an - auch mit dem
@@ -1244,19 +2042,29 @@ export default {
 				})
 				this.reset()
 				this.pollStatus()
+				this.loadMyPart()
+				this.resetLeaders()
+				this.loadLeaders()
+				this.restartFollow()
+				this.loadSetlistOffers()
+				this.loadRecordings()
 			},
 		},
 
-		// Bildschirm waehrend der Wiedergabe wachhalten - als Watcher statt in
+		setlistCurrent() {
+			this.announcePiece()
+		},
+
+		// Leiste einfahren waehrend der Wiedergabe - als Watcher statt in
 		// togglePlay() verdrahtet, damit JEDER Weg, der die Wiedergabe startet
 		// (Tastaturkuerzel, Einzaehler-Ende, Loop-Neustart), automatisch erfasst
-		// ist, ohne an jeder Stelle einzeln daran zu denken.
+		// ist. Das Wachhalten des Bildschirms haengt am selben Zustand, steht
+		// aber in useWakeLock.js (setup()), weil dort auch der
+		// Aufführungsmodus zaehlt.
 		isPlaying(playing) {
 			if (playing) {
-				this.requestWakeLock()
 				this.scheduleBarCollapse()
 			} else {
-				this.releaseWakeLock()
 				// Angehalten wird bedient - dann gehoert die Leiste hin.
 				this.showBar()
 			}
@@ -1275,9 +2083,9 @@ export default {
 
 		// Taktfeld der Wiedergabe nachführen, solange niemand darin tippt
 		// (Anzeige und Eingabe sind dasselbe Feld).
-		currentMeasureNumber(measureNumber) {
-			if (measureNumber !== null && !this.measureFieldFocused) {
-				this.measureInput = measureNumber
+		measureDisplay(text) {
+			if (text !== null && !this.measureFieldFocused) {
+				this.measureInput = text
 			}
 		},
 
@@ -1302,10 +2110,18 @@ export default {
 		// insbesondere Nextclouds eigene Kürzel).
 		this.$el.addEventListener('keydown', this.onKeydown)
 		this.observeBarWidth()
+		if (this.setlistId !== null) {
+			// Weg 1: Der Einstieg hat das erste spielbare Stueck schon
+			// als `fileid` gesetzt - die Liste setzt dort an.
+			this.openSetlist(this.setlistId, { at: this.fileid, data: this.setlistData })
+		}
 	},
 
 	beforeUnmount() {
 		this.cleanup()
+		this.destroyRecorder()
+		this.destroyIntonation()
+		this.turnMicOff()
 		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
 		this.$el.removeEventListener('keydown', this.onKeydown)
 		this.stopBarObserver()
@@ -1357,9 +2173,180 @@ export default {
 		 * @param {?string} partId Stimme aus meta.parts, null = keine
 		 */
 		onMyPartChanged(partId) {
-			this.myPartId = partId
+			this.saveMyPart(partId)
 			if (partId === null) {
 				this.focusMyPart = false
+			}
+		},
+
+		/**
+		 * Der Anfangston fand keine Stimme: die Stimmauswahl oeffnen.
+		 * Sie steckt im Mixer („Meine Stimme" je Zeile) - eine zweite Auswahl
+		 * fuer dieselbe Aussage waere eine Fehlerquelle (siehe data()).
+		 */
+		openVoiceSelection() {
+			if (!this.can('mixer')) {
+				return
+			}
+			this.showMixer = true
+		},
+
+		toggleStartToneMode() {
+			this.setStartToneMode(this.startToneMode === MODE_TONIC ? MODE_VOICE : MODE_TONIC)
+		},
+
+		/**
+		 * Beim Einschalten des Aufführungsmodus alles schliessen, was dort
+		 * gesperrt ist - ein offener Mixer bliebe sonst bedienbar stehen.
+		 */
+		onPerformanceEnter() {
+			this.showMixer = false
+			this.showAnnotations = false
+			this.disarmStamp()
+			this.showRehearsal = false
+			this.showPractice = false
+			this.setlistEditorMode = null
+			this.toolsOpen = false
+			this.releaseStartTone()
+		},
+
+		// --- Setliste -----------------------------------------------------
+
+		/** Blaettern in der Setliste - auch im Aufführungsmodus (Policy `nextPiece`). */
+		onSetlistNext() {
+			if (this.can('nextPiece')) {
+				this.setlistNext()
+			}
+		},
+
+		onSetlistPrevious() {
+			if (this.can('nextPiece')) {
+				this.setlistPrevious()
+			}
+		},
+
+		onSetlistGoTo(i) {
+			if (this.can('nextPiece')) {
+				this.setlistGoTo(i)
+			}
+		},
+
+		/** @param {'edit'|'new'} mode */
+		openSetlistEditor(mode) {
+			if (!this.can('settings')) {
+				return
+			}
+			this.setlistEditorMode = this.setlistEditorMode === mode ? null : mode
+		},
+
+		/**
+		 * Gespeichert oder angelegt: Die Liste gilt ab jetzt, auch eine neue -
+		 * wer eine Setliste anlegt, will sie gleich benutzen.
+		 *
+		 * @param {object} data Antwort von PUT/POST /api/setlists
+		 */
+		onSetlistSaved(data) {
+			this.setlistEditorMode = null
+			this.applySavedSetlist(data)
+		},
+
+		/**
+		 * Meldet dem Einstieg, welches Stueck gerade offen ist - ScoreModal
+		 * setzt daraus seine Ueberschrift. Ohne Setliste bleibt es beim
+		 * Dateinamen, den der Einstieg selbst kennt.
+		 */
+		announcePiece() {
+			const entry = this.setlistCurrent
+			this.$emit('pieceChange', entry ? { label: entry.label, setlistTitle: this.setlistTitle } : null)
+		},
+
+		// --- Aufnahme und Intonation ------------------------------------------
+
+		/**
+		 * Die Intonation braucht die Noten der eigenen Stimme - ohne Ton hat
+		 * das MIDI bis hierher niemand geladen.
+		 */
+		async ensureIntonationMidi() {
+			await this.ensureScoreMidi(this.midiUrl, true)
+		},
+
+		async onToggleLiveIntonation() {
+			await this.ensureIntonationMidi()
+			await this.toggleLiveIntonation()
+			if (this.intonationNeedPart) {
+				this.openVoiceSelection()
+			}
+		},
+
+		async onAnalyzeRecording(recording) {
+			await this.ensureIntonationMidi()
+			await this.analyzeRecording(recording === 'pending' ? { id: 'pending', ...this.recordPending.meta } : recording)
+			if (this.intonationNeedPart) {
+				this.openVoiceSelection()
+			}
+		},
+
+		/**
+		 * Abhoeren ist eigenes Navigieren (Sprung an den Anfang der
+		 * Aufnahme) - das loest das Folgen einer Leitung.
+		 *
+		 * @param {object|'pending'} recording
+		 */
+		onListenRecording(recording) {
+			this.followNavigation('seek')
+			this.listenRecording(recording)
+		},
+
+		/**
+		 * Aus der Problemliste an die Stelle springen.
+		 *
+		 * @param {number} onMs Partiturzeit der Note
+		 */
+		onPracticeJump(onMs) {
+			if (this.can('seek') && this.clock) {
+				this.followNavigation('seek')
+				this.clock.seek(onMs)
+			}
+		},
+
+		onPlayClick() {
+			if (this.can('play')) {
+				this.togglePlay()
+			}
+		},
+
+		onSeekBarInput(event) {
+			if (this.can('seek')) {
+				this.followNavigation('seek')
+				this.onSeekInput(event)
+			}
+		},
+
+		/**
+		 * Ein Stempel aus der Palette wartet auf den Tipp ins Notenbild. Das
+		 * Panel geht dafuer zu: Es laege ueber genau den Noten, in die jetzt
+		 * getippt werden soll.
+		 *
+		 * @param {{stamp:string, visibility:string, targetParts:?Array}} spec
+		 */
+		onArmStamp(spec) {
+			if (!this.can('annotate')) {
+				return
+			}
+			this.armStamp(spec)
+			this.showAnnotations = false
+		},
+
+		/**
+		 * Klick auf einen Notizmarker springt an dessen Stelle - im
+		 * Aufführungsmodus also gesperrt wie jeder andere Sprung.
+		 *
+		 * @param {number} id
+		 */
+		onMarkerClick(id) {
+			if (this.can('seek')) {
+				this.followNavigation('annotationJump')
+				this.onAnnotationJumpToById(id)
 			}
 		},
 
@@ -1403,7 +2390,16 @@ export default {
 		},
 
 		reset() {
+			this.loadGeneration++
+			// Vor dem Abbau der Wiedergabe: Eine laufende Aufnahme wird noch
+			// abgeschlossen und gespeichert, solange ihr Kontext lebt.
+			this.resetRecorder()
+			this.resetIntonation()
+			this.midiUrl = null
 			this.cleanup()
+			this.resetStartTone()
+			this.resetSpeedTrainer()
+			this.scoreMeta = null
 			this.resetConversion()
 			this.pageUrls = []
 			this.cursorRect = null
@@ -1412,13 +2408,13 @@ export default {
 			this.resetAutoScroll()
 			this.totalMeasures = 0
 			this.scoreParts = []
-			this.myPartId = null
 			this.focusMyPart = false
 			this.staffMappingOk = false
 			this.pageDimensions = {}
 			this.timeline = null
 			this.measuresTimeline = null
-			this.measureInput = 1
+			this.measureInput = '1'
+			this.resetScoreFacts()
 			this.resetLoop()
 			this.resetZoom()
 			this.measureFieldFocused = false
@@ -1444,17 +2440,23 @@ export default {
 		},
 
 		async loadScore({ files, soundFontUrl, renderer, canReconvert }) {
+			const mine = this.loadGeneration
+			const stale = () => mine !== this.loadGeneration
 			try {
 				const [timingRes, measuresRes, metaRes] = await Promise.all([
 					axios.get(files.timingJson),
 					axios.get(files.measuresJson),
 					axios.get(files.metaJson),
 				])
+				if (stale()) {
+					return
+				}
 				const timeline = buildTimeline(timingRes.data)
 				this.timeline = timeline
 				this.measuresTimeline = buildTimeline(measuresRes.data)
 				this.pageUrls = files.pages
 				this.currentEtag = files.etag
+				this.scoreMeta = metaRes.data
 				this.applyScoreMetadata(metaRes.data)
 				// Fuer die Zuordnung Notenzeile -> Stimme: Reihenfolge UND
 				// Anzahl aus meta.json, nicht aus dem Mixer - der laesst die
@@ -1469,17 +2471,29 @@ export default {
 				this.canReconvert = canReconvert === true
 				this.totalMeasures = metaRes.data.measures ?? this.measuresTimeline.events.length
 				this.loadAnnotations()
+				// Die Studierbuchstaben kommen auf dem Sidecar-Weg nur aus dem MIDI
+				// - und das laedt sonst nur, wer Ton hat (useScoreFacts).
+				this.ensureScoreMidi(files.midi)
+				this.midiUrl = files.midi
 				// Startzoom "Seitenbreite" statt fester Faktor 1: die Seite hat
 				// eine echte Breite (ScorePage.vue), ein fester Faktor 1 hieße auf
 				// einem Telefon 900px Seitenbreite neben 390px Bildschirm. Erst
 				// nach $nextTick, damit .scoreview-pages die Seiten schon enthält
 				// und seine endgültige Breite (inkl. Scrollbalken) steht.
 				await this.$nextTick()
-				this.applyZoomPreset('width')
+				if (stale()) {
+					return
+				}
+				// Das zuletzt gewaehlte Preset, nicht immer „Seitenbreite": Beim
+				// Stueckwechsel einer Setliste bleibt der Zoom.
+				this.restoreZoom()
 				this.setUpViewportObserver()
 
 				if (soundFontUrl) {
 					await this.setUpRealPlayer(files.midi, soundFontUrl, timeline)
+					if (stale()) {
+						return
+					}
 				} else {
 					this.setNoSoundFontConfigured()
 					this.setUpSilentClock(timeline)
@@ -1487,12 +2501,18 @@ export default {
 
 				this.sync = createScoreSync(timeline, (rect) => {
 					this.cursorRect = rect
-					// Nachführen statt nur beim Seitenwechsel zu springen.
-					this.updateAutoScroll(rect)
+					// Nachführen statt nur beim Seitenwechsel zu springen. Nach
+					// einem Sprung der Leitung auch dann, wenn gerade von Hand
+					// geblaettert wurde: Blaettern loest das Folgen nicht, der
+					// Sprung soll also sichtbar werden (followSeek).
+					this.updateAutoScroll(rect, Date.now() < this.followScrollUntil)
 				})
 
 				this.pumpTimeDisplay()
 			} catch (err) {
+				if (stale()) {
+					return
+				}
 				this.state = 'error'
 				this.errorMessage = err.message
 			}
@@ -1535,10 +2555,7 @@ export default {
 					// Sprung hörbar wird. Mit der Anzeigezeit käme der Rücksprung
 					// um die Ausgabelatenz zu spät - man hörte über das
 					// Loop-Ende hinaus.
-					const loopTarget = this.loopRestartTarget(this.currentTimeMs)
-					if (loopTarget !== null) {
-						this.clock.seek(loopTarget)
-					}
+					this.loopWrapIfDue(this.currentTimeMs)
 					// Ebenfalls die rohe Zeit: Der Klick wird über die Uhr des
 					// AudioContext terminiert (metronomeClick.js) und geht damit
 					// durch dieselbe Ausgabelatenz wie die Musik. Mit der
@@ -1552,7 +2569,7 @@ export default {
 		},
 
 		jumpToMeasure(measureNumber) {
-			if (!this.measuresTimeline || !this.clock) {
+			if (!this.measuresTimeline || !this.clock || !this.can('seek')) {
 				return
 			}
 			const timeMs = findMeasureStartTime(this.measuresTimeline, Number(measureNumber))
@@ -1561,61 +2578,175 @@ export default {
 			}
 		},
 
-		onMeasureFieldBlur() {
-			this.measureFieldFocused = false
-			if (this.currentMeasureNumber !== null) {
-				this.measureInput = this.currentMeasureNumber
+		/**
+		 * Ein Sprung der Leitung („Folgt mir"). Nicht ueber jumpToMeasure():
+		 * Das fragt can('seek'), und im Aufführungsmodus soll der Sprung
+		 * trotzdem ankommen, solange gefolgt wird - ob er darf,
+		 * entscheidet useFollowSession ueber `followJump`. Und es meldet kein
+		 * eigenes Navigieren, das das Folgen loesen wuerde.
+		 *
+		 * @param {number} measureNumber
+		 * @return {?number} die Zielzeit, oder null ohne Partitur oder Takt
+		 */
+		followSeek(measureNumber) {
+			if (!this.measuresTimeline || !this.clock) {
+				return null
+			}
+			const timeMs = findMeasureStartTime(this.measuresTimeline, Number(measureNumber))
+			if (timeMs === null) {
+				return null
+			}
+			// Der Sequencer rueckt nach dem Suchlauf noch auf das naechste
+			// Ereignis vor - das Fenster deckt das Nachfuehren bis dahin ab.
+			this.followScrollUntil = Date.now() + 1500
+			this.clock.seek(timeMs)
+			return timeMs
+		},
+
+		/**
+		 * Die eigene Stelle fuer die Leitung: Takt, und der Studierbuchstabe,
+		 * wenn der Takt genau einer ist (die Anzeige „C" statt „C+3").
+		 *
+		 * @return {?{measure:number, mark:?string}}
+		 */
+		followPosition() {
+			const measure = this.currentMeasureNumber
+			if (!measure) {
+				return null
+			}
+			const mark = this.rehearsalMarks.find((m) => m.measure === measure)
+			return { measure, mark: mark ? mark.text : null }
+		},
+
+		sendFollowPosition() {
+			return this.sendFollowPositionTo(null)
+		},
+
+		/**
+		 * „Alle zu C": Die Leitung springt selbst mit - sie soll sehen, was
+		 * sie angesagt hat.
+		 *
+		 * @param {{measure:number, text:string}} mark
+		 */
+		sendFollowMark(mark) {
+			this.jumpToMeasure(mark.measure)
+			return this.sendFollowPositionTo({ measure: mark.measure, mark: mark.text })
+		},
+
+		/**
+		 * Die Eingabe des Taktfelds anspringen: „47", „C" oder „C+3" - die
+		 * Form der Anzeige laesst sich also unveraendert eintippen
+		 * (resolveJumpTarget). Unbekanntes tut nichts, statt irgendwohin zu
+		 * springen.
+		 */
+		jumpToMeasureInput() {
+			const target = resolveJumpTarget(this.measureInput, this.rehearsalMarks, this.totalMeasures || null)
+			if (target !== null && this.can('seek')) {
+				this.followNavigation('measure')
+				this.jumpToMeasure(target.measure)
 			}
 		},
 
-		// Tastaturkürzel für die Probe - greifen nur, wenn der Viewer den
-		// Fokus hat (Listener sitzt auf this.$el, keydown bubbelt dorthin,
-		// siehe mounted()) und der Fokus nicht in einem Eingabefeld liegt
-		// (sonst würde z.B. das Pfeiltasten-Navigieren im Takt-Eingabefeld
-		// gestohlen).
+		/** Eigener Loop loest das Folgen. */
+		onToggleLoop() {
+			if (this.can('loop')) {
+				this.followNavigation('loop')
+				this.toggleLoop()
+			}
+		},
+
+		/**
+		 * Sprung zu einer Notiz aus der Liste - eigenes Navigieren.
+		 *
+		 * @param {object} annotation
+		 */
+		onAnnotationJumpToOwn(annotation) {
+			this.followNavigation('annotationJump')
+			this.onAnnotationJumpTo(annotation)
+		},
+
+		/**
+		 * Ein Chip ist eine Entscheidung - danach geht der Aufklapper zu.
+		 * Offen gelassen gab er beim spaeteren Schliessen den Fokus an seinen
+		 * Knopf zurueck, und wer inzwischen ins Taktfeld tippte, verlor dabei
+		 * die Eingabe (gemessen: je nach Zeitpunkt).
+		 *
+		 * @param {{measure:number}} mark
+		 */
+		jumpToMark(mark) {
+			this.marksOpen = false
+			if (this.can('seek')) {
+				this.followNavigation('mark')
+			}
+			this.jumpToMeasure(mark.measure)
+		},
+
+		// Beim Hineintippen den ganzen Inhalt markieren: „47 (C+3)" will
+		// niemand ergaenzen, sondern ersetzen.
+		onMeasureFieldFocus(event) {
+			this.measureFieldFocused = true
+			event?.target?.select?.()
+		},
+
+		onMeasureFieldBlur() {
+			this.measureFieldFocused = false
+			if (this.measureDisplay !== null) {
+				this.measureInput = this.measureDisplay
+			}
+		},
+
+		// Tastaturkürzel für die Probe - greifen, wenn der Viewer den Fokus
+		// hat (Listener auf this.$el, siehe mounted()) oder, im
+		// Aufführungsmodus, von überall (usePerformanceMode.js). Nie, wenn der
+		// Fokus in einem Eingabefeld liegt - sonst würde z.B. das
+		// Pfeiltasten-Navigieren im Takt-Eingabefeld gestohlen.
+		//
+		// Welche Taste was tut, steht in EINER Tabelle (lib/keyMap.js), ob es
+		// gerade wirken darf, in lib/interactionPolicy.js - hier nur die
+		// Ausführung.
 		onKeydown(event) {
 			const tag = event.target?.tagName
 			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable) {
 				return
 			}
-			if (event.code === 'Space') {
+			const binding = resolveKey(event, { performance: this.performanceMode })
+			if (!binding) {
+				return
+			}
+			if (binding.preventDefault) {
 				event.preventDefault()
-				this.togglePlay()
-			} else if (event.code === 'ArrowRight') {
-				event.preventDefault()
-				this.jumpRelativeMeasure(1)
-			} else if (event.code === 'ArrowLeft') {
-				event.preventDefault()
-				this.jumpRelativeMeasure(-1)
-			} else if (event.code === 'KeyL') {
-				event.preventDefault()
-				this.toggleLoop()
-			} else if (event.key === '+') {
-				event.preventDefault()
-				this.zoomBy(this.zoomStep)
-			} else if (event.key === '-') {
-				event.preventDefault()
-				this.zoomBy(1 / this.zoomStep)
-			} else if (event.key === '0') {
+			}
+			if (binding.action !== null && !this.can(binding.action)) {
+				return
+			}
+			const commands = {
+				togglePlay: () => this.togglePlay(),
+				nextMeasure: () => this.jumpRelativeMeasure(1),
+				previousMeasure: () => this.jumpRelativeMeasure(-1),
+				toggleLoop: () => this.onToggleLoop(),
+				zoomIn: () => this.zoomBy(this.zoomStep),
+				zoomOut: () => this.zoomBy(1 / this.zoomStep),
 				// Zurück zur Seitenbreite - und wieder der Fenstergröße
 				// folgend, wie beim Öffnen.
-				event.preventDefault()
-				this.applyZoomPreset('width')
-			} else if (SCROLL_KEYS.has(event.key)) {
-				// Bewusst OHNE preventDefault: Diese Tasten sollen weiter
-				// scrollen. Gemeldet wird nur, DASS gescrollt wird - der
-				// Browser meldet für Tastatur-Scrollen keine Geste, und ohne
-				// diesen Hinweis führte die App der Wiedergabe sofort wieder
-				// nach (siehe useAutoScroll.js).
-				this.noteManualScroll()
+				zoomWidth: () => this.applyZoomPreset('width'),
+				pageDown: () => this.pageBy(1),
+				pageUp: () => this.pageBy(-1),
+				// Diese Tasten scrollen nativ weiter. Gemeldet wird nur, DASS
+				// gescrollt wird - der Browser meldet für Tastatur-Scrollen
+				// keine Geste, und ohne diesen Hinweis führte die App der
+				// Wiedergabe sofort wieder nach (siehe useAutoScroll.js).
+				scroll: () => this.noteManualScroll(),
+				blocked: () => {},
 			}
+			commands[binding.command]?.()
 		},
 
 		jumpRelativeMeasure(delta) {
 			const current = this.currentAnchor?.measureNumber
-			if (!current) {
+			if (!current || !this.can('seek')) {
 				return
 			}
+			this.followNavigation('measure')
 			this.jumpToMeasure(Math.max(1, current + delta))
 		},
 
@@ -1624,7 +2755,17 @@ export default {
 		// eigentliche Element-/Zeit-Auflösung passiert hier mit der vollen
 		// timeline (scoreLayout.js).
 		onNoteClick({ page, x, y }) {
-			if (!this.timeline || !this.clock) {
+			// Liegt ein Stempel bereit, setzt der Tipp ihn - und springt nicht
+			// zusaetzlich dorthin.
+			if (this.armedStamp) {
+				if (this.can('annotate')) {
+					this.placeArmedStamp({ page, x, y })
+				}
+				return
+			}
+			// Im Aufführungsmodus der haeufigste Fehlgriff ueberhaupt: ein Tipp
+			// auf die Noten, um zu blaettern.
+			if (!this.timeline || !this.clock || !this.can('noteClick')) {
 				return
 			}
 			const elid = findElementAtPoint(this.timeline.elements, page, x, y)
@@ -1635,6 +2776,7 @@ export default {
 			// gerade klingt, nicht auf das, was schon im Ausgabepuffer steht.
 			const timeMs = findNearestOccurrenceTimeMs(this.timeline.events, elid, this.displayTimeMs)
 			if (timeMs !== null) {
+				this.followNavigation('noteClick')
 				this.clock.seek(timeMs)
 			}
 		},
@@ -1917,6 +3059,42 @@ export default {
 	display: none;
 }
 
+/*
+ * Die schmalsten Telefone (360 px): Play, Taktfeld, Anfangston, Schloss
+ * und „Mehr" muessen auf EINE Zeile - gemessen ragte „Mehr" sonst 38 px aus
+ * dem Bild und war nicht mehr zu erreichen, und mit ihm Dunkelmodus, Notizen
+ * und Probe. Weichen muss der Suchlauf: Er ist die einzige Angabe, die das
+ * Taktfeld daneben schon traegt, und auf 80 px ohnehin kaum zu treffen. An
+ * der Breite des Streifens statt an der des Fensters, weil der Viewer auch in
+ * einem schmalen Rahmen stecken kann. Bei Studierbuchstaben (breiteres Feld
+ * plus Knopf) geht dazu die Gesamtzahl der Takte.
+ */
+.scoreview-bar-transport {
+	container-type: inline-size;
+}
+
+.scoreview-bar--compact .scoreview-bar-transport {
+	gap: 4px;
+}
+
+@container (max-width: 400px) {
+	.scoreview-seek {
+		display: none;
+	}
+
+	.scoreview-measure {
+		gap: 2px;
+	}
+
+	.scoreview-measure-field--marks {
+		width: 96px;
+	}
+
+	.scoreview-measure-field--marks + .scoreview-measure-total {
+		display: none;
+	}
+}
+
 .scoreview-measure {
 	flex: 0 0 auto;
 	display: flex;
@@ -1941,6 +3119,25 @@ export default {
 	width: 72px;
 }
 
+/* „47 (C+3)" braucht Platz fuer die Klammer. */
+.scoreview-measure-field--marks {
+	width: 104px;
+}
+
+.scoreview-marks {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	max-width: 280px;
+}
+
+.scoreview-armed {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+
 /* Der obere Abstand von NcInputField (margin-block-start: 6px) verschiebt das
    Feld in einer waagerechten Leiste gegen alles andere. */
 .scoreview-measure-field :deep(.input-field) {
@@ -1953,6 +3150,10 @@ export default {
 
 .scoreview-tempo-button {
 	font-variant-numeric: tabular-nums;
+}
+
+.scoreview-tone-mode {
+	white-space: nowrap;
 }
 
 /* Popover-Inhalte (Loop, Tempo/Metronom, Zoom) - eine Spalte, breit genug
@@ -2131,6 +3332,18 @@ export default {
  */
 .scoreview-pages {
 	display: block;
+}
+
+/*
+ * Die Anzeige von „Folgt mir" liegt ueber dem Notenbild (FollowBadge.vue) -
+ * oben am Rand, unter den Panels: Ein offener Mixer ist eine bewusste
+ * Handlung und darf sie ueberdecken, das Notenbild nicht.
+ */
+.scoreview-follow {
+	position: absolute;
+	top: 6px;
+	inset-inline-start: 12px;
+	z-index: 15;
 }
 
 .scoreview-panels {

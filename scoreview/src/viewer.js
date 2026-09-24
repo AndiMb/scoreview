@@ -1,9 +1,14 @@
+import axios from '@nextcloud/axios'
 import { DefaultType, registerFileAction } from '@nextcloud/files'
 import { translate } from '@nextcloud/l10n'
+import { generateUrl } from '@nextcloud/router'
 import { createApp, h, nextTick } from 'vue'
 import ScoreModal from './components/ScoreModal.vue'
 import ScoreViewer from './components/ScoreViewer.vue'
-import { MSCZ_MIME, needsOwnFileAction } from './lib/scoreFile.js'
+import { isSetlistFile, MSCZ_MIME, needsOwnFileAction } from './lib/scoreFile.js'
+import { firstPlayableIndex } from './lib/setlistNav.js'
+
+import './publicPath.js'
 
 // Einzelargument-Wrapper um translate(), wie in jeder Komponente - das
 // Extraktionswerkzeug sucht nach genau diesem Aufrufmuster
@@ -162,7 +167,12 @@ function closeModal() {
 	modalEl = null
 }
 
-function openModal(fileid, name) {
+/**
+ * @param {?(number|string)} fileid die Partitur; null nur mit einer Setliste ohne spielbares Stueck
+ * @param {string} name Ueberschrift
+ * @param {{setlistId?: number, setlistData?: object}} [setlist] Weg 1
+ */
+function openModal(fileid, name, setlist = {}) {
 	// Ein zweites Modal ueber dem ersten waere ein Zustand ohne Ausweg.
 	closeModal()
 
@@ -172,6 +182,8 @@ function openModal(fileid, name) {
 	modalApp = createApp(ScoreModal, {
 		fileid,
 		name,
+		setlistId: setlist.setlistId ?? null,
+		setlistData: setlist.setlistData ?? null,
 		// Erst nach dem laufenden Ereignis abbauen: NcModal loest `close`
 		// aus seinem eigenen Klick-/Tastenhandler aus, und ein Unmount
 		// mitten darin zoege dem Handler (samt Fokusfalle) den Baum unter
@@ -231,4 +243,72 @@ window._nc_fileactions.push({
 	...AKTION,
 	enabled: (nodes) => nodes.length === 1 && needsOwnFileAction(nodes[0]),
 	exec: (node) => aktionAusfuehren(node),
+})
+
+// ---------------------------------------------------------------------------
+// Dritter Einstieg: die Setliste (E6, E11)
+// ---------------------------------------------------------------------------
+// Eine `*.setlist.md` ist Markdown, und Markdown oeffnet in Files die
+// Viewer-Aktion `view` (Text). Ein Klick soll aber das erste Stueck zeigen.
+// Gemessen: Files sortiert die Aktionen nach `order` und nimmt
+// die erste mit gesetztem `default` - mit `order: -10` gewinnt diese Aktion
+// den Klick vor `view` (order 0), und Text bleibt ueber das Menue
+// („Ansicht") erreichbar. `order: 0` entschiede die Ladereihenfolge. Das
+// Verhalten gehoert zur internen Umsetzung von Files und hat deshalb einen
+// Browser-Test in der Abnahme.
+//
+// DEFAULT statt HIDDEN: HIDDEN gewoenne den Klick ebenso, stuende aber nicht
+// im Menue - „Als Setliste oeffnen" soll auffindbar sein.
+
+// MDI `playlist-music` (Apache-2.0).
+const SETLIST_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15,6H3V8H15V6M15,10H3V12H15V10M3,16H11V14H3V16M17,6V14.18C16.69,14.07 16.35,14 16,14A3,3 0 0,0 13,17A3,3 0 0,0 16,20A3,3 0 0,0 19,17V8H22V6H17Z" /></svg>'
+
+const SETLIST_AKTION = {
+	id: 'scoreview-open-setlist',
+	displayName: () => t('Open as setlist'),
+	iconSvgInline: () => SETLIST_ICON,
+	default: DefaultType.DEFAULT,
+	order: -10,
+}
+
+/**
+ * Liest die Liste vorab, um das erste spielbare Stueck zu kennen - der
+ * Viewer braucht eine Partitur zum Oeffnen. Dieselbe Antwort geht an ihn
+ * weiter, damit er sie nicht noch einmal holt; die Vorab-Konvertierung
+ * hat der Server dabei schon angestossen.
+ *
+ * @param {object} node
+ * @return {Promise<?boolean>}
+ */
+async function setlistAusfuehren(node) {
+	if (!node?.fileid) {
+		return false
+	}
+	let data
+	try {
+		data = (await axios.get(generateUrl('/apps/scoreview/api/setlists/{id}', { id: node.fileid }))).data
+	} catch (err) {
+		// eslint-disable-next-line no-console
+		console.error('ScoreView: Setliste konnte nicht gelesen werden.', err)
+		return false
+	}
+	const first = firstPlayableIndex(data.entries)
+	openModal(first === null ? null : data.entries[first].fileId, node.basename, {
+		setlistId: node.fileid,
+		setlistData: data,
+	})
+	return null
+}
+
+registerFileAction({
+	...SETLIST_AKTION,
+	enabled: ({ nodes }) => nodes.length === 1 && isSetlistFile(nodes[0]),
+	exec: ({ nodes }) => setlistAusfuehren(nodes[0]),
+})
+
+// Dieselbe doppelte Eintragung wie oben, aus demselben Grund.
+window._nc_fileactions.push({
+	...SETLIST_AKTION,
+	enabled: (nodes) => nodes.length === 1 && isSetlistFile(nodes[0]),
+	exec: (node) => setlistAusfuehren(node),
 })

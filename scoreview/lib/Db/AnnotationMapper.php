@@ -21,7 +21,9 @@ class AnnotationMapper extends QBMapper {
 	 * Alles, was eine Nutzerin zu dieser Datei sehen darf: die eigenen
 	 * privaten Notizen PLUS alle geteilten Notizen dieser Datei
 	 * (unabhängig davon, wer sie angelegt hat - "geteilt" heißt für jeden
-	 * mit Dateizugriff sichtbar).
+	 * mit Dateizugriff sichtbar) PLUS alle Stimmnotizen. Letztere bewusst
+	 * ungefiltert: Welche Stimme jemand singt, ist eine Anzeigewahl im
+	 * Viewer, keine Berechtigung - der Client filtert.
 	 *
 	 * @return Annotation[]
 	 */
@@ -32,7 +34,10 @@ class AnnotationMapper extends QBMapper {
 			->where($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->orX(
 				$qb->expr()->eq('user_id', $qb->createNamedParameter($userId)),
-				$qb->expr()->eq('visibility', $qb->createNamedParameter(Annotation::VISIBILITY_SHARED)),
+				$qb->expr()->in('visibility', $qb->createNamedParameter(
+					[Annotation::VISIBILITY_SHARED, Annotation::VISIBILITY_PARTS],
+					IQueryBuilder::PARAM_STR_ARRAY,
+				)),
 			))
 			->orderBy('measure_number', 'ASC')
 			->addOrderBy('fraction', 'ASC');
@@ -90,7 +95,7 @@ class AnnotationMapper extends QBMapper {
 
 	/**
 	 * Nur ueber Datei-ID gefiltert, bewusst OHNE Owner-Einschraenkung (anders
-	 * als der bisherige Name suggerieren wuerde) - geteilte Notizen duerfen
+	 * als der Name suggerieren mag) - geteilte Notizen duerfen
 	 * von JEDER Nutzerin mit Schreibrecht auf die Datei geaendert werden,
 	 * nicht nur von der Autorin. Die eigentliche
 	 * Zugriffsentscheidung (Owner bei privat, Schreibrecht bei geteilt) treffen

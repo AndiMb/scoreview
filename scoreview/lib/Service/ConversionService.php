@@ -40,8 +40,14 @@ class ConversionService {
 	 *    Konvertierungen ohne Kennungen im Cache stehen, und der Viewer
 	 *    fiele fuer sie dauerhaft auf das Cursor-Band zurueck - ohne dass
 	 *    jemand sieht, warum.
+	 * 3: meta.json traegt auf dem Engine-Weg `keySigs` (mit Dur/Moll) und
+	 *    `rehearsalMarks`. Der Viewer kaeme zwar ohne sie aus (Rueckfall auf
+	 *    die MIDI-Marker wie auf dem Sidecar-Weg), bestimmte dann aber den
+	 *    Grundton einer Moll-Partitur als Dur-Tonika. Mit der Erhoehung konvertiert
+	 *    status() eine vorhandene Partitur beim naechsten Oeffnen neu, statt
+	 *    dass sie nur mit „Neu konvertieren" zu den Feldern kaeme.
 	 */
-	public const CURRENT_FORMAT_VERSION = 2;
+	public const CURRENT_FORMAT_VERSION = 3;
 
 	/**
 	 * Wie lange ein Lauf einen Datensatz halten darf, bevor er als tot gilt.

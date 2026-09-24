@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace OCA\ScoreView\DirectEditing;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\ViewerPreferences;
+use OCP\AppFramework\Http\FeaturePolicy;
 use OCP\AppFramework\Http\NotFoundResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\TemplateResponse;
@@ -58,6 +60,7 @@ class ScoreDirectEditor implements IEditor {
 		private IInitialState $initialState,
 		private IRequest $request,
 		private ViewerPreferences $preferences,
+		private FeatureConfig $features,
 	) {
 	}
 
@@ -129,9 +132,9 @@ class ScoreDirectEditor implements IEditor {
 			// Request-Parameter; dass er dort auf 31 wie auf 34 ankommt, ist
 			// nachgemessen.
 			'token' => (string)$this->request->getParam('token', ''),
-			// Woran die Seite sich selbst erkennt - heute daran, dass die
-			// Anzeigeeinstellungen nicht zurueckgeschrieben werden koennen
-			// (composables/useViewerPreferences.js).
+			// Woran die Seite sich selbst erkennt - etwa, um statt Nextclouds
+			// Dateiauswahl (braucht eine Sitzung) nur die Partituren rund um
+			// die offene anzubieten (components/SetlistEditor.vue).
 			'directEditing' => true,
 		]);
 
@@ -142,12 +145,32 @@ class ScoreDirectEditor implements IEditor {
 		// aus dem Token, nicht aus der Sitzung - die gibt es hier nicht.
 		$this->initialState->provideInitialState(
 			'viewer-preferences', $this->preferences->get($token->getUser()));
+		// Die Schalter der Administration gelten auch hier: Eine abgeschaltete
+		// Funktion darf in der App nicht auftauchen, nur weil der Einstieg ein
+		// anderer ist.
+		$this->initialState->provideInitialState('features', $this->features->forViewer());
 
 		Util::addScript(Application::APP_ID, Application::APP_ID . '-standalone');
 
 		// RENDER_AS_BASE: Seite ohne Navigation und ohne Files-Oberflaeche.
 		// Dasselbe tut nextcloud/whiteboard fuer seinen Direct Editor.
-		return new TemplateResponse(
+		$response = new TemplateResponse(
 			Application::APP_ID, 'standalone', [], TemplateResponse::RENDER_AS_BASE);
+
+		// Das Mikrofon fuer Aufnahme, Intonation und Mitverfolgen - direkt an
+		// DIESER Antwort statt ueber das instanzweite Ereignis (S3):
+		// Die Richtlinie gilt dann fuer genau diese Seite. Nextclouds
+		// FeaturePolicyMiddleware fuehrt sie mit der Vorgabe zusammen, weil es
+		// eine FeaturePolicy ist und keine EmptyFeaturePolicy - die ersetzte
+		// die Vorgabe ganz und naehme der Seite etwa das Vollbild. Nur wenn
+		// eine Mikrofonfunktion eingeschaltet ist: Eine Freigabe, die niemand
+		// nutzt, waere eine Tuer ohne Zweck. Ob die WebView der App das
+		// Mikrofon dann wirklich hergibt, entscheidet sie selbst (E8).
+		if ($this->features->usesMicrophone()) {
+			$policy = new FeaturePolicy();
+			$policy->addAllowedMicrophoneDomain("'self'");
+			$response->setFeaturePolicy($policy);
+		}
+		return $response;
 	}
 }

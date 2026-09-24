@@ -28,6 +28,10 @@ sidecar/testdata/*.mpos
 # D.C.) - Vorlage fuer selftest-score.mscz.
 !sidecar/testdata/repeat-test.mscz
 !sidecar/testdata/repeat-test.musicxml
+# Ebenfalls selbst erstellt, aus repeat-test abgeleitet: Tonarten (c-Moll,
+# D-Dur) und Studierbuchstaben A/B/C - Vorlage fuer
+# converter/keys-marks-test.mscz.
+!sidecar/testdata/keys-marks-test.mscz
 
 # Signaturmaterial der App: der private Schluessel darf NIE ins Repo, und
 # signature.json entsteht je Release neu (siehe docs/development.md).

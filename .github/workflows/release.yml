@@ -190,6 +190,7 @@ jobs:
             converter/convert.mjs \
             converter/package.json \
             converter/selftest-score.mscz \
+            converter/keys-marks-test.mscz \
             converter/node_modules/scoreview-engine/scoreview.lib.wasm \
             converter/node_modules/scoreview-engine/scoreview.lib.data \
             converter/node_modules/scoreview-engine/scoreview.nodejs.cjs \

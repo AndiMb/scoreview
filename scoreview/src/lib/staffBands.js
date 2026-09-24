@@ -9,6 +9,18 @@
 //
 //     <polyline class="StaffLines" points="1489.73,2148.84 9491.34,2148.84" />
 //
+// Die Engine des lokalen Wegs (M10) schreibt dieselben Linien in anderer
+// Form - die Klasse an einer Gruppe, die Lage als Transformation einer
+// inneren Gruppe, die Punkte relativ dazu:
+//
+//     <g class="StaffLines st-0 vc-0">
+//       <g transform="matrix(1 0 0 1 1345.086 1303.268)">
+//         <polyline points="0,0 7873.422,0" … />
+//
+// Beide Formen werden gelesen; ohne die zweite fand der Viewer auf dem
+// lokalen Weg gar keine Notenzeile (gemessen an einer SATB-Partitur: 0 statt
+// 10 Zeilen je Seite).
+//
 // Aus ihnen lassen sich System- und Zeilengrenzen zurückrechnen, und damit
 // alles, was „meine Stimme" heißt: sie hervorheben, die anderen zurücknehmen,
 // und den Wiedergabecursor auf die Zeilen aufteilen, statt einen Balken über
@@ -32,6 +44,9 @@ const NEUE_ZEILE_AB = 1.8
 /** Toleranz, ab der zwei Linien als „gleich lang" gelten (SVG-Einheiten). */
 const GLEICHE_BREITE = 1
 
+/** Affine Abbildung [a, b, c, d, e, f] wie in SVG `matrix(…)`. */
+const IDENTITAET = [1, 0, 0, 1, 0, 0]
+
 /**
  * Zieht die Notenlinien aus dem SVG-Text.
  *
@@ -45,19 +60,114 @@ const GLEICHE_BREITE = 1
  */
 export function extractStaffLines(svgText) {
 	const linien = []
+	// Sidecar-Form: die Klasse an der Polyline, absolute Punkte.
 	const muster = /<polyline\b[^>]*\bclass="StaffLines"[^>]*\bpoints="([^"]+)"/g
 	let treffer
 	while ((treffer = muster.exec(svgText)) !== null) {
-		const punkte = treffer[1].trim().split(/\s+/)
-		if (punkte.length < 2) {
+		const linie = lineFromPoints(treffer[1], IDENTITAET)
+		if (linie) {
+			linien.push(linie)
+		}
+	}
+	// Engine-Form: die Klasse an einer Gruppe, darin transformierte Polylines.
+	const gruppe = /<g\b([^>]*\bclass="StaffLines(?:\s[^"]*)?"[^>]*)>/g
+	while ((treffer = gruppe.exec(svgText)) !== null) {
+		linien.push(...linesInGroup(svgText, gruppe.lastIndex, parseTransform(treffer[1])))
+	}
+	return linien
+}
+
+/**
+ * Die Transformation aus den Attributen eines Elements - `matrix(…)` und
+ * `translate(…)`, das ist alles, was MuseScore schreibt. Ohne Angabe die
+ * Identitaet.
+ *
+ * @param {string} attrs
+ * @return {number[]}
+ */
+function parseTransform(attrs) {
+	const wert = /\btransform="([^"]*)"/.exec(attrs ?? '')?.[1] ?? ''
+	const zahlen = (text) => text.split(/[\s,]+/).filter((z) => z !== '').map(Number)
+	const matrix = /matrix\(([^)]*)\)/.exec(wert)
+	if (matrix) {
+		const m = zahlen(matrix[1])
+		return m.length === 6 && m.every(Number.isFinite) ? m : IDENTITAET
+	}
+	const verschiebung = /translate\(([^)]*)\)/.exec(wert)
+	if (verschiebung) {
+		const [tx = 0, ty = 0] = zahlen(verschiebung[1])
+		return Number.isFinite(tx) && Number.isFinite(ty) ? [1, 0, 0, 1, tx, ty] : IDENTITAET
+	}
+	return IDENTITAET
+}
+
+/**
+ * Hintereinanderausfuehrung: erst `innen`, dann `aussen`.
+ *
+ * @param {number[]} aussen
+ * @param {number[]} innen
+ * @return {number[]}
+ */
+function compose(aussen, innen) {
+	const [a, b, c, d, e, f] = aussen
+	const [g, h, i, j, k, l] = innen
+	return [a * g + c * h, b * g + d * h, a * i + c * j, b * i + d * j, a * k + c * l + e, b * k + d * l + f]
+}
+
+/**
+ * Eine Notenlinie aus dem `points`-Attribut, in Seitenkoordinaten.
+ *
+ * @param {string} punkteText
+ * @param {number[]} m Transformation der umgebenden Gruppen
+ * @return {?{y:number,left:number,right:number}}
+ */
+function lineFromPoints(punkteText, m) {
+	const punkte = punkteText.trim().split(/\s+/)
+	if (punkte.length < 2) {
+		return null
+	}
+	const [x1, y1] = punkte[0].split(',').map(Number)
+	const [x2, y2] = punkte[punkte.length - 1].split(',').map(Number)
+	if (![x1, y1, x2].every(Number.isFinite)) {
+		return null
+	}
+	const [a, b, c, d, e, f] = m
+	const links = a * x1 + c * y1 + e
+	const rechts = a * x2 + c * (Number.isFinite(y2) ? y2 : y1) + e
+	return { y: b * x1 + d * y1 + f, left: Math.min(links, rechts), right: Math.max(links, rechts) }
+}
+
+/**
+ * Die Polylines innerhalb EINER StaffLines-Gruppe der Engine-Form, samt der
+ * Transformationen ihrer inneren Gruppen. Gelesen wird nur bis zum Ende der
+ * Gruppe - eine Polyline dahinter (Hilfslinie, Bogen) ist keine Notenlinie.
+ *
+ * @param {string} svgText
+ * @param {number} start Position direkt hinter dem oeffnenden Tag
+ * @param {number[]} aussen Transformation der Gruppe selbst
+ * @return {Array<{y:number,left:number,right:number}>}
+ */
+function linesInGroup(svgText, start, aussen) {
+	const marke = /<(\/?)(g|polyline)\b([^>]*?)(\/?)>/g
+	marke.lastIndex = start
+	const stapel = [aussen]
+	const linien = []
+	let treffer
+	while (stapel.length > 0 && (treffer = marke.exec(svgText)) !== null) {
+		const [, schliessend, tag, attrs, leer] = treffer
+		if (tag === 'g') {
+			if (schliessend) {
+				stapel.pop()
+			} else if (!leer) {
+				stapel.push(compose(stapel[stapel.length - 1], parseTransform(attrs)))
+			}
 			continue
 		}
-		const [x1, y1] = punkte[0].split(',').map(Number)
-		const [x2] = punkte[punkte.length - 1].split(',').map(Number)
-		if (![x1, y1, x2].every(Number.isFinite)) {
-			continue
+		const punkte = schliessend ? null : /\bpoints="([^"]+)"/.exec(attrs)
+		const linie = punkte ? lineFromPoints(punkte[1], stapel[stapel.length - 1]) : null
+		if (linie) {
+			linien.push(linie)
 		}
-		linien.push({ y: y1, left: Math.min(x1, x2), right: Math.max(x1, x2) })
 	}
 	return linien
 }

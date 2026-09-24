@@ -8,6 +8,7 @@ use OCA\ScoreView\Controller\AnnotationController;
 use OCA\ScoreView\Db\Annotation;
 use OCA\ScoreView\Service\AnnotationService;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\LeaderService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Http;
 use OCP\Constants;
@@ -37,10 +38,14 @@ use PHPUnit\Framework\TestCase;
 class AnnotationControllerTest extends TestCase {
 	private UserFileResolver&MockObject $fileResolver;
 	private AnnotationService&MockObject $annotationService;
+	private LeaderService&MockObject $leaders;
 
 	protected function setUp(): void {
 		$this->fileResolver = $this->createMock(UserFileResolver::class);
 		$this->annotationService = $this->createMock(AnnotationService::class);
+		// Ohne Vorgabe ist niemand Leitung - die Faelle vor den Stimmnotizen
+		// laufen damit unveraendert.
+		$this->leaders = $this->createMock(LeaderService::class);
 	}
 
 	private function controller(): AnnotationController {
@@ -52,6 +57,7 @@ class AnnotationControllerTest extends TestCase {
 			$this->annotationService,
 			$this->createMock(ConversionService::class),
 			$l,
+			$this->leaders,
 		);
 	}
 
@@ -257,5 +263,219 @@ class AnnotationControllerTest extends TestCase {
 		$response = $this->controller()->$methode(...$argumente);
 
 		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
+	}
+
+	// --- Stimmnotizen (B2) -------------------------------------------------
+
+	private const TENOR = [['id' => '3', 'name' => 'Tenor']];
+
+	/**
+	 * Die Rolle wird serverseitig geprueft. Auch mit vollem
+	 * Schreibrecht an der Datei - Schreibrecht ist nicht Leitung.
+	 */
+	public function testOhneLeitungsrolleGibtEsKeineStimmnotiz(): void {
+		$this->angemeldetMitDatei(Constants::PERMISSION_ALL);
+		$this->leaders->method('isLeader')->willReturn(false);
+		$this->annotationService->expects($this->never())->method('create');
+
+		$response = $this->controller()->create(42, 1, 0.0, 'Tenor: leiser', null, null, 'parts', 'text', null, self::TENOR);
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $response->getStatus());
+	}
+
+	/**
+	 * Und umgekehrt: Eine Leitung, die die Datei nur lesen darf, darf ihrem
+	 * Tenor trotzdem etwas sagen.
+	 */
+	public function testEineLeitungDarfAuchOhneSchreibrechtAnStimmenSchreiben(): void {
+		$this->angemeldetMitDatei(Constants::PERMISSION_READ);
+		$this->leaders->method('isLeader')->willReturn(true);
+		$this->annotationService->expects($this->once())
+			->method('create')
+			->with(42, 'andreas', 12, 0.5, null, null, 'Tenor: leiser', 'parts', 'text', null,
+				'[{"id":"3","name":"Tenor"}]', true)
+			->willReturn(new Annotation());
+
+		$response = $this->controller()->create(42, 12, 0.5, 'Tenor: leiser', null, null, 'parts', 'text', null, self::TENOR);
+
+		$this->assertSame(Http::STATUS_CREATED, $response->getStatus());
+	}
+
+	/**
+	 * @return array<string, array{mixed}>
+	 */
+	public static function ungueltigeZielstimmen(): array {
+		return [
+			'keine' => [null],
+			'leer' => [[]],
+			'ohne ID' => [[['name' => 'Tenor']]],
+			'ID leer' => [[['id' => '', 'name' => 'Tenor']]],
+			'ID zu lang' => [[['id' => str_repeat('1', 65), 'name' => 'Tenor']]],
+			'Name zu lang' => [[['id' => '3', 'name' => str_repeat('T', 129)]]],
+			'Name kein Text' => [[['id' => '3', 'name' => ['Tenor']]]],
+			'kein Objekt' => [['Tenor']],
+			'zu viele' => [array_map(static fn (int $i) => ['id' => (string)$i, 'name' => "S$i"], range(1, 65))],
+		];
+	}
+
+	#[DataProvider('ungueltigeZielstimmen')]
+	public function testUngueltigeZielstimmenEndenAls400(mixed $targetParts): void {
+		$this->angemeldetMitDatei();
+		$this->leaders->method('isLeader')->willReturn(true);
+		$this->annotationService->expects($this->never())->method('create');
+
+		$response = $this->controller()->create(42, 1, 0.0, 'Notiz', null, null, 'parts', 'text', null, $targetParts);
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+	}
+
+	public function testZielstimmenWerdenNormalisiert(): void {
+		$this->angemeldetMitDatei();
+		$this->leaders->method('isLeader')->willReturn(true);
+		$this->annotationService->expects($this->once())
+			->method('create')
+			// Zahl-ID wird Text, Doppeltes faellt weg, Fremdfelder bleiben draussen.
+			->with($this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(),
+				$this->anything(), $this->anything(), 'parts', 'text', null,
+				'[{"id":"3","name":"Tenor"},{"id":"2","name":"Alt"}]')
+			->willReturn(new Annotation());
+
+		$this->controller()->create(42, 1, 0.0, 'Notiz', null, null, 'parts', 'text', null, [
+			['id' => 3, 'name' => 'Tenor', 'extra' => 'x'],
+			['id' => '3', 'name' => 'Tenor'],
+			['id' => '2', 'name' => 'Alt'],
+		]);
+	}
+
+	/**
+	 * Beim Anlegen festgehalten. Eine private Notiz fragt die Rolle
+	 * gar nicht erst - dort sieht niemand sonst, von wem sie ist.
+	 */
+	public function testByLeaderWirdNurBeiSichtbarenNotizenErmittelt(): void {
+		$this->angemeldetMitDatei();
+		$this->leaders->expects($this->never())->method('isLeader');
+		$this->annotationService->expects($this->once())
+			->method('create')
+			->with($this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(),
+				$this->anything(), $this->anything(), 'private', 'text', null, null, false)
+			->willReturn(new Annotation());
+
+		$this->controller()->create(42, 1, 0.0, 'Notiz');
+	}
+
+	public function testGeteilteNotizEinerLeitungIstAlsSolcheMarkiert(): void {
+		$this->angemeldetMitDatei();
+		$this->leaders->method('isLeader')->willReturn(true);
+		$this->annotationService->expects($this->once())
+			->method('create')
+			->with($this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(),
+				$this->anything(), $this->anything(), 'shared', 'text', null, null, true)
+			->willReturn(new Annotation());
+
+		$this->controller()->create(42, 1, 0.0, 'Notiz', null, null, 'shared');
+	}
+
+	// --- Stempel (B3) --------------------------------------------------------
+
+	public function testEinStempelBrauchtKeinenText(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->once())
+			->method('create')
+			->with(42, 'andreas', 12, 0.4, null, null, '', 'private', 'stamp', 'breath')
+			->willReturn(new Annotation());
+
+		$response = $this->controller()->create(42, 12, 0.4, '', null, null, 'private', 'stamp', 'breath');
+
+		$this->assertSame(Http::STATUS_CREATED, $response->getStatus());
+	}
+
+	/**
+	 * @return array<string, array{?string}>
+	 */
+	public static function unbekannteStempel(): array {
+		return [
+			'fehlt' => [null],
+			'Tippfehler' => ['breth'],
+			'Grossschreibung' => ['BREATH'],
+			'leer' => [''],
+		];
+	}
+
+	#[DataProvider('unbekannteStempel')]
+	public function testEinUnbekannterStempelEndetAls400(?string $stamp): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->never())->method('create');
+
+		$response = $this->controller()->create(42, 1, 0.0, '', null, null, 'private', 'stamp', $stamp);
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+	}
+
+	/**
+	 * Ein unbekannter Typ wird zur Textnotiz, nicht zum Stempel - und eine
+	 * Textnotiz ohne Text ist ein 400. Ein mitgeschickter Stempelcode geht
+	 * dabei nicht in die Datenbank.
+	 */
+	public function testEinUnbekannterTypIstEineTextnotiz(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->once())
+			->method('create')
+			->with($this->anything(), $this->anything(), $this->anything(), $this->anything(), $this->anything(),
+				$this->anything(), 'Text', 'private', 'text', null)
+			->willReturn(new Annotation());
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST,
+			$this->controller()->create(42, 1, 0.0, '', null, null, 'private', 'stmp', 'breath')->getStatus());
+		$this->controller()->create(42, 1, 0.0, 'Text', null, null, 'private', 'stmp', 'breath');
+	}
+
+	public function testDerZusatztextEinesStempelsIstBegrenzt(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->never())->method('create');
+
+		$response = $this->controller()->create(42, 1, 0.0, str_repeat('a', 10001), null, null, 'private', 'stamp', 'breath');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+	}
+
+	// --- Aendern und Loeschen ------------------------------------------------
+
+	public function testAendernReichtDieLeitungsrolleDurch(): void {
+		$this->angemeldetMitDatei(Constants::PERMISSION_READ);
+		$this->leaders->method('isLeader')->willReturn(true);
+		$this->annotationService->expects($this->once())
+			->method('updateContent')
+			->with(7, 42, 'andreas', false, 'leiser!', true, '[{"id":"3","name":"Tenor"}]')
+			->willReturn(new Annotation());
+
+		$response = $this->controller()->update(42, 7, 'leiser!', self::TENOR);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+	}
+
+	public function testLoeschenReichtDieLeitungsrolleDurch(): void {
+		$this->angemeldetMitDatei(Constants::PERMISSION_READ);
+		$this->leaders->method('isLeader')->willReturn(true);
+		$this->annotationService->expects($this->once())
+			->method('delete')
+			->with(7, 42, 'andreas', false, true)
+			->willReturn(true);
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->destroy(42, 7)->getStatus());
+	}
+
+	public function testEineLeerGeaenderteTextnotizEndetAls400(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->method('updateContent')
+			->willThrowException(new \InvalidArgumentException('leer'));
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $this->controller()->update(42, 7, '')->getStatus());
+	}
+
+	public function testUngueltigeZielstimmenBeimAendernEndenAls400(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->never())->method('updateContent');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $this->controller()->update(42, 7, 'x', [])->getStatus());
 	}
 }

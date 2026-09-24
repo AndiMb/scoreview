@@ -37,6 +37,13 @@ export function useZoom({ rootEl, scrollEl }) {
 	// absolut, sonst würde die App die Entscheidung der Nutzerin bei jedem
 	// Drehen des Tablets wieder verwerfen.
 	const followsWidth = ref(true)
+	// Das zuletzt gewaehlte Preset ('width' | 'page' | 'actual'), null nach
+	// einem eigenen Zoom. Beim Stueckwechsel einer Setliste gilt es fuer das
+	// naechste Stueck weiter - ein fester Faktor passte dort nicht,
+	// wenn das naechste Stueck ein anderes Seitenformat hat.
+	const chosen = ref('width')
+	// Ein Preset, das auf die Masse der ersten Seite wartet (siehe restore()).
+	let pendingPreset = null
 	const isFullscreen = ref(false)
 
 	/**
@@ -79,6 +86,7 @@ export function useZoom({ rootEl, scrollEl }) {
 	function set(value) {
 		zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value))
 		followsWidth.value = false
+		chosen.value = null
 	}
 
 	function by(factor) {
@@ -114,6 +122,11 @@ export function useZoom({ rootEl, scrollEl }) {
 		// Neues Objekt statt Mutation: pageDimensions ist ein shallowRef,
 		// eine Mutation im Inneren würde nichts auslösen.
 		pageDimensions.value = { ...pageDimensions.value, [index]: { viewBox, sizeMm } }
+		if (pendingPreset !== null) {
+			const wanted = pendingPreset
+			pendingPreset = null
+			applyPreset(wanted)
+		}
 	}
 
 	/** @param {'width'|'page'|'actual'} preset */
@@ -133,6 +146,7 @@ export function useZoom({ rootEl, scrollEl }) {
 			// nächsten Drehen/Vergrößern noch tun soll.
 			zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, computeFitWidthZoom(pagesEl.clientWidth)))
 			followsWidth.value = true
+			chosen.value = 'width'
 			return
 		}
 		if (preset === 'page') {
@@ -146,6 +160,8 @@ export function useZoom({ rootEl, scrollEl }) {
 		} else if (preset === 'actual') {
 			set(computeActualSizeZoom(dims?.sizeMm ?? null))
 		}
+		// Nach set(), das jeden Zoom als eigenen wertet.
+		chosen.value = preset
 	}
 
 	/**
@@ -242,12 +258,34 @@ export function useZoom({ rootEl, scrollEl }) {
 		viewportObserver = null
 	}
 
+	/**
+	 * Fuer eine neue Partitur im selben Viewer: Seitenmasse vergessen, den
+	 * Zoom aber NICHT - ihn waehlt die Nutzerin, nicht die Partitur.
+	 * Welcher Faktor dann gilt, entscheidet restore().
+	 */
 	function reset() {
 		stop()
-		zoom.value = 1
-		followsWidth.value = true
 		pageDimensions.value = {}
+		pendingPreset = null
 		isPinching = false
+	}
+
+	/**
+	 * Das gewaehlte Preset auf die gerade geladene Partitur anwenden. „Ganze
+	 * Seite" und „Originalgroesse" brauchen die Masse der ersten Seite; die
+	 * kommen erst mit deren SVG (onPageLoaded), bis dahin wartet das Preset.
+	 * Nach einem eigenen Zoom bleibt der Faktor, wie er ist.
+	 */
+	function restore() {
+		if (chosen.value === 'width') {
+			applyPreset('width')
+		} else if (chosen.value !== null) {
+			if (Object.keys(pageDimensions.value).length > 0) {
+				applyPreset(chosen.value)
+			} else {
+				pendingPreset = chosen.value
+			}
+		}
 	}
 
 	return {
@@ -265,6 +303,8 @@ export function useZoom({ rootEl, scrollEl }) {
 		onWheel,
 		onPageLoaded,
 		applyPreset,
+		restore,
+		preset: chosen,
 		observeViewport,
 		toggleFullscreen,
 		onFullscreenChange,

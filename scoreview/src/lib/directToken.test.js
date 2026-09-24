@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { darfTokenTragen } from './directToken.js'
+import {
+	ausweisFuer,
+	begleiterErneuerbar,
+	COMPANION_HEADER,
+	darfTokenTragen,
+	dateiDerAnfrage,
+	setlisteDerAnfrage,
+	TOKEN_HEADER,
+} from './directToken.js'
 
 const EIGEN = 'https://wolke.example'
 
@@ -44,5 +52,58 @@ describe('darfTokenTragen', () => {
 
 	it('haengt an einer unlesbaren URL nichts an', () => {
 		expect(darfTokenTragen('http://[nicht so', EIGEN)).toBe(false)
+	})
+})
+
+describe('Begleit-Token', () => {
+	const begleiter = new Map([['43', 'b43'], ['50', 'b50'], ['42', 'b42']])
+	const ausweis = { token: 'de', originFileId: 42, begleiter }
+
+	it('liest die Datei aus dem Pfad der App-Routen', () => {
+		expect(dateiDerAnfrage('/index.php/apps/scoreview/api/scores/43/status', EIGEN)).toBe('43')
+		expect(dateiDerAnfrage('/apps/scoreview/api/scores/43/artifact/page-1?v=x', EIGEN)).toBe('43')
+		expect(dateiDerAnfrage(`${EIGEN}/apps/scoreview/api/setlists/50`, EIGEN)).toBe('50')
+		expect(dateiDerAnfrage('/apps/scoreview/api/soundfont', EIGEN)).toBeNull()
+		expect(dateiDerAnfrage('/apps/scoreview/api/preferences', EIGEN)).toBeNull()
+		expect(dateiDerAnfrage('/apps/scoreview/api/setlists', EIGEN)).toBeNull()
+		expect(dateiDerAnfrage('/apps/andere/api/scores/43/status', EIGEN)).toBeNull()
+	})
+
+	it('erkennt die Setlisten-Datei selbst, nicht die Ausgabe', () => {
+		expect(setlisteDerAnfrage('/index.php/apps/scoreview/api/setlists/50', EIGEN)).toBe('50')
+		expect(setlisteDerAnfrage('/apps/scoreview/api/scores/42/setlists/50/tokens', EIGEN)).toBeNull()
+		expect(setlisteDerAnfrage('/apps/scoreview/api/scores/42/setlists', EIGEN)).toBeNull()
+		expect(setlisteDerAnfrage('https://fremde.example/apps/scoreview/api/setlists/50', EIGEN)).toBeNull()
+	})
+
+	it('schickt den Begleiter nur an seine Datei, das Direct-Editing-Token immer mit', () => {
+		expect(ausweisFuer('/apps/scoreview/api/scores/43/status', EIGEN, ausweis))
+			.toEqual({ [TOKEN_HEADER]: 'de', [COMPANION_HEADER]: 'b43' })
+		expect(ausweisFuer('/apps/scoreview/api/setlists/50', EIGEN, ausweis))
+			.toEqual({ [TOKEN_HEADER]: 'de', [COMPANION_HEADER]: 'b50' })
+		expect(ausweisFuer('/apps/scoreview/api/scores/44/status', EIGEN, ausweis))
+			.toEqual({ [TOKEN_HEADER]: 'de' })
+		expect(ausweisFuer('/apps/scoreview/api/soundfont', EIGEN, ausweis))
+			.toEqual({ [TOKEN_HEADER]: 'de' })
+	})
+
+	/** Die Datei des Direct-Editing-Tokens - und damit die Ausgabe neuer Token - bekommt nie einen Begleiter. */
+	it('schickt fuer die eigene Datei keinen Begleiter', () => {
+		expect(ausweisFuer('/apps/scoreview/api/scores/42/setlists/50/tokens', EIGEN, ausweis))
+			.toEqual({ [TOKEN_HEADER]: 'de' })
+	})
+
+	it('schickt an eine fremde Herkunft gar nichts', () => {
+		expect(ausweisFuer('https://fremde.example/apps/scoreview/api/scores/43/status', EIGEN, ausweis)).toEqual({})
+		expect(ausweisFuer('blob:https://wolke.example/1', EIGEN, ausweis)).toEqual({})
+	})
+
+	it('erneuert nur abgelaufene oder widerrufene Begleiter', () => {
+		expect(begleiterErneuerbar(401, 'companion_expired')).toBe(true)
+		expect(begleiterErneuerbar(401, 'companion_revoked')).toBe(true)
+		expect(begleiterErneuerbar(401, 'companion_invalid')).toBe(true)
+		expect(begleiterErneuerbar(401, 'token_expired')).toBe(false)
+		expect(begleiterErneuerbar(403, 'companion_purpose')).toBe(false)
+		expect(begleiterErneuerbar(403, 'token_file_mismatch')).toBe(false)
 	})
 })

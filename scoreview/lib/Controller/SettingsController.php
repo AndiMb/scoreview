@@ -7,8 +7,10 @@ namespace OCA\ScoreView\Controller;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
+use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\HealthService;
 use OCA\ScoreView\Service\LocalConverter;
+use OCA\ScoreView\Service\PushNotifier;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Settings\AdminSettings;
@@ -19,6 +21,15 @@ use OCP\IRequest;
 use OCP\Settings\Attribute\AuthorizedAdminSetting;
 
 class SettingsController extends Controller {
+	/**
+	 * Ab so vielen Folgegeraeten raet die Diagnose zu `notify_push`: Bei 20
+	 * Geraeten und 800 ms sind es gemessen rund 1,5 Kerne - darueber
+	 * wird es auf einem kleinen Server spuerbar.
+	 */
+	public const RECOMMEND_PUSH_FROM_DEVICES = 20;
+
+	private const MB = 1024 * 1024;
+
 	public function __construct(
 		IRequest $request,
 		private IAppConfig $appConfig,
@@ -27,6 +38,8 @@ class SettingsController extends Controller {
 		private SidecarClient $sidecarClient,
 		private LocalConverter $localConverter,
 		private ClientFallback $clientFallback,
+		private FeatureConfig $features,
+		private PushNotifier $push,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -39,7 +52,26 @@ class SettingsController extends Controller {
 	 */
 	#[AuthorizedAdminSetting(settings: AdminSettings::class)]
 	public function health(): JSONResponse {
-		return new JSONResponse($this->healthService->collect());
+		return new JSONResponse($this->healthService->collect() + ['follow' => $this->followStatus()]);
+	}
+
+	/**
+	 * „Folgt mir" ohne Push fragt alle `pollMs` ab - gemessen etwa
+	 * 50 ms CPU je Geraet und Abfrage, bei 40 Geraeten rund drei Kerne fuer
+	 * die Dauer der Probe. Das soll die Administration sehen, bevor es der
+	 * Server spuert: ob `notify_push` greift, und ab wie vielen Geraeten sich
+	 * die Installation lohnt (E10). Die Empfehlung selbst formuliert
+	 * die Oberflaeche.
+	 *
+	 * @return array{enabled: bool, pushAvailable: bool, pollMs: int, recommendPushFromDevices: int}
+	 */
+	private function followStatus(): array {
+		return [
+			'enabled' => $this->features->isEnabled(FeatureConfig::FOLLOW_SESSION),
+			'pushAvailable' => $this->push->isAvailable(),
+			'pollMs' => $this->features->followPollMs(),
+			'recommendPushFromDevices' => self::RECOMMEND_PUSH_FROM_DEVICES,
+		];
 	}
 
 	/**
@@ -74,6 +106,15 @@ class SettingsController extends Controller {
 		string $conversionBackend = ConversionBackend::SIDECAR,
 		string $nodePath = '',
 		string $soundFontFetchUrl = '',
+		?bool $featureFollowSession = null,
+		?bool $featureRecording = null,
+		?bool $featureIntonation = null,
+		?bool $featureScoreFollower = null,
+		?int $followPollMs = null,
+		?int $maxRecordingsPerScore = null,
+		?int $maxRecordingSeconds = null,
+		?int $maxRecordingMbPerUser = null,
+		?int $maxRecordingMbTotal = null,
 	): JSONResponse {
 		// Ueber normalize(), damit ein unbekannter Wert nicht als dritter,
 		// nirgends behandelter Zustand in der Konfiguration landet.
@@ -116,6 +157,44 @@ class SettingsController extends Controller {
 		// waere sonst bis zu fuenf Minuten alt, und der Betreiber saehe seine
 		// gerade eingetragene Reparatur nicht wirken (Service\ClientFallback).
 		$this->clientFallback->forget();
-		return new JSONResponse(['status' => 'ok']);
+
+		// Fehlt ein Feld (ein Formular aus einer aelteren Version), bleibt
+		// der Wert, wie er ist - ein Speichern der Sidecar-URL soll nicht
+		// nebenbei eine Funktion abschalten.
+		foreach ([
+			FeatureConfig::FOLLOW_SESSION => $featureFollowSession,
+			FeatureConfig::RECORDING => $featureRecording,
+			FeatureConfig::INTONATION => $featureIntonation,
+			FeatureConfig::SCORE_FOLLOWER => $featureScoreFollower,
+		] as $switch => $enabled) {
+			if ($enabled !== null) {
+				$this->features->setEnabled($switch, $enabled);
+			}
+		}
+		// Begrenzt statt abgelehnt: Die Antwort traegt den gespeicherten
+		// Wert, die Oberflaeche zeigt ihn danach an. Eine 400 fuer „200 ms"
+		// wuerde nur das ganze Formular scheitern lassen.
+		$pollMs = $followPollMs === null
+			? $this->features->followPollMs()
+			: $this->features->setNumber(FeatureConfig::FOLLOW_POLL_MS, $followPollMs);
+
+		// Die Grenzen der Aufnahmen (S5) nach derselben Regel. Der
+		// Speicher kommt als MB aus dem Formular und liegt als Bytes in der
+		// Konfiguration - dieselbe Einheit wie size_bytes in der Tabelle und
+		// wie ein `occ config:app:set`, das niemand erst umrechnen soll.
+		$recordingLimits = [];
+		foreach ([
+			'maxRecordingsPerScore' => [FeatureConfig::MAX_RECORDINGS_PER_SCORE, $maxRecordingsPerScore, 1],
+			'maxRecordingSeconds' => [FeatureConfig::MAX_RECORDING_SECONDS, $maxRecordingSeconds, 1],
+			'maxRecordingMbPerUser' => [FeatureConfig::MAX_RECORDING_BYTES_PER_USER, $maxRecordingMbPerUser, self::MB],
+			'maxRecordingMbTotal' => [FeatureConfig::MAX_RECORDING_BYTES_TOTAL, $maxRecordingMbTotal, self::MB],
+		] as $field => [$key, $value, $unit]) {
+			$stored = $value === null
+				? $this->features->number($key)
+				: $this->features->setNumber($key, $value * $unit);
+			$recordingLimits[$field] = intdiv($stored, $unit);
+		}
+
+		return new JSONResponse(['status' => 'ok', 'followPollMs' => $pollMs] + $recordingLimits);
 	}
 }

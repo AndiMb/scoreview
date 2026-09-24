@@ -4,6 +4,183 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.10.0] – 2026-09-24
+
+### Neu
+
+- **Anfangston, Stereobild und Speed-Trainer zum Üben.** Ein Knopf in der
+  Leiste spielt, solange man ihn hält, den Ton der eigenen Stimme an der
+  gerade sichtbaren Stelle – zwischen zwei Phrasen den nächsten Einsatz – oder
+  den Grundton der Tonart, als Klavierton durch dieselbe Ausgabekette wie die
+  Musik. „Meine Stimme“ merkt sich die App jetzt je Partitur auf dem Server
+  (`/api/scores/{fileId}/my-part`); bisher ging die Wahl bei jedem Öffnen
+  verloren, und Anfangston, Stimmnotizen und Intonation hängen alle daran. Auf
+  Wunsch liegt die eigene Stimme rechts im Stereobild und der Rest links. Der
+  Speed-Trainer hebt das Tempo mit jedem Loop-Durchlauf um einen Schritt bis
+  zum Zieltempo und endet, sobald jemand selbst am Tempo dreht.
+
+- **Aufführungsmodus, Blättern per Taste und Pedal, helle Noten auf Dunkel.**
+  Im Aufführungsmodus wirken nur Blättern, Zoom, „nächstes Stück“ und der
+  Sprung einer Leitung; verlassen wird er, indem man das Schloss eine Sekunde
+  hält. Welche Bedienung wann wirkt, entscheidet eine einzige Stelle
+  (`interactionPolicy.js`), die Unbekanntes sperrt. `Bild↓`/`Bild↑` – und damit
+  die meisten Bluetooth-Pedale – blättern so, dass das letzte vollständig
+  sichtbare System oben steht und keine Zeile verloren geht; im
+  Aufführungsmodus auch ohne Fokus im Viewer. Der Bildschirm bleibt wach,
+  solange gespielt, aufgeführt oder gefolgt wird. Die Notenfarbe folgt auf
+  Wunsch dem dunklen Theme, per CSS und ohne das SVG anzufassen; eingebettete
+  Bilder bleiben unverändert.
+
+- **Leitungsrolle, Stimmnotizen, Stempel und Studierbuchstaben für die
+  Chorprobe.** Die Eigentümerin einer Partitur – ohne Eigentümerin, wer
+  Schreibrecht hat – kann Leitungen ernennen und abberufen; die Rolle ergänzt
+  die Dateirechte und setzt Dateizugriff voraus
+  ([E9](docs/architecture.md#e9-die-leitungsrolle-ergänzt-die-dateirechte)).
+  Leitungen richten Notizen an einzelne Stimmen, die jede Stimme hervorgehoben
+  und die übrigen zurückgenommen sieht, und setzen Stempel – Atemzeichen,
+  Zäsur, Dynamik, Fermate und mehr –, die an Takt und Anteil hängen und mit dem
+  Zoom skalieren. Die Taktnavigation nimmt „C“ und „C+3“ an, zeigt die Stelle
+  als „47 (C+3)“ und bietet die Buchstaben als Schnellwahl.
+
+- **„Folgt mir“.** Eine Leitung schickt Stelle, Loop und Anfangston an alle
+  Geräte mit derselben Partitur. Übertragen wird ein Zustand mit Zählern statt
+  eines Befehlsstroms: Ein Gerät nach einem Funkloch holt den letzten Stand,
+  nichts wird nachgespielt, und ein Anfangston, der älter als 2 s ankommt,
+  bleibt stumm
+  ([E10](docs/architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+  Ohne weitere Einrichtung fragen die Geräte alle 800 ms ab (einstellbar
+  500–3000 ms), aus dem Cache beantwortet und ohne Datenbank. Gemessen: Tipp →
+  Sprung p50 595 ms, p95 945 ms; 40 Geräte kosten 2–3 CPU-Kerne. Ist
+  `notify_push` eingerichtet, schickt der Server stattdessen ein Ereignis, und
+  die Last entfällt weitgehend; die Betriebsdiagnose zeigt, ob Push greift, und
+  rät ab 20 Geräten dazu. Neue Abhängigkeit: `@nextcloud/notify_push`.
+
+- **Setlisten.** Eine Datei `*.setlist.md` – Markdown mit einer Liste von Links
+  auf Partituren – öffnet sich per Klick in ScoreView; der Viewer wechselt von
+  Stück zu Stück, ohne Aufführungsmodus, Zoom oder SoundFont neu zu laden
+  ([E11](docs/architecture.md#e11-die-setliste-als-markdown-datei)). Aus einer
+  offenen Partitur heraus bietet er die Setlisten ihres Ordners an. Der Editor
+  fügt Stücke über Nextclouds Dateiauswahl hinzu und ordnet per Ziehen; er
+  ersetzt nur die erste Liste und lässt allen übrigen Text der Datei stehen.
+  Aufgelöst wird jeder Eintrag aus Sicht der Leserin – was eine Sängerin nicht
+  sehen darf, fehlt nur für sie. Neue Abhängigkeit: `@nextcloud/dialogs`.
+
+- **Eigene Aufnahmen und Rückmeldung zur Intonation.** Aufgenommen wird mono
+  mit 16 kHz, gespeichert in den App-Daten statt in Files; eine Aufnahme hört
+  nur, wer sie gemacht hat. Abgehört wird sie im selben AudioContext wie die
+  Begleitung, beide Latenzen ausgeglichen – gemessen liegt sie 42–52 ms hinter
+  dem Cursor und bis zu 22 ms vor der Begleitung. Die Intonation zeigt live
+  eine Nadel am Cursor und danach, aus der gespeicherten Aufnahme neu
+  berechnet, die Stellen mit mehr als 25 bzw. 50 Cent Abweichung; auf dem
+  lokalen Konvertierungsweg färben sich zusätzlich die Notenköpfe der eigenen
+  Stimme. Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt in
+  der Leiste zeigt wofür und schaltet es ab. Grenzen je Partitur, je Aufnahme,
+  je Person und für die Instanz schützen den Speicher, der gegen kein
+  Kontingent zählt.
+
+- **Alles auch in den mobilen Apps.** Setliste, Leiten, Folgen, Stempel und
+  Einstellungen gehen auf der Seite für die Nextcloud-Apps. Weitere Stücke
+  einer Setliste erreicht sie über kurzlebige Begleit-Token, die nur gegen ihr
+  Direct-Editing-Token, nur für Stücke derselben Setliste und nie aus einem
+  anderen Begleit-Token entstehen
+  ([E8](docs/architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps));
+  widerrufen lassen sie sich alle mit
+  `occ config:app:delete scoreview companion_secret`. Die Leiste passt auf
+  360 px in eine Zeile. Das Mikrofon gibt die Android-App nicht frei; dort
+  führt „Im Browser öffnen“ weiter.
+
+### Geändert
+
+- **Die Engine des lokalen Wegs steht auf `v4.7.5-engine.3`** und schreibt
+  Tonarten mit Dur/Moll und Studierbuchstaben in `meta.json` (`keySigs`,
+  `rehearsalMarks`). Der Sidecar liefert die Felder nicht; dort kommen
+  Buchstaben und Tonarten aus dem MIDI, das auf beiden Wegen byteweise gleich
+  ist, nur ohne Dur/Moll
+  ([E12](docs/architecture.md#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)).
+  `CURRENT_FORMAT_VERSION` steigt auf 3: Jede bereits konvertierte Partitur
+  wird beim nächsten Öffnen einmal neu konvertiert, damit sie die Felder
+  bekommt.
+
+- **Anzeigeeinstellungen werden auch in den mobilen Apps gespeichert.**
+  `POST /api/preferences` nimmt jetzt das Direct-Editing-Token an; bisher
+  wirkten Hervorhebung und Farbe dort nur bis zum Schließen.
+
+- **Das Mikrofon ist auf der Files-Seite freigegeben**, solange Aufnahme oder
+  Intonation eingeschaltet sind. Nextcloud sperrt es sonst auf jeder Seite per
+  `Feature-Policy`. Freigegeben wird nur unter `/apps/files` und auf der Seite
+  der mobilen Apps; Dashboard, Talk und alle übrigen Seiten bleiben gesperrt.
+  Wer das nicht will, schaltet beide Funktionen in der Verwaltung ab.
+
+- **Neue Admin-Einstellungen im Abschnitt „Probe und Konzert“:** Schalter für
+  Leitung/„Folgt mir“, Aufnahme und Intonation, das Abfrageintervall und die
+  vier Speichergrenzen der Aufnahmen. Neue Routen und Tabellen verlangen
+  `occ upgrade`.
+
+### Behoben
+
+- **Ein Suchlauf setzte Stummschaltung, Solo und Lautstärke im Mixer zurück.**
+  spessasynth setzt bei jedem Suchlauf – und damit bei jedem Loop-Rücksprung –
+  den Synthesizer zurück und spielt die Controller aus dem MIDI nach, und
+  MuseScore schreibt die Kanal-Lautstärke an den Anfang jeder Spur. Ein
+  stummgeschalteter Kanal stand nach dem ersten Durchlauf wieder auf voller
+  Lautstärke. Die Einstellungen des Mixers sind jetzt per `lockController`
+  gegen den Sequencer verriegelt.
+
+- **Ein Suchlauf setzte das im Mixer gewählte Instrument zurück**, aus
+  demselben Grund: Der Reset endet mit einem Programmwechsel auf 0, danach
+  spielt der Sequencer den aus dem MIDI nach. Die gewählte Trompete klang nach
+  dem ersten Loop wieder als Chorstimme. Jetzt verriegelt über `presetLock`.
+
+- **Auf dem lokalen Konvertierungsweg wurden keine Notenlinien erkannt.** Die
+  Engine schreibt sie als Gruppe mit Transformation statt als Polylinie mit
+  absoluten Punkten; der Viewer kannte nur die zweite Form und fand 0 statt 10
+  Notenzeilen je Seite. „Meine Zeile“ blieb deshalb wirkungslos. Beide Formen
+  werden jetzt gelesen.
+
+- **Die Loop-Flaggen waren auf dem Notenpapier kaum zu sehen.** Sie benutzten
+  Nextclouds Farbvariablen für Flächen, die auf dem weißen Papier fast
+  verschwinden; sie haben jetzt eigene Farben mit Kontrast zum Papier, hell wie
+  dunkel.
+
+- **Der Punkt einer eigenen Notiz war unter Nextcloud 34 kaum zu sehen.**
+  `--color-warning` ist dort eine Flächenfarbe (hell #FFEEC5, dunkel #3D3010);
+  der Punkt kam damit auf 1,15:1 zum weißen und 1,32:1 zum dunklen Papier. Er
+  hat jetzt wie die Loop-Flaggen eine eigene Farbe je Notenmodus, mit
+  mindestens 3:1 zum Papier.
+
+- **Die Punkte geteilter Notizen und der Stimmnotizen waren bei gekreuzten
+  Farben kaum zu sehen.** Sie nahmen Primär- und Warntextfarbe des
+  Nextcloud-Themes, lagen aber auf dem Papier, das dem Notenmodus folgt: Bei
+  hellen Noten auf Dunkel unter hellem Theme kam der Stimmnotizpunkt auf
+  2,0:1, bei dunklen Noten auf Weiß unter dunklem Theme auf 1,15:1. Beide haben
+  jetzt wie der eigene Punkt eine Farbe je Notenmodus (bei Standard-Theme
+  dieselbe wie bisher), mit mindestens 3:1 zum Papier in allen zwölf
+  Kombinationen. Umgekehrt folgen die Stempel in Palette und Notizliste jetzt
+  dem Theme statt dem Notenmodus – sie stehen in der Leiste, nicht auf dem
+  Papier, und ein hellblauer Stempel auf weißer Leiste kam auf 2,2:1.
+
+- **Der Rahmen einer verwaisten Notiz war unter Nextcloud 34 praktisch
+  unsichtbar.** Er nahm `--color-warning`, das dort eine Flächenfarbe ist
+  (1,15:1 hell, 1,39:1 dunkel zum Grund der Leiste). Jetzt
+  `--color-element-warning` mit 3,5:1 bzw. 11,9:1.
+
+- **Ein zweiter Tipp der Leitung kurz nach dem ersten ging verloren.** Solange
+  eine Änderung von „Folgt mir“ unterwegs war, waren die Knöpfe gesperrt; wer
+  binnen einer Antwortzeit (gemessen rund 70 ms) von „B“ auf „C“
+  umentschied, schickte alle nach B. Die Knöpfe bleiben jetzt bedienbar: Was
+  während einer Anfrage getippt wird, geht gleich danach als eine Anfrage
+  hinaus, von Stelle und Loop nur der neueste Stand, ein Anfangston nie
+  verdrängt. Weiterhin läuft je Gerät nur eine Anfrage zur Zeit, sodass ein
+  älterer Sprung nie einen neueren überholt; ein kleines Rad neben „Folgt mir“
+  zeigt, dass noch etwas unterwegs ist
+  ([E10](docs/architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+
+- **Der AudioWorklet-Prozessor der Wiedergabe konnte nach einem Update aus dem
+  Browser-Cache kommen.** `audioWorklet.addModule()` lädt ihn unter einer
+  festen Adresse, an der kein Versionsparameter hing – ein Browser durfte nach
+  einem App-Update den alten Stand weiterverwenden. Seine Adresse und die des
+  neuen Aufnahme-Worklets tragen jetzt die App-Version.
+
 ## [1.9.3] – 2026-09-23
 
 ### Behoben

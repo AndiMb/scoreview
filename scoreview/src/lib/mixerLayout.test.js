@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeEffectiveVolumes, computeVoiceFocusVolumes, resolveMixerChannels, resolveMixerGroups } from './mixerLayout.js'
+import { computeEffectiveVolumes, computeVoiceFocusVolumes, resolveMixerChannels, resolveMixerGroups, voiceFocusForPart } from './mixerLayout.js'
 
 describe('resolveMixerChannels', () => {
 	// tracks[].name ist bei MuseScore 4 fuer jede Stimme "MS Basic" (Name der
@@ -134,5 +134,28 @@ describe('computeVoiceFocusVolumes', () => {
 		const result = computeVoiceFocusVolumes([0, 1], [0], { loud: 100, quiet: 20 })
 		expect(result.get(0)).toBe(100)
 		expect(result.get(1)).toBe(20)
+	})
+})
+
+describe('voiceFocusForPart', () => {
+	const channels = [
+		{ channel: 0, partId: '1', name: 'S' },
+		{ channel: 2, partId: '2', name: 'A' },
+		{ channel: 3, partId: '2', name: 'A' },
+	]
+
+	it('hebt die Kanaele der gemerkten Stimme an und daempft die uebrigen', () => {
+		const focus = voiceFocusForPart(channels, '2')
+		expect(focus.key).toBe('2')
+		expect([...focus.volumes]).toEqual([[0, 40], [2, 127], [3, 127]])
+	})
+
+	it('vergleicht die Stimmen-ID als Text (Server liefert Text, meta.json Zahlen)', () => {
+		expect(voiceFocusForPart(channels, 1)?.key).toBe('1')
+	})
+
+	it('liefert null ohne Stimme oder fuer eine Stimme, die es nicht mehr gibt', () => {
+		expect(voiceFocusForPart(channels, null)).toBeNull()
+		expect(voiceFocusForPart(channels, '9')).toBeNull()
 	})
 })

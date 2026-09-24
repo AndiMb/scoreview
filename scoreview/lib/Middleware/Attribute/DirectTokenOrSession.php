@@ -31,6 +31,30 @@ class DirectTokenOrSession {
 	public function __construct(
 		/** Ob im Sitzungsfall die CSRF-Pruefung nachzuholen ist - siehe oben. */
 		public bool $csrfInSession = true,
+		/**
+		 * Fuer Routen, die eine Datei in einem ORDNER anlegen statt eine Datei
+		 * zu lesen (`POST /api/setlists`): der Parameter mit der fileId des
+		 * Ordners. Mit Token muss er der Ordner der Token-Datei sein - sonst
+		 * waere ein Token fuer eine Partitur ein Schreibrecht in jedem Ordner
+		 * der Nutzerin. Ohne Token aendert der Schalter nichts.
+		 */
+		public ?string $folderParam = null,
+		/**
+		 * Welche Art Begleit-Token die Route annimmt (S1 in docs/architecture.md):
+		 * `score` fuer alles an einer Partitur, `setlist` nur fuer Lesen und
+		 * Schreiben der Setlisten-Datei, `null` fuer gar keins. Getrennt,
+		 * weil ein Token fuer die Setlisten-Datei sonst auch deren
+		 * Partitur-Routen oeffnete - und ein Partitur-Token eine Liste
+		 * umschreiben koennte.
+		 */
+		public ?string $companion = 'score',
+		/**
+		 * Nur mit Direct-Editing-Token, weder mit Sitzung noch mit
+		 * Begleit-Token: die Ausgabe von Begleit-Token. Aus einer Sitzung
+		 * braucht sie niemand, und aus einem Begleiter heraus entstuende eine
+		 * Kette, an deren Ende jede Datei stuende.
+		 */
+		public bool $directOnly = false,
 	) {
 	}
 }
