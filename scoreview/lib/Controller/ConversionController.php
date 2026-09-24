@@ -346,10 +346,11 @@ class ConversionController extends Controller {
 				Application::APP_ID . '.conversion.source', ['fileId' => $node->getId(), 'v' => $etag]),
 			// Die Engine-Version als Cache-Schluessel: Ein Wechsel des
 			// Engine-Pakets muss beim Client ankommen, obwohl die Auslieferung
-			// `immutable` ist.
+			// `immutable` ist. Im Pfad, nicht als ?v= - nur so gilt sie auch
+			// fuer .wasm und .data (siehe EngineController).
 			'engineUrl' => $this->urlGenerator->linkToRoute(
 				Application::APP_ID . '.engine.get',
-				['name' => 'scoreview.mjs', 'v' => $this->localConverter->engineVersion()]),
+				['version' => $this->localConverter->engineVersion(), 'name' => 'scoreview.mjs']),
 			'maxBytes' => $this->appConfig->getValueInt(
 				Application::APP_ID, 'client_max_score_bytes', self::DEFAULT_CLIENT_MAX_BYTES),
 			'soundFontUrl' => $this->soundFontUrl(),

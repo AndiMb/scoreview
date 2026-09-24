@@ -4,6 +4,24 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.10.1] – 2026-09-24
+
+### Behoben
+
+- **„engine initialisation failed“ beim Konvertieren im Browser nach einem
+  Engine-Wechsel.** Die Route der Engine trug ihre Version nur als `?v=` am
+  Glue. `scoreview.lib.wasm` und `scoreview.lib.data` fordert der Glue aber
+  relativ zu seiner eigenen URL an, und dabei fällt der Query-String weg. Beide
+  Dateien lagen damit unter einer unversionierten URL ein Jahr lang als
+  `immutable` im Browsercache. Ein Browser, der die Engine schon einmal
+  geladen hatte, setzte nach dem Wechsel von 4.7.4 auf 4.7.5 die alte `.wasm`
+  unter den neuen Glue und scheiterte bei jedem Öffnen, ohne dass Neuladen
+  half. Betroffen war vor allem die Nextcloud-Android-App, deren WebView ihren
+  Cache nie von selbst räumt. Die Version steht jetzt im Pfad
+  (`/api/engine/{version}/{name}`) und gilt damit für alle drei Dateien. Ein
+  vergifteter Cache heilt sich dadurch von selbst, weil die neuen URLs dort
+  nie vorkamen.
+
 ## [1.10.0] – 2026-09-24
 
 ### Neu

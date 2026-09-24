@@ -90,7 +90,7 @@ recordings only the person recording can hear, and intonation feedback while
 singing. Apart from the microphone in the Android app, this also works in
 the Nextcloud mobile apps.
 	]]></description>
-	<version>1.10.0</version>
+	<version>1.10.1</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>

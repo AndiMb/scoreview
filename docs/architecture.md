@@ -108,7 +108,7 @@ Route mit Token annimmt; Einzelheiten in
 | `GET /api/scores/{fileId}/status` | Konvertierungsstatus, Seitenzahl, Metadaten | ja |
 | `GET /api/scores/{fileId}/artifact/{name}` | Ein Artefakt aus dem Cache (`page-N`, `midi`, `timing`, `measures`, `meta`) | ja |
 | `GET /api/scores/{fileId}/source` | Die `.mscz` selbst – nur für die Konvertierung im Browser ([E7](#e7-konvertierung-im-browser-als-rückfall)) | ja |
-| `GET /api/engine/{name}` | Die drei Dateien der scoreview-engine, für denselben Weg (**ohne Anmeldung** – appeigene Bauartefakte, für alle dieselben Bytes; ein nativer `import()` kann keinen Ausweis tragen) | – |
+| `GET /api/engine/{version}/{name}` | Die drei Dateien der scoreview-engine, für denselben Weg – die Engine-Version steht im Pfad, damit auch `.wasm` und `.data` sie tragen, die der Glue relativ zu seiner eigenen URL anfordert (**ohne Anmeldung** – appeigene Bauartefakte, für alle dieselben Bytes; ein nativer `import()` kann keinen Ausweis tragen) | – |
 | `POST /api/scores/{fileId}/reconvert` | Verwirft die gespeicherte Konvertierung und lässt sie neu erzeugen (nur mit Schreibrecht auf die Datei) | – |
 | `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe | ja |
 | `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen und Stempel; Sichtbarkeit `parts` nur für Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | ja |
@@ -1171,7 +1171,7 @@ Prüfung in `src/lib/directToken.js`, und zwar an der **Herkunft der URL** –
 ein extern konfiguriertes SoundFont bekommt den Token nie zu sehen, und
 `blob:`-URLs bleiben außen vor.
 
-Eine Ausnahme bleibt: `GET /api/engine/{name}` trägt **keinen** Token, sondern
+Eine Ausnahme bleibt: `GET /api/engine/{version}/{name}` trägt **keinen** Token, sondern
 `#[PublicPage]`. Der Grund ist technisch zwingend – die Engine wird mit
 `import(engineUrl)` geladen, und ein nativer dynamischer Import kann keinen
 Header tragen. Was dort herauskommt, sind appeigene Bauartefakte: für jede

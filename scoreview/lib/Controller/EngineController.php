@@ -41,9 +41,19 @@ use OCP\IRequest;
  *
  * **Die drei Dateien muessen unter demselben Praefix liegen.** Der Glue sucht
  * `scoreview.lib.wasm` und `scoreview.lib.data` relativ zu seiner eigenen
- * Script-URL (getSelfURL/locateFile im Engine-Paket). Bei `/api/engine/{name}`
- * stimmt das von selbst - deshalb ist der Routenzuschnitt hier keine
- * Geschmacksfrage.
+ * Script-URL (getSelfURL/locateFile im Engine-Paket). Bei
+ * `/api/engine/{version}/{name}` stimmt das von selbst - deshalb ist der
+ * Routenzuschnitt hier keine Geschmacksfrage.
+ *
+ * **Die Version gehoert in den Pfad.** `immutable` verspricht, dass sich
+ * unter einer URL nie etwas aendert; der Cache-Schluessel muss also in JEDER
+ * der drei URLs stehen. Ein `?v=` am Glue erreicht die Geschwister nicht -
+ * aufgeloest gegen die Script-URL faellt der Query-String weg. Gemessen: Ein
+ * Browser, der die `.wasm` von 4.7.4 im Cache hielt, setzte sie unter dem
+ * Glue von 4.7.5 ein und scheiterte mit "engine initialisation failed", ein
+ * Jahr lang und durch kein Neuladen zu beheben. Eine fremde Version ist
+ * deshalb 404 statt der aktuellen Bytes - sonst landete die neue Datei
+ * unter der alten URL wieder als `immutable` im Cache.
  *
  * **Zugriff ohne Anmeldung (#[PublicPage]).** Was hier herauskommt, sind
  * appeigene Bauartefakte: fuer jede Instanz und jede Nutzerin dieselben Bytes,
@@ -92,9 +102,9 @@ class EngineController extends Controller {
 	// Admin“ und waere neben #[PublicPage] schlicht unwahr.
 	#[PublicPage]
 	#[NoCSRFRequired]
-	public function get(string $name): Http\Response {
+	public function get(string $version, string $name): Http\Response {
 		$mimeType = self::FILES[$name] ?? null;
-		if ($mimeType === null) {
+		if ($mimeType === null || $version !== $this->localConverter->engineVersion()) {
 			return new JSONResponse(['error' => $this->l->t('Requested file does not exist.')], Http::STATUS_NOT_FOUND);
 		}
 

@@ -37,7 +37,10 @@ return [
 		// kommt und nicht als Routing-Fehler (wie bei conversion#artifact).
 		// Der Zuschnitt "ein Verzeichnis, drei Geschwister" ist Bedingung: Der
 		// Glue sucht seine .wasm/.data relativ zur eigenen Script-URL.
-		['name' => 'engine#get', 'url' => '/api/engine/{name}', 'verb' => 'GET', 'requirements' => ['name' => '[a-zA-Z0-9._\-]+']],
+		// Die Engine-Version steht deshalb im PFAD und nicht als ?v= daneben:
+		// Nur so erben die beiden Geschwister sie - aufgeloest gegen die
+		// Script-URL faellt ein Query-String weg (siehe EngineController).
+		['name' => 'engine#get', 'url' => '/api/engine/{version}/{name}', 'verb' => 'GET', 'requirements' => ['version' => '[a-zA-Z0-9._\-]+', 'name' => '[a-zA-Z0-9._\-]+']],
 
 		// Private Notizen
 		['name' => 'annotation#index', 'url' => '/api/scores/{fileId}/annotations', 'verb' => 'GET'],
