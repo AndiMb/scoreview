@@ -4,6 +4,16 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Sicherheit
+
+- **Abhängigkeiten mit bekannten Lücken angehoben:** DOMPurify 3.4.16
+  (GHSA-p98j-92pf-mc4p; betrifft nur den von ScoreView nicht genutzten
+  `IN_PLACE`-Modus), axios 1.20.0 über `@nextcloud/axios`, dazu zur Bauzeit
+  webpack-dev-middleware und brace-expansion. `@nextcloud/vue` 9.13.1 bringt
+  einen Fix für die Ebenenlage aufgeklappter Auswahllisten mit.
+
 ## [1.11.0] – 2026-09-24
 
 ### Geändert
