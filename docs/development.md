@@ -146,9 +146,14 @@ App Stores – der Store lehnt beim Hochladen ab, was nicht passt, also erst nac
 dem Tag, wenn die Version schon vergeben ist. Einer prüft, dass der Engine-Pin
 in `converter/package.json` und `MUSESCORE_VERSION` in `sidecar/Dockerfile`
 dieselbe MuseScore-Version nennen. Und einer meldet bekannte
-Sicherheitslücken (`npm audit --audit-level=high`, `composer audit`); damit
-eine neue Meldung auch ohne Commit auffällt, läuft die CI zusätzlich jeden
-Montagmorgen.
+Sicherheitslücken (`npm run audit`, `composer audit`); damit eine neue
+Meldung auch ohne Commit auffällt, läuft die CI zusätzlich jeden
+Montagmorgen. `npm run audit` ist `npm audit` mit Schwelle „high“, kennt aber
+Ausnahmen: Gibt es für eine Meldung keine bereinigte Version, kommt ihre
+GHSA-Kennung mit Begründung und Ablaufdatum in `tools/audit-allowlist.json`.
+Nach dem Ablauf wird der Job wieder rot, bis jemand verlängert oder behebt;
+eine Ausnahme, deren Meldung verschwunden ist, meldet das Skript zum
+Entfernen.
 
 `.github/dependabot.yml` hält die Abhängigkeiten wöchentlich aktuell, in vier
 getrennten Bäumen (App, lokaler Konverter, PHP-Dev-Pakete, Sidecar) plus den

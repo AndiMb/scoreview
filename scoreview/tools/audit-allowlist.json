@@ -1,0 +1,7 @@
+[
+	{
+		"id": "GHSA-vfj7-8cjw-p6xm",
+		"until": "2027-01-06",
+		"reason": "braces: Stack-Erschoepfung bei tief geschachtelten Mustern. Alle Versionen betroffen, keine bereinigte veroeffentlicht. Nur zur Bauzeit (micromatch/fast-glob unter stylelint und webpack-dev-server), verarbeitet nur Muster aus dem Repo, landet in keinem Bundle."
+	}
+]

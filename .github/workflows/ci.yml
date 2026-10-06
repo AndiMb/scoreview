@@ -281,10 +281,14 @@ jobs:
   # unterscheiden koennen, ob der Code kaputt ist oder die Welt sich geaendert
   # hat.
   #
-  # `--audit-level=high`, nicht strenger: Die niedrigen Meldungen stammen
+  # Schwelle "high", nicht strenger: Die niedrigen Meldungen stammen
   # durchweg aus Webpacks Node-Polyfills (crypto-browserify und Angrenzendes),
   # laufen also zur BAUZEIT und landen in keinem Bundle. Sie jedes Mal rot zu
   # faerben hiesse, den Job binnen einer Woche zu ignorieren.
+  #
+  # Aus demselben Grund `npm run audit` statt `npm audit`: Eine Meldung ohne
+  # bereinigte Version laesst sich nur per datierter Ausnahme in
+  # tools/audit-allowlist.json zuruecklassen, eine pro GHSA-Kennung.
   advisories:
     name: Abhaengigkeiten (Sicherheitsmeldungen)
     runs-on: ubuntu-latest
@@ -305,7 +309,7 @@ jobs:
           tools: composer:v2
 
       - name: npm (Laufzeit und Bauzeit)
-        run: npm audit --audit-level=high
+        run: npm run audit
 
       # composer audit braucht nur den Lock, keine Installation.
       - name: composer

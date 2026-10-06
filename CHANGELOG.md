@@ -13,6 +13,10 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   `IN_PLACE`-Modus), axios 1.20.0 über `@nextcloud/axios`, dazu zur Bauzeit
   webpack-dev-middleware und brace-expansion. `@nextcloud/vue` 9.13.1 bringt
   einen Fix für die Ebenenlage aufgeklappter Auswahllisten mit.
+- **Die Sicherheitsprüfung in CI kennt datierte Ausnahmen** (`npm run audit`,
+  `tools/audit-allowlist.json`). Die erste gilt bis 2027-01-06 für braces
+  (GHSA-vfj7-8cjw-p6xm): Dafür gibt es keine bereinigte Version, und braces
+  läuft nur zur Bauzeit.
 
 ## [1.11.0] – 2026-09-24
 
