@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Tests\Unit\Controller;
 
+use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Controller\FollowController;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
+use OCA\ScoreView\Middleware\DirectAccessContext;
+use OCA\ScoreView\Service\CompanionTokenService;
 use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\FollowException;
 use OCA\ScoreView\Service\FollowService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Http;
+use OCP\Files\File;
 use OCP\Files\Node;
 use OCP\IAppConfig;
 use OCP\IL10N;
@@ -44,7 +48,13 @@ class FollowControllerTest extends TestCase {
 		'state' => ['session' => 100, 'position' => ['seq' => 1, 'measure' => 47, 'mark' => 'C']],
 	];
 
+	private DirectAccessContext $access;
+	private CompanionTokenService&MockObject $companions;
+
 	protected function setUp(): void {
+		$this->access = new DirectAccessContext();
+		$this->access->setSession();
+		$this->companions = $this->createMock(CompanionTokenService::class);
 		$this->fileResolver = $this->createMock(UserFileResolver::class);
 		$this->follow = $this->createMock(FollowService::class);
 		$this->follow->method('nowMs')->willReturn(1790000000123);
@@ -56,11 +66,12 @@ class FollowControllerTest extends TestCase {
 		$config = $this->createMock(IAppConfig::class);
 		$config->method('getValueBool')->willReturnCallback(fn (string $app, string $key, bool $default) => $key === FeatureConfig::FOLLOW_SESSION ? $this->eingeschaltet : $default);
 		$config->method('getValueInt')->willReturnCallback(fn (string $app, string $key, int $default) => $key === FeatureConfig::FOLLOW_POLL_MS ? 1200 : $default);
-		return new FollowController($this->createMock(IRequest::class), $this->fileResolver, $this->follow, new FeatureConfig($config), $l);
+		return new FollowController($this->createMock(IRequest::class), $this->fileResolver, $this->follow, new FeatureConfig($config), $l, $this->access, $this->companions);
 	}
 
-	private function angemeldet(string $uid, bool $sichtbar = true): Node {
-		$node = $this->createMock(Node::class);
+	private function angemeldet(string $uid, bool $sichtbar = true, string $mime = Application::MSCZ_MIMETYPE): Node {
+		$node = $this->createMock(File::class);
+		$node->method('getMimetype')->willReturn($mime);
 		$this->fileResolver->method('currentUserId')->willReturn($uid);
 		$this->fileResolver->method('resolveOwnNode')->willReturn($sichtbar ? $node : null);
 		return $node;
@@ -213,5 +224,67 @@ class FollowControllerTest extends TestCase {
 		$this->assertSame($status, $this->controller()->create(42)->getStatus());
 		$this->assertSame($status, $this->controller()->update(42, tone: true)->getStatus());
 		$this->assertSame($status, $this->controller()->destroy(42)->getStatus());
+	}
+
+	public function testTranspositionGehtAnDenDienst(): void {
+		$node = $this->angemeldet('anna');
+		$this->follow->expects($this->once())->method('change')
+			->with($node, 'anna', $this->callback(fn (array $c) => $c['transpose'] === -2))
+			->willReturn(['version' => '5', 'active' => false]);
+		$this->controller()->update(42, null, null, false, false, false, -2);
+	}
+
+	public function testUmzugBrauchtLesbaresZiel(): void {
+		$this->fileResolver->method('currentUserId')->willReturn('anna');
+		$this->fileResolver->method('resolveOwnNode')->willReturnCallback(fn (int $id) => $id === 42 ? $this->createMock(Node::class) : null);
+		$this->follow->expects($this->never())->method('move');
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->move(42, 99)->getStatus());
+	}
+
+	public function testUmzug(): void {
+		$this->angemeldet('anna');
+		$this->follow->expects($this->once())->method('move')->willReturn(['version' => '7', 'active' => false]);
+		$this->assertSame(Http::STATUS_OK, $this->controller()->move(42, 43, 900)->getStatus());
+	}
+
+	public function testUmzugNurZuEinerPartitur(): void {
+		$this->angemeldet('anna', true, 'application/pdf');
+		$this->follow->expects($this->never())->method('move');
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->move(42, 43, null)->getStatus());
+	}
+
+	public function testBegleitTokenNurMitDirectEditing(): void {
+		$this->angemeldet('anna');
+		$this->follow->method('isMoveTarget')->willReturn(true);
+		$this->companions->expects($this->never())->method('issue');
+		// Sitzung (Browser): kein Token - der braucht keins.
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->companion(42, 43)->getStatus());
+	}
+
+	public function testBegleitTokenNurFuerDasZielDesUmzugs(): void {
+		// Auf 43 laeuft vielleicht eine Sitzung - aber nicht die von 42 (S1).
+		$this->access->setToken(DirectAccessContext::DIRECT, 42, str_repeat('a', 32));
+		$this->angemeldet('anna');
+		$this->follow->method('isActive')->willReturn(true);
+		$this->follow->expects($this->once())->method('isMoveTarget')->with(42, 43)->willReturn(false);
+		$this->companions->expects($this->never())->method('issue');
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->companion(42, 43)->getStatus());
+	}
+
+	public function testBegleitTokenNieFuerAndereDateien(): void {
+		$this->access->setToken(DirectAccessContext::DIRECT, 42, str_repeat('a', 32));
+		$this->angemeldet('anna', true, 'application/x-keepass2');
+		$this->follow->method('isMoveTarget')->willReturn(true);
+		$this->companions->expects($this->never())->method('issue');
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->companion(42, 43)->getStatus());
+	}
+
+	public function testBegleitTokenFuerDasNeueStueck(): void {
+		$this->access->setToken(DirectAccessContext::DIRECT, 42, str_repeat('a', 32));
+		$this->angemeldet('anna');
+		$this->follow->method('isMoveTarget')->willReturn(true);
+		$this->companions->expects($this->once())->method('issue')
+			->with('anna', 43, CompanionTokenService::PURPOSE_SCORE, str_repeat('a', 32))->willReturn('tok');
+		$this->assertSame(['fileId' => 43, 'token' => 'tok'], $this->controller()->companion(42, 43)->getData());
 	}
 }

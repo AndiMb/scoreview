@@ -100,6 +100,14 @@ export default {
 			type: [String, Number],
 			default: null,
 		},
+
+		// Wie laut die uebrigen Stimmen bei „Meine Stimme" sind - der Regler
+		// „andere Stimmen" (H4), damit Mixer und geschlossener Viewer
+		// (useMyPartSound.js) dasselbe hoeren lassen.
+		othersLevel: {
+			type: Number,
+			default: 40,
+		},
 	},
 
 	emits: ['volumesChanged', 'programChanged', 'focusChanged'],
@@ -107,7 +115,7 @@ export default {
 	data() {
 		// Mit gemerkter Stimme beginnt der Mixer schon im Fokus - dieselben
 		// Werte, die der Viewer beim Laden bereits an den Player gegeben hat.
-		const focus = voiceFocusForPart(this.channels, this.myPartId)
+		const focus = voiceFocusForPart(this.channels, this.myPartId, { quiet: this.othersLevel })
 		return {
 			// channel -> { volume, muted, solo, program }
 			//
@@ -141,7 +149,7 @@ export default {
 		 * @param {?string} partId
 		 */
 		myPartId(partId) {
-			const focus = voiceFocusForPart(this.channels, partId)
+			const focus = voiceFocusForPart(this.channels, partId, { quiet: this.othersLevel })
 			if ((focus?.key ?? null) === this.focusedGroupKey) {
 				return
 			}
@@ -205,8 +213,8 @@ export default {
 			// sich trotzdem hervorheben, nur nicht als „Meine Stimme" merken.
 			const focus = this.focusedGroupKey === group.key
 				? null
-				: (voiceFocusForPart(this.channels, group.partId)
-					?? { key: group.key, volumes: computeVoiceFocusVolumes(this.channels.map((ch) => ch.channel), group.channels) })
+				: (voiceFocusForPart(this.channels, group.partId, { quiet: this.othersLevel })
+					?? { key: group.key, volumes: computeVoiceFocusVolumes(this.channels.map((ch) => ch.channel), group.channels, { quiet: this.othersLevel }) })
 			this.applyFocus(focus)
 			this.emitVolumes()
 			// "Meine Stimme" ist nicht nur eine Lautstaerkefrage: Wer seine

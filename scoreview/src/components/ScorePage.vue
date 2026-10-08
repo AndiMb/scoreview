@@ -34,13 +34,32 @@
 			:key="`dim-${i}`"
 			class="score-page-dimmed"
 			:style="band" />
-		<div
-			v-for="(band, i) in cursorBands"
-			:key="`cursor-${i}`"
-			:ref="i === 0 ? 'cursor' : undefined"
-			class="score-page-cursor"
-			:class="{ 'score-page-cursor--hidden': notesHighlighted }"
-			:style="band" />
+		<!--
+			Der Cursor als <rect> in einer SVG-Ebene mit der viewBox der Seite,
+			nicht als positionierte <div>s: Er bewegt sich bei jedem Notenschritt,
+			und in Files kostet jede Aenderung eines style-Attributs eine
+			Stil-Neuberechnung ueber den ganzen Baum (Nextclouds :has()-Regeln
+			mit [style*=...] an body/Viewer - gemessen: ~70 ms je Aenderung am
+			Desktop, am S23 die halbe Hauptthread-Zeit). Geometrie-Attribute
+			eines SVG-Elements kosten dort nichts (gemessen: 3 ms fuer 50).
+		-->
+		<svg
+			v-if="cursorRects.length > 0"
+			class="score-page-cursor-layer"
+			:viewBox="viewBoxAttr"
+			preserveAspectRatio="none"
+			aria-hidden="true">
+			<rect
+				v-for="(band, i) in cursorRects"
+				:key="`cursor-${i}`"
+				:ref="i === 0 ? 'cursor' : undefined"
+				class="score-page-cursor"
+				:class="{ 'score-page-cursor--hidden': notesHighlighted }"
+				:x="band.x"
+				:y="band.y"
+				:width="band.w"
+				:height="band.h" />
+		</svg>
 		<!--
 			v-html ist hier unvermeidbar: das MuseScore-SVG soll als echtes DOM
 			im Dokument liegen, damit Zoom, Scoped-CSS (siehe :deep(svg) unten)
@@ -111,6 +130,21 @@
 			:viewBox="viewBox"
 			@stampClick="(id) => $emit('markerClick', id)" />
 		<!--
+			Tonnamen (H3) links neben den Notenkoepfen. Nicht klickbar: Ein
+			Tipp soll die Note treffen, nicht ihr Etikett.
+		-->
+		<span
+			v-for="label in noteLabels"
+			:key="label.key"
+			class="score-page-note-name"
+			:style="{ left: label.left + '%', top: label.top + '%', fontSize: label.size + 'px' }"
+			aria-hidden="true">{{ label.text }}</span>
+		<span
+			v-if="tapBubble"
+			class="score-page-tap-bubble"
+			:style="{ left: tapBubble.left + '%', top: tapBubble.top + '%' }"
+			role="status">{{ tapBubble.text }}</span>
+		<!--
 			Sichtbare Loop-Bereichsmarkierung - zwei schmale, farbige Flaggen an
 			Start-/Ende-Takt statt eines vollflächigen Bereichs: measures.json
 			liefert nur Punktkoordinaten je Takt (M4), keine Taktbreite, ein
@@ -149,6 +183,8 @@ import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import ScoreStamps from './ScoreStamps.vue'
 import { formatCents } from '../lib/intonation.js'
+import { nameOf } from '../lib/noteNames.js'
+import { hitNotehead, matchNoteheads } from '../lib/noteSpellingIndex.js'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
 import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, stavesOfPart } from '../lib/staffBands.js'
 import { buildNoteIndex, buildSegmentIndex, pickNoteheads, setHighlight } from '../lib/svgIndex.js'
@@ -311,9 +347,36 @@ export default {
 			type: Object,
 			default: null,
 		},
+
+		// Tonhoehe und Schreibweise je Notenkopf (`noteSpellings`, E15), als
+		// Map aus lib/noteSpellingIndex.js - oder null, wenn die Artefakte
+		// sie nicht tragen. Grundlage fuer Tonnamen und „Note antippen".
+		spellings: {
+			type: Map,
+			default: null,
+		},
+
+		// Tonnamen anzeigen: 'de' | 'en' | 'solfa-fixed' | 'solfa-movable',
+		// null = aus (H3).
+		noteNameSystem: {
+			type: String,
+			default: null,
+		},
+
+		// Nur diese Notenzeilen beschriften (die eigene Stimme), null = alle.
+		noteNameStaves: {
+			type: Array,
+			default: null,
+		},
+
+		// Vorzeichen an einem Segment, fuer das bewegliche Do.
+		keyOfElid: {
+			type: Function,
+			default: () => 0,
+		},
 	},
 
-	emits: ['noteClick', 'markerClick', 'loaded', 'staffMapping'],
+	emits: ['noteClick', 'markerClick', 'loaded', 'staffMapping', 'indexed'],
 
 	data() {
 		return {
@@ -331,6 +394,12 @@ export default {
 			// selbst steht bewusst ausserhalb von data() (siehe created()); dieses
 			// eine Bit liest das Template, es entscheidet, ob das Band malt.
 			notesHighlighted: false,
+			// Die Tonnamen dieser Seite: {key, left, top, size, text} in
+			// Prozent der Seite. Einmal je Seite und Einstellung berechnet,
+			// nicht je Rahmen (die Arbeit aus 1.10.2 bleibt so erhalten).
+			noteLabels: [],
+			// Der Name des zuletzt angetippten Kopfs, kurz eingeblendet (D13).
+			tapBubble: null,
 		}
 	},
 
@@ -427,32 +496,36 @@ export default {
 			return this.t('{cents} cents', { cents: formatCents(this.needle.cents) })
 		},
 
-		cursorBands() {
+		/** Die viewBox der Seite fuer die Cursor-Ebene. */
+		viewBoxAttr() {
+			const box = this.viewBox
+			return box ? `${box.minX} ${box.minY} ${box.width} ${box.height}` : '0 0 1 1'
+		},
+
+		/**
+		 * Der Cursor in Seitenkoordinaten - ein Band je Notenzeile des Systems,
+		 * damit er die Zeilen trifft und nicht die Zwischenraeume.
+		 *
+		 * @return {Array<{x: number, y: number, w: number, h: number}>}
+		 */
+		cursorRects() {
 			const rect = this.cursorRect
 			const box = this.viewBox
 			if (!rect || !box || rect.page !== this.pageIndex) {
 				return []
 			}
-			const links = `${((rect.x - box.minX) / box.width) * 100}%`
-			const breite = `${(rect.w / box.width) * 100}%`
-
 			const system = this.staffSystems.find((s) => rect.y < s.bottom + 1 && rect.y + rect.h > s.top - 1)
 			if (!system) {
-				return [{
-					left: links,
-					top: `${((rect.y - box.minY) / box.height) * 100}%`,
-					width: breite,
-					height: `${(rect.h / box.height) * 100}%`,
-				}]
+				return [{ x: rect.x, y: rect.y, w: rect.w, h: rect.h }]
 			}
 			// Etwas ueber die aeusseren Notenlinien hinaus, damit Noten in
 			// Hilfslinien noch im Band liegen.
 			const luft = (system.staves[0].bottom - system.staves[0].top) / 4
 			return system.staves.map((band) => ({
-				left: links,
-				top: `${((band.top - luft - box.minY) / box.height) * 100}%`,
-				width: breite,
-				height: `${((band.bottom - band.top + 2 * luft) / box.height) * 100}%`,
+				x: rect.x,
+				y: band.top - luft,
+				w: rect.w,
+				h: band.bottom - band.top + 2 * luft,
 			}))
 		},
 
@@ -600,6 +673,23 @@ export default {
 		liveNoteMarks() {
 			this.applyLiveNoteMarks()
 		},
+
+		spellings() {
+			this.indexSpellings()
+		},
+
+		noteNameSystem() {
+			this.updateNoteLabels()
+		},
+
+		noteNameStaves() {
+			this.updateNoteLabels()
+		},
+
+		zoom() {
+			// Die Schriftgroesse der Tonnamen folgt dem Notenbild.
+			this.updateNoteLabels()
+		},
 	},
 
 	created() {
@@ -617,6 +707,10 @@ export default {
 		this.noteIndex = null
 		this.marked = []
 		this.liveMarked = []
+		// Notenkoepfe mit Tonhoehe und Schreibweise (lib/noteSpellingIndex.js)
+		// - DOM-Knoten, also ebenfalls nicht reaktiv.
+		this.noteItems = []
+		this.tapTimer = null
 	},
 
 	mounted() {
@@ -642,9 +736,94 @@ export default {
 	beforeUnmount() {
 		this.loadObserver?.disconnect()
 		this.unloadObserver?.disconnect()
+		clearTimeout(this.tapTimer)
 	},
 
 	methods: {
+		/**
+		 * Notenkoepfe dieser Seite mit Tonhoehe und Schreibweise verbinden
+		 * (E15). Die Boxen werden einmal hier gemessen - getBBox() ist eine
+		 * Layoutabfrage, je Rahmen waere sie zu teuer.
+		 */
+		indexSpellings() {
+			this.noteItems = []
+			if (this.spellings && this.noteIndex) {
+				this.noteItems = matchNoteheads(this.noteIndex, this.spellings).map((item) => {
+					let box = null
+					try {
+						const b = item.node.getBBox()
+						box = { x: b.x, y: b.y, width: b.width, height: b.height }
+					} catch {
+						// Ein Knoten ohne Layout (ausgeblendet) bleibt ohne Box.
+					}
+					return { ...item, box }
+				}).filter((item) => item.box !== null)
+			}
+			this.updateNoteLabels()
+		},
+
+		updateNoteLabels() {
+			const box = this.viewBox
+			if (!this.noteNameSystem || !box || this.noteItems.length === 0) {
+				this.noteLabels = []
+				return
+			}
+			const staves = this.noteNameStaves ? new Set(this.noteNameStaves) : null
+			// Schriftgroesse aus der Kopfhoehe: etwas groesser als ein
+			// Notenkopf, damit sie am Notenstaender lesbar bleibt.
+			const pxPerUnit = (BASE_PAGE_WIDTH_PX * this.zoom) / box.width
+			this.noteLabels = this.noteItems
+				.filter((item) => staves === null || staves.has(item.staff))
+				.map((item, i) => ({
+					key: `${item.elid}:${item.staff}:${item.voice}:${i}`,
+					left: ((item.box.x - box.minX) / box.width) * 100,
+					top: ((item.box.y + item.box.height / 2 - box.minY) / box.height) * 100,
+					size: Math.max(9, Math.min(22, item.box.height * pxPerUnit * 1.15)),
+					text: nameOf({ tpc: item.tpc, system: this.noteNameSystem, concertKey: this.keyOfElid(item.elid) }),
+				}))
+		},
+
+		/**
+		 * Der angetippte Notenkopf, falls einer getroffen wurde - fuer
+		 * „Note antippen = Ton hoeren" (D13).
+		 *
+		 * @param {number} x SVG-Einheiten
+		 * @param {number} y SVG-Einheiten
+		 * @return {?{pitch: number, tpc: number, elid: number, left: number, top: number}}
+		 */
+		hitNote(x, y) {
+			if (this.noteItems.length === 0 || !this.viewBox) {
+				return null
+			}
+			const height = this.noteItems[0].box.height
+			const hit = hitNotehead(this.noteItems, x, y, height * 0.8)
+			if (!hit) {
+				return null
+			}
+			const box = this.viewBox
+			return {
+				pitch: hit.pitch,
+				tpc: hit.tpc,
+				elid: hit.elid,
+				left: ((hit.box.x + hit.box.width / 2 - box.minX) / box.width) * 100,
+				top: ((hit.box.y - box.minY) / box.height) * 100,
+			}
+		},
+
+		/**
+		 * Den Namen eines angetippten Kopfs kurz zeigen.
+		 *
+		 * @param {{left: number, top: number}} at
+		 * @param {string} text
+		 */
+		showTapName(at, text) {
+			clearTimeout(this.tapTimer)
+			this.tapBubble = { left: at.left, top: at.top, text }
+			this.tapTimer = setTimeout(() => {
+				this.tapBubble = null
+			}, 1500)
+		},
+
 		t(text, vars) {
 			return translate('scoreview', text, vars)
 		},
@@ -715,6 +894,10 @@ export default {
 			this.noteIndex = buildNoteIndex(svg)
 			this.marked = []
 			this.liveMarked = []
+			this.indexSpellings()
+			// Ob das SVG Kennungen traegt (M10) - eine Faehigkeit der Artefakte,
+			// nach der der Viewer Liedtext und Tonnamen anbietet (E15).
+			this.$emit('indexed', { segIds: (this.segmentIndex?.size ?? 0) > 0 })
 			// Die Seite kann mitten in der Wiedergabe nachgeladen worden sein.
 			this.applyHighlight()
 			this.applyNoteMarks()
@@ -817,6 +1000,8 @@ export default {
 			this.noteIndex = null
 			this.marked = []
 			this.liveMarked = []
+			this.noteItems = []
+			this.noteLabels = []
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid: "Klick auf eine Note springt
@@ -851,10 +1036,15 @@ export default {
 			const rect = this.$refs.root.getBoundingClientRect()
 			const fracX = (event.clientX - rect.left) / rect.width
 			const fracY = (event.clientY - rect.top) / rect.height
+			const x = this.viewBox.minX + fracX * this.viewBox.width
+			const y = this.viewBox.minY + fracY * this.viewBox.height
 			this.$emit('noteClick', {
 				page: this.pageIndex,
-				x: this.viewBox.minX + fracX * this.viewBox.width,
-				y: this.viewBox.minY + fracY * this.viewBox.height,
+				x,
+				y,
+				// Der getroffene Kopf mit Tonhoehe, wenn die Artefakte sie tragen
+				// - der Viewer spielt ihn an (D13).
+				note: this.hitNote(x, y),
 			})
 		},
 
@@ -1034,15 +1224,24 @@ export default {
  * fruehere Deckkraft war auf einem hellen Tabletbildschirm kaum noch zu
  * sehen (Nutzerrueckmeldung).
  */
-.score-page-cursor {
+/* Liegt wie zuvor das Cursor-Band hinter dem Notenbild: absolut
+   positioniert ohne z-index, das Notenbild hat z-index 1 (.score-page-svg). */
+.score-page-cursor-layer {
 	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	overflow: visible;
+}
+
+.score-page-cursor {
 	/* Farbe und Deckkraft kommen aus der Nutzereinstellung (siehe
 	   lib/highlightStyle.js); der Rueckfallwert traegt nur, solange die
-	   Variable noch nicht gesetzt ist. */
-	background: var(--scoreview-highlight-band, rgba(211, 47, 47, 0.32));
-	border-radius: 4px;
-	pointer-events: none;
-	transition: left 0.08s linear, top 0.08s linear, height 0.08s linear;
+	   Variable noch nicht gesetzt ist. Kein Uebergang: Geometrie-Attribute
+	   gleiten nicht per CSS, und ein Gleiten ueber den Stil kostete genau die
+	   Neuberechnung, die die SVG-Ebene vermeidet. */
+	fill: var(--scoreview-highlight-band, rgba(211, 47, 47, 0.32));
 }
 
 /*
@@ -1054,7 +1253,7 @@ export default {
  * (getCursorClientRect()), mit display:none oder v-if haette es keine.
  */
 .score-page-cursor--hidden {
-	background: transparent;
+	fill: transparent;
 }
 
 /*
@@ -1118,6 +1317,30 @@ export default {
 .score-page-svg :deep(path.scoreview-intonation-na),
 .score-page-svg :deep(.scoreview-intonation-na [fill]:not([fill="none"])) {
 	fill: var(--scoreview-intonation-na, #9e9e9e);
+}
+
+.score-page-note-name {
+	position: absolute;
+	transform: translate(calc(-100% - 2px), -50%);
+	pointer-events: none;
+	font-weight: 600;
+	line-height: 1;
+	white-space: nowrap;
+	color: var(--color-primary-element, #00679e);
+	text-shadow: 0 0 2px var(--color-main-background, #fff), 0 0 2px var(--color-main-background, #fff);
+}
+
+.score-page-tap-bubble {
+	position: absolute;
+	transform: translate(-50%, calc(-100% - 6px));
+	pointer-events: none;
+	padding: 2px 8px;
+	border-radius: var(--border-radius-large, 10px);
+	background: var(--color-primary-element, #00679e);
+	color: var(--color-primary-element-text, #fff);
+	font-weight: 600;
+	font-size: 16px;
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 .score-page-needle {

@@ -50,7 +50,23 @@ Grund, eingebettete Bilder bleiben dabei unverändert.
 eigenen Stimme an der aktuellen Stelle oder den Grundton der Tonart. „Meine
 Stimme“ merkt sich die App je Partitur und legt sie auf Wunsch rechts ins
 Stereobild, die übrigen links. Der **Speed-Trainer** steigert das Tempo mit
-jedem Loop-Durchlauf bis zum Zieltempo.
+jedem Loop-Durchlauf bis zum Zieltempo. **Coach** spielt die eigene Stimme als
+Klavier laut und rechts, die übrigen leise links, und **Transponieren** setzt
+den Klang um Halbtöne höher oder tiefer, ohne das Notenbild zu ändern.
+
+**Unterwegs üben, am Handy lesen.** Ein **Übe-Track** speichert genau das, was
+man gerade hört – Stimme, Coach, Tempo, Transposition, auf Wunsch nur den
+Loop oder mit Metronom – als MP3 neben der Partitur in Files; die
+Nextcloud-App spielt ihn offline und mit Steuerung auf dem Sperrbildschirm.
+Wer neben der Partitur schreiben darf, erzeugt mit einem Klick **Tracks für
+alle Stimmen**. Zum Lesen auf dem Telefon stellt das **Systemband** die Systeme
+nebeneinander, jedes so hoch wie der Bildschirm, und die **Liedtext-Ansicht**
+zeigt nur den Text der eigenen Stimme mit allen Strophen, die gesungene Silbe
+hervorgehoben. **Tonnamen** stehen auf Wunsch neben den Notenköpfen – deutsch,
+englisch oder als Solmisation –, und ein Tipp auf eine Note spielt ihren Ton.
+Mit **„Offline vormerken“** liegen ein Stück oder eine ganze Setliste samt
+Klang im Browser bereit und öffnen sich ohne Netz über die Offline-Seite der
+App.
 
 **In der Chorprobe.** Wer eine Partitur besitzt, ernennt **Leitungen**, und jede
 Leitung kann weitere ernennen. Leitungen schreiben **Stimmnotizen**, die nur die
@@ -58,8 +74,9 @@ angesprochenen Stimmen sehen – wer noch keine Stimme gewählt hat, sieht sie
 zurückgenommen mit dem Namen der Stimme. Dazu kommen **Stempel** (Atemzeichen,
 Zäsur, Dynamik, Fermate …), die an der musikalischen Stelle im Notenbild stehen. Die
 Taktnavigation versteht **Studierbuchstaben**: „C“ und „C+3“ springen dorthin.
-Mit **„Folgt mir“** schickt die Leitung Stelle, Loop und Anfangston an alle
-Geräte im Raum – wer selbst navigiert, löst sich und kommt mit einem Tipp
+Mit **„Folgt mir“** schickt die Leitung Stelle, Loop, Anfangston und eine
+Transposition an alle Geräte im Raum und nimmt sie in der Setliste zum
+nächsten Stück mit – wer selbst navigiert, löst sich und kommt mit einem Tipp
 zurück.
 
 ![Die Leitung führt mit „Folgt mir“; eine Notiz erreicht gezielt eine Stimme](docs/img/rehearsal.png)
@@ -75,12 +92,15 @@ zeigt beim Singen eine Nadel am Cursor und danach die Stellen, die zu hoch oder
 zu tief waren. Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt
 zeigt wofür.
 
-Das geht auch in den mobilen Nextcloud-Apps, mit zwei Einschränkungen: Das
+Das geht auch in den mobilen Nextcloud-Apps, mit wenigen Einschränkungen: Das
 Mikrofon gibt die Android-App nicht frei, dort führt „Im Browser öffnen“ weiter.
 Und eine Setliste öffnet sich mobil über eine ihrer Partituren statt über die
-Datei selbst. Die Verwaltung kann „Folgt mir“,
-Aufnahme und Intonation einzeln abschalten; was die Funktionen kosten und wo sie
-enden, steht in [docs/limits.md](docs/limits.md#probe--und-konzertfunktionen).
+Datei selbst. Die Offline-Seite gibt es nur im Browser, nicht in den Apps.
+Liedtext-Ansicht und Tonnamen brauchen den lokalen Konvertierungsweg (siehe
+unten). Die Verwaltung kann „Folgt mir“, Aufnahme, Intonation, Übe-Tracks und
+die Offline-Seite einzeln abschalten; was die Funktionen kosten und wo sie
+enden, steht in [docs/limits.md](docs/limits.md#probe--und-konzertfunktionen)
+und [docs/limits.md](docs/limits.md#üben-und-lesen-auf-dem-handy).
 
 Tastatur im Viewer: `Leertaste` Start/Stopp · `←` `→` Takt zurück/vor · `L` Loop
 · `+` `−` Zoom · `0` Seitenbreite · `Bild↓` `Bild↑` blättern.
@@ -105,6 +125,7 @@ Ergebnis liefern und sich nur darin unterscheiden, was der Server dafür braucht
 | Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
 | MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
+| Liedtext-Ansicht, Tonnamen, eingefärbte Notenköpfe | ja | nein |
 | Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
 
 Der lokale Weg ist voreingestellt, weil er der einzige ist, der nach
@@ -197,5 +218,7 @@ ScoreView steht unter AGPL-3.0-or-later, siehe [LICENSE](LICENSE).
   (MIT), dasselbe, das MuseScore mitbringt. Mit Sidecar stammt es aus dessen
   MuseScore-Installation (MuseScore General von S. Christian Collins, MIT),
   sonst aus der Quelle, die der Betreiber hinterlegt.
+- Übe-Tracks kodiert im Browser
+  [`@breezystack/lamejs`](https://www.npmjs.com/package/@breezystack/lamejs) (LGPL-3.0).
 - Die Partitur auf den Bildern ist Anton Bruckners *Aequale Nr. 1* in der
   [OpenScore-Ausgabe](https://musescore.com/openscore/scores/4074271) (CC0).

@@ -19,6 +19,7 @@
 		"extends @nextcloud/browserslist-config"
 	],
 	"dependencies": {
+		"@breezystack/lamejs": "^1.2.7",
 		"@nextcloud/axios": "^2.5.0",
 		"@nextcloud/dialogs": "^7.5.0",
 		"@nextcloud/files": "^4.0.0",

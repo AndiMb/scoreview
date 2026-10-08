@@ -55,7 +55,12 @@ class MyPartController extends Controller {
 		if ($userId === null) {
 			return $this->notFound();
 		}
-		return new JSONResponse(['partId' => $this->preferences->getMyPart($userId, $fileId)]);
+		return new JSONResponse([
+			'partId' => $this->preferences->getMyPart($userId, $fileId),
+			// Mit derselben Antwort, nicht als eigener Abruf: Offline gibt es
+			// sie dann ohne weitere vorgemerkte URL (offlinePlan.js).
+			'practice' => $this->preferences->getPractice($userId, $fileId),
+		]);
 	}
 
 	/**
@@ -79,6 +84,24 @@ class MyPartController extends Controller {
 	 * Die Nutzerin, wenn sie die Datei sieht - sonst null. Die Kennung kommt
 	 * aus der Sitzung bzw. dem Token-Scope, nie aus der Anfrage.
 	 */
+	/**
+	 * Uebe-Einstellungen dieser Partitur (H4/H6). Eine eigene Route statt
+	 * eines Felds an `update`: Dort heisst ein fehlendes `partId` „keine
+	 * Stimme" - wer nur die Transposition schickte, verloere seine Stimme.
+	 * Hier gilt: was fehlt, bleibt.
+	 */
+	#[NoAdminRequired]
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession]
+	public function updatePractice(int $fileId, ?int $transpose = null, ?bool $coach = null, ?int $othersLevel = null): JSONResponse {
+		$userId = $this->userWithAccess($fileId);
+		if ($userId === null) {
+			return $this->notFound();
+		}
+		return new JSONResponse(['practice' => $this->preferences->setPractice($userId, $fileId, $transpose, $coach, $othersLevel)]);
+	}
+
 	private function userWithAccess(int $fileId): ?string {
 		$userId = $this->fileResolver->currentUserId();
 		if ($userId === null || $this->fileResolver->resolveOwnNode($fileId) === null) {

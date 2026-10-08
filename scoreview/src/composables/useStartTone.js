@@ -34,9 +34,12 @@ const FIXED_TONE_MS = 2000
  * @param {() => ?string} deps.myPartId
  * @param {() => boolean} deps.permitted ob die Bedienung gerade wirken darf (interactionPolicy)
  * @param {() => void} deps.onNeedPart Stimmauswahl oeffnen
+ * @param {() => number} [deps.transpose] Transposition des Klangs (H6). Der
+ *   Synthesizer verschiebt den Ton selbst (player.js); hier zaehlt sie nur
+ *   fuer den angezeigten Namen - man soll lesen, was man hoert.
  * @return {object}
  */
-export function useStartTone({ clock, hasRealPlayer, parsedMidi, facts, measuresTimeline, displayTimeMs, durationMs, mixerChannels, myPartId, permitted, onNeedPart }) {
+export function useStartTone({ clock, hasRealPlayer, parsedMidi, facts, measuresTimeline, displayTimeMs, durationMs, mixerChannels, myPartId, permitted, onNeedPart, transpose = () => 0 }) {
 	const mode = ref(MODE_VOICE)
 	const sounding = ref(false)
 	// Der zuletzt gespielte Ton als Name ("E♭4") - steht am Knopf, damit man
@@ -105,7 +108,13 @@ export function useStartTone({ clock, hasRealPlayer, parsedMidi, facts, measures
 		clearFixedTimer()
 		const mine = ++pressId
 		sounding.value = true
-		lastToneName.value = pitchName(tone.pitch, tone.concertKey)
+		const shift = transpose() || 0
+		// Vorzeichen der transponierten Tonart: jede Quinte ein Kreuz mehr,
+		// auf -6..6 gefaltet - fuer "Es" statt "Dis" eine Ganzton tiefer.
+		const key = tone.concertKey === null || tone.concertKey === undefined
+			? null
+			: ((((tone.concertKey + 7 * shift) % 12) + 18) % 12) - 6
+		lastToneName.value = pitchName(tone.pitch + shift, key)
 		await clock()?.startTone?.(tone.pitch)
 		// Losgelassen, waehrend der AudioContext noch aufwachte: Dann kam
 		// stopTone() VOR dem Anschlag und haette nichts beendet - der Ton

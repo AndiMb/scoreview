@@ -48,6 +48,13 @@ Loop und Anfangston an alle Geräte (mit notify_push unter einer Sekunde);
 Setlisten als Markdown-Datei mit Stückwechsel im Viewer; eigene Aufnahmen, die
 nur die Aufnehmende hört, und Rückmeldung zur Intonation beim Singen. Bis auf
 das Mikrofon in der Android-App geht das auch in den mobilen Nextcloud-Apps.
+
+Für unterwegs und das Handy: Übe-Tracks als MP3 in Files - die aktuelle
+Mischung, auf Wunsch je Stimme für alle -, Coach (eigene Stimme als Klavier),
+Transponieren des Klangs, ein Systemband mit den Notensystemen nebeneinander,
+eine Liedtext-Ansicht der eigenen Stimme, Tonnamen an den Noten und Noten mit
+Ton ohne Netz über eine Offline-Seite im Browser. „Folgt mir" nimmt alle zum
+nächsten Stück der Setliste mit.
 	]]></description>
 	<description lang="en"><![CDATA[
 ScoreView displays MuseScore scores (.mscz) directly from Files - as faithful
@@ -89,8 +96,15 @@ setlists as a Markdown file with piece changes inside the viewer; own
 recordings only the person recording can hear, and intonation feedback while
 singing. Apart from the microphone in the Android app, this also works in
 the Nextcloud mobile apps.
+
+On the go and on a phone: practice tracks as MP3 files in Files - the current
+mix, optionally one per voice for everyone -, a coach mode (your own voice on
+the piano), transposing the sound, a system band with the staves side by
+side, a lyrics view of your own voice, note names on the notes, and scores
+with sound without a network via an offline page in the browser. "Follow me"
+takes everyone along to the next piece of the setlist.
 	]]></description>
-	<version>1.11.0</version>
+	<version>1.12.0</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>

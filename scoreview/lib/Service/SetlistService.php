@@ -59,7 +59,7 @@ class SetlistService {
 	 */
 	public const MAX_CANDIDATE_FOLDERS = 100;
 	/** Laengster Dateiname einer neuen Liste, ohne Endung. */
-	public const MAX_NAME_LENGTH = 120;
+	public const MAX_NAME_LENGTH = FileNames::MAX_NAME_LENGTH;
 
 	public const STATUS_OK = 'ok';
 	public const STATUS_MISSING = 'missing';
@@ -375,19 +375,12 @@ class SetlistService {
 	 * @throws SetlistException INVALID
 	 */
 	public static function sanitizeName(string $name): string {
-		$name = preg_replace('/[\x00-\x1F\x7F\/\\\\]+/u', ' ', $name) ?? '';
-		$name = trim(preg_replace('/\s+/u', ' ', $name) ?? '');
-		foreach ([SetlistFormat::EXTENSION, '.md'] as $suffix) {
-			if (str_ends_with(mb_strtolower($name), $suffix)) {
-				$name = rtrim(mb_substr($name, 0, mb_strlen($name) - mb_strlen($suffix)));
-			}
-		}
-		$name = mb_substr($name, 0, self::MAX_NAME_LENGTH);
-		// Ein Name aus Punkten waere versteckt oder ein Pfadsegment.
-		if (trim($name, '. ') === '') {
+		// Dieselben Regeln wie fuer Uebe-Tracks (FileNames).
+		$clean = FileNames::clean($name, [SetlistFormat::EXTENSION, '.md']);
+		if ($clean === null) {
 			throw new SetlistException(SetlistException::INVALID);
 		}
-		return trim($name);
+		return $clean;
 	}
 
 	/**

@@ -49,3 +49,17 @@ Selbsttest des lokalen Konvertierungswegs (`node convert.mjs --selftest`)
 prüft an ihr die Felder `keySigs` und `rehearsalMarks`, die nur die
 scoreview-engine in `meta.json` schreibt. Der Sidecar kennt sie nicht
 (Stock-MuseScore) und benutzt die Datei deshalb nicht.
+
+## `lyrics-test.mscz`
+
+Die dritte Ausnahme, selbst erstellt und reproduzierbar aus
+`keys-marks-test.mscz` erzeugt (`python lyrics-test.gen.py` in diesem
+Verzeichnis): Sopran und Bass, Takt 1–2 dreimal wiederholt mit drei
+Strophen, danach ein Schluss „A-men". Zusammen 56 Silben.
+
+`scoreview/converter/lyrics-test.mscz` ist eine Kopie davon. Der Selbsttest
+des lokalen Wegs prüft daran `lyricSyllables` und `noteSpellings`: die Zahl
+der Silben und Strophen, „Hal-le-lu-ja" mit seinen Silbenarten, dass jede
+Silbe auf eine elid aus `timing.json` zeigt und dass die Notenköpfe je
+Segment, Notenzeile und Stimme mit dem SVG übereinstimmen. Der Sidecar kennt
+diese Felder nicht und benutzt die Datei deshalb nicht.

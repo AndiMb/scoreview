@@ -60,7 +60,16 @@ class PreferenceController extends Controller {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession(companion: null)]
-	public function update(string $highlightColor = '', string $highlightMode = '', ?bool $stereoMyPart = null, ?string $noteTheme = null): JSONResponse {
+	public function update(
+		string $highlightColor = '',
+		string $highlightMode = '',
+		?bool $stereoMyPart = null,
+		?string $noteTheme = null,
+		?string $noteNames = null,
+		?bool $noteNamesMine = null,
+		?string $layout = null,
+		?bool $bandOffered = null,
+	): JSONResponse {
 		$userId = $this->userSession->getUser()?->getUID();
 		if ($userId === null) {
 			return new JSONResponse(['error' => $this->l->t('Not logged in.')], Http::STATUS_UNAUTHORIZED);
@@ -70,7 +79,8 @@ class PreferenceController extends Controller {
 		// Browser weiterzuleben und beim naechsten Oeffnen zu verschwinden.
 		return new JSONResponse(
 			$this->preferences->set($userId, $highlightColor, $highlightMode)
-			+ $this->preferences->setDisplay($userId, $stereoMyPart, $noteTheme),
+			+ $this->preferences->setDisplay($userId, $stereoMyPart, $noteTheme)
+			+ $this->preferences->setViewing($userId, $noteNames, $noteNamesMine, $layout, $bandOffered),
 		);
 	}
 }

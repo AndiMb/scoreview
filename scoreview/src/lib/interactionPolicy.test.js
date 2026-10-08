@@ -50,3 +50,21 @@ describe('interactionPolicy.allowed', () => {
 		expect(allowed('followJump')).toBe(false)
 	})
 })
+
+describe('interactionPolicy.allowed - offline (E14)', () => {
+	it('sperrt Notizen und Spruenge der Leitung', () => {
+		expect(allowed('annotate', { offline: true })).toBe(false)
+		expect(allowed('followJump', { offline: true, following: true })).toBe(false)
+	})
+
+	it('laesst Ueben, Lesen und Spielen zu', () => {
+		for (const action of ['play', 'seek', 'loop', 'mixer', 'tone', 'settings', 'page', 'zoom', 'nextPiece', 'noteClick']) {
+			expect(allowed(action, { offline: true })).toBe(true)
+		}
+	})
+
+	it('verbindet sich mit dem Auffuehrungsmodus', () => {
+		expect(allowed('mixer', { offline: true, performance: true })).toBe(false)
+		expect(allowed('page', { offline: true, performance: true })).toBe(true)
+	})
+})

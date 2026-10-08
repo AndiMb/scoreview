@@ -27,6 +27,19 @@ webpackConfig.entry = {
 	// Teils: Im AudioWorkletGlobalScope gibt es weder importScripts noch
 	// fetch, das Bundle muss fuer sich allein stehen.
 	'scoreview-capture-worklet': path.join(__dirname, 'src', 'worklets', 'captureWorklet.js'),
+	// Der Render-Worker des Uebe-Tracks (H1). Ein eigener Einstieg statt
+	// `new Worker(new URL(…))`: Als nachgeladener Teil spaltete die
+	// Nextcloud-Vorlage spessasynth und lamejs in einen Vendor-Teil ab, den
+	// der Worker dann unter dem festen Pfad /apps/scoreview/js/ suchte -
+	// falsch, wenn die App unter custom_apps liegt (src/publicPath.js
+	// korrigiert das nur fuer die Seite, nicht fuer einen Worker). Ein
+	// Einstieg traegt seine Abhaengigkeiten in sich.
+	'scoreview-render-worker': path.join(__dirname, 'src', 'workers', 'renderWorker.js'),
+	// Die Offline-Seite (E14) und ihr Service Worker. Der Worker ist ein
+	// eigener Einstieg aus demselben Grund wie der Render-Worker: Er laedt
+	// keine nachgeladenen Teile nach und muss fuer sich allein stehen.
+	'scoreview-offline': path.join(__dirname, 'src', 'offline.js'),
+	'scoreview-offline-sw': path.join(__dirname, 'src', 'offline-sw.js'),
 }
 
 // Ausgabedateiname explizit festlegen (kein Content-Hash im Dateinamen),

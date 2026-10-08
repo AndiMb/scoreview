@@ -104,9 +104,15 @@ function pushConnected() {
  * @param {() => void} deps.playTone Anfangston meiner Stimme (useStartTone.startToneFor)
  * @param {() => ?{measure: number, mark: ?string}} deps.currentPosition fuer die Leitung
  * @param {() => ?{from: number, to: number}} deps.currentLoop fuer die Leitung
+ * @param {(semitones: ?number) => void} [deps.setTranspose] Transposition der
+ *   Leitung uebernehmen (H6); null = wieder die eigene
+ * @param {(target: {fileId: number, setlistId: ?number}) => void} [deps.openPiece]
+ *   zum Stueck wechseln, zu dem die Leitung umgezogen ist (H7)
+ * @param {(target: ?{fileId: number, setlistId: ?number}) => void} [deps.leaderMoved]
+ *   fuer Geloeste: wo die Leitung jetzt ist, null = wieder hier
  * @return {object}
  */
-export function useFollowSession({ fileId, enabled, standalone, ready, permitted, seekToMeasure, setLoop, clearLoop, playTone, currentPosition, currentLoop }) {
+export function useFollowSession({ fileId, enabled, standalone, ready, permitted, seekToMeasure, setLoop, clearLoop, playTone, currentPosition, currentLoop, setTranspose = () => {}, openPiece = () => {}, leaderMoved = () => {} }) {
 	const t = (text) => translate('scoreview', text)
 
 	const local = shallowRef(initialFollowState())
@@ -235,7 +241,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		takePollMs(body.pollMs)
 		const wasActive = local.value.active
 		const session = local.value.session
-		const result = reduce(local.value, { type: 'state', body })
+		const result = reduce(local.value, { type: 'state', body, fileId: Number(fileId()) })
 		local.value = result.local
 		execute(result.actions)
 		if (local.value.active && (!wasActive || local.value.session !== session)) {
@@ -283,6 +289,19 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 					break
 				case 'tone':
 					playTone()
+					break
+				case 'setTranspose':
+					setTranspose(action.semitones)
+					break
+				case 'restoreTranspose':
+					setTranspose(null)
+					break
+				case 'openPiece':
+					leaderMoved(null)
+					openPiece({ fileId: action.fileId, setlistId: action.setlistId })
+					break
+				case 'leaderMoved':
+					leaderMoved({ fileId: action.fileId, setlistId: action.setlistId })
 					break
 				default:
 				// 'ended', 'leaderChanged': Die Anzeige liest den Zustand
@@ -335,7 +354,9 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	 * @param {string} kind
 	 */
 	function noteNavigation(kind) {
-		local.value = reduce(local.value, { type: 'navigate', kind }).local
+		const result = reduce(local.value, { type: 'navigate', kind })
+		local.value = result.local
+		execute(result.actions)
 	}
 
 	/** „Zurueck zur Leitung". */
@@ -365,6 +386,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		position: () => t('Could not send the position.'),
 		loop: () => t('Could not send the loop.'),
 		tone: () => t('Could not send the starting note.'),
+		transpose: () => t('Could not send the transposition.'),
 	}
 
 	/**
@@ -416,7 +438,10 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 			ok = true
 		} catch (err) {
 			if (gen === generation) {
-				error.value = message(err, FALLBACK[step.last]())
+				// Ohne eigene Meldung die allgemeine: Wuerfe der Fehlerzweig
+				// selbst, gaebe nichts mehr die Warteschlange frei - jeder
+				// weitere Tipp der Leitung bliebe bis zum Neuladen liegen.
+				error.value = message(err, (FALLBACK[step.last] ?? FALLBACK.position)())
 			}
 		}
 		for (const resolve of step.waiters) {
@@ -464,6 +489,34 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 
 	function sendTone() {
 		return submit({ type: 'tone' })
+	}
+
+	/** @param {number} semitones die Transposition fuer alle (H6) */
+	function sendTranspose(semitones) {
+		return submit({ type: 'transpose', semitones })
+	}
+
+	/**
+	 * Die Leitung schaltet zum naechsten Stueck weiter (H7): Die Sitzung zieht
+	 * mit um. Nicht ueber die Warteschlange - der Umzug ist kein Stand dieser
+	 * Datei, und was in der Schlange wartete, gilt dem alten Stueck. Die
+	 * Antwort ist der Stand des neuen Stuecks; den holt der Neustart dort.
+	 *
+	 * @param {number} targetFileId
+	 * @param {?number} setlistId
+	 * @return {Promise<boolean>}
+	 */
+	async function move(targetFileId, setlistId) {
+		if (!mine.value) {
+			return false
+		}
+		try {
+			await axios.post(url('/move'), { targetFileId, setlistId }, { timeout: REQUEST_TIMEOUT_MS })
+			return true
+		} catch (err) {
+			error.value = message(err, t('Could not take the session to the next piece.'))
+			return false
+		}
 	}
 
 	function updateHeartbeat() {
@@ -518,6 +571,12 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	/** Fuer eine andere Partitur von vorn - aufgerufen beim Dateiwechsel. */
 	function restart() {
 		stop()
+		// Wer die Transposition der Leitung trug, bekommt die eigene zurueck -
+		// im neuen Stueck gilt sie, bis dessen Sitzung etwas anderes sagt.
+		if (local.value.sessionTranspose) {
+			setTranspose(null)
+		}
+		leaderMoved(null)
 		local.value = initialFollowState()
 		connected.value = true
 		disabled.value = false
@@ -575,6 +634,8 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		sendPosition,
 		sendLoop,
 		sendTone,
+		sendTranspose,
+		move,
 		restart,
 		stop,
 	}

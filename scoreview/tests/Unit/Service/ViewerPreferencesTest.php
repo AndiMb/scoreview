@@ -149,4 +149,55 @@ class ViewerPreferencesTest extends TestCase {
 		$this->assertNull(ViewerPreferences::normalizePartId("1\n2"));
 		$this->assertSame(str_repeat('x', 64), ViewerPreferences::normalizePartId(str_repeat('x', 64)));
 	}
+
+	public function testUebeEinstellungenHabenVorgabenOhneEintrag(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturn('');
+		$this->assertSame(['transpose' => 0, 'coach' => false, 'othersLevel' => 40], (new ViewerPreferences($config))->getPractice('anna', 7));
+	}
+
+	public function testUebeEinstellungenWerdenBegrenzt(): void {
+		$this->assertSame(
+			['transpose' => -12, 'coach' => false, 'othersLevel' => 127],
+			ViewerPreferences::normalizePractice(['transpose' => -40, 'coach' => 'ja', 'othersLevel' => 999]),
+		);
+	}
+
+	public function testSpeichertNurMitgeschickteUebeWerte(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturn('{"transpose":-2,"coach":true,"othersLevel":30}');
+		$config->expects($this->once())->method('setUserValue')
+			->with('anna', 'scoreview', 'practice.7', '{"transpose":-2,"coach":true,"othersLevel":60}');
+		$werte = (new ViewerPreferences($config))->setPractice('anna', 7, null, null, 60);
+		$this->assertSame(['transpose' => -2, 'coach' => true, 'othersLevel' => 60], $werte);
+	}
+
+	public function testLoeschtDenEintragBeiLauterVorgaben(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturn('{"transpose":3}');
+		$config->expects($this->never())->method('setUserValue');
+		$config->expects($this->once())->method('deleteUserValue')->with('anna', 'scoreview', 'practice.7');
+		(new ViewerPreferences($config))->setPractice('anna', 7, 0, null, null);
+	}
+
+	public function testUnlesbarerUebeEintragGiltAlsVorgabe(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturn('{kaputt');
+		$this->assertSame(0, (new ViewerPreferences($config))->getPractice('anna', 7)['transpose']);
+	}
+
+	public function testTonnamenUndDarstellungNurMitgeschickt(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->expects($this->exactly(2))->method('setUserValue');
+		$werte = (new ViewerPreferences($config))->setViewing('anna', 'solfa-movable', null, 'karaoke', null);
+		// Unbekannte Darstellung faellt auf Seiten zurueck, statt gespeichert zu werden.
+		$this->assertSame(['noteNames' => 'solfa-movable', 'layout' => 'pages'], $werte);
+	}
+
+	public function testTonnamenVorgabenOhneEintrag(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnArgument(3);
+		$werte = (new ViewerPreferences($config))->get('anna');
+		$this->assertSame(['off', true, 'pages', false], [$werte['noteNames'], $werte['noteNamesMine'], $werte['layout'], $werte['bandOffered']]);
+	}
 }

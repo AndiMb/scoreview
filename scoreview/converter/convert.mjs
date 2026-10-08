@@ -24,7 +24,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { cpus } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
-import { checkPromises, checkScoreFacts, toPositions } from './lib/artifacts.mjs'
+import { checkLyrics, checkPromises, checkScoreFacts, toPositions } from './lib/artifacts.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
@@ -221,11 +221,16 @@ async function main() {
 		// auf Stock-MuseScore, das diese Felder nicht kennt.
 		const fakten = checkScoreFacts((await convert(join(HERE, 'keys-marks-test.mscz'), fontVerzeichnis)).meta)
 		problems.push(...fakten.problems)
+		// Dritte: Liedtext und Schreibweisen (E15), mit Seiten und Timing,
+		// denn geprueft wird, dass sie auf dieselben Kennungen zeigen.
+		const mitText = await convert(join(HERE, 'lyrics-test.mscz'), fontVerzeichnis)
+		const text = checkLyrics({ meta: mitText.meta, timing: mitText.timing, svgs: mitText.pages })
+		problems.push(...text.problems)
 		stdoutWrite(JSON.stringify({
 			ok: problems.length === 0,
 			error: problems.length > 0 ? problems.join('; ') : null,
 			problems,
-			details: { musescoreVersion: await museScoreVersion(), seconds, ...details, scoreFacts: fakten.details },
+			details: { musescoreVersion: await museScoreVersion(), seconds, ...details, scoreFacts: fakten.details, lyrics: text.details },
 		}) + '\n')
 		return
 	}

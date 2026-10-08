@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMs, formatTime, progressPercent } from './viewerFormat.js'
+import { formatMs, formatTime, progressPercent, seekValue } from './viewerFormat.js'
 
 describe('formatTime', () => {
 	it('schreibt Minuten und zweistellige Sekunden', () => {
@@ -39,5 +39,19 @@ describe('progressPercent', () => {
 
 	it('kappt bei 100, wenn die Anzeigezeit das Ende ueberholt', () => {
 		expect(progressPercent(10300, 10000)).toBe(100)
+	})
+})
+
+describe('seekValue', () => {
+	it('rundet auf das Raster ab', () => {
+		expect(seekValue(0)).toBe(0)
+		expect(seekValue(249)).toBe(0)
+		expect(seekValue(1013.7)).toBe(1000)
+		expect(seekValue(1250)).toBe(1250)
+	})
+	it('haelt unbrauchbare Werte auf 0', () => {
+		expect(seekValue(-5)).toBe(0)
+		expect(seekValue(NaN)).toBe(0)
+		expect(seekValue(undefined)).toBe(0)
 	})
 })

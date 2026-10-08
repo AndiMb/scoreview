@@ -63,6 +63,9 @@ export function useScoreSession() {
 	// Ob diese Nutzerin die Partitur neu konvertieren lassen darf - kommt aus
 	// dem Statusendpunkt, nicht aus einer eigenen Annahme ueber Freigaben.
 	const canReconvert = ref(false)
+	// Ob neben der Partitur angelegt werden darf - Tracks fuer alle Stimmen
+	// (H10) gibt es nur dann; ebenfalls aus dem Statusendpunkt.
+	const canWriteFolder = ref(false)
 	// score.mid dieser Partitur - die Intonation laedt es nach, wenn ohne Ton
 	// niemand sonst es geholt hat (useScoreFacts.ensureMidi).
 	const midiUrl = ref(null)
@@ -120,8 +123,9 @@ export function useScoreSession() {
 	 * @param {?string} body.soundFontUrl null = ohne Ton, nur der Cursor laeuft
 	 * @param {?{backend: ?string}} body.renderer der Konvertierungsweg (E3)
 	 * @param {boolean} body.canReconvert
+	 * @param {boolean} [body.canWriteFolder]
 	 */
-	async function load({ files, soundFontUrl, renderer, canReconvert: mayReconvert }) {
+	async function load({ files, soundFontUrl, renderer, canReconvert: mayReconvert, canWriteFolder: mayWrite }) {
 		const mine = generation
 		const stale = () => mine !== generation
 		try {
@@ -148,6 +152,7 @@ export function useScoreSession() {
 			rendererBackend.value = renderer?.backend ?? null
 			mscoreVersion.value = metaRes.data.mscoreVersion ?? null
 			canReconvert.value = mayReconvert === true
+			canWriteFolder.value = mayWrite === true
 			totalMeasures.value = metaRes.data.measures ?? measuresTimeline.value.events.length
 			hooks.loadAnnotations()
 			// Die Studierbuchstaben kommen auf dem Sidecar-Weg nur aus dem MIDI
@@ -301,6 +306,7 @@ export function useScoreSession() {
 		rendererBackend.value = null
 		mscoreVersion.value = null
 		canReconvert.value = false
+		canWriteFolder.value = false
 	}
 
 	return {
@@ -317,6 +323,7 @@ export function useScoreSession() {
 		rendererBackend,
 		mscoreVersion,
 		canReconvert,
+		canWriteFolder,
 		midiUrl,
 		cursorRect,
 		currentElid,

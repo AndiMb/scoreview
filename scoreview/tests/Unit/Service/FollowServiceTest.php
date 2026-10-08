@@ -12,6 +12,7 @@ use OCA\ScoreView\Service\LeaderService;
 use OCA\ScoreView\Service\PushNotifier;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\Exception as DbException;
+use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\ICache;
 use OCP\ICacheFactory;
@@ -139,7 +140,7 @@ class FollowServiceTest extends TestCase {
 		$factory = $this->createMock(ICacheFactory::class);
 		$factory->method('isAvailable')->willReturn($verteilt);
 		$factory->expects($this->once())->method($verteilt ? 'createDistributed' : 'createLocal')->willReturn($this->cache);
-		return new FollowService($this->mapper, $this->leaders, $users, $this->push, $time, $factory);
+		return new FollowService($this->mapper, $this->leaders, $users, $this->push, $time, $factory, $this->createMock(IRootFolder::class));
 	}
 
 	/** Fuehrt `dazwischen` genau einmal aus. */
@@ -193,8 +194,9 @@ class FollowServiceTest extends TestCase {
 		$this->assertSame((string)($v0 + 1), $a['version']);
 		// „Nochmal ab 12" ist ein neuer Befehl, auch bei gleichem Takt.
 		$this->assertSame(2, $b['state']['position']['seq']);
-		$this->assertSame(['seq' => 1, 'from' => 40, 'to' => 48], $c['state']['loop']);
-		$this->assertSame(['seq' => 2, 'from' => null, 'to' => null], $d['state']['loop']);
+		// Stelle und Loop tragen ihre Datei (H7: Umzug zum naechsten Stueck).
+		$this->assertSame(['seq' => 1, 'from' => 40, 'to' => 48, 'fileId' => 42], $c['state']['loop']);
+		$this->assertSame(['seq' => 2, 'from' => null, 'to' => null, 'fileId' => 42], $d['state']['loop']);
 		$this->assertSame(1, $d['state']['tone']['seq']);
 		$this->assertSame(1790000000250, $d['state']['tone']['issuedAt'], 'Serverzeit in ms');
 		$this->assertSame((string)($v0 + 4), $d['version']);
@@ -411,7 +413,7 @@ class FollowServiceTest extends TestCase {
 		$factory = $this->createMock(ICacheFactory::class);
 		$factory->method('createLocal')->willReturn($this->cache);
 		$users = $this->createMock(IUserManager::class);
-		$zweiter = new FollowService($mapper, $this->leaders, $users, $this->push, $time, $factory);
+		$zweiter = new FollowService($mapper, $this->leaders, $users, $this->push, $time, $factory, $this->createMock(IRootFolder::class));
 		$vorher = $this->zeile->getVersion();
 
 		$stand = $zweiter->change($this->node(), 'anna', ['position' => ['measure' => 9]]);

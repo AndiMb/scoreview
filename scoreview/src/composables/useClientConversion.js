@@ -109,6 +109,7 @@ function koerper(files, antwort) {
 		soundFontUrl: antwort.soundFontUrl,
 		renderer: { backend: 'client' },
 		canReconvert: antwort.canReconvert === true,
+		canWriteFolder: antwort.canWriteFolder === true,
 	}
 }
 

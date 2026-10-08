@@ -145,6 +145,32 @@
 					{{ t('Intonation feedback while singing') }}
 				</NcCheckboxRadioSwitch>
 
+				<!--
+					Ueben unterwegs (E13/E14): Uebe-Tracks landen als Dateien in
+					Files und zaehlen gegen die Quota der Ordnerbesitzerin -
+					deshalb hier nur die Groessengrenze je Datei. Offline merkt
+					jede Person nur im eigenen Browser vor; das braucht keine
+					Grenze auf dem Server.
+				-->
+				<h3 class="scoreview-subheading">
+					{{ t('Practising on the go') }}
+				</h3>
+				<NcCheckboxRadioSwitch v-model="form.featurePracticeExport" type="switch" class="scoreview-field">
+					{{ t('Practice tracks as MP3 files in Files') }}
+				</NcCheckboxRadioSwitch>
+				<NcTextField
+					v-if="form.featurePracticeExport"
+					:modelValue="String(form.practiceTrackMaxMb)"
+					type="number"
+					class="scoreview-field"
+					:label="t('Maximum size of one practice track (MB)')"
+					:placeholder="String(practiceLimit.default)"
+					:helperText="t('Allowed: {min}–{max}. Default: {default}.', { min: practiceLimit.min, max: practiceLimit.max, default: practiceLimit.default })"
+					@update:modelValue="setPracticeLimit" />
+				<NcCheckboxRadioSwitch v-model="form.featureOffline" type="switch" class="scoreview-field">
+					{{ t('Offline page (scores and setlists saved in the browser)') }}
+				</NcCheckboxRadioSwitch>
+
 				<div class="scoreview-actions">
 					<NcButton variant="primary" type="submit" :disabled="saving">
 						<template #icon>
@@ -272,6 +298,9 @@ export default {
 				featureFollowSession: initial.featureFollowSession ?? true,
 				featureRecording: initial.featureRecording ?? true,
 				featureIntonation: initial.featureIntonation ?? true,
+				featurePracticeExport: initial.featurePracticeExport ?? true,
+				featureOffline: initial.featureOffline ?? true,
+				practiceTrackMaxMb: initial.practiceTrackMaxMb?.value ?? 60,
 				followPollMs: initial.followPollMs ?? 800,
 				maxRecordingsPerScore: initial.recordingLimits?.maxRecordingsPerScore?.value ?? 5,
 				maxRecordingSeconds: initial.recordingLimits?.maxRecordingSeconds?.value ?? 600,
@@ -355,6 +384,11 @@ export default {
 				{ key: 'maxRecordingMbPerUser', label: t('Storage for recordings per person (MB)') },
 				{ key: 'maxRecordingMbTotal', label: t('Storage for recordings on this server (MB)') },
 			].map((field) => ({ ...field, limit: limits[field.key] ?? fallback }))
+		},
+
+		/** @return {{min: number, max: number, default: number}} */
+		practiceLimit() {
+			return this.initial.practiceTrackMaxMb ?? { min: 5, max: 500, default: 60 }
 		},
 
 		/** Konvertiert dieser Server gerade gar nicht selbst? */
@@ -531,6 +565,11 @@ export default {
 			this.form[key] = Number.isFinite(zahl) ? zahl : field.limit.default
 		},
 
+		setPracticeLimit(value) {
+			const zahl = Number.parseInt(value, 10)
+			this.form.practiceTrackMaxMb = Number.isFinite(zahl) ? zahl : this.practiceLimit.default
+		},
+
 		async save() {
 			this.saving = true
 			this.saveState = ''
@@ -541,9 +580,9 @@ export default {
 				if (typeof res.data?.followPollMs === 'number') {
 					this.form.followPollMs = res.data.followPollMs
 				}
-				for (const field of this.recordingLimitFields) {
-					if (typeof res.data?.[field.key] === 'number') {
-						this.form[field.key] = res.data[field.key]
+				for (const key of [...this.recordingLimitFields.map((f) => f.key), 'practiceTrackMaxMb']) {
+					if (typeof res.data?.[key] === 'number') {
+						this.form[key] = res.data[key]
 					}
 				}
 				if (this.form.sidecarSecret !== '') {

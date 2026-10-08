@@ -32,6 +32,10 @@ sidecar/testdata/*.mpos
 # D-Dur) und Studierbuchstaben A/B/C - Vorlage fuer
 # converter/keys-marks-test.mscz.
 !sidecar/testdata/keys-marks-test.mscz
+# Ebenfalls selbst erstellt (lyrics-test.gen.py): zwei Stimmen, drei
+# Strophen unter einer Wiederholung - fuer Liedtext und Schreibweisen der
+# Engine im Konverter-Selbsttest, Kopie unter converter/lyrics-test.mscz.
+!sidecar/testdata/lyrics-test.mscz
 
 # Signaturmaterial der App: der private Schluessel darf NIE ins Repo, und
 # signature.json entsteht je Release neu (siehe docs/development.md).

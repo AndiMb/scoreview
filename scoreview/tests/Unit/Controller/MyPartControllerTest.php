@@ -58,11 +58,12 @@ class MyPartControllerTest extends TestCase {
 	public function testLiestDieGespeicherteStimme(): void {
 		$this->angemeldet($this->createMock(Node::class));
 		$this->preferences->expects($this->once())->method('getMyPart')->with('anna', 42)->willReturn('3');
+		$this->preferences->method('getPractice')->willReturn(['transpose' => -2, 'coach' => false, 'othersLevel' => 40]);
 
 		$antwort = $this->controller()->show(42);
 
 		$this->assertSame(Http::STATUS_OK, $antwort->getStatus());
-		$this->assertSame(['partId' => '3'], $antwort->getData());
+		$this->assertSame(['partId' => '3', 'practice' => ['transpose' => -2, 'coach' => false, 'othersLevel' => 40]], $antwort->getData());
 	}
 
 	public function testSpeichertUndAntwortetMitDemGeltenden(): void {
@@ -112,5 +113,29 @@ class MyPartControllerTest extends TestCase {
 
 	public static function methoden(): array {
 		return [['show'], ['update']];
+	}
+
+	public function testSpeichertUebeEinstellungenOhneDieStimmeAnzufassen(): void {
+		$this->angemeldet($this->createMock(Node::class));
+		$this->preferences->expects($this->never())->method('setMyPart');
+		$this->preferences->expects($this->once())->method('setPractice')->with('anna', 42, -2, null, null)
+			->willReturn(['transpose' => -2, 'coach' => false, 'othersLevel' => 40]);
+
+		$antwort = $this->controller()->updatePractice(42, -2);
+
+		$this->assertSame(['practice' => ['transpose' => -2, 'coach' => false, 'othersLevel' => 40]], $antwort->getData());
+	}
+
+	public function testUebeEinstellungenFremderDateiSindEineVierNullVier(): void {
+		$this->angemeldet(null);
+		$this->preferences->expects($this->never())->method('setPractice');
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->updatePractice(42, 1)->getStatus());
+	}
+
+	public function testUebeEinstellungenSindAuchMitTokenOffen(): void {
+		$methode = new \ReflectionMethod(MyPartController::class, 'updatePractice');
+		$this->assertNotEmpty($methode->getAttributes(DirectTokenOrSession::class));
+		$this->assertNotEmpty($methode->getAttributes(PublicPage::class));
 	}
 }

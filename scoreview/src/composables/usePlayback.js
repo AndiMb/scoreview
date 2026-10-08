@@ -85,6 +85,13 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	// Faktor auf playbackRate (die Zeitachse bleibt davon unberührt), nur
 	// Anzeige und Eingabe sind BPM.
 	const tempo = ref(1)
+	// Transposition des Klangs in Halbtoenen (H6); gilt ueber Stueckwechsel
+	// hinweg, bis usePracticeSettings den Wert der neuen Partitur setzt.
+	const transpose = ref(0)
+	// Was zuletzt an den Player ging - der Uebe-Track (H1) rendert genau
+	// diese Mischung, gleich, ob sie aus dem Mixer, „Meine Stimme" oder dem
+	// Coach stammt. Eine Quelle statt einer zweiten Mischlogik.
+	const applied = { volumes: new Map(), pans: new Map(), programs: new Map() }
 	const baseTempoBpm = ref(defaultTempoBpm)
 	const tempoGuessed = ref(false)
 	const mixerChannels = shallowRef([])
@@ -132,6 +139,9 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	// nicht ueberschreiben.
 	let generation = 0
 	let soundFontUrlInFlight = null
+	// Das SoundFont der laufenden Wiedergabe - der Export (H1) rendert mit
+	// demselben, ohne es ein zweites Mal zu laden.
+	let lastSoundFontUrl = null
 	// metadata.tracks/parts - für den zweiten resolveMixerChannels()-Aufruf
 	// aufgehoben, sobald die echten MIDI-Kanäle bekannt sind.
 	let metaTracks = null
@@ -212,6 +222,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	 * @param {object} timeline Rückfall-Zeitachse für den stummen Modus
 	 */
 	async function useRealPlayer(midiUrl, soundFontUrl, timeline) {
+		lastSoundFontUrl = soundFontUrl
 		const own = generation
 		const current = () => own === generation
 		soundFontLoading.value = true
@@ -249,6 +260,11 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 				return
 			}
 			clock.value = player
+			// Ein neuer Player beginnt mit der Mischung der Partitur.
+			applied.volumes.clear()
+			applied.pans.clear()
+			applied.programs.clear()
+			player.setTranspose(transpose.value)
 			hasRealPlayer.value = true
 			durationMs.value = player.durationMs
 			presetList.value = player.getPresetList() ?? []
@@ -371,6 +387,32 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	}
 
 	/**
+	 * Eine eigene Kopie des SoundFonts der Wiedergabe, fuer den Render-Worker
+	 * des Uebe-Tracks. Aus dem Cache (lib/soundFontCache.js) - geladen wird
+	 * es dafuer nicht noch einmal.
+	 *
+	 * @return {Promise<?ArrayBuffer>} null ohne geladenes SoundFont
+	 */
+	async function getSoundFont() {
+		if (!lastSoundFontUrl || !soundFontCache.has(lastSoundFontUrl)) {
+			return null
+		}
+		const url = lastSoundFontUrl
+		return soundFontCache.get(url, (report) => {
+			const controller = new AbortController()
+			return { promise: fetchSoundFont(url, controller.signal, report), abort: () => controller.abort() }
+		})
+	}
+
+	/**
+	 * @param {number} semitones -12..12, siehe lib/player.js
+	 */
+	function setTranspose(semitones) {
+		transpose.value = Math.max(-12, Math.min(12, Math.trunc(Number(semitones) || 0)))
+		clock.value?.setTranspose?.(transpose.value)
+	}
+
+	/**
 	 * Pegel der Begleitung 0..1 (lib/player.js) - im stummen Modus gibt es
 	 * keine, dann wirkungslos.
 	 *
@@ -381,6 +423,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	}
 
 	function applyChannelVolumes(volumes) {
+		volumes.forEach((v, ch) => applied.volumes.set(ch, v))
 		clock.value?.applyChannelVolumes?.(volumes)
 	}
 
@@ -388,11 +431,31 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	 * @param {Map<number, number>} pans siehe lib/panLayout.js
 	 */
 	function applyChannelPans(pans) {
+		pans.forEach((v, ch) => applied.pans.set(ch, v))
 		clock.value?.applyChannelPans?.(pans)
 	}
 
 	function setProgram({ channel, program }) {
+		applied.programs.set(channel, program)
 		clock.value?.setProgram?.(channel, program)
+	}
+
+	/**
+	 * Die Mischung, die gerade klingt - je Kanal Lautstaerke (0..127, Vorgabe
+	 * 127 wie im Mixer), Panorama und Instrument (null = wie im MIDI).
+	 *
+	 * @return {{volumes: Map<number, number>, pans: Map<number, number>, programs: Map<number, ?number>}}
+	 */
+	function currentMix() {
+		const volumes = new Map()
+		const pans = new Map()
+		const programs = new Map()
+		for (const ch of mixerChannels.value) {
+			volumes.set(ch.channel, applied.volumes.get(ch.channel) ?? 127)
+			pans.set(ch.channel, applied.pans.get(ch.channel) ?? 0)
+			programs.set(ch.channel, applied.programs.get(ch.channel) ?? null)
+		}
+		return { volumes, pans, programs }
 	}
 
 	/**
@@ -595,6 +658,10 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		onTempoBpmInput,
 		setTempoBpm,
 		setTempoFactor,
+		transpose,
+		setTranspose,
+		getSoundFont,
+		currentMix,
 		setAccompanimentGain,
 		applyChannelVolumes,
 		applyChannelPans,

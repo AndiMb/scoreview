@@ -6,10 +6,12 @@ namespace OCA\ScoreView\Db;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Service\ViewerPreferences;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
 /**
- * Die „Meine Stimme"-Eintraege (`my_part.<fileId>`, Service\ViewerPreferences)
+ * Die Nutzerwerte je Partitur - „Meine Stimme" (`my_part.<fileId>`) und die
+ * Uebe-Einstellungen (`practice.<fileId>`), Service\ViewerPreferences -
  * aus Sicht des Aufraeum-Jobs: welche Dateien welche haben, und alle
  * Eintraege einer Datei auf einmal loeschen.
  *
@@ -30,6 +32,8 @@ use OCP\IDBConnection;
  */
 class MyPartPreferenceMapper {
 	private const TABLE = 'preferences';
+	/** Die Nutzerwerte je Partitur: Stimmwahl und Uebe-Einstellungen. */
+	private const PREFIXES = [ViewerPreferences::KEY_MY_PART_PREFIX, ViewerPreferences::KEY_PRACTICE_PREFIX];
 
 	public function __construct(
 		private IDBConnection $db,
@@ -40,23 +44,24 @@ class MyPartPreferenceMapper {
 	 * @return int[] alle fileIds, zu denen irgendwer eine Stimme gewaehlt hat
 	 */
 	public function findAllFileIds(): array {
-		$prefix = ViewerPreferences::KEY_MY_PART_PREFIX;
-		$qb = $this->db->getQueryBuilder();
-		$qb->selectDistinct('configkey')
-			->from(self::TABLE)
-			->where($qb->expr()->eq('appid', $qb->createNamedParameter(Application::APP_ID)))
-			->andWhere($qb->expr()->like('configkey', $qb->createNamedParameter($this->db->escapeLikeParameter($prefix) . '%')));
-		$result = $qb->executeQuery();
 		$ids = [];
-		while (($row = $result->fetch()) !== false) {
-			$suffix = substr((string)$row['configkey'], strlen($prefix));
-			// Nur reine Zahlen: Ein fremder Schluessel mit demselben Praefix
-			// darf nicht als fileId 0 in die Pruefung geraten.
-			if (ctype_digit($suffix)) {
-				$ids[] = (int)$suffix;
+		foreach (self::PREFIXES as $prefix) {
+			$qb = $this->db->getQueryBuilder();
+			$qb->selectDistinct('configkey')
+				->from(self::TABLE)
+				->where($qb->expr()->eq('appid', $qb->createNamedParameter(Application::APP_ID)))
+				->andWhere($qb->expr()->like('configkey', $qb->createNamedParameter($this->db->escapeLikeParameter($prefix) . '%')));
+			$result = $qb->executeQuery();
+			while (($row = $result->fetch()) !== false) {
+				$suffix = substr((string)$row['configkey'], strlen($prefix));
+				// Nur reine Zahlen: Ein fremder Schluessel mit demselben Praefix
+				// darf nicht als fileId 0 in die Pruefung geraten.
+				if (ctype_digit($suffix)) {
+					$ids[] = (int)$suffix;
+				}
 			}
+			$result->closeCursor();
 		}
-		$result->closeCursor();
 		return array_values(array_unique($ids));
 	}
 
@@ -65,9 +70,10 @@ class MyPartPreferenceMapper {
 	 */
 	public function deleteByFileId(int $fileId): int {
 		$qb = $this->db->getQueryBuilder();
+		$keys = array_map(static fn (string $prefix) => $prefix . $fileId, self::PREFIXES);
 		$qb->delete(self::TABLE)
 			->where($qb->expr()->eq('appid', $qb->createNamedParameter(Application::APP_ID)))
-			->andWhere($qb->expr()->eq('configkey', $qb->createNamedParameter(ViewerPreferences::KEY_MY_PART_PREFIX . $fileId)));
+			->andWhere($qb->expr()->in('configkey', $qb->createNamedParameter($keys, IQueryBuilder::PARAM_STR_ARRAY)));
 		return $qb->executeStatement();
 	}
 }

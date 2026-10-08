@@ -1,4 +1,4 @@
-import { planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
+import { isManualScrollEnd, planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
 
 // Pausendauer für das Nachführen nach manuellem Scrollen (siehe
 // scrollPlan.js) - lang genug, um in Ruhe zu lesen, kurz genug, um nicht wie
@@ -34,6 +34,10 @@ export function useAutoScroll({ scrollEl }) {
 	let lastManualScrollAt = null
 	// Ob gerade ein Finger auf dem Glas liegt bzw. die Maustaste unten ist.
 	let gestureActive = false
+	// Beginn des eigenen, noch laufenden Nachfuehrens (null = keins) und der
+	// letzten Geste - fuer die Deutung von `scrollend` (scrollPlan.js).
+	let ownScrollAt = null
+	let lastGestureAt = null
 
 	function setPageRef(el, index) {
 		if (el) {
@@ -65,6 +69,11 @@ export function useAutoScroll({ scrollEl }) {
 		}
 		if (left !== null) {
 			options.left = left
+		}
+		// Nur wenn sich wirklich etwas bewegt - sonst kaeme kein `scrollend`,
+		// und das naechste echte Traegheitsscrollen gaelte als eigenes.
+		if (distance >= 1) {
+			ownScrollAt = Date.now()
 		}
 		el.scrollTo(options)
 	}
@@ -152,6 +161,7 @@ export function useAutoScroll({ scrollEl }) {
 	function onUserGestureStart() {
 		gestureActive = true
 		lastManualScrollAt = Date.now()
+		lastGestureAt = lastManualScrollAt
 	}
 
 	/**
@@ -172,10 +182,24 @@ export function useAutoScroll({ scrollEl }) {
 		lastManualScrollAt = Date.now()
 	}
 
+	/**
+	 * `scrollend`: am Ende einer Geste (Traegheit) ein Eingriff, am Ende des
+	 * eigenen Nachfuehrens nicht (scrollPlan.js#isManualScrollEnd).
+	 */
+	function onScrollEnd() {
+		const manual = isManualScrollEnd({ ownScrollAt, lastGestureAt })
+		ownScrollAt = null
+		if (manual) {
+			noteManualScroll()
+		}
+	}
+
 	function reset() {
 		pageRefs.length = 0
 		lastManualScrollAt = null
 		gestureActive = false
+		ownScrollAt = null
+		lastGestureAt = null
 	}
 
 	/**
@@ -188,5 +212,5 @@ export function useAutoScroll({ scrollEl }) {
 		return pageRefs
 	}
 
-	return { setPageRef, pages, update, onUserGestureStart, onUserGestureEnd, noteManualScroll, reset }
+	return { setPageRef, pages, update, onUserGestureStart, onUserGestureEnd, noteManualScroll, onScrollEnd, reset }
 }

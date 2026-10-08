@@ -276,3 +276,64 @@ export function checkScoreFacts(meta) {
 		},
 	}
 }
+
+/**
+ * Liedtext und Schreibweisen der Engine (E12/E15) an lyrics-test.mscz: zwei
+ * Notenzeilen (Sopran, Bass), Takt 1-2 dreimal wiederholt mit drei
+ * Strophen, Schluss „A-men". Die Liedtext-Ansicht und die Tonnamen hängen
+ * daran, dass diese Listen auf genau die Kennungen von Timing und SVG
+ * zeigen - sonst leuchtet die falsche Silbe, und der Name steht am falschen
+ * Notenkopf.
+ *
+ * @param {{meta: object, timing: object, svgs: string[]}} converted
+ * @return {{problems: string[], details: object}}
+ */
+export function checkLyrics({ meta, timing, svgs }) {
+	const problems = []
+	const silben = Array.isArray(meta?.lyricSyllables) ? meta.lyricSyllables : null
+	const spellings = Array.isArray(meta?.noteSpellings) ? meta.noteSpellings : null
+	const elemente = new Set(Object.keys(timing?.elements ?? {}).map(Number))
+
+	if (silben === null) {
+		problems.push('meta.json hat keine lyricSyllables - die Liedtext-Ansicht fehlt')
+	} else {
+		if (silben.length !== 56) {
+			problems.push(`erwartet 56 Silben, gefunden ${silben.length}`)
+		}
+		const strophen = [...new Set(silben.map((s) => s.verse))].sort().join(',')
+		if (strophen !== '0,1,2') {
+			problems.push(`Strophen sind nicht 0,1,2: ${strophen}`)
+		}
+		const erste = silben.filter((s) => s.staff === 0 && s.verse === 0).slice(0, 4).map((s) => `${s.text}/${s.syllabic}`).join(' ')
+		if (erste !== 'Hal/begin le/middle lu/middle ja/end') {
+			problems.push(`Sopran, Strophe 1 beginnt nicht mit Hal-le-lu-ja: ${erste}`)
+		}
+		const fremd = silben.filter((s) => !elemente.has(s.elid)).length
+		if (fremd > 0) {
+			problems.push(`${fremd} Silben zeigen auf eine elid, die timing.json nicht kennt`)
+		}
+	}
+
+	if (spellings === null) {
+		problems.push('meta.json hat keine noteSpellings - Tonnamen und „Note antippen" fehlen')
+	} else {
+		// Notenkoepfe je (elid, Zeile, Stimme) im SVG gegen die Liste
+		const imSvg = new Map()
+		for (const svg of svgs ?? []) {
+			for (const m of svg.matchAll(/class="Note seg-(\d+) st-(\d+) vc-(\d+)"/g)) {
+				const key = `${m[1]}:${m[2]}:${m[3]}`
+				imSvg.set(key, (imSvg.get(key) ?? 0) + 1)
+			}
+		}
+		const inListe = new Map(spellings.map((s) => [`${s.elid}:${s.staff}:${s.voice}`, s.notes.length]))
+		const abweichend = [...new Set([...imSvg.keys(), ...inListe.keys()])].filter((k) => imSvg.get(k) !== inListe.get(k))
+		if (abweichend.length > 0) {
+			problems.push(`Notenköpfe weichen vom SVG ab bei ${abweichend.slice(0, 5).join(', ')}`)
+		}
+	}
+
+	return {
+		problems,
+		details: { lyricSyllables: silben?.length ?? 0, noteSpellings: spellings?.length ?? 0 },
+	}
+}

@@ -7,10 +7,15 @@ function ctx(overrides = {}) {
 		can: () => true,
 		hasRealPlayer: true,
 		canFocusMyPart: true,
+		canCoach: true,
 		recordingEnabled: true,
 		intonationEnabled: false,
 		setlistCanCreate: true,
 		isLeader: false,
+		exportEnabled: true,
+		offlineEnabled: true,
+		offline: false,
+		standalone: false,
 		...overrides,
 	}
 }
@@ -21,7 +26,10 @@ const IDLE = {
 	trainerActive: false,
 	showMixer: false,
 	showPractice: false,
+	coachActive: false,
+	transposed: false,
 	focusMyPart: false,
+	showNoteNames: false,
 	showNoteText: false,
 	showAnnotations: false,
 	showRehearsal: false,
@@ -31,10 +39,29 @@ const IDLE = {
 describe('barGroups', () => {
 	it('ordnet alle Werkzeuge ihrer Gruppe zu', () => {
 		expect(barGroups(ctx())).toEqual([
-			{ id: 'practice', items: ['loop', 'tempo', 'metronome', 'toneMode', 'mixer', 'practice'] },
-			{ id: 'view', items: ['zoom', 'appearance', 'myPart', 'noteText', 'annotations'] },
+			{ id: 'practice', items: ['loop', 'tempo', 'metronome', 'toneMode', 'mixer', 'coach', 'transpose', 'practice', 'export'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'noteNames', 'noteText', 'annotations', 'pin'] },
 			{ id: 'rehearsal', items: ['rehearsal', 'newSetlist'] },
 		])
+	})
+
+	it('nimmt offline alles weg, was den Server braucht (E14)', () => {
+		const can = (action) => allowed(action, { offline: true })
+		expect(barGroups(ctx({ can, offline: true }))).toEqual([
+			{ id: 'practice', items: ['loop', 'tempo', 'metronome', 'toneMode', 'mixer', 'coach', 'transpose'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'noteNames', 'noteText'] },
+		])
+	})
+
+	it('bietet Vormerken in den Apps nicht an', () => {
+		const view = barGroups(ctx({ standalone: true }))[1]
+		expect(view.items).not.toContain('pin')
+	})
+
+	it('zeigt Export und Vormerken nur, wenn die Administration sie erlaubt', () => {
+		const groups = barGroups(ctx({ exportEnabled: false, offlineEnabled: false }))
+		expect(groups[0].items).not.toContain('export')
+		expect(groups[1].items).not.toContain('pin')
 	})
 
 	it('stellt die Probe fuer Leitungen nach vorn', () => {
@@ -61,7 +88,7 @@ describe('barGroups', () => {
 		}))
 		expect(groups).toEqual([
 			{ id: 'practice', items: ['loop', 'tempo', 'metronome'] },
-			{ id: 'view', items: ['zoom', 'appearance', 'noteText', 'annotations'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'noteNames', 'noteText', 'annotations', 'pin'] },
 			{ id: 'rehearsal', items: ['rehearsal'] },
 		])
 	})
@@ -83,6 +110,9 @@ describe('groupActive', () => {
 	it.each([
 		['metronomeEnabled', 'practice'],
 		['loopActive', 'practice'],
+		['coachActive', 'practice'],
+		['transposed', 'practice'],
+		['showNoteNames', 'view'],
 		['trainerActive', 'practice'],
 		['showMixer', 'practice'],
 		['showPractice', 'practice'],
@@ -101,5 +131,13 @@ describe('groupActive', () => {
 	it('zaehlt nur den Editor fuer eine NEUE Setliste zur Probe', () => {
 		expect(groupActive('rehearsal', { ...IDLE, setlistEditorMode: 'new' })).toBe(true)
 		expect(groupActive('rehearsal', { ...IDLE, setlistEditorMode: 'edit' })).toBe(false)
+	})
+})
+
+describe('Coach', () => {
+	it('braucht nur eine eigene Stimme, keine Zuordnung der Notenzeilen', () => {
+		const practice = barGroups(ctx({ canFocusMyPart: false, canCoach: true }))[0]
+		expect(practice.items).toContain('coach')
+		expect(barGroups(ctx({ canCoach: false }))[0].items).not.toContain('coach')
 	})
 })

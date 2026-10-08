@@ -90,7 +90,7 @@ export function anchorFromTap(measureElements, page, x, y) {
  * @return {?object}
  */
 function systemOf(systems, rect) {
-	// Dieselbe Ueberlappungsregel wie beim Cursor (ScorePage cursorBands).
+	// Dieselbe Ueberlappungsregel wie beim Cursor (ScorePage cursorRects).
 	return (systems ?? []).find((s) => rect.y < s.bottom + 1 && rect.y + rect.h > s.top - 1) ?? null
 }
 

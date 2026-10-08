@@ -139,6 +139,9 @@ class SettingsController extends Controller {
 		?int $maxRecordingSeconds = null,
 		?int $maxRecordingMbPerUser = null,
 		?int $maxRecordingMbTotal = null,
+		?bool $featurePracticeExport = null,
+		?bool $featureOffline = null,
+		?int $practiceTrackMaxMb = null,
 	): JSONResponse {
 		// Leer = automatisch suchen (siehe Service\LocalConverter), nicht
 		// "kein node".
@@ -220,6 +223,8 @@ class SettingsController extends Controller {
 			FeatureConfig::RECORDING => $featureRecording,
 			FeatureConfig::INTONATION => $featureIntonation,
 			FeatureConfig::SCORE_FOLLOWER => $featureScoreFollower,
+			FeatureConfig::PRACTICE_EXPORT => $featurePracticeExport,
+			FeatureConfig::OFFLINE => $featureOffline,
 		] as $switch => $enabled) {
 			if ($enabled !== null) {
 				$this->features->setEnabled($switch, $enabled);
@@ -242,6 +247,8 @@ class SettingsController extends Controller {
 			'maxRecordingSeconds' => [FeatureConfig::MAX_RECORDING_SECONDS, $maxRecordingSeconds, 1],
 			'maxRecordingMbPerUser' => [FeatureConfig::MAX_RECORDING_BYTES_PER_USER, $maxRecordingMbPerUser, self::MB],
 			'maxRecordingMbTotal' => [FeatureConfig::MAX_RECORDING_BYTES_TOTAL, $maxRecordingMbTotal, self::MB],
+			// Schon in MB gespeichert (E13) - die Einheit des Formulars.
+			'practiceTrackMaxMb' => [FeatureConfig::PRACTICE_TRACK_MAX_MB, $practiceTrackMaxMb, 1],
 		] as $field => [$key, $value, $unit]) {
 			$stored = $value === null
 				? $this->features->number($key)

@@ -124,3 +124,15 @@ describe('sendDelay', () => {
 		expect(recordSend([0, 100, 900], 1050, budget)).toEqual([100, 900, 1050])
 	})
 })
+
+describe('leaderQueue - Transposition (H6)', () => {
+	it('nimmt nur die neueste Transposition und verschmilzt mit dem Rest', () => {
+		let q = enqueue(emptyQueue(), { type: 'position', position: { measure: 3 } })
+		q = takeNext(q).queue
+		q = enqueue(q, { type: 'transpose', semitones: -1 })
+		q = enqueue(q, { type: 'tone' })
+		q = enqueue(q, { type: 'transpose', semitones: -2 })
+		expect(q.pending).toHaveLength(1)
+		expect(q.pending[0].data).toEqual({ transpose: -2, tone: true })
+	})
+})

@@ -16,6 +16,11 @@ import { isDarkBackground, normalizeNoteTheme, noteThemeCssVars, resolveNoteThem
  */
 const SAVE_DELAY_MS = 600
 
+/** Wie Service\ViewerPreferences::NOTE_NAME_SYSTEMS - der erste ist die Vorgabe. */
+export const NOTE_NAME_SYSTEMS = Object.freeze(['off', 'de', 'en', 'solfa-fixed', 'solfa-movable'])
+/** Wie Service\ViewerPreferences::LAYOUTS. */
+export const LAYOUTS = Object.freeze(['pages', 'band', 'lyrics'])
+
 /**
  * Die Anzeigeeinstellungen der Nutzerin: Farbe und Form der Hervorhebung,
  * der Dunkelmodus der Noten und „Meine Stimme im Stereobild".
@@ -40,6 +45,12 @@ export function useViewerPreferences() {
 	const highlightMode = ref(normalizeHighlightMode(anfang.highlightMode))
 	const stereoMyPart = ref(anfang.stereoMyPart === true)
 	const noteTheme = ref(normalizeNoteTheme(anfang.noteTheme))
+	// Tonnamen (H3) und Darstellung (H2/H8). Unbekannte Werte - etwa aus
+	// einem neueren Server - fallen auf aus bzw. Seiten zurueck.
+	const noteNames = ref(oneOf(anfang.noteNames, NOTE_NAME_SYSTEMS))
+	const noteNamesMine = ref(anfang.noteNamesMine !== false)
+	const layout = ref(oneOf(anfang.layout, LAYOUTS))
+	const bandOffered = ref(anfang.bandOffered === true)
 
 	// Ob das Nextcloud-Theme gerade dunkel ist - gelesen am Grund selbst
 	// (lib/noteTheme.js). Nachgelesen, wenn das Betriebssystem umschaltet:
@@ -72,7 +83,7 @@ export function useViewerPreferences() {
 	// (Controller\PreferenceController, E8). Wer am Telefon den
 	// Dunkelmodus waehlt, soll ihn beim naechsten Oeffnen wiederfinden.
 	let saveTimer = null
-	watch([highlightColor, highlightMode, stereoMyPart, noteTheme], () => {
+	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered], () => {
 		if (saveTimer) {
 			clearTimeout(saveTimer)
 		}
@@ -87,6 +98,10 @@ export function useViewerPreferences() {
 				highlightMode: highlightMode.value,
 				stereoMyPart: stereoMyPart.value,
 				noteTheme: noteTheme.value,
+				noteNames: noteNames.value,
+				noteNamesMine: noteNamesMine.value,
+				layout: layout.value,
+				bandOffered: bandOffered.value,
 			})
 		} catch (err) {
 			// Bewusst nur ins Log: Die Einstellung wirkt im geoeffneten Viewer
@@ -99,7 +114,16 @@ export function useViewerPreferences() {
 		}
 	}
 
-	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle }
+	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle, noteNames, noteNamesMine, layout, bandOffered }
+}
+
+/**
+ * @param {unknown} value
+ * @param {readonly string[]} allowed
+ * @return {string}
+ */
+function oneOf(value, allowed) {
+	return allowed.includes(value) ? value : allowed[0]
 }
 
 /**

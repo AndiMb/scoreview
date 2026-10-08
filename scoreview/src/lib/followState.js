@@ -24,13 +24,15 @@ export const TONE_MAX_AGE_MS = 2000
 
 /**
  * Eigenes Navigieren, das das Folgen loest: Suchlauf, Takteingabe,
- * Studierbuchstabe, Klick auf eine Note, Sprung zu einer Notiz, Loop.
+ * Studierbuchstabe, Klick auf eine Note, Sprung zu einer Notiz, Loop -
+ * und eine eigene Transposition: Sonst ueberschriebe die naechste der
+ * Leitung die eigene Wahl ungefragt.
  *
  * Blaettern und Zoom stehen bewusst NICHT darin: Wer am Notenstaender
  * umblaettert oder groesser zieht, will weiter der Leitung folgen - loeste
  * das das Folgen, waere es am Notenstaender nutzlos.
  */
-export const UNFOLLOWING = Object.freeze(['seek', 'measure', 'mark', 'noteClick', 'annotationJump', 'loop'])
+export const UNFOLLOWING = Object.freeze(['seek', 'measure', 'mark', 'noteClick', 'annotationJump', 'loop', 'transpose'])
 
 /** Was ausdruecklich NICHT loest - nur, damit die Tests es benennen koennen. */
 export const KEEPS_FOLLOWING = Object.freeze(['page', 'zoom'])
@@ -48,27 +50,33 @@ export function initialFollowState() {
 		// Voreingestellt wird gefolgt - auch schon vor der Sitzung, damit
 		// der erste Stand gleich wirkt.
 		following: true,
-		seen: { position: 0, loop: 0, tone: 0 },
-		latest: { position: null, loop: null },
+		seen: { position: 0, loop: 0, tone: 0, transpose: 0, moved: 0 },
+		latest: { position: null, loop: null, transpose: null, moved: null },
+		// Ob dieses Geraet gerade die Transposition der Leitung traegt - dann
+		// gehoert beim Loesen oder Ende die eigene zurueck.
+		sessionTranspose: false,
 	}
 }
 
 /**
  * @param {object} local Zustand vor diesem Stand (initialFollowState)
  * @param {object} event
- *   - `{type: 'state', body}` - Antwort des Servers (`version`, `active`,
- *     `leader`, `state`, `serverNow`)
+ *   - `{type: 'state', body, fileId?}` - Antwort des Servers (`version`,
+ *     `active`, `leader`, `state`, `serverNow`); `fileId` ist die Partitur,
+ *     die dieses Geraet gerade zeigt
  *   - `{type: 'navigate', kind}` - eigene Bedienung, siehe UNFOLLOWING
  *   - `{type: 'resume'}` - „Zurueck zur Leitung"
  * @return {{local: object, actions: Array<object>}}
  *   actions: `{type: 'seek', measure, mark}` | `{type: 'setLoop', from, to}`
  *   | `{type: 'clearLoop'}` | `{type: 'tone'}` | `{type: 'ended'}`
- *   | `{type: 'leaderChanged', name}`
+ *   | `{type: 'leaderChanged', name}` | `{type: 'setTranspose', semitones}`
+ *   | `{type: 'restoreTranspose'}` | `{type: 'openPiece', fileId, setlistId}`
+ *   | `{type: 'leaderMoved', fileId, setlistId}`
  */
 export function reduce(local, event) {
 	switch (event?.type) {
 		case 'state':
-			return applyState(local, event.body)
+			return applyState(local, event.body, event.fileId ?? null)
 		case 'navigate':
 			return navigate(local, event.kind)
 		case 'resume':
@@ -78,7 +86,7 @@ export function reduce(local, event) {
 	}
 }
 
-function applyState(local, body) {
+function applyState(local, body, fileId) {
 	if (!body || typeof body !== 'object') {
 		return { local, actions: [] }
 	}
@@ -86,6 +94,9 @@ function applyState(local, body) {
 		// Beendet oder abgelaufen. Loop und Stelle bleiben, wie sie sind:
 		// Mitten in der Probe soll das Ende der Sitzung nichts verstellen.
 		const actions = local.active ? [{ type: 'ended' }] : []
+		if (local.sessionTranspose) {
+			actions.push({ type: 'restoreTranspose' })
+		}
 		return { local: { ...initialFollowState(), version: String(body.version ?? '0') }, actions }
 	}
 
@@ -111,11 +122,17 @@ function applyState(local, body) {
 	const seen = { ...base.seen }
 	const latest = { ...base.latest }
 
+	// Stelle und Loop gelten der Partitur, auf der die Sitzung sie gesetzt
+	// hat. Waehrend eines Umzugs (V6) kann ein Stand der alten Datei noch
+	// unterwegs sein - auf der neuen waere Takt 12 ein anderer Takt 12.
+	const here = (part) => fileId === null || part.fileId === undefined || part.fileId === null
+		|| String(part.fileId) === String(fileId)
+
 	const position = state.position
 	if (position && seq(position) > 0) {
-		latest.position = { seq: seq(position), measure: position.measure, mark: position.mark ?? null }
+		latest.position = { seq: seq(position), measure: position.measure, mark: position.mark ?? null, fileId: position.fileId ?? null }
 		if (seq(position) > seen.position) {
-			if (applies && Number(position.measure) > 0) {
+			if (applies && here(position) && Number(position.measure) > 0) {
 				actions.push({ type: 'seek', measure: Number(position.measure), mark: position.mark ?? null })
 			}
 			seen.position = seq(position)
@@ -124,8 +141,8 @@ function applyState(local, body) {
 
 	const loop = state.loop
 	if (loop && seq(loop) > 0) {
-		latest.loop = { seq: seq(loop), from: loop.from ?? null, to: loop.to ?? null }
-		if (seq(loop) > seen.loop) {
+		latest.loop = { seq: seq(loop), from: loop.from ?? null, to: loop.to ?? null, fileId: loop.fileId ?? null }
+		if (seq(loop) > seen.loop && here(loop)) {
 			const set = loop.from !== null && loop.from !== undefined
 			// Beim ersten Stand einer Sitzung wird ein aufgehobener Loop nicht
 			// „aufgehoben": Dieses Geraet hatte den Loop der Leitung nie, ein
@@ -150,6 +167,39 @@ function applyState(local, body) {
 		seen.tone = seq(tone)
 	}
 
+	let sessionTranspose = newSession ? false : base.sessionTranspose
+	const transpose = state.transpose
+	if (transpose && seq(transpose) > 0) {
+		latest.transpose = { seq: seq(transpose), semitones: Number(transpose.semitones) || 0 }
+		if (seq(transpose) > seen.transpose) {
+			if (applies) {
+				actions.push({ type: 'setTranspose', semitones: latest.transpose.semitones })
+				sessionTranspose = true
+			}
+			seen.transpose = seq(transpose)
+		}
+	}
+
+	const moved = state.moved
+	if (!moved || seq(moved) === 0) {
+		// Die Sitzung, in der dieses Geraet jetzt steht, ist nicht (mehr)
+		// umgezogen - etwa die neue auf B. Ein gemerkter Umzug verfiele sonst
+		// nicht, und „Zurueck zur Leitung" oeffnete nur B erneut.
+		latest.moved = null
+	} else if (moved.fileId !== null && moved.fileId !== undefined) {
+		latest.moved = { seq: seq(moved), fileId: Number(moved.fileId), setlistId: moved.setlistId ?? null }
+		if (seq(moved) > seen.moved) {
+			// Die Leitung selbst ist schon dort; wer folgt, kommt mit;
+			// wer sich geloest hat, bekommt nur den Hinweis (D5).
+			if (applies) {
+				actions.push({ type: 'openPiece', fileId: latest.moved.fileId, setlistId: latest.moved.setlistId })
+			} else if (!mine) {
+				actions.push({ type: 'leaderMoved', fileId: latest.moved.fileId, setlistId: latest.moved.setlistId })
+			}
+			seen.moved = seq(moved)
+		}
+	}
+
 	return {
 		local: {
 			...base,
@@ -161,6 +211,7 @@ function applyState(local, body) {
 			following,
 			seen,
 			latest,
+			sessionTranspose,
 		},
 		actions,
 	}
@@ -170,7 +221,8 @@ function navigate(local, kind) {
 	if (!local.active || local.mine || !local.following || !UNFOLLOWING.includes(kind)) {
 		return { local, actions: [] }
 	}
-	return { local: { ...local, following: false }, actions: [] }
+	const actions = local.sessionTranspose ? [{ type: 'restoreTranspose' }] : []
+	return { local: { ...local, following: false, sessionTranspose: false }, actions }
 }
 
 /**
@@ -185,7 +237,16 @@ function resume(local) {
 		return { local, actions: [] }
 	}
 	const actions = []
-	const { position, loop } = local.latest
+	const { position, loop, transpose, moved } = local.latest
+	// Ist die Leitung inzwischen bei einem anderen Stueck, geht es zuerst
+	// dorthin; Stelle und Loop der neuen Datei kommen mit ihrer Sitzung.
+	if (moved) {
+		actions.push({ type: 'openPiece', fileId: moved.fileId, setlistId: moved.setlistId })
+		return { local: { ...local, following: true }, actions }
+	}
+	if (transpose) {
+		actions.push({ type: 'setTranspose', semitones: transpose.semitones })
+	}
 	if (position && Number(position.measure) > 0) {
 		actions.push({ type: 'seek', measure: Number(position.measure), mark: position.mark ?? null })
 	}
@@ -194,7 +255,7 @@ function resume(local) {
 			? { type: 'setLoop', from: Number(loop.from), to: Number(loop.to) }
 			: { type: 'clearLoop' })
 	}
-	return { local: { ...local, following: true }, actions }
+	return { local: { ...local, following: true, sessionTranspose: Boolean(transpose) }, actions }
 }
 
 function seq(part) {

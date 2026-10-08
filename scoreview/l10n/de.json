@@ -37,6 +37,16 @@
     "You already have the maximum number of notes for this score. Delete some notes first." : "Du hast bereits die höchstmögliche Zahl an Notizen zu dieser Partitur. Lösche zuerst einige Notizen.",
     "Only administrators can change the Node.js path, the conversion service and the SoundFont source." : "Nur Administratoren können den Node.js-Pfad, den Konvertierungsdienst und die SoundFont-Quelle ändern.",
     "The Node.js path must be empty or an absolute path to a program named node or nodejs." : "Der Node.js-Pfad muss leer sein oder ein absoluter Pfad zu einem Programm namens node oder nodejs.",
-    "Addresses for the conversion service and the SoundFont source must start with http:// or https://." : "Adressen für den Konvertierungsdienst und die SoundFont-Quelle müssen mit http:// oder https:// beginnen."
+    "Addresses for the conversion service and the SoundFont source must start with http:// or https://." : "Adressen für den Konvertierungsdienst und die SoundFont-Quelle müssen mit http:// oder https:// beginnen.",
+    "Saving here is not possible from the mobile app." : "Von der Mobil-App aus lässt sich hier nicht speichern.",
+    "This is not an MP3 file." : "Das ist keine MP3-Datei.",
+    "A file with this name already exists." : "Eine Datei mit diesem Namen gibt es schon.",
+    "You cannot save files in this folder." : "In diesem Ordner darfst du keine Dateien speichern.",
+    "Not enough storage space." : "Nicht genug Speicherplatz.",
+    "Invalid file name or folder." : "Ungültiger Dateiname oder Ordner.",
+    "The practice track is larger than allowed ({mb} MB)." : "Der Übe-Track ist größer als erlaubt ({mb} MB).",
+    "Practice tracks" : "Übe-Tracks",
+    "The offline page is turned off on this server." : "Die Offline-Seite ist auf diesem Server ausgeschaltet.",
+    "ScoreView offline" : "ScoreView offline"
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }

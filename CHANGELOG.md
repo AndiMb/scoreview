@@ -4,9 +4,104 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [1.12.0] – unveröffentlicht
+
+### Neu
+
+- **Übe-Tracks als MP3 in Files.** „Als Audiodatei speichern“ in der Gruppe
+  Üben rendert genau das, was man gerade hört – Mixer, Coach, Tempo,
+  Transposition, auf Wunsch mit Metronom oder nur den Loop – im Browser als
+  MP3 und legt es neben die Partitur, in einen Unterordner „Übe-Tracks“ oder
+  einen selbst gewählten Ordner. Die Datei trägt Titel, Stimme und Mischung im
+  Namen und als ID3-Angaben. Unterwegs spielt sie jeder Player, auch die
+  Nextcloud-App offline und mit Steuerung auf dem Sperrbildschirm. Gemessen:
+  ein Chorsatz von 76 s in 7 s am Desktop, mit demselben Kern 191 s Musik am
+  Galaxy S23 in 16 s. Die Dateien
+  zählen gegen das Kontingent der Ordnerbesitzerin
+  ([E13](docs/architecture.md#e13-übe-tracks-sind-dateien-in-files)).
+- **Tracks für alle Stimmen.** Wer neben der Partitur Dateien anlegen darf,
+  erzeugt mit einem Klick je Stimme einen Coach-Track im Ordner „Übe-Tracks“;
+  vorhandene werden ersetzt.
+- **Coach.** Die eigene Stimme klingt als Klavier laut und rechts, die übrigen
+  leise links. Ein Regler „Andere Stimmen“ setzt deren Pegel, auch ohne Coach;
+  er ersetzt den bisher festen Wert von „Meine Stimme“.
+- **Transponieren.** In Halbtönen (−12 … +12), nur der Klang – das Notenbild
+  bleibt. Anfangston, Intonation und Übe-Track hören mit. Der Wert gilt je
+  Partitur und wird wie Coach und Pegel auf dem Server gespeichert. Ist er
+  gesetzt, trägt die Gruppe Üben einen Punkt.
+- **Systemband für das Handy.** Die Systeme stehen nebeneinander, jedes so hoch
+  wie der Bildschirm, waagerecht zu scrollen; `Bild↓` und ein Pedal gehen ein
+  System weiter. Ausgeschnitten aus MuseScores eigenem
+  Seitenbild, Cursor, Notizen und Stempel bleiben. Wer auf schmalem Bildschirm
+  öffnet, bekommt es einmal angeboten.
+- **Liedtext-Ansicht.** Nur der Text der eigenen Stimme, alle Strophen
+  untereinander; die gesungene Silbe leuchtet, bei Wiederholungen in der
+  richtigen Strophe. Ein Tipp auf ein Wort springt dorthin, Ziehen setzt einen
+  Loop.
+- **Tonnamen und Note antippen.** Neben jedem Notenkopf auf Wunsch der Name:
+  deutsch (mit H und B), englisch, feste oder relative Solmisation, für die
+  eigene Stimme oder alle. Er nennt die geschriebene Note, Fis bleibt Fis. Ein
+  Tipp auf eine Note spielt bei stehender Wiedergabe ihren Ton.
+- **„Folgt mir“ über das Ende eines Stücks hinaus.** Schaltet die Leitung in
+  der Setliste weiter, kommen alle Folgenden mit – auch wer die Setliste nicht
+  offen hat, in der App ebenso. Wer sich gelöst hat, bekommt einen Hinweis mit
+  „Dorthin wechseln“. Auf dem neuen Stück führt die Leitung weiter, auch wenn
+  sie dort keine Leitungsrolle hat; Stimmnotizen und Stempel bleiben dort den
+  eigenen Leitungen vorbehalten
+  ([E10](docs/architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+- **Eine Transposition der Leitung gilt für alle Folgenden**, ohne deren
+  eigene Einstellung zu überschreiben. Wer selbst transponiert, folgt nicht
+  mehr.
+- **Noten und Ton ohne Netz.** „Offline vormerken“ in der Gruppe Ansicht legt
+  ein Stück oder eine ganze Setliste samt Klang im Browser ab. Ohne Netz öffnet
+  man sie über die Offline-Seite `/apps/scoreview/offline` – wiedergeben,
+  blättern, Mixer, Loop, Tempo, Transposition gehen; was einen Server braucht
+  (Notizen setzen, Leitung, Aufnahme, Übe-Tracks), fehlt dort. Die Seite muss
+  einmal mit Netz geöffnet werden und lässt sich zum Startbildschirm
+  hinzufügen; beim Öffnen mit Netz bringt sie Vorgemerktes auf den neuen
+  Stand. Nur im Browser, nicht in den mobilen Apps
+  ([E14](docs/architecture.md#e14-eine-offline-seite-mit-eigenem-service-worker)).
+- **Titel und Medientasten.** Während der Wiedergabe kennt das System Titel
+  und Stimme; am Desktop wirken die Medientasten. Am Handy läuft der Ton bei
+  gesperrtem Bildschirm weiter, eine Steuerung auf dem Sperrbildschirm gibt es
+  für Web Audio aber nicht – beim ersten Sperren weist der Viewer einmal auf
+  den Übe-Track hin.
+- **Verwaltung:** Unter „Üben unterwegs“ lassen sich Übe-Tracks
+  (`feature_practice_export`) und die Offline-Seite (`feature_offline`)
+  einzeln abschalten, beide sind voreingestellt an. Die Größe eines Übe-Tracks
+  begrenzt `practice_track_max_mb` (Vorgabe 60 MB).
+
+### Geändert
+
+- **Neue Engine `v4.7.5-engine.4`** mit Liedtextsilben und der Schreibweise
+  je Notenkopf in `meta.json`; das Cache-Format steigt auf 4. Vorhandene
+  Partituren werden beim nächsten Öffnen einmal neu konvertiert. Liedtext-Ansicht
+  und Tonnamen gibt es nur mit diesen Daten, also nicht auf dem Sidecar-Weg;
+  die Auswahl sagt dann warum
+  ([E15](docs/architecture.md#e15-fähigkeiten-statt-weg)).
+- **Neue Routen:** `PUT /api/scores/{fileId}/practice`,
+  `POST /api/scores/{fileId}/practice-tracks`, `POST …/follow/move`,
+  `GET …/follow/companion` und die Offline-Seite unter `/offline`. Nach dem
+  Update `occ upgrade` laufen lassen, sonst antworten sie bis zu einer Stunde
+  mit 404.
 
 ### Sicherheit
+
+- **Vorgemerktes gehört einem Konto.** Die Offline-Seite zeigt nur Einträge der
+  angemeldeten Person und löscht fremde. Weil Nextcloud den Browserspeicher
+  beim Abmelden in Chrome nicht räumt, löscht die App alles Vorgemerkte, sobald
+  die Offline-Seite mit Netz nachweislich zum Login umgeleitet wird; ein
+  Captive Portal räumt nichts. Bis dahin bleibt es auf dem Gerät ohne Netz
+  lesbar; auf geteilten Geräten nicht vormerken
+  ([S10](docs/architecture.md#s10-vorgemerktes-gehört-einem-konto-und-verschwindet-mit-der-anmeldung)).
+- **Begleit-Token für „Folgt mir“ nur für das Umzugsziel.** Ein Folgegerät in
+  der App bekommt ein Token nur für eine Partitur, zu der die Sitzung seiner
+  geöffneten Partitur tatsächlich umgezogen ist, und nur, wenn es sie lesen
+  darf ([S1](docs/architecture.md#s1-begleit-token-sind-an-zweck-datei-und-direct-editing-token-gebunden)).
+- **Dateinamen, die die App anlegt** (Setlisten und Übe-Tracks), verlieren
+  Steuer- und Richtungszeichen, mit denen sich eine Endung optisch verdrehen
+  ließe, und sind auf 120 Zeichen bzw. 240 Bytes begrenzt
+  ([S2](docs/architecture.md#s2-schreiben-mit-token-nur-um-die-partitur-herum)).
 
 - **Abhängigkeiten mit bekannten Lücken angehoben:** DOMPurify 3.4.16
   (GHSA-p98j-92pf-mc4p; betrifft nur den von ScoreView nicht genutzten
@@ -17,6 +112,20 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
   `tools/audit-allowlist.json`). Die erste gilt bis 2027-01-06 für braces
   (GHSA-vfj7-8cjw-p6xm): Dafür gibt es keine bereinigte Version, und braces
   läuft nur zur Bauzeit.
+
+### Behoben
+
+- **Mitscrollen bei starkem Zoom.** Das Ende des eigenen, weichen
+  Nachführens galt als Scrollen von Hand und hielt das Mitscrollen 2,5 s an:
+  Waagerecht lief der Cursor aus dem Bild, und beim Systemwechsel blieb die
+  Ansicht rechts stehen, bis die Pause ablief. Jetzt folgt sie laufend und
+  springt beim Systemwechsel sofort an den Anfang des nächsten Systems.
+- **Ruckeln bei der Wiedergabe in Files.** Cursor und Positionsregler
+  schrieben bei jedem Notenschritt bzw. in jedem Bild ein `style`-Attribut;
+  in Files löst das über Nextclouds `:has()`-Regeln jedes Mal eine
+  Stil-Neuberechnung über den ganzen Baum aus. Der Cursor ist jetzt ein
+  SVG-Rechteck, der Regler läuft in 250-ms-Schritten – rund ein Viertel der
+  Stilzeit. Das weiche Gleiten des Cursor-Bands entfällt dabei.
 
 ## [1.11.0] – 2026-09-24
 
@@ -887,5 +996,5 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.md](docs/limits.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
-[Unveröffentlicht]: https://github.com/AndiMb/scoreview/compare/v1.0.0...HEAD
+[1.12.0]: https://github.com/AndiMb/scoreview/compare/v1.11.0...HEAD
 [1.0.0]: https://github.com/AndiMb/scoreview/releases/tag/v1.0.0

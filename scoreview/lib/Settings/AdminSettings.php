@@ -68,6 +68,9 @@ class AdminSettings implements ISettings {
 			'featureRecording' => $this->features->isEnabled(FeatureConfig::RECORDING),
 			'featureIntonation' => $this->features->isEnabled(FeatureConfig::INTONATION),
 			'featureScoreFollower' => $this->features->isEnabled(FeatureConfig::SCORE_FOLLOWER),
+			'featurePracticeExport' => $this->features->isEnabled(FeatureConfig::PRACTICE_EXPORT),
+			'featureOffline' => $this->features->isEnabled(FeatureConfig::OFFLINE),
+			'practiceTrackMaxMb' => self::limit(FeatureConfig::PRACTICE_TRACK_MAX_MB, intdiv($this->features->practiceTrackMaxBytes(), self::MB), 1),
 			'followPollMs' => $this->features->followPollMs(),
 			// Grenzen aus derselben Quelle wie die Pruefung beim Speichern -
 			// das Zahlenfeld soll nicht anbieten, was der Server danach klemmt.

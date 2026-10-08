@@ -26,12 +26,15 @@ class FeatureConfig {
 	public const RECORDING = 'feature_recording';
 	public const INTONATION = 'feature_intonation';
 	public const SCORE_FOLLOWER = 'feature_score_follower';
+	public const PRACTICE_EXPORT = 'feature_practice_export';
+	public const OFFLINE = 'feature_offline';
 
 	public const FOLLOW_POLL_MS = 'follow_poll_ms';
 	public const MAX_RECORDINGS_PER_SCORE = 'max_recordings_per_score';
 	public const MAX_RECORDING_SECONDS = 'max_recording_seconds';
 	public const MAX_RECORDING_BYTES_PER_USER = 'max_recording_bytes_per_user';
 	public const MAX_RECORDING_BYTES_TOTAL = 'max_recording_bytes_total';
+	public const PRACTICE_TRACK_MAX_MB = 'practice_track_max_mb';
 
 	private const MB = 1024 * 1024;
 
@@ -41,6 +44,12 @@ class FeatureConfig {
 		self::RECORDING => true,
 		self::INTONATION => true,
 		self::SCORE_FOLLOWER => false,
+		// Uebe-Tracks (E13) und Offline-Seite (E14): an, weil sie nur
+		// anbieten, was jemand ausdruecklich anstoesst - ein Track entsteht
+		// erst auf Klick und zaehlt gegen die eigene Quota, vorgemerkt wird
+		// nur im eigenen Browser.
+		self::PRACTICE_EXPORT => true,
+		self::OFFLINE => true,
 	];
 
 	/**
@@ -65,6 +74,10 @@ class FeatureConfig {
 	 * Mitgliedern. Gespeichert in Bytes, damit `occ` und Rechnung dieselbe
 	 * Einheit haben - die Oberflaeche zeigt MB.
 	 *
+	 * `practice_track_max_mb` (E13): Ein Uebe-Track mit 128 kbit/s braucht
+	 * rund 1 MB je Minute (gemessen: 191 s -> 3,1 MB). 60 MB reichen fuer eine
+	 * Stunde - ein ganzes Oratorium in einem Stueck, mehr wird es nicht.
+	 *
 	 * @var array<string, array{int, int, int}>
 	 */
 	public const NUMBERS = [
@@ -73,6 +86,7 @@ class FeatureConfig {
 		self::MAX_RECORDING_SECONDS => [600, 10, 3600],
 		self::MAX_RECORDING_BYTES_PER_USER => [200 * self::MB, 10 * self::MB, 100 * 1024 * self::MB],
 		self::MAX_RECORDING_BYTES_TOTAL => [5 * 1024 * self::MB, 100 * self::MB, 10 * 1024 * 1024 * self::MB],
+		self::PRACTICE_TRACK_MAX_MB => [60, 5, 500],
 	];
 
 	public function __construct(
@@ -118,12 +132,16 @@ class FeatureConfig {
 		return $this->number(self::MAX_RECORDING_BYTES_TOTAL);
 	}
 
+	public function practiceTrackMaxBytes(): int {
+		return $this->number(self::PRACTICE_TRACK_MAX_MB) * self::MB;
+	}
+
 	/**
 	 * Was der Viewer beim ersten Rendern wissen muss - im Anfangszustand statt
 	 * ueber eine eigene Anfrage (wer eine Funktion nicht nutzt, merkt
 	 * nichts davon, auch keine zusaetzliche Anfrage).
 	 *
-	 * @return array{followSession: bool, recording: bool, intonation: bool, scoreFollower: bool, followPollMs: int, maxRecordingsPerScore: int, maxRecordingSeconds: int}
+	 * @return array{followSession: bool, recording: bool, intonation: bool, scoreFollower: bool, practiceExport: bool, offline: bool, followPollMs: int, maxRecordingsPerScore: int, maxRecordingSeconds: int}
 	 */
 	public function forViewer(): array {
 		return [
@@ -131,6 +149,8 @@ class FeatureConfig {
 			'recording' => $this->isEnabled(self::RECORDING),
 			'intonation' => $this->isEnabled(self::INTONATION),
 			'scoreFollower' => $this->isEnabled(self::SCORE_FOLLOWER),
+			'practiceExport' => $this->isEnabled(self::PRACTICE_EXPORT),
+			'offline' => $this->isEnabled(self::OFFLINE),
 			'followPollMs' => $this->followPollMs(),
 			'maxRecordingsPerScore' => $this->maxRecordingsPerScore(),
 			'maxRecordingSeconds' => $this->maxRecordingSeconds(),

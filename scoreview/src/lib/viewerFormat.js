@@ -43,3 +43,20 @@ export function progressPercent(ms, durationMs) {
 	}
 	return Math.min(100, (ms / durationMs) * 100)
 }
+
+/** Raster des Positionsreglers in ms (siehe seekValue). */
+export const SEEK_STEP_MS = 250
+
+/**
+ * Der Wert fuer den Positionsregler, auf SEEK_STEP_MS abgerundet. Der Regler
+ * bewegt sich bei einem Stueck von einer Minute ohnehin nur wenige Pixel je
+ * Sekunde - in jedem Bild neu geschrieben, kostete er in Files aber jedes Mal
+ * eine Stil-Neuberechnung ueber den ganzen Baum (ScoreViewer.vue).
+ *
+ * @param {number} ms
+ * @return {number}
+ */
+export function seekValue(ms) {
+	const value = Number(ms)
+	return Number.isFinite(value) && value > 0 ? Math.floor(value / SEEK_STEP_MS) * SEEK_STEP_MS : 0
+}

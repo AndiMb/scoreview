@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 return [
 	'routes' => [
-		// Kein '/'-Einstieg und kein Navigations-Eintrag (siehe info.xml): die
-		// App hat bewusst keine eigene Seite, sie klinkt sich ausschliesslich in
-		// Files/Viewer ein (Listener\FilesLoadAdditionalScriptsListener).
+		// Kein '/'-Einstieg und kein Navigations-Eintrag (siehe info.xml): Der
+		// Viewer klinkt sich ausschliesslich in Files/Viewer ein
+		// (Listener\FilesLoadAdditionalScriptsListener). Die einzige eigene
+		// Seite ist die Offline-Seite (E14) - sie zeigt nur Vorgemerktes.
+		['name' => 'page#offline', 'url' => '/offline', 'verb' => 'GET'],
+		['name' => 'page#serviceWorker', 'url' => '/offline/sw.js', 'verb' => 'GET'],
+		['name' => 'page#manifest', 'url' => '/offline/manifest.webmanifest', 'verb' => 'GET'],
 
 		// Konvertierungs-Pipeline (siehe docs/architecture.md E1/E2)
 		['name' => 'conversion#status', 'url' => '/api/scores/{fileId}/status', 'verb' => 'GET'],
@@ -53,6 +57,8 @@ return [
 		// kennt (Controller\MyPartController).
 		['name' => 'my_part#show', 'url' => '/api/scores/{fileId}/my-part', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'my_part#update', 'url' => '/api/scores/{fileId}/my-part', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'practice_track#create', 'url' => '/api/scores/{fileId}/practice-tracks', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'my_part#updatePractice', 'url' => '/api/scores/{fileId}/practice', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
 
 		// Leitungen einer Partitur (B1, Controller\LeaderController). Die
 		// Kennung im DELETE darf alles enthalten, was Nextcloud in einer UID
@@ -74,6 +80,8 @@ return [
 		['name' => 'follow#update', 'url' => '/api/scores/{fileId}/follow', 'verb' => 'PATCH', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'follow#destroy', 'url' => '/api/scores/{fileId}/follow', 'verb' => 'DELETE', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'follow#join', 'url' => '/api/scores/{fileId}/follow/join', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'follow#move', 'url' => '/api/scores/{fileId}/follow/move', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'follow#companion', 'url' => '/api/scores/{fileId}/follow/companion', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
 
 		// Eigene Aufnahmen (D1, Controller\RecordingController): nur fuer die
 		// Aufnehmende, fremd heisst 404 (V7). Der Upload kommt roh als

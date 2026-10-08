@@ -104,7 +104,9 @@ stammen von Chorsätzen bis fünf Seiten.
 Telefonbreite einzeilig – Play, Taktfeld, Anfangston, Schloss und „Mehr“, alles
 Weitere steckt im Überlaufmenü –, geprüft in einem Chromium bei 360 × 780 px,
 nicht am Gerät. Mixer, Notizen und der Setlisten-Editor sind dort benutzbar,
-nicht bequem. Ein eigener Telefon-Modus wäre ein eigenes Vorhaben.
+nicht bequem. Zum Lesen auf dem Telefon gibt es das Systemband und die
+Liedtext-Ansicht; ihre Grenzen stehen unter
+[Üben und Lesen auf dem Handy](#üben-und-lesen-auf-dem-handy).
 
 **Die WebView der mobilen Apps.** Gemessen auf einem Samsung Galaxy S23 mit der
 Nextcloud-Android-App, Instanz über `adb reverse` als `http://localhost:8134`:
@@ -135,7 +137,9 @@ mobile Browser beenden Tabs erfahrungsgemäß früher als ein Desktop.
 
 **Klangqualität.** Der Browser-Mixdown liegt rund 7 dB unter MuseScores eigenem
 Render; die Stimmentrennung stimmt. Ein pauschaler Verstärkungsfaktor ist
-bewusst nicht eingebaut (Clipping-Risiko in lauten Passagen). Der Unterschied
+bewusst nicht eingebaut (Clipping-Risiko in lauten Passagen). Ein Übe-Track
+dagegen wird nach dem Rendern auf −1 dBFS Spitze normalisiert (höchstens
++12 dB) – dort ist das ganze Stück vorher bekannt. Der Unterschied
 stammt vor allem aus der SoundFont-Wahl und fehlenden Master-Effekten. Wer
 besseren Klang braucht, hinterlegt ein eigenes SoundFont – siehe
 [Installation](installation.md#soundfont).
@@ -227,10 +231,9 @@ Nicht erprobt ist weiterhin **eine ganze Probe am Notenständer**, und
 gegengeprüft ist die Wirkung nur in Chrome – **ob Operas hakendes Scrollen
 tatsächlich an der früheren Zeitfenster-Heuristik lag, steht aus.**
 
-**Offlinebetrieb.** Im Probenraum ist WLAN oft schlecht oder gar nicht vorhanden.
-Die Artefakte sind unveränderlich und aggressiv cachebar, was günstig ist – aber
-Nextclouds Viewer ist keine installierbare Web-App, und das SoundFont wiegt
-~23 MB (Vorgabe) bzw. ~40 MB (aus dem Sidecar). Ob die App ohne Netz brauchbar ist, ist ungeprüft.
+**Offlinebetrieb nur über die Offline-Seite.** Der Viewer in Files lädt ohne
+Netz nicht; ohne Netz geht nur, was vorher vorgemerkt wurde, und nur über die
+Offline-Seite ([Offline](#offline)).
 
 ## Probe- und Konzertfunktionen
 
@@ -274,6 +277,22 @@ Daraus folgt für den Betrieb:
   höchstens eine Sekunde, danach liest der nächste Aufruf die Datenbank –
   ein Lesezugriff je Sekunde und Datei (siehe
   [E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+- **Der Wechsel zum nächsten Stück dauert gemessen rund 3 s** bis zum
+  Folgegerät, einschließlich Laden der neuen Partitur (zwei Browser an der
+  Testinstanz, Desktop). Mit einem Folgegerät in der App ist das nicht
+  gemessen.
+- **Nur die Leitung, die die Sitzung führt, nimmt sie mit.** Führt auf dem
+  nächsten Stück schon jemand anderes, bleibt diese Sitzung; die Leitung
+  wechselt allein, ihre Folgenden bleiben stehen.
+- **Auf einem mitgenommenen Stück fehlt der Leitung die Rolle**, wenn sie dort
+  keine Leitung ist: Stelle, Loop, Anfangston und Transposition gehen,
+  Stimmnotizen und Stempel nicht
+  ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+- **Wer das nächste Stück nicht lesen darf, sieht dort eine Fehlermeldung.**
+  Vorab prüfen lässt sich das von der Leitung aus nicht – sie sieht die Rechte
+  der anderen nicht.
+- **Eine Transposition der Leitung gilt für alle Folgenden** und wird bei
+  ihnen nicht gespeichert; wer selbst transponiert, folgt nicht mehr.
 
 ### Leitung
 
@@ -389,6 +408,9 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
 - **Stimmstempel stehen über dem System, wenn sich Zeilen und Stimmen nicht
   zuordnen lassen** – etwa sechs Stimmen auf fünf Notenzeilen. Der Stempel ist
   dann da, aber nicht an der Zeile seiner Stimme.
+- **Auf dem Sidecar-Weg keine Liedtext-Ansicht und keine Tonnamen.** Beides
+  braucht Listen, die nur die Engine schreibt; siehe
+  [Darstellungen](#darstellungen).
 
 ### Mobil
 
@@ -410,7 +432,152 @@ Umgesetzt und im Browser geprüft, aber **nicht am Gerät**:
   (Android über `adb reverse`, siehe oben; ein iOS-Gerät fehlt ganz);
 - das Wachhalten des Bildschirms im Aufführungsmodus und beim Folgen – ohne
   Fenster nur gegen eine nachgebaute `navigator.wakeLock` geprüft;
-- eine ganze Probe mit echten Stimmen, echtem WLAN und `notify_push`.
+- eine ganze Probe mit echten Stimmen, echtem WLAN und `notify_push`;
+- die Geräteabnahme der Übe- und Lesefunktionen am Galaxy S23, siehe
+  [Am Gerät offen](#am-gerät-offen).
+
+## Üben und Lesen auf dem Handy
+
+### Übe-Tracks
+
+| Messung | Ergebnis |
+|---|---|
+| Export in der App, Desktop-Chromium: Chorsatz mit 5 Stimmen | 76 s Musik in **7 s**, 1,24 MB |
+| Messaufbau mit demselben Kern (spessasynth im Worker, lamejs, 128 kbit/s), Desktop | 76 s in 6,7 s · 191 s in 14,2 s (3,08 MB) |
+| derselbe Messaufbau, Galaxy S23, Chrome | 76 s in 8,3 s · 191 s in **15,9 s**, davon 11,8 s Kodieren |
+
+- **Das Kodieren kostet rund dreimal so viel wie das Rendern.** Am S23 ist
+  der Export so schnell wie am Desktop. Ein Mittelklassegerät ist nicht
+  gemessen; das Ziel „4 min Musik in höchstens 60 s“ ist am S23 mit großem
+  Abstand erfüllt.
+- **Rund 1 MB je Minute Musik** (128 kbit/s stereo). Die Grenze
+  `practice_track_max_mb` (Vorgabe 60 MB) reicht damit für eine Stunde. Der
+  Webserver vor Nextcloud muss Anfragen dieser Größe annehmen
+  ([Installation](installation.md#übe-tracks-und-offline-seite)).
+- **Ein Track zählt gegen das Kontingent der Ordnerbesitzerin** – bei einem
+  geteilten Ordner also gegen das der Person, der er gehört. Die App hat dafür
+  keine eigene Grenze und räumt keine Tracks auf.
+- **Tracks für alle Stimmen ersetzen ohne Rückfrage**, was im Unterordner
+  „Übe-Tracks“ unter demselben Namen liegt; ein einzelner Track fragt vorher.
+- **Der Name des Unterordners folgt der Voreinstellungssprache der Instanz.**
+  Wechselt sie, entsteht beim nächsten Mal ein zweiter Ordner.
+- **Mobil nur neben die Partitur.** Mit dem Token der App gibt es keinen frei
+  gewählten Ordner (keine Dateiauswahl ohne Sitzung), aus einem Stück einer
+  Setliste heraus (Begleit-Token) gar keinen Export.
+
+### Sperrbildschirm
+
+Gemessen am Galaxy S23: Die Wiedergabe **läuft bei gesperrtem Bildschirm
+weiter**, in Chrome (rund 10 s gesperrt, lückenlos) und in der Nextcloud-App
+(von Hand). Eine **Steuerung auf dem Sperrbildschirm erscheint für Web Audio
+nicht**, auch nicht über ein `<audio>` mit `MediaStream`, und die
+Kopfhörertaste wirkt nicht. Daran kann die App nichts ändern; der Ausweg ist
+der Übe-Track, den jeder Player mit Steuerung abspielt. Eine Sperre über
+mehrere Minuten ist nicht gemessen.
+
+### Darstellungen
+
+- **Liedtext-Ansicht und Tonnamen nur mit den Daten der Engine.** Sie brauchen
+  `lyricSyllables` bzw. `noteSpellings`, und die schreibt nur die Engine – auf
+  dem lokalen Konvertierungsweg und beim Rückfall im Browser. Auf dem
+  Sidecar-Weg sind beide nicht wählbar und sagen warum; eine Neukonvertierung
+  dort ändert daran nichts
+  ([E15](architecture.md#e15-fähigkeiten-statt-weg)). Das Systemband geht auf
+  beiden Wegen.
+- **Partituren, die vor dem Formatwechsel konvertiert wurden,** bekommen die
+  Listen beim nächsten Öffnen durch eine Neukonvertierung
+  (`CURRENT_FORMAT_VERSION` 4).
+- **Über 20 000 Silben gibt es keine Liedtext-Ansicht** – die Engine lässt die
+  Liste dann ganz weg, statt sie abzuschneiden.
+- **Die gesungene Strophe folgt den ausgerollten Wiederholungen:** Das n-te
+  Auftreten einer Stelle singt Strophe n. Wo eine Partitur Strophen über
+  Sprünge verteilt, die nicht ausgerollt werden (D.C./D.S., siehe
+  [Bekannte Lücken](#bekannte-lücken)), leuchtet die falsche Strophe.
+- **Systemband:** gemessen an einem Chorsatz mit 10 Systemen, Scrollen mit
+  rund 60 fps am Desktop. Am Galaxy S23 (Chrome, ohne Energiesparmodus)
+  während der Wiedergabe: Seiten 29–30 fps, Systemband 18–20 fps (p95 150 ms).
+  Die Ursache lag nicht im Band: In Files kostet **jede Änderung eines
+  `style`-Attributs** eine Stil-Neuberechnung über rund 7000 Elemente
+  (Nextclouds `:has()`-Regeln, u. a. mit `[style*=…]`, an `body` und am
+  Viewer; gemessen ~70 ms je Änderung am Desktop) – und der Cursor wurde bei
+  jedem Notenschritt, der Positionsregler in jedem Bild neu geschrieben. Seit
+  der Cursor ein SVG-Rechteck ist und der Regler in 250-ms-Schritten läuft,
+  sinkt die Stilzeit am Desktop auf ein Viertel; die Nachmessung am Telefon
+  steht aus (siehe [Am Gerät offen](#am-gerät-offen)). Mit drei geladenen
+  Seiten-SVGs bleibt das Band teurer als die Seitenansicht. Im
+  Energiesparmodus drosselt das Telefon schon eine leere Seite auf 24 fps.
+  Die Grenzen der Systeme kommen aus den Notenlinien, mit begrenztem Rand
+  darüber und darunter – was weit darüber hinausragt, kann angeschnitten
+  werden.
+- **Tonnamen stehen links neben dem Kopf** und sind bei Seitenbreite klein
+  (mindestens 9 px). Am ersten Kopf nach einem Wiederholungszeichen stoßen sie
+  an dessen Punkte.
+- **„Nur meine Stimme“ bei Tonnamen** wirkt nur, wo sich Notenzeilen den
+  Stimmen zuordnen lassen; sonst stehen Namen an allen Zeilen.
+- **Passt die Zahl der Köpfe eines Segments nicht zur Liste**, bleibt dieses
+  Segment ohne Namen und ohne Ton beim Antippen, statt falsche zu zeigen.
+
+### Offline
+
+Gemessen ist das Muster am Desktop und im Handybrowser (Galaxy S23, Chrome):
+Der Worker registriert sich, steuert die Offline-Seite, und nach dem Trennen
+vom Netz kommt die Seite aus dem Cache.
+
+| Messung | Ergebnis |
+|---|---|
+| Speicher, den der Browser zuteilt | Desktop 7,8 GB · S23 **10,7 GB**; 300 MB in 1,3 s geschrieben |
+| `navigator.storage.persist()` | **verweigert** (Desktop und S23) |
+| Platz | das SoundFont einmal für alle Einträge (~23 MB, aus dem Sidecar ~40 MB), dazu je Partitur ihr Cache, siehe [Gemessene Werte](#gemessene-werte) |
+
+- **Der Browser darf Vorgemerktes räumen.** Weil `persist()` verweigert wird,
+  kann er den Cache bei Platzmangel löschen. Die Offline-Seite erkennt das
+  („Vom Browser entfernt“) und sagt es; vor einem Konzert die Seite noch einmal
+  mit Netz öffnen.
+- **Abmelden räumt in Chrome nicht sofort.** Nextcloud schickt
+  `Clear-Site-Data` beim Abmelden nur über HTTPS und nie an Chrome, auch nicht
+  an Chrome auf Android; gemessen bleiben Cache und Worker dort nach dem
+  Abmelden liegen. Die App räumt erst, wenn die Offline-Seite das nächste Mal
+  **mit Netz** aufgerufen und zum Login umgeleitet wird
+  ([S10](architecture.md#s10-vorgemerktes-gehört-einem-konto-und-verschwindet-mit-der-anmeldung)).
+  Bis dahin bleibt die zwischengespeicherte Offline-Seite samt Vorgemerktem
+  auf diesem Gerät **ohne Netz lesbar**, auch nach dem Abmelden – einschließlich
+  der Kennung (`uid`) der zuletzt angemeldeten Person. Eine Umleitung auf ein
+  Captive Portal oder eine SSO-Zwischenseite räumt bewusst nicht. Folge: ein
+  Konto je Browser bzw. Gerät, und auf geteilten Geräten nichts vormerken.
+- **Ein Konto je Offline-Cache.** Merkt im selben Browser ein anderes Konto
+  vor oder öffnet es die Offline-Seite, löscht die App die Einträge des
+  vorigen samt aller ihrer URLs; auch eigene Einträge, die davon etwas
+  mitbenutzten (etwa das SoundFont), gelten danach als beschädigt.
+- **Nur im Browser, nicht in den mobilen Apps.** Die Direct-Editing-Seite hat
+  keinen eigenen Pfad für einen Worker; dort gibt es kein Vormerken. Ob die
+  WebView der Android-App überhaupt Service Worker zulässt, ist nicht geprüft.
+- **Einmal mit Netz öffnen.** Die Offline-Seite richtet sich beim ersten
+  Besuch mit Netz ein. Wer vormerkt, die Seite aber nie online geöffnet hat,
+  bekommt ohne Netz die Fehlerseite des Browsers.
+- **Aktualisiert wird nur beim Öffnen der Offline-Seite mit Netz**, nicht im
+  Hintergrund. Ändert sich eine Partitur danach, zeigt das Gerät ohne Netz den
+  vorgemerkten Stand.
+- **Offline fehlt, was einen Server braucht:** Notizen und Stempel setzen
+  (vorgemerkte erscheinen im Stand des Vormerkens), Leitung und „Folgt mir“,
+  Aufnahme und Intonation, Übe-Tracks, Vormerken und Setlisten bearbeiten.
+  Wiedergabe, Mixer, Loop, Tempo, Metronom, Anfangston, Transposition, Coach
+  und die Darstellungen gehen.
+
+### Am Gerät offen
+
+Am Galaxy S23 im Browser (Chrome) abgenommen: Übe-Track in 8,8 s
+(Duckwerk, ganzer Mix), Vormerken in 1,1 s, die Offline-Seite und die
+Wiedergabe ohne erreichbaren Server, Systemband, Liedtext-Ansicht und
+Tonnamen im Bild. **Noch offen:**
+
+- eine Sperre über mehrere Minuten bei laufender Wiedergabe;
+- ein Übe-Track aus der Nextcloud-App heraus und an einem Mittelklassegerät;
+- der Wechsel zum nächsten Stück mit drei Folgegeräten, davon eines in der
+  Nextcloud-App (Begleit-Token für das neue Stück);
+- die Bildrate des Systembands am Telefon nach der Korrektur von Cursor und
+  Positionsregler (siehe oben);
+- ein Pedal im Systemband – Tasten erreichen den Viewer nur, wenn er den
+  Fokus hat; das galt schon vorher für das Blättern der Seiten.
 
 ## Was die App bewusst nicht tut
 
@@ -431,24 +598,35 @@ Umgesetzt und im Browser geprüft, aber **nicht am Gerät**:
 - **Kein Reflow.** Das Seitenbild ist MuseScores A4-Satz
   ([E2](architecture.md#e2-musescore-svg-statt-neusatz-im-browser)).
   „Bildschirmfüllend" ist eine Skalierung, kein Umbruch. Echter Umbruch bräuchte
-  ein zweites serverseitiges Layout.
+  ein zweites serverseitiges Layout. Das Systemband schneidet aus demselben
+  Seitenbild aus; umbrechen darf nur der Text der Liedtext-Ansicht.
 - **Kein Bearbeiten von Partituren.** ScoreView zeigt und spielt; es korrigiert
   nichts in der `.mscz`.
 - **Keine Aufnahmen für andere.** Eine Aufnahme hört nur, wer sie gemacht hat;
   sie liegt in den App-Daten, nicht in Files, und lässt sich nicht teilen.
+  Übe-Tracks sind dagegen synthetisiert und bewusst Dateien in Files
+  ([E13](architecture.md#e13-übe-tracks-sind-dateien-in-files)).
 - **Kein Long-Polling für „Folgt mir“.** Jedes wartende Gerät belegte einen
   PHP-Worker; abgefragt wird kurz, beschleunigt durch `notify_push`, wo es
   eingerichtet ist ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
 - **Kein Direct Editor für Markdown.** ScoreView erschiene sonst in den
   mobilen Apps bei jeder `.md`-Datei; Setlisten öffnen sich dort über eine
   Partitur.
-- **Keine eigene Seite in Nextcloud.** Eingestiegen wird ausschließlich aus
-  Files – über Nextclouds Viewer, die Dateiaktion auf der Endung oder die auf
-  `*.setlist.md`
+- **Kein eigener Einstieg in Partituren.** Eingestiegen wird ausschließlich
+  aus Files – über Nextclouds Viewer, die Dateiaktion auf der Endung oder die
+  auf `*.setlist.md`
   ([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste))
   – und aus den mobilen Apps über Direct Editing; `/apps/scoreview/`
-  antwortet bewusst 404. Setlisten sind Dateien in Files, keine eigene
-  Verwaltung der App.
+  antwortet bewusst 404. Die einzige eigene Seite, `/apps/scoreview/offline`,
+  zeigt nur Vorgemerktes
+  ([E14](architecture.md#e14-eine-offline-seite-mit-eigenem-service-worker)).
+  Setlisten sind Dateien in Files, keine eigene Verwaltung der App.
+- **Keine Steuerung auf dem Sperrbildschirm für die Wiedergabe im Viewer.**
+  Web Audio bekommt sie nicht ([Sperrbildschirm](#sperrbildschirm)); dafür gibt
+  es den Übe-Track.
+- **Kein transponiertes Notenbild.** Transponiert wird der Klang; die Noten
+  und die Tonnamen bleiben, wie sie geschrieben sind. Ein transponiertes
+  Notenbild bräuchte ein zweites serverseitiges Layout.
 - **Kein Stift-/Freihand-Layer.** Notizen sind Text an einem musikalischen Anker.
   Freie Striche wären eine zweite Datenart, deren Anker ein Pfad statt eines
   Punktes sein müsste – und die anders als Text ein Neurendern der Partitur

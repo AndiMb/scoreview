@@ -159,9 +159,11 @@ export function computeVoiceFocusVolumes(allChannels, focusChannels, { loud = 12
  *
  * @param {MixerChannel[]} channels
  * @param {?string} partId
+ * @param {{loud?:number, quiet?:number}} [opts] wie computeVoiceFocusVolumes;
+ *   `quiet` ist der Regler „andere Stimmen" (H4)
  * @return {?{key:string, volumes:Map<number, number>}} null ohne Stimme oder ohne passende Zeile
  */
-export function voiceFocusForPart(channels, partId) {
+export function voiceFocusForPart(channels, partId, opts = {}) {
 	if (partId === null || partId === undefined) {
 		return null
 	}
@@ -171,6 +173,6 @@ export function voiceFocusForPart(channels, partId) {
 	}
 	return {
 		key: group.key,
-		volumes: computeVoiceFocusVolumes(channels.map((ch) => ch.channel), group.channels),
+		volumes: computeVoiceFocusVolumes(channels.map((ch) => ch.channel), group.channels, opts),
 	}
 }

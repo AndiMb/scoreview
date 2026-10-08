@@ -13,10 +13,18 @@
  *   (lib/interactionPolicy.js) - im Auffuehrungsmodus bleibt so nur Zoom
  * @property {boolean} hasRealPlayer ob Ton da ist (Mixer, Anfangston-Modus)
  * @property {boolean} canFocusMyPart ob „nur meine Zeile" etwas bewirken kann
+ * @property {boolean} [canCoach] ob es eine eigene Stimme gibt - der Coach
+ *   braucht nur ihre Kanaele, keine Zuordnung der Notenzeilen
  * @property {boolean} recordingEnabled Aufnahme von der Administration an
  * @property {boolean} intonationEnabled Intonation von der Administration an
  * @property {boolean} setlistCanCreate ob im Ordner angelegt werden darf (E11)
  * @property {boolean} isLeader Leitung dieser Partitur (E9)
+ * @property {boolean} [exportEnabled] Uebe-Tracks von der Administration an (E13)
+ * @property {boolean} [offlineEnabled] Offline-Seite von der Administration an (E14)
+ * @property {boolean} [offline] der Viewer laeuft auf der Offline-Seite: Was
+ *   den Server braucht, entfaellt - ein Kontextwert, keine Weiche im Viewer
+ * @property {boolean} [standalone] Direct Editing der mobilen Apps (E8) -
+ *   dort gibt es die Offline-Seite nicht
  */
 
 /**
@@ -35,6 +43,7 @@
 export function barGroups(ctx) {
 	const { can } = ctx
 	const settings = can('settings')
+	const online = ctx.offline !== true
 	const groups = {
 		practice: pick({
 			loop: can('loop'),
@@ -42,20 +51,29 @@ export function barGroups(ctx) {
 			metronome: settings,
 			toneMode: ctx.hasRealPlayer && can('tone'),
 			mixer: ctx.hasRealPlayer && can('mixer'),
-			practice: (ctx.recordingEnabled || ctx.intonationEnabled) && settings,
+			// Coach braucht eine eigene Stimme, die er hervorheben kann.
+			coach: ctx.hasRealPlayer && ctx.canCoach === true && can('mixer'),
+			transpose: ctx.hasRealPlayer && settings,
+			practice: (ctx.recordingEnabled || ctx.intonationEnabled) && settings && online,
+			export: ctx.exportEnabled === true && ctx.hasRealPlayer && settings && online,
 		}),
 		view: pick({
 			// Zoom zuerst und ohne Unterseite: Im Auffuehrungsmodus ist es
 			// das einzige Werkzeug, am Notenstaender das haeufigste.
 			zoom: can('zoom'),
+			layout: settings,
 			appearance: settings,
 			myPart: ctx.canFocusMyPart && settings,
+			noteNames: settings,
 			noteText: settings,
 			annotations: can('annotate'),
+			// Vormerken geht nur von einer Seite aus, die online ist, und nur
+			// im Browser - die Offline-Seite gibt es in den Apps nicht (E14).
+			pin: ctx.offlineEnabled === true && online && ctx.standalone !== true && settings,
 		}),
 		rehearsal: pick({
-			rehearsal: settings,
-			newSetlist: settings && ctx.setlistCanCreate,
+			rehearsal: settings && online,
+			newSetlist: settings && ctx.setlistCanCreate && online,
 		}),
 	}
 	const order = ctx.isLeader
@@ -76,9 +94,9 @@ function pick(flags) {
 
 /**
  * Die Schalter des Viewers, gleichnamig: metronomeEnabled, loopActive,
- * trainerActive, showMixer, showPractice, focusMyPart, showNoteText,
- * showAnnotations, showRehearsal (Booleans) und setlistEditorMode
- * ('new' | 'edit' | null).
+ * trainerActive, showMixer, showPractice, coachActive, transposed,
+ * focusMyPart, showNoteNames, showNoteText, showAnnotations, showRehearsal
+ * (Booleans) und setlistEditorMode ('new' | 'edit' | null).
  *
  * @typedef {Record<string, boolean|string|null>} BarState
  */
@@ -97,9 +115,12 @@ function pick(flags) {
 export function groupActive(id, s) {
 	switch (id) {
 		case 'practice':
-			return Boolean(s.metronomeEnabled || s.loopActive || s.trainerActive || s.showMixer || s.showPractice)
+			// Eine Transposition gehoert dazu: Wer vergisst, dass alles einen
+			// Ton tiefer klingt, singt in der Probe falsch an.
+			return Boolean(s.metronomeEnabled || s.loopActive || s.trainerActive || s.showMixer || s.showPractice
+				|| s.coachActive || s.transposed)
 		case 'view':
-			return Boolean(s.focusMyPart || s.showNoteText || s.showAnnotations)
+			return Boolean(s.focusMyPart || s.showNoteNames || s.showNoteText || s.showAnnotations)
 		case 'rehearsal':
 			return Boolean(s.showRehearsal || s.setlistEditorMode === 'new')
 		default:

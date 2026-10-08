@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkPromises, checkScoreFacts, toPositions } from './artifacts.mjs'
+import { checkLyrics, checkPromises, checkScoreFacts, toPositions } from './artifacts.mjs'
 
 /**
  * Diese Umformung ist die Stelle, an der der lokale Konvertierungsweg das
@@ -220,5 +220,60 @@ describe('checkScoreFacts', () => {
 		const meta = engineMeta()
 		meta.rehearsalMarks[1] = { measure: 2, text: '<b>B</b>', tick: 1920 }
 		expect(checkScoreFacts(meta).problems).toEqual([expect.stringContaining('A@1,<b>B</b>@2,C@4')])
+	})
+})
+
+describe('checkLyrics', () => {
+	// Nachgebaut nach lyrics-test.mscz: je Notenzeile 28 Silben
+	// (8 Stellen x 3 Strophen + 4 Schluss), zusammen 56.
+	const WORT = [['Hal', 'begin'], ['le', 'middle'], ['lu', 'middle'], ['ja', 'end'], ['a', 'single'], ['b', 'single'], ['c', 'single'], ['d', 'single']]
+	const converted = () => {
+		const lyricSyllables = []
+		for (const staff of [0, 1]) {
+			for (let verse = 0; verse < 3; verse++) {
+				WORT.forEach(([text, syllabic], elid) => lyricSyllables.push({ elid, staff, voice: 0, verse, syllabic, text, melisma: false }))
+			}
+			for (let elid = 8; elid < 12; elid++) {
+				lyricSyllables.push({ elid, staff, voice: 0, verse: 0, syllabic: 'single', text: 'A', melisma: false })
+			}
+		}
+		const noteSpellings = []
+		let svg = ''
+		for (const staff of [0, 1]) {
+			for (let elid = 0; elid < 12; elid++) {
+				noteSpellings.push({ elid, staff, voice: 0, notes: [[60, 14]] })
+				svg += `<g class="Note seg-${elid} st-${staff} vc-0"></g>`
+			}
+		}
+		const elements = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [String(i), {}]))
+		return { meta: { lyricSyllables, noteSpellings }, timing: { events: [], elements }, svgs: [svg] }
+	}
+
+	it('nimmt die Engine-Ausgabe ab', () => {
+		expect(checkLyrics(converted())).toEqual({ problems: [], details: { lyricSyllables: 56, noteSpellings: 24 } })
+	})
+
+	it('meldet fehlende Listen - der Fall Stock-MuseScore', () => {
+		const c = converted()
+		c.meta = {}
+		expect(checkLyrics(c).problems).toEqual([expect.stringContaining('lyricSyllables'), expect.stringContaining('noteSpellings')])
+	})
+
+	it('meldet eine Silbe ohne elid im Timing', () => {
+		const c = converted()
+		c.meta.lyricSyllables[0].elid = 99
+		expect(checkLyrics(c).problems).toEqual([expect.stringContaining('elid')])
+	})
+
+	it('meldet Notenkoepfe, die nicht zum SVG passen', () => {
+		const c = converted()
+		c.meta.noteSpellings[3].notes.push([64, 18])
+		expect(checkLyrics(c).problems).toEqual([expect.stringContaining('3:0:0')])
+	})
+
+	it('meldet eine falsche Silbenfolge', () => {
+		const c = converted()
+		c.meta.lyricSyllables[1].syllabic = 'end'
+		expect(checkLyrics(c).problems).toEqual([expect.stringContaining('Hal-le-lu-ja')])
 	})
 })

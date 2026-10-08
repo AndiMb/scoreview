@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from './scrollPlan.js'
+import { isManualScrollEnd, planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from './scrollPlan.js'
 
 describe('planAutoScroll', () => {
 	// Viewport 1000px hoch, Default-Rand 24px.
@@ -97,5 +97,18 @@ describe('shouldSuppressAutoScroll', () => {
 
 	it('behandelt das Fensterende (exakt resumeDelayMs später) als abgelaufen', () => {
 		expect(shouldSuppressAutoScroll(10000, 12500, 2500)).toBe(false)
+	})
+})
+
+describe('isManualScrollEnd', () => {
+	it('wertet das Ende des eigenen Nachfuehrens nicht als Eingriff', () => {
+		expect(isManualScrollEnd({ ownScrollAt: 1000, lastGestureAt: null })).toBe(false)
+		expect(isManualScrollEnd({ ownScrollAt: 1000, lastGestureAt: 500 })).toBe(false)
+	})
+	it('erkennt das Traegheitsscrollen einer Geste waehrend des Nachfuehrens', () => {
+		expect(isManualScrollEnd({ ownScrollAt: 1000, lastGestureAt: 1200 })).toBe(true)
+	})
+	it('ohne eigenes Scrollen ist jedes Ende ein Eingriff (Mausrad, Tastatur)', () => {
+		expect(isManualScrollEnd({ ownScrollAt: null, lastGestureAt: null })).toBe(true)
 	})
 })

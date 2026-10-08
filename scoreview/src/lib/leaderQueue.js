@@ -14,6 +14,8 @@
  *   zaehlt - die Folgenden sollen dort stehen, wo die Leitung zuletzt
  *   hingezeigt hat, nicht erst durch alle Zwischenstellen wandern.
  * - **Loop** (setzen oder fuer alle aufheben): ebenso nur der neueste.
+ * - **Transposition** (H6): ebenso nur die neueste - „−1, nein −2" kommt als
+ *   −2 an.
  * - **Anfangston**: ein Ausloeser, kein Zustand - er wird nie von einem
  *   anderen Tipp verdraengt. Mehrere Tontipps waehrend EINER laufenden Anfrage
  *   werden aber zu einem: Der zweite Ton striche den ersten nach Sekunden-
@@ -82,6 +84,9 @@ function mergeInto(data, action) {
 		case 'tone':
 			next.tone = true
 			break
+		case 'transpose':
+			next.transpose = action.semitones
+			break
 		default:
 			break
 	}
@@ -92,7 +97,7 @@ function mergeInto(data, action) {
  * Einen Tipp einreihen.
  *
  * @param {{inflight: ?object, pending: object[]}} queue
- * @param {{type: 'start'|'end'|'position'|'loop'|'tone', data?: object, position?: object, loop?: ?object}} action
+ * @param {{type: 'start'|'end'|'position'|'loop'|'tone'|'transpose', data?: object, position?: object, loop?: ?object, semitones?: number}} action
  * @param {unknown} [waiter] wird an den Schritt gehaengt, der den Tipp traegt
  * @return {{inflight: ?object, pending: object[]}}
  */

@@ -10,6 +10,7 @@ es **zwei zur Wahl**, und sie liefern dasselbe Ergebnis
 | MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
 | SoundFont | holt der Server selbst, Adresse voreingestellt | bringt der Container mit |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
+| Notenköpfe einfärben, Liedtext-Ansicht, Tonnamen | ja | nein – Stock-MuseScore liefert die Daten nicht ([E15](architecture.md#e15-fähigkeiten-statt-weg)) |
 | Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
 
 **Weg A ist voreingestellt und braucht keine Einstellung.** Wo eine
@@ -277,11 +278,12 @@ aus.
 
 ## Probe und Konzert
 
-Leitung, „Folgt mir“, eigene Aufnahmen und die Rückmeldung zur Intonation
-sind nach der Installation eingeschaltet und brauchen nichts weiter. Unter
-**Einstellungen → Verwaltung → ScoreView → Probe und Konzert** lassen sie
-sich einzeln abschalten; eine abgeschaltete Funktion verschwindet aus dem
-Viewer, und ihre Endpunkte antworten 404. Drei Dinge sind trotzdem zu wissen.
+Leitung, „Folgt mir“, eigene Aufnahmen, die Rückmeldung zur Intonation,
+Übe-Tracks und die Offline-Seite sind nach der Installation eingeschaltet und
+brauchen nichts weiter. Unter
+**Einstellungen → Verwaltung → ScoreView**, Abschnitte **Probe und Konzert**
+und **Üben unterwegs**, lassen sie sich einzeln abschalten; eine abgeschaltete Funktion verschwindet aus dem
+Viewer, und ihre Endpunkte antworten 404. Einiges ist trotzdem zu wissen.
 
 ### `notify_push` für „Folgt mir“ (empfohlen)
 
@@ -360,6 +362,52 @@ Wechsel überall. Eine abgewiesene Anfrage lässt die Seite selbst neue Token
 holen, solange ihr Direct-Editing-Token noch gilt. Die Token einer einzelnen Person verfallen außerdem, wenn sie ihr
 Passwort ändert oder ihr Konto deaktiviert wird.
 
+Dasselbe gilt für die Token, die ein Folgegerät in der App bekommt, wenn eine
+Leitung ihre Sitzung von „Folgt mir“ zum nächsten Stück mitnimmt.
+
+### Übe-Tracks und Offline-Seite
+
+Im Abschnitt **Üben unterwegs** der Verwaltungsseite stehen zwei Schalter
+und eine Grenze.
+
+**Übe-Tracks als MP3-Dateien in Files** (`feature_practice_export`). Der
+Browser rendert die aktuelle Mischung als MP3 und legt sie neben die Partitur,
+in einen Unterordner „Übe-Tracks“ oder einen selbst gewählten Ordner
+([E13](architecture.md#e13-übe-tracks-sind-dateien-in-files)). Die Dateien
+zählen gegen das Kontingent der Ordnerbesitzerin wie jede andere Datei; eine
+eigene Speichergrenze wie bei Aufnahmen gibt es deshalb nicht, nur eine je
+Datei:
+
+```sh
+occ config:app:set scoreview practice_track_max_mb --value 60   # 5-500, in MB
+```
+
+Ein Track wiegt rund 1 MB je Minute Musik. Wie bei den Aufnahmen muss der
+Webserver Anfragen dieser Größe annehmen – bei nginx `client_max_body_size`
+mindestens so groß wie die längsten Tracks, die erwartet werden; die
+PHP-Grenzen spielen keine Rolle. Der Name des Unterordners steht in der
+Voreinstellungssprache der Instanz (`default_language` in `config.php`), damit
+er für alle gleich heißt.
+
+**Offline-Seite** (`feature_offline`). Personen merken im Viewer Stücke oder
+Setlisten vor und öffnen sie ohne Netz über `/apps/scoreview/offline`
+([E14](architecture.md#e14-eine-offline-seite-mit-eigenem-service-worker)).
+Gespeichert wird nur im Browser der Person, der Server braucht dafür nichts.
+Ausgeschaltet antworten Seite, Service Worker und Manifest mit 404, und der
+Viewer bietet das Vormerken nicht mehr an; was schon vorgemerkt ist, bleibt
+im jeweiligen Browser liegen, bis die Person es entfernt. Zwei Dinge sind zu
+wissen:
+
+- Ein Service Worker braucht einen sicheren Kontext, also HTTPS (oder
+  `localhost`).
+- Vorgemerktes ist an das Gerät gebunden und überdauert in Chrome das
+  Abmelden, bis die Offline-Seite wieder mit Netz geöffnet wird
+  ([Grenzwerte](limits.md#offline)). Auf Geräten, die sich mehrere Personen
+  teilen, sollte niemand vormerken.
+
+Ein externes SoundFont (`soundfont_url`) braucht nichts weiter: Die
+Offline-Seite gibt dessen Herkunft in ihrer CSP selbst frei.
+
 ## Einstellungen im Überblick
 
 | Schlüssel | Wo | Bedeutung |
@@ -379,6 +427,9 @@ Passwort ändert oder ihr Konto deaktiviert wird.
 | `feature_recording` | Verwaltung | Eigene Aufnahmen (Vorgabe an) |
 | `feature_intonation` | Verwaltung | Rückmeldung zur Intonation (Vorgabe an) |
 | `feature_score_follower` | nur `occ` | Vorgesehen für das Mitverfolgen per Mikrofon, noch ohne Funktion (Vorgabe aus) |
+| `feature_practice_export` | Verwaltung | Übe-Tracks als MP3 in Files (Vorgabe an) |
+| `practice_track_max_mb` | Verwaltung | Höchstgröße eines Übe-Tracks in MB (Vorgabe 60, 5–500) |
+| `feature_offline` | Verwaltung | Offline-Seite und „Offline vormerken“ (Vorgabe an) |
 | `follow_poll_ms` | Verwaltung | Abfrageintervall von „Folgt mir“ ohne Push in ms (Vorgabe 800, erlaubt 500–3000) |
 | `max_recordings_per_score` | Verwaltung | Aufnahmen je Person und Partitur (Vorgabe 5, 1–50) |
 | `max_recording_seconds` | Verwaltung | Höchstlänge einer Aufnahme in Sekunden (Vorgabe 600, 10–3600) |

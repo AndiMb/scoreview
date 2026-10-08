@@ -10,8 +10,8 @@ ScoreView besteht aus diesen Teilen:
 
 | Teil | Wo | Aufgabe |
 |---|---|---|
-| Nextcloud-App | `scoreview/lib/` (PHP) | Konvertierung anstoßen, Ergebnis cachen, Artefakte ausliefern, Notizen, Leitungen, „Folgt mir“, Setlisten und Aufnahmen verwalten |
-| Viewer | `scoreview/src/` (Vue 3) | Notenseiten anzeigen, MIDI im Browser synthetisieren, Cursor führen, Mikrofon auswerten |
+| Nextcloud-App | `scoreview/lib/` (PHP) | Konvertierung anstoßen, Ergebnis cachen, Artefakte ausliefern, Notizen, Leitungen, „Folgt mir“, Setlisten und Aufnahmen verwalten, Übe-Tracks in Files ablegen, die Offline-Seite ausliefern |
+| Viewer | `scoreview/src/` (Vue 3) | Notenseiten anzeigen, MIDI im Browser synthetisieren, Cursor führen, Mikrofon auswerten, Übe-Tracks rendern, Partituren für die Offline-Seite vormerken |
 | Sidecar | `sidecar/` (Python + MuseScore 4) | `.mscz` übersetzen – im eigenen Container |
 | Lokaler Konverter | `scoreview/converter/` (Node + scoreview-engine: MuseScore als WebAssembly) | dasselbe, ohne Container |
 
@@ -61,7 +61,10 @@ Browser
    |- Taktnavigation über mpos, Studierbuchstaben aus meta.json/MIDI (E12)
    |- Notizen und Stempel an musikalischen Ankern (eigene Tabellen)
    |- „Folgt mir“: Zustand einer Leitung, abgefragt oder per Push (E10)
-   +- Mikrofon: Aufnahmen (IAppData), Intonation (nur im Browser)
+   |- Mikrofon: Aufnahmen (IAppData), Intonation (nur im Browser)
+   |- Übe-Track: im Browser gerendert, als MP3 in Files (E13)
+   +- Vormerken: Antworten in den Cache des Browsers, gelesen von der
+      Offline-Seite /apps/scoreview/offline mit eigenem Service Worker (E14)
 ```
 
 **Leitprinzip: Das Frontend kennt ausschließlich die HTTP-API der App.** Es
@@ -72,15 +75,20 @@ ohne eine einzige Zeile im Viewer. Diese Trennung bitte nicht
 aufweichen. Der Statusendpunkt *nennt* den Weg (`renderer.backend`),
 und der Viewer *zeigt* ihn an – das ist eine Angabe für Menschen, keine
 Verzweigung; was der Viewer tut, hängt weiterhin allein an den Artefakten.
+Was eine Darstellung braucht, fragt er als **Fähigkeit** der Artefakte ab,
+nie als Weg ([E15](#e15-fähigkeiten-statt-weg)).
 
 ## Serverseite
 
 ### HTTP-API
 
-Alle Routen liegen unter `/apps/scoreview/api/` und stehen in
-`scoreview/appinfo/routes.php`. Die App hat bewusst **keine eigene Seite** und
-keinen Navigationseintrag; `/apps/scoreview/` antwortet 404. Eingestiegen wird
-auf vier Wegen, und alle vier zeigen **dieselbe Komponente**:
+Die Routen stehen in `scoreview/appinfo/routes.php` und liegen bis auf drei
+unter `/apps/scoreview/api/`. Die App hat bewusst **keinen Einstieg in
+Partituren außerhalb von Files** und keinen Navigationseintrag;
+`/apps/scoreview/` antwortet 404. Die einzige eigene Seite ist die
+Offline-Seite unter `/apps/scoreview/offline`, und die zeigt nur, was vorher
+in Files vorgemerkt wurde ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)).
+Eingestiegen wird auf vier Wegen, und alle vier zeigen **dieselbe Komponente**:
 
 1. **Nextclouds Viewer**, am Mimetype `application/x-musescore` – der
    reguläre Weg im Browser.
@@ -113,10 +121,14 @@ Route mit Token annimmt; Einzelheiten in
 | `POST /api/scores/{fileId}/reconvert` | Verwirft die gespeicherte Konvertierung und lässt sie neu erzeugen (nur mit Schreibrecht auf die Datei) | – |
 | `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe | ja |
 | `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen und Stempel; Sichtbarkeit `parts` nur für Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | ja |
-| `GET\|PUT /api/scores/{fileId}/my-part` | „Meine Stimme“ je Partitur und Nutzerin | ja |
+| `GET\|PUT /api/scores/{fileId}/my-part` | „Meine Stimme“ je Partitur und Nutzerin; `GET` liefert die Übe-Einstellungen (`practice`) mit | ja |
+| `PUT /api/scores/{fileId}/practice` | Übe-Einstellungen je Partitur und Nutzerin: Transposition, Coach, Pegel der übrigen Stimmen. Was fehlt, bleibt unverändert | ja |
+| `POST /api/scores/{fileId}/practice-tracks` | Einen im Browser gerenderten Übe-Track als MP3 in Files ablegen ([E13](#e13-übe-tracks-sind-dateien-in-files)) | Direct-Editing-Token nur neben die Partitur, Begleit-Token nein |
 | `GET\|POST /api/scores/{fileId}/leaders`, `DELETE …/leaders/{uid}` | Leitungen lesen, ernennen, abberufen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | ja |
 | `GET /api/scores/{fileId}/leader-candidates?q=` | Nutzersuche für die Ernennung, nur Leitungen, 30 Aufrufe je Minute | ja |
 | `GET\|POST\|PATCH\|DELETE /api/scores/{fileId}/follow`, `POST …/follow/join` | „Folgt mir“: Zustand lesen (alle mit Dateizugriff), Sitzung führen (Leitung), für Push anmelden ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | ja |
+| `POST /api/scores/{fileId}/follow/move` | Die Sitzung zum nächsten Stück mitnehmen (Leitung, E10) | ja |
+| `GET /api/scores/{fileId}/follow/companion?target=` | Begleit-Token für das Stück, zu dem eine Sitzung umgezogen ist ([S1](#s1-begleit-token-sind-an-zweck-datei-und-direct-editing-token-gebunden)) | **nur** Direct-Editing-Token |
 | `GET\|POST /api/scores/{fileId}/recordings`, `GET\|DELETE …/recordings/{id}` | Eigene Aufnahmen – nur die eigenen, fremde antworten 404 | ja |
 | `GET\|PUT /api/setlists/{fileId}` | Setliste lesen (aufgelöst aus Sicht der Nutzerin) und schreiben ([E11](#e11-die-setliste-als-markdown-datei)) | Setlisten-Begleit-Token; schreibend nur mit Einträgen um die Partitur herum |
 | `POST /api/setlists` | Neue Setliste anlegen | nur im Ordner der Token-Datei, ohne Begleit-Token |
@@ -126,8 +138,14 @@ Route mit Token annimmt; Einzelheiten in
 | `POST /api/preferences` | Anzeigeeinstellungen der Nutzerin (nur schreibend – gelesen aus dem Anfangszustand der Seite) | ja, ohne Begleit-Token |
 | `POST /api/settings` | Admin-Einstellungen speichern | – |
 | `GET /api/health`, `POST /api/selftest` | Betriebsdiagnose, Sidecar-Selbsttest (nur Admins) | – |
+| `GET /offline`, `GET /offline/sw.js`, `GET /offline/manifest.webmanifest` | Offline-Seite, ihr Service Worker und ihr Web-App-Manifest ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)); Worker und Manifest **ohne Anmeldung** – statischer Code ohne Daten, den der Browser beim Aktualisieren ohne Sitzung holt | – |
 
-Die Endpunkte von „Folgt mir“, Aufnahme und Intonation hängen an je einem
+Der Statusendpunkt trägt zusätzlich `canWriteFolder`: ob die Person neben der
+Partitur anlegen darf. Daran hängt, ob der Viewer „Tracks für alle Stimmen“
+anbietet.
+
+Die Endpunkte von „Folgt mir“, Aufnahme, Intonation, Übe-Tracks und der
+Offline-Seite hängen an je einem
 Schalter der Verwaltung (`FeatureConfig`). Ist er aus, antworten sie 404, und
 der Viewer zeigt nichts davon – wer eine Funktion nicht nutzt, bemerkt sie
 nicht, auch nicht als zusätzliche Anfrage. Die Leitungsrolle hängt an keinem
@@ -240,8 +258,10 @@ Aufnahme antwortet 404, nicht 403.
 ### Aufräumen
 
 `CleanupOrphansJob` räumt Cache-Einträge, Notizen, Leitungen, Folgesitzungen,
-Aufnahmen und die gemerkte Stimmwahl („Meine Stimme“, `my_part.<fileId>` in den
-Nutzereinstellungen) gelöschter Dateien ab. Das geschieht bewusst erst, wenn die Datei
+Aufnahmen, die gemerkte Stimmwahl („Meine Stimme“, `my_part.<fileId>` in den
+Nutzereinstellungen) und die Übe-Einstellungen (`practice.<fileId>`)
+gelöschter Dateien ab. Übe-Tracks räumt die App nicht: Sie sind gewöhnliche
+Dateien in Files ([E13](#e13-übe-tracks-sind-dateien-in-files)). Das geschieht bewusst erst, wenn die Datei
 auch aus dem Papierkorb verschwunden ist – eine Wiederherstellung aus dem
 Papierkorb soll nichts davon verlieren. Nur den Cache nimmt schon
 `Listener\NodeDeletedListener` beim Verschieben in den Papierkorb weg: Er ist
@@ -264,14 +284,18 @@ Einstellungsseite.
 
 Aufbau:
 
-- Drei Webpack-Einträge für drei Seiten: `src/viewer.js` für die Dateien-Seite
+- Vier Webpack-Einträge für vier Seiten: `src/viewer.js` für die Dateien-Seite
   (Viewer-Handler **und** die beiden Dateiaktionen,
   [E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)),
   `src/standalone.js` für die eigenständige Seite der mobilen Apps
-  ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)) und
-  `src/settings.js` für die Verwaltung. Dazu ein vierter, der keine Seite ist:
+  ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)),
+  `src/offline.js` für die Offline-Seite
+  ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)) und
+  `src/settings.js` für die Verwaltung. Dazu drei, die keine Seite sind:
   `src/worklets/captureWorklet.js`, das Aufnahme-Worklet (siehe
-  [Mikrofon](#mikrofon)).
+  [Mikrofon](#mikrofon)), `src/workers/renderWorker.js`, der Übe-Tracks
+  rendert ([E13](#e13-übe-tracks-sind-dateien-in-files)), und
+  `src/offline-sw.js`, der Service Worker der Offline-Seite.
 - `src/components/` – `ScoreViewer.vue` als Rahmen und Orchestrierung, dazu
   `ScorePage.vue`, `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreStamps.vue`,
   `ScoreModal.vue`, `StandaloneFrame.vue`, `AdminSettings.vue`, die Teile der
@@ -296,13 +320,17 @@ Aufbau:
   `svgIndex.js`, `highlightStyle.js`, `staffBands.js`, `generation.js`,
   `assetVersion.js`, `viewerFormat.js`, `viewerTexts.js`, für die Leiste
   `barGroups.js` und `barFit.js`, für den Rückfall im Browser `clientConversion.js` und
-  `artifactUrls.js` ([E7](#e7-konvertierung-im-browser-als-rückfall)) und die
-  Module der Tabelle unten. Neue Logik gehört hierhin, nicht in die Komponenten.
+  `artifactUrls.js` ([E7](#e7-konvertierung-im-browser-als-rückfall)), für die
+  Fähigkeiten der Artefakte `capabilities.js`
+  ([E15](#e15-fähigkeiten-statt-weg)) und die Module der beiden Tabellen
+  unten. Neue Logik gehört hierhin, nicht in die Komponenten.
 
-`ScoreViewer.vue` ist auf allen drei Seiten dieselbe Komponente und weiß
-nicht, über welche sie geladen wurde. Was den Seiten eigen ist – das
-Schließkreuz, der Token an den Anfragen, die Brücke zur mobilen App – steht in
-ihrem jeweiligen Einstiegspunkt, nicht im Viewer.
+`ScoreViewer.vue` ist auf allen drei Seiten mit Partituren dieselbe
+Komponente und weiß nicht, über welche sie geladen wurde. Was den Seiten eigen
+ist – das Schließkreuz, der Token an den Anfragen, die Brücke zur mobilen App –
+steht in ihrem jeweiligen Einstiegspunkt, nicht im Viewer. Die Offline-Seite
+zeigt ebenfalls diese Komponente, mit einem einzigen Kontextwert `offline`
+([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)).
 
 Wiedergabe: `spessasynth_lib` synthetisiert das MIDI im Browser gegen das
 ausgelieferte SoundFont. Eine einzige `requestAnimationFrame`-Schleife treibt
@@ -432,6 +460,78 @@ die Form der Taktanzeige „C+3“ an, damit sich eine abgelesene Angabe
 unverändert eintippen lässt; woher die Buchstaben kommen, steht in
 [E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall).
 
+### Üben und Lesen auf dem Handy
+
+Derselbe Schnitt wie oben – reines Modul, Composable, Komponente:
+
+| Funktion | Reine Logik (`src/lib/`) | Composable | Komponente |
+|---|---|---|---|
+| Transposition des Klangs | `noteNames.js` (Zieltonart) | `useMyPart` | `TransposeControls.vue` |
+| Coach: eigene Stimme als Klavier rechts, übrige leise links | `coachMix.js` | `useMyPart`, `useMyPartSound` | `CoachControls.vue` |
+| Übe-Track als MP3, Tracks für alle Stimmen ([E13](#e13-übe-tracks-sind-dateien-in-files)) | `exportPlan.js`, `practiceTrackName.js`, `id3.js` | `usePracticeExport` | `PracticeExportControls.vue` |
+| Titel und Medientasten, Hinweis bei gesperrtem Bildschirm | – | `useMediaSession` | – |
+| Darstellung: Seiten, Systemband, Liedtext ([E15](#e15-fähigkeiten-statt-weg)) | `capabilities.js`, `systemBand.js`, `lyricsLayout.js` | `useViewerPreferences` | `LayoutControls.vue`, `SystemBand.vue`, `LyricsView.vue` |
+| Tonnamen, Note antippen | `noteNames.js`, `noteSpellingIndex.js` | `useViewerPreferences` | `NoteNameControls.vue`, Overlay in `ScorePage.vue` |
+| Offline vormerken ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)) | `offlinePlan.js` | `useOffline` | `PinControls.vue`, `OfflineApp.vue` |
+
+**Ein Versatz für alle Verbraucher.** Die Transposition (−12 … +12 Halbtöne)
+verschiebt nur den Klang, nie das Notenbild. Derselbe Wert geht an den Player,
+an den Anfangston, an die Sollnoten der Intonation und an den Export; die
+Tonnamen nennen dagegen die **geschriebene** Note, und die Unterseite sagt
+das. Gespeichert wird sie je Partitur und Person auf dem Server, zusammen mit
+Coach und dem Pegel der übrigen Stimmen (`ViewerPreferences`, `practice.<fileId>`)
+– was in einem Stück einen Ton tiefer geübt wird, soll das nächste nicht
+verstimmen. Eine Leitung kann eine Transposition für alle setzen
+([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+
+**Coach ist ein Preset, kein vierter Mischzustand.** Er setzt sich aus dem
+Fokus auf die eigene Stimme (`mixerLayout.js`) und dem Stereobild
+(`panLayout.js`) zusammen; dazu spielt die eigene Stimme Klavier. Der Regler
+„Andere Stimmen“ ersetzt den festen Pegel des Fokus und gilt auch ohne Coach.
+Beim Ausschalten kehren genau die Programme zurück, die Coach verändert hat –
+eine Instrumentenwahl, die währenddessen im Mixer fiel, bleibt.
+
+**Sperrbildschirm.** Gemessen am Galaxy S23: Die Wiedergabe läuft bei
+gesperrtem Bildschirm weiter, in Chrome und in der Nextcloud-App. Eine
+Steuerung auf dem Sperrbildschirm erscheint für Web Audio aber nicht, auch
+nicht über ein `<audio>` mit `MediaStream`, und die Kopfhörertaste wirkt nicht.
+`useMediaSession` setzt Titel und Handler trotzdem – am Desktop greifen die
+Medientasten. Wer am Handy während der Wiedergabe sperrt, bekommt **einmal je
+Gerät** den Hinweis auf den Übe-Track: Den spielt jeder Player mit Steuerung
+auf dem Sperrbildschirm.
+
+**Systemband.** Die Systeme stehen nebeneinander, jedes so hoch wie der Platz –
+am Handy quer gehalten füllt ein System den Bildschirm. Nichts wird neu gesetzt
+([E2](#e2-musescore-svg-statt-neusatz-im-browser)): Jedes System ist eine
+gewöhnliche `ScorePage` mit einem Ausschnitt (`crop`) ihrer Seite, die Grenzen
+kommen aus den Notenlinien (`staffBands.js`), Liedtext darunter zählt zum
+System. Cursor, Stempel, Notizen, Loop und Tonnamen liegen in Prozent der
+Seite und funktionieren deshalb unverändert. Gerendert werden nur das
+sichtbare System und seine Nachbarn. `Bild↓`/`Bild↑` und ein Pedal gehen ein
+System weiter. Wer den Viewer zum ersten Mal unter 600 px Breite mit Seiten
+öffnet, bekommt das Band einmal angeboten; die Antwort merkt sich die App.
+
+**Liedtext-Ansicht.** Nur der Text der eigenen Stimme – ohne gewählte Stimme
+der der obersten Notenzeile mit Text –, die Strophen untereinander, ein Block
+je System. Text darf umbrechen, Noten nicht. Welche Strophe klingt, sagt die
+ausgerollte Wiederholung ([M7](#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)):
+Das n-te Auftreten einer `elid` im Timing singt Strophe n, gibt es weniger
+Strophen, bleibt es bei der letzten. Die gesungene Silbe leuchtet über eine
+Klasse am Knoten, nicht über eine Vue-Eigenschaft; ein Tipp auf ein Wort
+springt dorthin, Ziehen über mehrere Wörter setzt einen Loop.
+
+**Tonnamen und Note antippen.** Deutsch (H, B für Hes), Englisch, feste und
+relative Solmisation, wahlweise nur an der eigenen Stimme (Vorgabe). Der Name
+kommt aus der Schreibweise je Notenkopf (`tpc` in `noteSpellings`,
+[E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)): Aus der
+MIDI-Tonhöhe allein ist Fis von Ges nicht zu unterscheiden. Zugeordnet wird
+der Reihe nach je Segment, Notenzeile und Stimme; stimmt die Zahl einer Gruppe
+nicht, bleibt sie ohne Namen – lieber keiner als ein falscher. Das relative Do
+braucht keinen Modus: do sitzt auf der Dur-Tonika der Vorzeichnung, Moll ist
+la-basiert. Ein Tipp auf eine Note springt wie bisher und spielt bei stehender
+Wiedergabe zusätzlich deren Ton (mit Transposition), der Name erscheint kurz am
+Kopf.
+
 ### Wiedergabe: was ein Suchlauf zurücksetzt
 
 Gemessen: Jeder Suchlauf in spessasynth – und damit jeder Loop-Rücksprung –
@@ -448,6 +548,13 @@ und ein im Mixer gewähltes Instrument nach dem ersten Suchlauf wieder weg.
   eigene Wert an der eigenen Sperre ab.
 - **Instrumente** über den Systemparameter `presetLock`: Er lässt jeden
   Programmwechsel abprallen, auch das `programChange(0)` des Resets.
+
+Die **Transposition** braucht keine Sperre: Sie sitzt im globalen
+Systemparameter `keyShift`, nicht im gleichnamigen Kanalparameter. Gemessen:
+C4 klingt mit +2 auf 294 Hz und nach zwei Suchläufen weiterhin auf 294 Hz;
+den Kanalparameter setzt der Reset dagegen auf 0. Schlagzeugkanäle lassen den
+globalen Wert von selbst aus. Der Render-Worker der Übe-Tracks benutzt
+denselben Parameter.
 
 Ein zweites Merkmal desselben Suchlaufs: Er wirkt **asynchron**. Nach
 `seek()` stimmt die Zeit des Sequencers erst mit dem Ereignis `timechange`;
@@ -533,13 +640,19 @@ Update einen alten Stand im Browser-Cache ablöst:
 | `spessasynth_processor.min.js`, `scoreview-capture-worklet.js` | `audioWorklet.addModule(url)` | `generateFilePath()` | `?v=<App-Version>`, beim Bauen aus `info.xml` (`assetVersion.js`) |
 | Tonhöhen-Worker, Teile von `@nextcloud/dialogs` | webpack-Nachladen (`new Worker(new URL(…))`, `import()`) | `__webpack_public_path__`, zur Laufzeit gesetzt (`publicPath.js`) | Inhalts-Hash als `?v=` im Dateinamen der Teile |
 | scoreview-engine (`scoreview.mjs`, `.lib.wasm`, `.lib.data`), nur für [E7](#e7-konvertierung-im-browser-als-rückfall) | nativer `import(engineUrl)`; `.wasm`/`.data` fordert der Glue relativ zu seiner eigenen URL an | `GET /api/engine/{version}/{name}` (`EngineController`) | Engine-Version im **Pfad** – ein `?v=` am Glue erbten die Geschwister nicht; eine fremde Version antwortet 404 |
+| `scoreview-render-worker.js` ([E13](#e13-übe-tracks-sind-dateien-in-files)) | `new Worker(url)` | `generateFilePath()` | `?v=<App-Version>`, wie die Worklets |
+| `scoreview-offline-sw.js` ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)) | `navigator.serviceWorker.register()` | `GET /offline/sw.js` (`PageController`), damit `Service-Worker-Allowed` gesetzt werden kann | `?v=<App-Version>`; der Worker benennt danach seinen Cache für die Hülle der Seite und räumt ältere |
 
 Die Laufzeit-Adresse ist nötig, weil die Vorgabe von
 `@nextcloud/webpack-vue-config` fest `/apps/scoreview/js/` lautet – liegt die App
 wie üblich unter `custom_apps/`, liefe jedes Nachladen ins 404. Ein Worklet
 kann nichts nachladen (im `AudioWorkletGlobalScope` gibt es weder
 `importScripts` noch `fetch`); es ist deshalb ein eigener Webpack-Eintrag, der
-für sich allein steht.
+für sich allein steht. Dasselbe gilt für den Render-Worker und den Service
+Worker: Als nachgeladener Teil spaltete die Nextcloud-Vorlage ihre
+Abhängigkeiten in einen Vendor-Teil ab, den der Worker unter dem festen Pfad
+`/apps/scoreview/js/` suchte – die Laufzeit-Adresse korrigiert das nur für die
+Seite, nicht für einen Worker.
 
 ### Stückwechsel im Viewer
 
@@ -552,12 +665,17 @@ Modulebene für die Lebensdauer der Seite, teilt einen laufenden Abruf und
 merkt sich keinen Fehler. Ein Generationszähler in `usePlayback.js` verwirft
 Antworten, die zu einem schon verlassenen Stück gehören.
 
+Denselben Weg nimmt der Wechsel, den eine Leitung in „Folgt mir“ auslöst:
+Wer eine Setliste offen hat, die das neue Stück enthält, wechselt über deren
+Navigation, sonst wird das neue Stück als Einzelstück geöffnet
+([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+
 ## Sicherheitsregeln
 
 Die Regeln, die die Probe- und Konzertfunktionen und die eigenständige Seite
 ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)) verbindlich
 einhalten. Die Begründungen stehen ausführlich an den verlinkten Stellen; hier
-steht, was nicht aufgeweicht werden darf. Im Code sind sie als `S1`…`S9`
+steht, was nicht aufgeweicht werden darf. Im Code sind sie als `S1`…`S10`
 referenziert.
 
 ### S1: Begleit-Token sind an Zweck, Datei und Direct-Editing-Token gebunden
@@ -565,9 +683,15 @@ referenziert.
 Ein Begleit-Token (`Service\CompanionTokenService`) gilt nur für seinen Zweck
 (`score` oder `setlist`), nur für seine Datei und nur zusammen mit dem lebenden
 Direct-Editing-Token, aus dem es ausgegeben wurde (`dt`). Ausgegeben wird nur
-mit einem Direct-Editing-Token und nur für eine Setliste neben dessen Partitur,
-die sie enthält – nie aus einer Sitzung, nie aus einem Begleit-Token heraus
-(keine Kette). Widerrufen wird bei jeder Anfrage: hartes Ablaufdatum nach
+mit einem Direct-Editing-Token, und zwar an genau zwei Stellen: für eine
+Setliste neben dessen Partitur, die sie enthält, und für das Stück, zu dem
+eine Sitzung von „Folgt mir“ umgezogen ist
+([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+Das zweite nur für eine Partitur (`application/x-musescore`), die die Person
+lesen darf, und nur, wenn die Sitzung der Token-Datei dorthin umgezogen ist –
+beide tragen dieselbe Sitzungskennung (`FollowService::isMoveTarget`); eine
+beliebige Datei mit irgendeiner laufenden Sitzung reicht nicht. Nie aus einer
+Sitzung, nie aus einem Begleit-Token heraus (keine Kette). Widerrufen wird bei jeder Anfrage: hartes Ablaufdatum nach
 12 h, Epoche der Nutzerin, Konto aktiv, Datei neu aufgelöst. Token stehen nur
 im Header, nie in URL, Protokoll oder `localStorage`. Einzelheiten:
 [E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps).
@@ -577,9 +701,19 @@ im Header, nie in URL, Protokoll oder `localStorage`. Einzelheiten:
 Mit einem Token kommt in eine Setliste nichts, was nicht schon um die offene
 Partitur liegt: mit dem Direct-Editing-Token nur Dateien aus deren Ordner bis
 Tiefe 2, mit einem Begleit-Token gar nichts Neues (Umordnen und Entfernen
-bleiben), angelegt wird nur im Ordner der Token-Datei. Beliebige Pfade gibt es
-nur in der Browser-Sitzung. Sonst würde aus der Erlaubnis für eine Datei über
-eine selbst angelegte Liste und S1 eine für alle.
+bleiben), angelegt wird nur im Ordner der Token-Datei. Ein Übe-Track
+entsteht mit dem Direct-Editing-Token nur neben der Partitur oder in ihrem
+Unterordner für Übe-Tracks, mit einem Begleit-Token gar nicht – und auf jedem
+Weg nur neben einer `.mscz`: Ist die angegebene Datei ein Ordner oder etwas
+anderes, antwortet der Server 404. Beliebige Pfade und frei gewählte Ordner
+gibt es nur in der Browser-Sitzung. Sonst würde aus der Erlaubnis für eine
+Datei über eine selbst angelegte Liste und S1 eine für alle.
+
+Dateinamen, die die App selbst anlegt (Setlisten, Übe-Tracks), verlieren
+Steuer- und Richtungszeichen (U+200E/F, U+202A–202E, U+2066–2069 – sonst ließe
+sich eine Endung optisch verdrehen) und sind auf 120 Zeichen bzw. 240 Bytes
+begrenzt; einen Namen, den die Instanz verbietet, lehnt der Server mit 400 ab
+(`Service\FileNames`).
 
 Die Regel hängt daran, dass Middleware und Controller dieselbe
 `DirectAccessContext`-Instanz sehen. `AppInfo\Application` registriert sie
@@ -607,9 +741,10 @@ Was ohne Sitzung erreichbar ist, darf nicht unbegrenzt Arbeit auslösen:
   Lesen, denn jede aufgelöste Zeile kostet einen Zugriff auf den Dateibaum,
   und die Datei lässt sich im Texteditor beliebig füllen. Die Suche nach
   Listen, die eine Partitur enthalten, sieht höchstens 20 Listen je Ordner an.
-- Die Nutzersuche für Leitungen und die schreibenden Routen (Aufnahme
-  hochladen, „Folgt mir“ starten, steuern, beenden und beitreten, Notiz
-  anlegen und ändern, Setliste speichern und anlegen) tragen
+- Die Nutzersuche für Leitungen und die schreibenden Routen (Aufnahme und
+  Übe-Track hochladen, „Folgt mir“ starten, steuern, umziehen, beenden und
+  beitreten, Begleit-Token für ein umgezogenes Stück, Notiz anlegen und
+  ändern, Setliste speichern und anlegen) tragen
   `#[UserRateLimit]` **und** `#[AnonRateLimit]`: Anfragen mit Token sind für
   Nextclouds Drosselung anonym, weil sie vor der eigenen Middleware läuft.
 - Die Nutzersuche für Leitungen prüft höchstens 30 Treffer auf Dateizugriff –
@@ -663,10 +798,46 @@ nicht, damit delegierte Admins den Rest der Seite weiter speichern können.
 Geänderte Werte werden außerdem geprüft: `node_path` leer oder absolut mit
 dem Programmnamen `node`/`nodejs`, die Adressen nur `http(s)` mit Host.
 
+### S10: Vorgemerktes gehört einem Konto und verschwindet mit der Anmeldung
+
+Vorgemerkte Partituren liegen im Cache Storage des Browsers
+([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)), und der hängt am
+Origin, nicht am Konto. Deshalb:
+
+- **Ein Konto je Offline-Cache.** Jeder Eintrag trägt die `uid`. Beim
+  Vormerken und beim Öffnen der Offline-Seite werden Einträge anderer Konten
+  gelöscht, samt **aller** ihrer URLs – auch solcher, die ein eigener Eintrag
+  mitbenutzt; der gilt danach als beschädigt und wird neu vorgemerkt. Meldet
+  sich im selben Browser jemand anderes an, ohne dass vorher abgemeldet wurde
+  (abgelaufene Sitzung), sieht er nichts davon.
+- **Wer nicht mehr angemeldet ist, verliert das Vorgemerkte.** Nextcloud
+  schickt beim Abmelden `Clear-Site-Data` nur über HTTPS und nie an Chrome
+  (`core/Controller/LoginController.php`); gemessen: In Chrome bleiben Cache
+  und Worker nach dem Abmelden liegen. Die App holt das nach: Leitet der Server
+  den Aufruf der Offline-Seite mit Netz um, prüft der Worker mit einem
+  Folgeabruf, ob das Ziel wirklich der Login derselben Instanz ist; nur dann
+  löscht er alle Caches der Offline-Seite und meldet sich selbst ab. Ein
+  Captive Portal oder eine Zwischenseite (SSO, zweiter Faktor) leitet ebenfalls
+  um und räumt nichts – sonst ginge das Vorgemerkte genau dann verloren, wenn
+  das Netz fehlt. Bis zu einem solchen Aufruf ist das Vorgemerkte auf dem Gerät
+  ohne Netz über die Offline-Seite lesbar – die Grenze steht in
+  [Grenzwerte](limits.md#offline).
+- **Nur Vorgemerktes kommt in den Datencache.** Was die Offline-Seite online
+  abruft, geht ans Netz und wird nicht nebenbei gespeichert; nur „Offline
+  vormerken“ schreibt Antworten der API in den Cache. Der Cache der Hülle nimmt
+  nur Dateien unter `/apps`, `/custom_apps`, `/apps-extra`, `/core`, `/dist`
+  und `/themes` – keine Avatare, Vorschauen oder API-Antworten.
+- **Der Worker steuert nur die Offline-Seite.** `Service-Worker-Allowed` nennt
+  genau ihre Adresse; Anfragen anderer Nextcloud-Seiten sieht er nicht, und
+  der Worker von Files mit dem Scope `/` bleibt unberührt.
+- **Schreibendes geht nie aus dem Cache.** Nur `GET` wird beantwortet; alles
+  andere geht unverändert ans Netz, und die Oberfläche bietet es offline gar
+  nicht an.
+
 ## Entwurfsentscheidungen
 
 Diese Entscheidungen tragen den Aufbau. Sie sind im Code an vielen Stellen als
-`E1`…`E12` referenziert und sollten nicht ohne erneute Bewertung revidiert
+`E1`…`E15` referenziert und sollten nicht ohne erneute Bewertung revidiert
 werden.
 
 ### E1: MIDI statt MP3 als Audioartefakt
@@ -697,6 +868,11 @@ Der Cursor ist ein Overlay über bekannten Koordinaten
 ([M4](#m4-koordinaten-passen-mit-faktor-12-auf-das-svg)) statt eines
 Renderer-internen Zustands, und Wiederholungen lösen sich strukturell auf
 ([M7](#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)).
+
+Die beiden Darstellungen für das Handy halten sich daran: Das Systemband
+schneidet Systeme aus dem Seitenbild aus, statt sie neu zu setzen, und die
+Liedtext-Ansicht zeigt Text, keine Noten
+([Üben und Lesen auf dem Handy](#üben-und-lesen-auf-dem-handy)).
 
 ### E3: Zwei Konvertierungswege hinter einer API
 
@@ -795,11 +971,15 @@ konvertieren lassen – und gäbe damit das beste Argument des Sidecars auf,
 nämlich echtes, per Versionswechsel aktualisierbares MuseScore.
 
 **Und einer in `meta.json`:** Tonarten mit Dur/Moll und Studierbuchstaben
-(`keySigs`, `rehearsalMarks`) schreibt ebenfalls nur die Engine. Auch hier
+(`keySigs`, `rehearsalMarks`), Liedtextsilben und die Schreibweise je Notenkopf
+(`lyricSyllables`, `noteSpellings`) schreibt ebenfalls nur die Engine. Auch hier
 entscheidet der Viewer am Inhalt, nicht am Weg: Fehlen die Felder, kommen
 Buchstaben und Tonarten aus dem MIDI, das auf beiden Wegen byteweise gleich
 ist – nur ohne Dur/Moll
-([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)).
+([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)). Für Liedtext und
+Schreibweisen gibt es keinen solchen Rückfall; Liedtext-Ansicht und Tonnamen
+fehlen dann, und der Viewer sagt warum
+([E15](#e15-fähigkeiten-statt-weg)).
 
 **Und einer bei den eingebetteten Bildern:** Beide Wege setzen sie, aber der
 lokale reicht die Originalbytes als Daten-URI durch, statt sie zu rastern –
@@ -1011,6 +1191,11 @@ dafür bewusst **nicht** als Direct Editor an – es erschiene sonst bei jeder
 Markdown-Datei. Mobil öffnet eine Setliste deshalb über eine ihrer Partituren
 (siehe [E11](#e11-die-setliste-als-markdown-datei)).
 
+**Eine eigene Seite gibt es genau eine: `/apps/scoreview/offline`.** Sie zeigt
+nur, was in Files vorgemerkt wurde, und ist kein zweiter Einstieg in
+Partituren; `/apps/scoreview/` antwortet weiterhin 404. Warum es sie trotzdem
+braucht, steht in [E14](#e14-eine-offline-seite-mit-eigenem-service-worker).
+
 ### E7: Konvertierung im Browser als Rückfall
 
 Wo der Server **nicht konvertieren kann** – keine Node-Laufzeit, `proc_open`
@@ -1190,6 +1375,15 @@ ohnehin öffnen dürfte:
 Stückwechsel den passenden; welcher Ausweis zu welcher Anfrage gehört,
 entscheidet `directToken.js` (`ausweisFuer`).
 
+Einen zweiten Anlass zur Ausgabe gibt es: Zieht eine Leitung ihre Sitzung von
+„Folgt mir“ zum nächsten Stück um
+([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)),
+braucht ein Folgegerät in der App ein Token für dieses Stück, auch ohne
+Setliste. `GET …/follow/companion?target=` gibt es aus – wieder nur gegen das
+Direct-Editing-Token der geöffneten Partitur, nur für eine Datei, die die
+Person lesen darf, und nur, solange dort eine Sitzung läuft. Ein abgegriffenes
+Token der Seite öffnet so keine beliebigen Dateien.
+
 **Push gibt es dort nicht.** `notify_push` meldet sich über eine Sitzung an,
 die die Seite nicht hat. Folgegeräte in den Apps fragen deshalb immer ab
 ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)); Leiten
@@ -1263,8 +1457,9 @@ einzige Werkzeug ist. Was wann sichtbar ist und in welcher Gruppe, steht allein
 in `lib/barGroups.js`: Leere Gruppen entfallen, für die Leitung steht die
 Probe vorn, für alle anderen zuletzt – aber sie steht da, denn die Liste der
 Leitungen sehen alle ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)).
-Ist in einer Gruppe etwas eingeschaltet (Metronom, Loop, ein offenes Panel),
-trägt ihr Knopf einen Punkt. Die Folgen-Anzeige steht nicht in der Leiste,
+Ist in einer Gruppe etwas eingeschaltet (Metronom, Loop, Coach, eine
+Transposition, Tonnamen, ein offenes Panel), trägt ihr Knopf einen Punkt –
+eine vergessene Transposition hieße in der Probe falsch ansingen. Die Folgen-Anzeige steht nicht in der Leiste,
 sondern über den Noten (`FollowBadge.vue`) – dort kostet sie keine Höhe und
 bleibt im Aufführungsmodus sichtbar.
 
@@ -1334,12 +1529,14 @@ sie sollen sehen, wer leitet, nicht die Kontonamen der Instanz sammeln.
 
 ### E10: „Folgt mir“ – ein Zustand mit Zählern, abgefragt oder gepusht
 
-Eine Leitung schickt ihre Stelle, einen Loop und den Anfangston an alle
-Geräte, die dieselbe Partitur offen haben (`Service\FollowService`,
+Eine Leitung schickt ihre Stelle, einen Loop, den Anfangston und eine
+Transposition an alle Geräte, die dieselbe Partitur offen haben, und nimmt sie
+in der Setliste zum nächsten Stück mit (`Service\FollowService`,
 `useFollowSession.js`).
 
 **Zustand statt Ereignisse.** Gespeichert wird je Datei *ein* Zustand –
-`position`, `loop` und `tone`, jeder mit eigenem Zähler `seq`, dazu eine
+`position`, `loop`, `tone`, `transpose` und `moved`, jeder mit eigenem Zähler
+`seq`, dazu eine
 `version`, die bei jeder Änderung steigt. Ein Gerät vergleicht nur die Version
 und holt bei Abweichung den ganzen Zustand; was daraus folgt, entscheidet
 `followState.js` an den Zählern. Ein Nachzügler oder ein Gerät nach einem
@@ -1414,6 +1611,53 @@ Gerät); ist das Budget erschöpft, wartet sie und sammelt weiter.
 wird schon beim Lesen als beendet gewertet. Eine andere Leitung übernimmt eine
 laufende Sitzung, indem sie selbst startet; allen wird das angezeigt. Es gibt
 höchstens eine Sitzung je Datei.
+
+**Transposition für alle.** Die Leitung setzt sie mit `PATCH {transpose}`
+(−12 … +12). Folgende übernehmen sie für die Dauer der Sitzung, gespeichert
+wird sie bei ihnen **nicht**; beim Lösen oder Ende gilt wieder die eigene. Wer
+folgt und selbst transponiert, löst sich – wie bei eigenem Navigieren, sonst
+überschriebe die nächste Angabe der Leitung die eigene Wahl ungefragt.
+
+**Umzug zum nächsten Stück.** Eine Sitzung bleibt an *einer* Datei. Schaltet
+die Leitung in der Setliste weiter, ruft der Viewer `POST …/follow/move` mit
+dem neuen Stück auf. Der Server legt dort eine Sitzung mit **derselben
+Kennung** (`state.session`) und denselben Zählern an und schreibt danach auf
+der alten `moved` mit dem Ziel – in dieser Reihenfolge, damit wer dem Verweis
+folgt, die Sitzung schon vorfindet. Folgende behalten ihre gesehenen Zähler
+und springen erst beim nächsten neuen Stand; fingen die Zähler bei 0 an,
+überginge ein Gerät die ersten Stände dort. Wer folgt, wird mitgenommen, auch
+ohne Setliste; wer sich gelöst hat, bekommt nur den Hinweis mit „Dorthin
+wechseln“. Wer das neue Stück direkt öffnet, findet die Sitzung dort.
+
+- **Stelle und Loop tragen ihre Datei** (`fileId`). Während eines Umzugs kann
+  ein Stand der alten noch unterwegs sein, und Takt 12 dort ist ein anderer
+  Takt 12; `followState.js` verwirft fremde.
+- **Nur Partituren.** `move` nimmt als Ziel nur eine `.mscz`
+  (`application/x-musescore`) an.
+- **Getragene Leitung.** Die Leitung darf auf dem neuen Stück führen, auch wenn
+  sie dort keine Leitungsrolle hat – aber nur, solange sie die Sitzung dort
+  angelegt hat und auf der Herkunft (`carriedFrom`: die letzte Datei der
+  Kette, auf der sie Leitung ist) weiterhin Leitung ist. Stimmnotizen und
+  Stempel auf dem neuen Stück prüft weiter `LeaderService`; dafür muss sie dort
+  Leitung sein. Übernimmt dort eine echte Leitung die Sitzung, indem sie selbst
+  startet, entfällt `carriedFrom`.
+- **Fremde Sitzungen bleiben unangetastet.** Führt auf dem Ziel schon jemand
+  anderes, lehnt der Server ab (409); das Stück wechselt für die Leitung
+  trotzdem, die Folgenden bleiben stehen.
+- **Ohne Leserecht auf dem Ziel** antwortet es einer Folgenden mit 404, wie
+  jede fremde Datei ([S8](#s8-404-vor-403)), und der Viewer zeigt das. Der
+  Umzug selbst verlangt nur, dass die *Leitung* das Ziel lesen darf.
+- **Mobil** holt ein Folgegerät für das neue Stück ein Begleit-Token
+  ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps),
+  [S1](#s1-begleit-token-sind-an-zweck-datei-und-direct-editing-token-gebunden)).
+- **Aufräumen.** Endet die Sitzung auf dem neuen Stück, enden die Vorgänger
+  mit, sonst schickten sie Nachzügler an ein beendetes Stück. Rückwärts
+  gegangen wird über `movedFrom`, und je Glied nur, solange dort noch dieselbe
+  Sitzung steht und auf genau den Nachfolger zeigt – eine inzwischen neu
+  gestartete Sitzung einer anderen Leitung bleibt unberührt.
+- **Die Kette bleibt beim Server.** `carriedFrom` und `movedFrom` nennen
+  fileIds, die Folgende womöglich nicht lesen dürfen; an Geräte ausgeliefert
+  wird der Zustand ohne sie ([S8](#s8-404-vor-403)).
 
 ### E11: Die Setliste als Markdown-Datei
 
@@ -1509,16 +1753,195 @@ sonst kommt die Lage aus dem MIDI und landet damit von selbst in der Zählung
 des Viewers. Den Modus übernimmt der Rückfall dann aus der Engine, wo er je
 Vorzeichnung eindeutig ist.
 
+**Liedtext und Schreibweisen kommen ebenfalls aus der Engine.** Seit
+`v4.7.5-engine.4` schreibt sie zwei weitere Listen in `meta.json`
+([Artefaktschema](#artefaktschema)): `lyricSyllables`, jede sichtbare Silbe
+mit Segment, Notenzeile, Stimme, Strophe und Silbenart, und `noteSpellings`,
+je Notenkopf die klingende Tonhöhe und die gezeigte Schreibweise (`tpc`).
+Beides ist aus den übrigen Artefakten nicht zu gewinnen
+([M12](#m12-liedtext-steht-im-svg-nur-als-glyphen)). Auf ihnen bauen die
+Liedtext-Ansicht und die Tonnamen auf, und angeboten werden diese nur, wo die
+Listen da sind ([E15](#e15-fähigkeiten-statt-weg)). Einen Rückfall aus dem MIDI
+gibt es dafür nicht: Das MIDI trägt keinen Text und keine Schreibweise. Der
+Selbsttest prüft beide Listen an `lyrics-test.mscz` – drei Strophen unter einer
+Wiederholung, 56 Silben, jede an einer `elid` aus `timing.json`, und je Segment,
+Notenzeile und Stimme so viele Schreibweisen wie Notenköpfe im SVG.
+
 **Bestehende Partituren bekommen die Felder durch eine Neukonvertierung.**
-`CURRENT_FORMAT_VERSION` steht auf 3; ein älterer Cache-Eintrag gilt beim
+`CURRENT_FORMAT_VERSION` steht auf 4; ein älterer Cache-Eintrag gilt beim
 nächsten Öffnen als nicht fertig und wird neu erzeugt
 ([Konvertierung und Cache](#konvertierung-und-cache)).
+
+### E13: Übe-Tracks sind Dateien in Files
+
+Ein Übe-Track ist ein MP3 der aktuellen Mischung – die eigene Stimme im
+Coach, ein Ausschnitt im Loop, ein langsameres Tempo, eine Transposition –,
+das die Person in Files ablegt. Damit hört sie unterwegs ohne Viewer: in der
+Nextcloud-App offline vorgehalten, im Hintergrund mit Steuerung auf dem
+Sperrbildschirm, in jedem Player, geteilt mit anderen. Genau das kann der
+Viewer im Browser nicht
+([Sperrbildschirm](#üben-und-lesen-auf-dem-handy)).
+
+**Das bricht bewusst mit „Aufnahmen nicht in Files“.** Eigene Aufnahmen liegen
+in IAppData, weil sie die Stimme eines Menschen tragen und nur die
+Aufnehmende sie hören soll. Ein Übe-Track ist synthetisiert, er trägt keinen
+Personenbezug; als Datei soll er gerade geteilt, verschoben und offline
+gehalten werden können. Er zählt deshalb wie jede Datei gegen das Kontingent
+der Ordnerbesitzerin, und die App räumt ihn nicht auf.
+
+**Gerendert wird im Browser, gespeichert vom Server.** Der Browser hat
+SoundFont, MIDI und Mischung ohnehin; der Server bräuchte sonst eine eigene
+Synthese. `usePracticeExport` baut aus dem, was gerade an den Player geht
+(Lautstärken nach Mute, Solo, Fokus und Coach, Panorama, Programme), einen Plan
+(`exportPlan.js`); ein eigener Worker (`renderWorker.js`) spielt das MIDI damit
+über `spessasynth_core` ab, mischt jeden Kanal einzeln nach derselben Kurve wie
+der `StereoPannerNode` des Viewers, legt Metronomklicks dazu, normalisiert auf
+−1 dBFS Spitze (höchstens +12 dB) und kodiert mit `@breezystack/lamejs`
+(LGPL-3.0) als MP3 mit 128 kbit/s, ID3v2.3-Kopf mit Titel, Stimme und Mischung.
+Ein eigener Worker statt des Players oder eines `OfflineAudioContext`: Er läuft
+unabhängig von der laufenden Wiedergabe, und Chromium reicht Nachrichten an
+ein Worklet im `OfflineAudioContext` nicht weiter. Der Track klingt so wie das,
+was man eben gehört hat.
+
+**Wohin.** `POST …/practice-tracks` nimmt das MP3 als Rumpf, Name, Ziel und
+„ersetzen“ als Parameter:
+
+| Ziel | Ordner | Mit Token |
+|---|---|---|
+| `folder` | neben der Partitur | Direct-Editing-Token ja |
+| `sub` | Unterordner „Übe-Tracks“ neben der Partitur, bei Bedarf angelegt | Direct-Editing-Token ja |
+| `own` | ein selbst gewählter Ordner (Nextclouds Dateiauswahl), als fileId im eigenen Nutzerordner aufgelöst, nie als Pfad | nein |
+
+Mit einem Begleit-Token entsteht gar nichts
+([S2](#s2-schreiben-mit-token-nur-um-die-partitur-herum)). Der Name des
+Unterordners steht in der **Voreinstellungssprache der Instanz**
+(`default_language`), nicht in der der Person – ein geteilter Ordner soll für
+den ganzen Chor gleich heißen und nicht je Sprache doppelt entstehen. Der
+Dateiname (`practiceTrackName.js`, bereinigt wie auf dem Server in
+`Service\FileNames`) nennt Titel, Stimme oder „Gesamtmischung“ und, wo
+zutreffend, Coach, Tempo, Transposition und Ausschnitt.
+
+| Prüfung | Antwort |
+|---|---|
+| Schalter `feature_practice_export` aus, Datei nicht sichtbar oder keine `.mscz` | 404 ([S8](#s8-404-vor-403)) |
+| Größer als `practice_track_max_mb` (Vorgabe 60 MB) | 413, vor dem Lesen am `Content-Length` und beim Lesen |
+| Kein ID3-Kopf und kein MPEG-Frame-Sync in den ersten 4 KB | 400 – hält Versehen fern, mehr nicht; Nextcloud führt die Datei nie aus |
+| Name leer oder von der Instanz verboten (nach dem Bereinigen, [S2](#s2-schreiben-mit-token-nur-um-die-partitur-herum)) | 400 |
+| Kein Anlegerecht im Zielordner, vorhandene Datei nicht änderbar, Token-Regel verletzt | 403 |
+| Name vergeben, ohne „ersetzen“ | 409 mit einem freien Vorschlag „… (2).mp3“ |
+| Kontingent erschöpft | 507 |
+| gespeichert | 201 mit fileId und Pfad |
+
+**Tracks für alle Stimmen.** Wer neben der Partitur anlegen darf
+(`canWriteFolder` im Status), bekommt je Stimme einen Coach-Track in den
+Unterordner, vorhandene werden ersetzt. Bewusst am Schreibrecht, nicht an der
+Leitungsrolle: Wer schreiben darf, darf auch Dateien ablegen. Die Leitungsrolle
+regelt weiterhin Notizen, Stempel und „Folgt mir“. Gerendert wird Stimme für
+Stimme; bricht man ab, bleiben die fertigen Tracks, eine halbe Datei entsteht
+nicht.
+
+### E14: Eine Offline-Seite mit eigenem Service Worker
+
+Im Probenraum ist das Netz oft schlecht oder gar nicht da. Vorgemerkte
+Partituren – Noten und Ton – sollen dann trotzdem gehen.
+
+**Warum eine eigene Seite.** Gemessen auf Nextcloud 34: Files registriert
+selbst einen Service Worker mit dem Scope `/` (`preview-service-worker.js`),
+und der steuert damit auch den Viewer. Je Scope gibt es nur einen Worker; ein
+ScoreView-Worker mit `/` verdrängte den von Files. Ein Worker wirkt aber auf
+Seiten unter seinem eigenen Pfad, und dort gewinnt der spezifischere Scope.
+Ohne Worker lädt die Files-Seite ohne Netz gar nicht. Deshalb gibt es genau
+eine eigene Seite, `/apps/scoreview/offline`, mit einem Worker, dessen Scope
+**nur diese Seite** ist
+([E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste) bleibt
+sonst, wie es ist).
+
+**Tragende Idee: dieselben URLs.** Der Viewer fragt auf der Offline-Seite
+genau die Adressen ab, die er auch in Files abfragt – Status, Artefakte samt
+`?v=`, Notizen, „Meine Stimme“, Setliste, SoundFont. „Offline vormerken“ legt
+die Antworten unter genau diesen URLs in den Cache `scoreview-offline-data`
+(`offlinePlan.js` nennt sie, `useOffline.js` lädt sie), und der Worker
+beantwortet sie von dort, wenn das Netz fehlt. Der Viewer braucht dadurch
+keine zweite Datenquelle, nur einen Kontextwert `offline`, der in `barGroups.js`
+und `interactionPolicy.js` ausblendet und sperrt, was einen Server braucht:
+Notizen und Stempel setzen, Leitung und „Folgt mir“, Aufnahme und Intonation,
+Übe-Tracks, Vormerken und Setlisten bearbeiten. Wiedergabe, Mixer, Loop,
+Tempo, Metronom, Anfangston, Transposition, Coach, Darstellungen und
+Aufführungsmodus bleiben.
+
+**Was der Worker tut** (`src/offline-sw.js`), nach Art der Anfrage:
+
+| Anfrage | Regel |
+|---|---|
+| die Seite selbst | erst das Netz, sonst der Cache der Hülle; eine nachgewiesene Umleitung zum Login räumt alles ([S10](#s10-vorgemerktes-gehört-einem-konto-und-verschwindet-mit-der-anmeldung)) |
+| `GET` an `/apps/scoreview/api/…` | erst das Netz, sonst `scoreview-offline-data`, mit und ohne `index.php`; sonst 503 `{offline: true}` |
+| Skripte, Stile, Schriften, Übersetzungen unter `/apps`, `/custom_apps`, `/apps-extra`, `/core`, `/dist`, `/themes` | aus dem Cache der Hülle, im Hintergrund erneuert; der Cache trägt die App-Version im Namen |
+| alles andere `GET` (etwa ein externes SoundFont) | erst der Datencache, dann das Netz |
+| nicht `GET` | geht unverändert ans Netz |
+
+**Einmal online öffnen.** Die Seite richtet sich beim ersten Besuch mit Netz
+ein: Sie registriert den Worker und schickt ihm die Liste dessen, was sie
+schon geladen hat, damit auch Nextclouds eigene Skripte in den Cache kommen.
+Wann das Handy offline sein wird, lässt sich vorher nicht wissen, und die Liste
+der Core-Skripte ist nicht stabil genug, um sie blind vorzuladen. Nach dem
+Vormerken weist der Viewer deshalb darauf hin. Ein Web-App-Manifest erlaubt
+„Zum Startbildschirm hinzufügen“.
+
+**Eine Adresse.** Die Seite antwortet nur unter der Form, die auch der Scope
+ist; unter der anderen (mit bzw. ohne `index.php`) leitet sie dorthin um. Sonst
+steuerte der Worker sie nie, und die Seite fiele ohne Netz aus.
+
+**Aktualisieren und Räumen.** Öffnet man die Offline-Seite mit Netz, prüft sie
+jedes Vorgemerkte am Statusendpunkt; hat sich der Konvertierungsstand
+geändert, lädt sie den Eintrag neu („Aktualisiert“), ohne Netz bleibt er
+(„Eventuell veraltet“). Ob der Server erreichbar ist, schließt sie aus einer
+gescheiterten Prüfung, nicht allein aus `navigator.onLine` – das meldet nur
+ein Netz, keinen erreichbaren Server. Der Browser gewährt
+`navigator.storage.persist()` in der Regel nicht und darf den Cache bei
+Platzmangel räumen; fehlt beim Öffnen eine URL eines Eintrags, gilt er als
+„Vom Browser entfernt“. Das SoundFont teilen sich alle Einträge und zählt in
+der Platzangabe nur einmal.
+
+**Nur im Browser.** In den mobilen Apps gibt es die Offline-Seite nicht – die
+Direct-Editing-Seite hat keinen eigenen Pfad, unter dem ein Worker gelten
+könnte –, und der Viewer bietet dort kein Vormerken an.
+
+### E15: Fähigkeiten statt Weg
+
+Liedtext-Ansicht und Tonnamen brauchen Daten, die heute nur die Engine des
+lokalen Wegs schreibt (`lyricSyllables`, `noteSpellings`,
+[E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)). Der Viewer
+fragt deshalb nicht, welcher Weg gelaufen ist, sondern was die Artefakte
+hergeben (`capabilities.js`): `segIds` (Kennungen nach
+[M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)),
+`lyrics`, `spellings`, `keyModes`. Das ist das Leitprinzip aus dem
+[Datenfluss](#datenfluss), auf eine neue Frage angewandt: Käme ein Weg mit
+denselben Daten dazu, würde er ohne eine Zeile im Viewer mitgenutzt.
+
+| Darstellung | braucht |
+|---|---|
+| Seiten | nichts |
+| Systemband | nichts – die Systemgrenzen kommen aus den Notenlinien, auf beiden Wegen |
+| Liedtext | `lyricSyllables` mit mindestens einer Silbe |
+| Tonnamen, Ton beim Antippen | `noteSpellings` |
+
+**Kein stiller Rückfall.** Anders als die Färbung der Notenköpfe, die still auf
+das Band zurückfällt, sagen die neuen Darstellungen, warum sie nicht gehen
+(`unavailableReason`): Die Partitur hat keinen Liedtext (`hasLyrics`, das beide
+Wege schreiben); sie hat zu viel Text (die Engine lässt die Liste über 20 000
+Silben ganz weg, statt sie abzuschneiden); oder die Seiten wurden ohne die
+nötigen Daten gesetzt – „eine Neukonvertierung auf diesem Server kann sie
+nicht ergänzen“. Der letzte Text gilt auf Sidecar-Instanzen, nennt aber keinen
+Weg. Nicht verfügbare Optionen sind in der Auswahl ausgegraut und nennen den
+Grund; ist die gewählte Darstellung bei einer Partitur nicht verfügbar, zeigt
+der Viewer die Seiten mit einer Hinweisleiste, und die Wahl bleibt
+gespeichert.
 
 ## Formatgrundlagen
 
 Eigenschaften des MuseScore-Exports, auf denen die Umsetzung aufbaut. Alle gegen
 das gebaute Image bzw. die Engine gemessen, nicht angenommen. Die Kennungen
-`M1`…`M11` sind im Code referenziert.
+`M1`…`M12` sind im Code referenziert.
 
 ### M1: `--score-media` liefert alles in einem Aufruf
 
@@ -1542,11 +1965,12 @@ kommt nicht in Frage.)
 `pngs`, `pdf` und `mxml` werden verworfen: PNG ist der mit Abstand größte Posten
 und wird durch SVG ersetzt, MusicXML braucht der Viewer nicht.
 
-`metadata` trägt bei der Engine des lokalen Wegs zwei Felder mehr, die
-Stock-MuseScore nicht kennt: `keySigs` und `rehearsalMarks`
+`metadata` trägt bei der Engine des lokalen Wegs vier Felder mehr, die
+Stock-MuseScore nicht kennt: `keySigs`, `rehearsalMarks`, `lyricSyllables`
+und `noteSpellings`
 ([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall), Form im
 [Artefaktschema](#artefaktschema)). Das `metadata` des Sidecars hat keines
-von beiden.
+davon.
 
 ### M3: stdout ist nicht sauber
 
@@ -1752,6 +2176,37 @@ Studierbuchstaben A/B/C, eine Wiederholung) auf beiden Wegen:
   Millisekunden. Ohne 1 ms Zugabe landete ein Buchstabe gelegentlich im Takt
   davor (`scoreFacts.js`).
 
+### M12: Liedtext steht im SVG nur als Glyphen
+
+Gemessen an `lyrics-test.mscz` (Sopran und Bass, Takt 1–2 dreimal wiederholt
+mit drei Strophen, Schluss „A-men“) auf beiden Wegen:
+
+| | lokal (Engine) | Sidecar |
+|---|---|---|
+| Liedtext-Gruppen im SVG | 76 × `<g class="Lyrics seg-N st-N vc-N">` – 56 Silben und 20 Linien zwischen und hinter Silben (`LyricsLineSegment`) | 76 × `<g class="Lyrics">`, ohne `seg-` |
+| Silbentext lesbar | nein – Glyphen als `<use>` | nein, ebenso Glyphen |
+| Strophennummer | keine; nur die senkrechte Lage ordnet die Strophen | keine |
+| `meta.json` `lyrics` | ein flacher String aller Strophen beider Stimmen, Silben zusammengezogen | dasselbe |
+
+Aus den übrigen Artefakten lässt sich damit **kein Liedtext rekonstruieren** –
+weder Wörter noch die Zuordnung Silbe ↔ Strophe ↔ Stimme. Deshalb schreibt die
+Engine `lyricSyllables`
+([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)); auf dem
+Sidecar-Weg gibt es die Liedtext-Ansicht nicht
+([E15](#e15-fähigkeiten-statt-weg)). Das Timing rollt die Wiederholung
+korrekt aus (28 Ereignisse = 3 × 8 + 4,
+[M7](#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)); daraus folgt, welche
+Strophe bei welchem Durchgang klingt.
+
+**Die Notenköpfe im SVG stehen in derselben Reihenfolge wie
+`noteSpellings`**, einschließlich Vorschlags- und Ornament-Hilfsnoten: Über den
+vtest-Korpus der Engine (838 Dateien, 14 254 Noten) stimmt die Zahl der Köpfe
+je Segment, Notenzeile und Stimme mit dem SVG überein. Darauf beruht die
+Zuordnung der Tonnamen der Reihe nach; der Selbsttest prüft sie an
+`lyrics-test.mscz`. Der Modus einer Tonart steht weiterhin nicht im MIDI
+([M11](#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen)) –
+für das relative Do wird er nicht gebraucht.
+
 ## Artefaktschema
 
 `timing.json` und `measures.json` haben dieselbe Form (ein gemeinsamer Parser im
@@ -1780,8 +2235,9 @@ beim Abspielen durchlaufen wird.
 
 `meta.json` ist das `metadata`-Objekt des Konverters, unverändert
 ([M8](#m8-metadata-trägt-tempo-und-titel-tracks-ist-aber-nicht-garantiert)).
-Die Engine des lokalen Wegs ergänzt zwei Felder
-([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)):
+Die Engine des lokalen Wegs ergänzt vier Felder
+([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)), zuerst zwei
+für Tonarten und Studierbuchstaben:
 
 ```json
 "keySigs":        [{"measure": 1, "tick": 0,    "concertKey": -3, "mode": "minor"},
@@ -1800,8 +2256,37 @@ Die Engine des lokalen Wegs ergänzt zwei Felder
 - Fehlen die Felder (Sidecar, Konvertierung mit einer älteren Engine), ist das
   kein Fehler – der Viewer nimmt dann das MIDI.
 
+Dann zwei für Liedtext und Schreibweisen (ab `v4.7.5-engine.4`):
+
+```json
+"lyricSyllables": [{"elid": 0, "staff": 0, "voice": 0, "verse": 0,
+                    "syllabic": "begin", "text": "Hal", "melisma": false}],
+"noteSpellings":  [{"elid": 3, "staff": 0, "voice": 0, "notes": [[67, 15], [71, 19]]}]
+```
+
+- `elid` ist dieselbe Segmentnummer wie in `timing.json` und `seg-N` im SVG
+  ([M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)),
+  `staff` und `voice` entsprechen `st-N` und `vc-N`.
+- `lyricSyllables` enthält jede sichtbare Silbe auf einer gezeichneten
+  Notenzeile, geordnet nach `elid`, Notenzeile, Stimme und Strophe. `verse`
+  zählt ab 0, `syllabic` nimmt MuseScores Vokabular (`single`, `begin`,
+  `middle`, `end`) – ein Wort endet genau dort, wo MuseScore keinen
+  Silbenstrich zeichnet –, `melisma` sagt, dass eine Haltelinie folgt, `text`
+  ist die Silbe ohne Formatierung. Über 20 000 Silben fehlt das Feld ganz,
+  statt abgeschnitten zu werden: Ein halber Text wäre schlimmer als keiner, und
+  „zu viel“ (Feld fehlt, `hasLyrics` wahr) bleibt von „keiner“ (leere Liste)
+  unterscheidbar.
+- `noteSpellings` nennt je Segment, Notenzeile und Stimme die Notenköpfe in der
+  Reihenfolge des SVG ([M12](#m12-liedtext-steht-im-svg-nur-als-glyphen)) als
+  `[pitch, tpc]`: `pitch` ist die klingende MIDI-Tonhöhe (wie im MIDI),
+  `tpc` MuseScores „tonal pitch class“ der Note, wie sie im Notenbild steht
+  (14 = C, 21 = Fis, 13 = F, eine Quinte je Schritt).
+- Fehlen die Felder, gibt es Liedtext-Ansicht und Tonnamen nicht
+  ([E15](#e15-fähigkeiten-statt-weg)); einen Rückfall aus dem MIDI gibt es
+  dafür nicht.
+
 Welche Fassung dieses Schemas ein Cache-Eintrag hat, hält `format_version` fest
-(`CURRENT_FORMAT_VERSION` = 3, [Konvertierung und Cache](#konvertierung-und-cache)).
+(`CURRENT_FORMAT_VERSION` = 4, [Konvertierung und Cache](#konvertierung-und-cache)).
 
 ## Weiter
 

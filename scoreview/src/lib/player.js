@@ -18,7 +18,7 @@ import { pickToneChannel } from './startTone.js'
 // Datei geladen, nicht importiert/gebündelt - webpack.config.js kopiert sie
 // unverändert neben die anderen Bundles (siehe dort). Mit App-Version, weil
 // sie sonst nach einem Update aus dem Browser-Cache kaeme (assetVersion.js).
-const WORKLET_URL = withAppVersion(generateFilePath('scoreview', 'js', 'spessasynth_processor.min.js'), SCOREVIEW_APP_VERSION)
+export const WORKLET_URL = withAppVersion(generateFilePath('scoreview', 'js', 'spessasynth_processor.min.js'), SCOREVIEW_APP_VERSION)
 
 // MIDI CC7 = Kanal-Lautstärke (General-MIDI-Standard). Mute/Solo werden
 // bewusst darüber abgebildet statt über eine synth-interne Mute-API - CC7
@@ -234,6 +234,24 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	}
 
 	/**
+	 * Transposition des Klangs in Halbtoenen (H6). Das Notenbild bleibt
+	 * stehen - das sagt die Oberflaeche dazu.
+	 *
+	 * Bewusst die GLOBALE Systemeinstellung, nicht `keyShift` je Kanal:
+	 * Gemessen setzt der Reset beim Suchlauf die kanalweise auf 0 zurueck
+	 * (resetAllControllers), die globale bleibt stehen - ohne Sperre wie bei
+	 * den Controllern, und Schlagzeugkanaele laesst sie von selbst aus. Weil
+	 * sie im Synthesizer wirkt, klingen auch Anfangston und Testton
+	 * transponiert, ohne dass jemand die Tonhoehe umrechnet.
+	 *
+	 * @param {number} semitones -12..12
+	 */
+	function setTranspose(semitones) {
+		const n = Math.max(-12, Math.min(12, Math.trunc(Number(semitones) || 0)))
+		synth.setSystemParameter('keyShift', n)
+	}
+
+	/**
 	 * Einen Controller setzen und gegen den Sequencer verriegeln.
 	 *
 	 * Gemessen: Jeder Suchlauf - und damit jeder Loop-Ruecksprung - setzt den
@@ -406,6 +424,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		seekIsAsync: true,
 		setTempo,
 		getTempo,
+		setTranspose,
 		setAccompanimentGain,
 		applyChannelVolumes,
 		applyChannelPans,

@@ -37,6 +37,25 @@ const begleiter = new Map()
 const ausgaben = new Map()
 /** Die zuletzt freigeschaltete Liste - dorthin geht es, wenn Begleiter ablaufen. */
 let letzteListe = null
+/** Stuecke, zu denen „Folgt mir" umgezogen ist - ihre Begleiter kommen beim Erneuern mit. */
+const folgeZiele = new Set()
+
+/**
+ * Ein Begleit-Token fuer das Stueck, zu dem „Folgt mir" umgezogen ist (H7) -
+ * wie bei der Setliste nur gegen das Direct-Editing-Token dieser Seite
+ * (Controller\FollowController::companion, S1).
+ *
+ * @param {number|string} ziel fileId
+ * @return {Promise<void>}
+ */
+async function folgeBegleiterHolen(ziel) {
+	const url = generateUrl('/apps/scoreview/api/scores/{fileId}/follow/companion', { fileId: zustand.fileId })
+	const antwort = await axios.get(url, { params: { target: ziel } })
+	if (antwort.data?.token) {
+		begleiter.set(String(antwort.data.fileId), antwort.data.token)
+		folgeZiele.add(String(antwort.data.fileId))
+	}
+}
 
 /**
  * Holt die Begleit-Token einer Setliste - eines je Stueck, das die Nutzerin
@@ -167,9 +186,16 @@ function beiAblaufNeuLaden(bruecke) {
 		const status = fehler?.response?.status
 		const code = fehler?.response?.data?.errorCode
 		const config = fehler?.config
-		if (begleiterErneuerbar(status, code) && letzteListe !== null && config && !config.scoreviewErneuert) {
+		if (begleiterErneuerbar(status, code) && (letzteListe !== null || folgeZiele.size > 0) && config && !config.scoreviewErneuert) {
 			begleiter.clear()
-			await begleiterHolen(letzteListe)
+			if (letzteListe !== null) {
+				await begleiterHolen(letzteListe)
+			}
+			// Auch die Begleiter der Folge-Stuecke - sonst antwortete das Stueck,
+			// zu dem die Leitung gewechselt hat, nach dem Erneuern mit 403.
+			for (const ziel of folgeZiele) {
+				await folgeBegleiterHolen(ziel).catch(() => {})
+			}
 			return axios({ ...config, scoreviewErneuert: true })
 		}
 		if (status === 401 && code === 'token_expired') {
@@ -188,4 +214,14 @@ if (zustand.token) {
 createApp(StandaloneFrame, {
 	fileid: zustand.fileId,
 	name: zustand.fileName ?? '',
-}).mount('#scoreview-standalone')
+})
+	// Ein Begleit-Token fuer das Stueck, zu dem „Folgt mir" umgezogen ist
+	// (H7) - wie bei der Setliste nur gegen das Direct-Editing-Token dieser
+	// Seite (Controller\FollowController::companion, S1).
+	.provide('scoreviewCompanion', async (target) => {
+		if (begleiter.has(String(target)) || String(target) === String(zustand.fileId)) {
+			return
+		}
+		await folgeBegleiterHolen(target)
+	})
+	.mount('#scoreview-standalone')

@@ -189,6 +189,29 @@ Cron spielt hier **keine** Rolle – alles läuft in den Anfragen selbst.
   Änderungen bis zu einer Sekunde später
   ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
 
+**Beim nächsten Stück der Setliste kommt niemand mit:**
+
+- **Meldet die Leitung „Die Sitzung ließ sich nicht zum nächsten Stück
+  mitnehmen“?** Dann führt dort schon eine andere Leitung eine Sitzung, oder
+  die eigene ist inzwischen abgelaufen. Die Leitung ist trotzdem gewechselt;
+  dort bei Bedarf „Folgt mir“ neu starten – eine laufende Sitzung einer
+  anderen Leitung wird damit übernommen.
+- **Folgte das Gerät?** Wer sich gelöst hatte, wird nicht mitgenommen, sondern
+  bekommt den Hinweis „Die Leitung ist zu einem anderen Stück weitergegangen“
+  mit „Dorthin wechseln“.
+- **Darf das Gerät das neue Stück lesen?** Sonst antwortet es 404, und der
+  Viewer zeigt den Fehler. Mitgenommen wird nur, wer die Datei sieht.
+- **In der App:** Das Folgegerät braucht für das neue Stück ein Begleit-Token,
+  das es selbst holt – nur, solange dort die Sitzung läuft und das Token der
+  geöffneten Seite gilt. Hilft das nicht, die Partitur in der App neu
+  öffnen.
+
+**Alles klingt höher oder tiefer als notiert:** Eine Transposition ist
+gesetzt – von der Person selbst (je Partitur gespeichert) oder von einer
+Leitung für alle. Die Gruppe „Üben“ trägt dann einen Punkt; unter
+„Transponieren“ steht der Wert und lässt sich zurücksetzen. Wer einer Leitung
+folgt und selbst transponiert, folgt danach nicht mehr.
+
 ## Eine Aufnahme lässt sich nicht speichern
 
 Die Aufnahme bleibt dann im Speicher des Browsers, lässt sich abhören und über
@@ -203,6 +226,94 @@ Meldung nennt den Grund:
 | `507` „… all the storage allowed per person“ | Der Speicher je Person ist voll | ältere Aufnahmen löschen, oder `max_recording_bytes_per_user` anheben |
 | `507` „… storage for recordings on this server is full“ | Der Speicher der Instanz für Aufnahmen ist voll | `max_recording_bytes_total` anheben |
 | `404` | Die Partitur ist nicht (mehr) erreichbar, oder die Aufnahme gehört jemand anderem | – |
+
+## Ein Übe-Track lässt sich nicht speichern
+
+Die Meldung nennt den Grund:
+
+| Antwort | Bedeutung | Was hilft |
+|---|---|---|
+| `409` „… gibt es schon“ | Eine Datei dieses Namens liegt schon dort | den vorgeschlagenen Namen nehmen oder „Ersetzen“ |
+| `413` „Der Übe-Track ist größer als erlaubt …“ | Der Track ist größer als `practice_track_max_mb` | einen Ausschnitt (Loop) speichern oder die Grenze anheben ([Installation](installation.md#übe-tracks-und-offline-seite)) |
+| `413` ohne Meldung der App (Seite des Webservers) | Der Webserver nimmt so große Anfragen nicht an | `client_max_body_size` (nginx) anheben |
+| `507` „Nicht genug Speicherplatz.“ | Das Kontingent der Besitzerin des Zielordners ist voll | Platz schaffen oder einen eigenen Ordner wählen |
+| `403` „Von der Mobil-App aus lässt sich hier nicht speichern.“ | In der App gibt es keinen frei gewählten Ordner, und aus einem Stück einer Setliste heraus gar keinen Export | in der App die Partitur selbst öffnen und neben ihr speichern, oder im Browser |
+| `403` „In diesem Ordner darfst du keine Dateien speichern.“ | Kein Schreibrecht im Zielordner, oder die vorhandene Datei ist nicht änderbar | einen eigenen Ordner wählen |
+| `400` „Das ist keine MP3-Datei.“ | Der Rumpf war kein MP3 – im Viewer nur bei einem abgebrochenen Rendern denkbar | erneut speichern |
+| `404` | Die Partitur ist nicht (mehr) erreichbar, oder Übe-Tracks sind auf diesem Server abgeschaltet | – |
+
+**„Tracks für alle Stimmen“ fehlt:** Den Knopf sieht nur, wer neben der
+Partitur Dateien anlegen darf. Der Export als Ganzes fehlt, wenn die
+Verwaltung ihn abgeschaltet hat und auf der Offline-Seite; solange der Klang
+nicht geladen ist, sagt er „Der Klang ist noch nicht geladen.“
+
+## Die Offline-Seite bleibt ohne Netz leer oder lädt nicht
+
+- **Wurde sie je mit Netz geöffnet?** Die Seite richtet sich beim ersten
+  Besuch mit Netz ein. Vorher kennt der Browser sie nicht und zeigt ohne Netz
+  seine eigene Fehlerseite. Abhilfe: einmal mit Netz
+  `/apps/scoreview/offline` öffnen, bis die Liste erscheint – am besten gleich
+  nach dem Vormerken, der Viewer weist darauf hin. Am Handy lässt sie sich
+  dann zum Startbildschirm hinzufügen.
+- **Unter welcher Adresse?** Die Seite gilt nur unter einer Form – mit oder
+  ohne `index.php`, je nachdem, wie die Instanz ihre Adressen bildet. Unter
+  der anderen leitet sie mit Netz um; ein Lesezeichen auf die andere Form
+  scheitert ohne Netz. Das Lesezeichen deshalb **nach** der Umleitung setzen.
+- **HTTPS?** Service Worker gibt es nur in einem sicheren Kontext. Über
+  schlichtes `http://` (außer `localhost`) bleibt die Seite ohne Netz
+  unbenutzbar.
+- **Zeigt sie „Noch nichts offline gespeichert“?** Dann ist in diesem Browser
+  für das angemeldete Konto nichts vorgemerkt – Vormerken gilt je Browser, und
+  Einträge eines anderen Kontos zeigt die Seite nicht
+  ([S10](architecture.md#s10-vorgemerktes-gehört-einem-konto-und-verschwindet-mit-der-anmeldung)).
+- **War die Person abgemeldet?** Öffnet man die Seite mit Netz ohne Anmeldung,
+  leitet Nextcloud zum Login um, und das Vorgemerkte dieses Browsers wird
+  gelöscht. Nach dem Anmelden neu vormerken.
+- **„Die Offline-Seite ist auf diesem Server ausgeschaltet“** bzw. 404: Die
+  Verwaltung hat sie abgeschaltet (`feature_offline`).
+
+## „Vom Browser entfernt – bitte erneut vormerken“
+
+Der Browser hat Teile des Vorgemerkten gelöscht. Er darf das bei Platzmangel,
+weil er die dauerhafte Speicherung (`navigator.storage.persist()`) gemessen
+nicht gewährt ([Grenzwerte](limits.md#offline)). Abhilfe: Stück oder Setliste
+mit Netz im Viewer erneut vormerken, Platz auf dem Gerät schaffen, und vor
+einem Konzert die Offline-Seite noch einmal mit Netz öffnen – sie prüft dann
+jeden Eintrag.
+
+**„Eventuell veraltet“** heißt dagegen nur, dass die Seite den Server beim
+Öffnen nicht erreicht hat; der Eintrag ist vollständig, nur ungeprüft.
+
+## „Offline vormerken“ fehlt im Viewer
+
+- **In den mobilen Apps gibt es das nicht** – die Offline-Seite braucht einen
+  Browser. Über „Im Browser öffnen“ geht es dort.
+- **Auf der Offline-Seite selbst** wird nicht vorgemerkt, das geht nur mit
+  Netz aus Files.
+- **Abgeschaltet** von der Verwaltung (`feature_offline`).
+- **„Öffne jedes Stück einmal, bis es angezeigt wird“:** Ein Stück der
+  Setliste ist noch nicht konvertiert. Vorgemerkt werden nur fertige
+  Konvertierungen; jedes Stück einmal öffnen, dann erneut vormerken.
+
+## Liedtext-Ansicht oder Tonnamen sind nicht wählbar
+
+Die Auswahl nennt den Grund:
+
+- **„Diese Partitur hat keinen Liedtext.“** – so ist es.
+- **„Diese Seiten wurden ohne die Daten gesetzt, die diese Ansicht braucht.“**
+  Die Partitur wurde über den Sidecar konvertiert; Stock-MuseScore liefert
+  Liedtextsilben und Schreibweisen nicht
+  ([E15](architecture.md#e15-fähigkeiten-statt-weg)). Eine Neukonvertierung auf
+  derselben Instanz ändert daran nichts, nur der lokale Konvertierungsweg.
+- **„Diese Partitur hat zu viel Text für die Liedtext-Ansicht.“** Mehr als
+  20 000 Silben.
+- **Zeigt die Liedtext-Ansicht „Diese Stimme hat keinen Liedtext.“**, ist die
+  eigene Stimme textlos; „Meine Stimme“ wechseln oder abwählen (dann gilt die
+  oberste Stimme mit Text).
+
+Ist die gewählte Darstellung bei einer Partitur nicht verfügbar, zeigt der
+Viewer die Seiten mit einem Hinweis und behält die Wahl für die nächste
+Partitur.
 
 ## Die Konvertierung kommt nicht voran
 

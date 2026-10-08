@@ -140,3 +140,25 @@ export function planHorizontalScroll({
 export function shouldSuppressAutoScroll(lastManualScrollAt, now, resumeDelayMs = 2500) {
 	return lastManualScrollAt !== null && (now - lastManualScrollAt) < resumeDelayMs
 }
+
+/**
+ * Ob ein `scrollend` ein Eingriff der Nutzerin war. Der Browser meldet es
+ * auch am Ende des eigenen, weichen Nachfuehrens - gezaehlt als Eingriff,
+ * hielt jedes Nachfuehren sich selbst fuer die Pausendauer an (gemessen bei
+ * starkem Zoom: Der Cursor lief waagerecht aus dem Bild, und beim
+ * Systemwechsel blieb die Ansicht rechts stehen, bis die Pause ablief). Ein
+ * Eingriff ist es nur, wenn seit dem eigenen Scrollen eine Geste begann -
+ * dann ist das Ende ihr Traegheitsscrollen.
+ *
+ * @param {object} params
+ * @param {number|null} params.ownScrollAt Beginn des eigenen Scrollens (ms),
+ *   null, wenn keins unterwegs ist
+ * @param {number|null} params.lastGestureAt Beginn der letzten Geste (ms)
+ * @return {boolean}
+ */
+export function isManualScrollEnd({ ownScrollAt, lastGestureAt }) {
+	if (ownScrollAt === null) {
+		return true
+	}
+	return lastGestureAt !== null && lastGestureAt >= ownScrollAt
+}

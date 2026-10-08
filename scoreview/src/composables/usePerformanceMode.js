@@ -31,16 +31,17 @@ export const EXIT_HOLD_MS = 1000
  * @param {(event: KeyboardEvent) => void} deps.onKeydown derselbe Handler wie am Viewer
  * @param {() => void} [deps.onEnter] beim Einschalten (Panels schliessen, Ton aus)
  * @param {() => boolean} [deps.following] ob gerade einer Leitung gefolgt wird (spaeter)
+ * @param {() => boolean} [deps.offline] ob der Viewer auf der Offline-Seite laeuft (E14)
  * @return {object}
  */
-export function usePerformanceMode({ rootEl, onKeydown, onEnter = () => {}, following = () => false }) {
+export function usePerformanceMode({ rootEl, onKeydown, onEnter = () => {}, following = () => false, offline = () => false }) {
 	const active = ref(false)
 	// 0..1 waehrend das Schloss gehalten wird - treibt den Fortschrittsring.
 	const exitProgress = ref(0)
 	let holdStart = null
 	let frame = null
 
-	const context = computed(() => ({ performance: active.value, following: following() }))
+	const context = computed(() => ({ performance: active.value, following: following(), offline: offline() }))
 
 	/**
 	 * @param {string} action eine Bedienung aus interactionPolicy.ACTIONS

@@ -42,9 +42,11 @@ Buchstaben D und prüft den Rückfall, wenn die Taktzählung der Engine von
 ([E12](architecture.md#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)).
 Wer sie neu erzeugt, nimmt `score.mid` aus `node convert.mjs <partitur> <ziel>`.
 
-**Die AudioWorklets tragen die App-Version.** `webpack.config.js` liest sie
-beim Bauen aus `appinfo/info.xml` und hängt sie als `?v=` an die Adressen, die
-`audioWorklet.addModule()` lädt
+**Die AudioWorklets tragen die App-Version**, ebenso der Render-Worker der
+Übe-Tracks und der Service Worker der Offline-Seite. `webpack.config.js` liest
+sie beim Bauen aus `appinfo/info.xml` und hängt sie als `?v=` an die Adressen, die
+`audioWorklet.addModule()`, `new Worker()` und
+`navigator.serviceWorker.register()` laden
 ([Nachgeladene Dateien](architecture.md#nachgeladene-dateien)). Ein Build ohne
 Versionssprung behält also dieselbe Adresse – wer am Worklet arbeitet, lädt
 hart neu.
@@ -130,7 +132,11 @@ M7 überhaupt prüfbar ist. Daneben konvertiert der Selbsttest
 `converter/keys-marks-test.mscz` (Kopie von
 `sidecar/testdata/keys-marks-test.mscz`) und prüft an ihr die nur von der
 Engine gelieferten Felder `keySigs` (c-Moll, Wechsel nach D-Dur) und
-`rehearsalMarks` (A/B/C).
+`rehearsalMarks` (A/B/C), und `converter/lyrics-test.mscz` (Kopie von
+`sidecar/testdata/lyrics-test.mscz`, erzeugt von `lyrics-test.gen.py` daneben)
+mit `lyricSyllables` (56 Silben, drei Strophen, jede an einer `elid` aus
+`timing.json`) und `noteSpellings` (je Segment, Notenzeile und Stimme so viele
+Einträge wie Notenköpfe im SVG).
 
 ## CI
 
@@ -225,7 +231,19 @@ die Anfrage ablehnt.
 Konten mit Zugriff auf dieselbe Partitur (Eigentümerin, Leitung, Sängerin),
 also eine Freigabe an zwei weitere Testnutzer. `notify_push` ist in der
 schlichten Testinstanz nicht eingerichtet; dort läuft nur der Weg über
-Abfragen.
+Abfragen. Für den Wechsel zum nächsten Stück braucht es eine Setliste mit
+mindestens zwei Partituren, die alle Beteiligten lesen dürfen.
+
+**Offline ohne Netz.** Die Offline-Seite lässt sich in Playwright mit
+`context.setOffline(true)` prüfen, mit zwei Fallstricken: `navigator.onLine`
+bleibt dabei `true` – die Seite schließt deshalb zusätzlich aus einer
+gescheiterten Prüfung auf „offline“, und ein Test darf sich nicht auf das
+Ereignis `offline` verlassen. Und der Worker steuert die Seite nur unter der
+Adresse, die sein Scope ist (mit oder ohne `index.php`, wie
+`linkToRoute` sie bildet); die andere Form leitet dorthin um, ein Test
+sollte deshalb gleich die kanonische aufrufen. `localhost` gilt als sicherer
+Kontext, eine LAN-Adresse über `http://` nicht – dort gibt es keinen Service
+Worker.
 
 ## Konventionen
 
@@ -374,7 +392,7 @@ vollständig gebaut wurde.
 
 **Testpartituren** unter `sidecar/testdata/` sind nicht garantiert frei
 lizenziert und bleiben draußen; Ausnahmen sind die selbst erstellten
-`repeat-test.*` und `keys-marks-test.mscz` (`.gitignore` führt beide
-ausdrücklich). Ebenso draußen: `scoreview/js/` (Build-Artefakte) und
+`repeat-test.*`, `keys-marks-test.mscz` und `lyrics-test.mscz` samt
+`lyrics-test.gen.py` (`.gitignore` führt die Partituren ausdrücklich). Ebenso draußen: `scoreview/js/` (Build-Artefakte) und
 `node_modules/`. Das Remote ist öffentlich – vor dem Push darauf achten, dass
 weder Geheimnisse noch fremdlizenziertes Material mitgehen.

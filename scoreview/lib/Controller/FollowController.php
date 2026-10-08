@@ -6,6 +6,8 @@ namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
+use OCA\ScoreView\Middleware\DirectAccessContext;
+use OCA\ScoreView\Service\CompanionTokenService;
 use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\FollowException;
 use OCA\ScoreView\Service\FollowService;
@@ -19,6 +21,7 @@ use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
+use OCP\Files\File;
 use OCP\Files\Node;
 use OCP\IL10N;
 use OCP\IRequest;
@@ -57,6 +60,8 @@ class FollowController extends Controller {
 		private FollowService $follow,
 		private FeatureConfig $features,
 		private IL10N $l,
+		private DirectAccessContext $access,
+		private CompanionTokenService $companions,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -133,12 +138,16 @@ class FollowController extends Controller {
 		bool $clearLoop = false,
 		bool $tone = false,
 		bool $heartbeat = false,
+		?int $transpose = null,
 	): JSONResponse {
 		[$node, $userId] = $this->resolve($fileId);
 		if ($node === null) {
 			return $this->notFound();
 		}
 		$changes = ['clearLoop' => $clearLoop, 'tone' => $tone, 'heartbeat' => $heartbeat];
+		if ($transpose !== null) {
+			$changes['transpose'] = $transpose;
+		}
 		if ($position !== null) {
 			$changes['position'] = $position;
 		}
@@ -174,6 +183,64 @@ class FollowController extends Controller {
 	 * Anmelden fuer Push (E10). Die Antwort sagt, ob sich das Geraet darauf
 	 * verlassen darf - `push: false` heisst: weiter abfragen.
 	 */
+	/**
+	 * Die Leitung schaltet zum naechsten Stueck weiter (V6, H7). `$fileId` ist
+	 * die Datei der laufenden Sitzung, `$targetFileId` das neue Stueck - es
+	 * muss fuer die Leitung lesbar sein, sonst 404 wie jede fremde Datei.
+	 */
+	#[NoAdminRequired]
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession]
+	#[UserRateLimit(limit: 30, period: 60)]
+	#[AnonRateLimit(limit: 30, period: 60)]
+	public function move(int $fileId, int $targetFileId, ?int $setlistId = null): JSONResponse {
+		[$node, $userId] = $this->resolve($fileId);
+		$target = $node === null ? null : $this->fileResolver->resolveOwnNode($targetFileId);
+		// Nur zu einer Partitur: Das Ziel bekommt spaeter Begleit-Token mit dem
+		// Zweck `score` (companion) - ein Ordner oder eine beliebige Datei
+		// waere darueber lesbar (S1).
+		if ($node === null || !$target instanceof File || $target->getMimetype() !== Application::MSCZ_MIMETYPE) {
+			return $this->notFound();
+		}
+		try {
+			return $this->respond($this->follow->move($node, $target, $userId, $setlistId), $userId);
+		} catch (FollowException $e) {
+			return $this->refused($e);
+		}
+	}
+
+	/**
+	 * Ein Begleit-Token fuer das Stueck, zu dem die Sitzung umgezogen ist -
+	 * fuer Folgende in den mobilen Apps (E8, S1). Wie jedes Begleit-Token nur
+	 * gegen das Direct-Editing-Token der geoeffneten Partitur (`$fileId`), nur
+	 * fuer eine Partitur, die die Person ohnehin lesen darf, und nur, wenn die
+	 * Sitzung DIESER Partitur dorthin umgezogen ist (gleiche Sitzungskennung,
+	 * FollowService::isMoveTarget) - eine beliebige Datei mit irgendeiner
+	 * laufenden Sitzung reicht nicht. Ein abgegriffenes Token der Seite oeffnet
+	 * so keine beliebigen Dateien.
+	 */
+	#[NoAdminRequired]
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession(companion: null, directOnly: true)]
+	#[UserRateLimit(limit: 30, period: 60)]
+	#[AnonRateLimit(limit: 30, period: 60)]
+	public function companion(int $fileId, int $target): JSONResponse {
+		[$node, $userId] = $this->resolve($fileId);
+		$digest = $this->access->directDigest();
+		$targetNode = $node === null ? null : $this->fileResolver->resolveOwnNode($target);
+		if ($node === null || !$targetNode instanceof File || $targetNode->getMimetype() !== Application::MSCZ_MIMETYPE
+			|| $digest === null || $this->access->mode() !== DirectAccessContext::DIRECT
+			|| !$this->follow->isMoveTarget($fileId, $target)) {
+			return $this->notFound();
+		}
+		return new JSONResponse([
+			'fileId' => $target,
+			'token' => $this->companions->issue($userId, $target, CompanionTokenService::PURPOSE_SCORE, $digest),
+		]);
+	}
+
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[NoCSRFRequired]

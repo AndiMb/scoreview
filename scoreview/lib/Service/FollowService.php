@@ -8,6 +8,7 @@ use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\FollowSession;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\Exception as DbException;
+use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\ICache;
 use OCP\ICacheFactory;
@@ -52,6 +53,15 @@ use OCP\IUserManager;
  * einem Webserver kostet das einen Lesezugriff je Sekunde und Datei, nicht je
  * Geraet - der Kurzschluss bleibt also fast vollstaendig erhalten.
  *
+ * **Umzug zum naechsten Stueck (V6, H7).** Eine Sitzung bleibt an EINER
+ * Datei. Schaltet die Leitung in der Setliste weiter, entsteht auf dem neuen
+ * Stueck eine Sitzung mit derselben Kennung (`session`), die die Zaehler
+ * uebernimmt, und das alte traegt `moved` mit der neuen Datei. Wer folgt,
+ * kommt so mit - auch ohne Setliste -, und wer das neue Stueck direkt
+ * oeffnet, findet die Sitzung dort. Die Leitung darf auf dem neuen Stueck
+ * fuehren, ohne dort Leitung zu sein (`carriedFrom`, D16); Stimmnotizen
+ * und Stempel prueft dort weiter LeaderService.
+ *
  * **Sitzungsende:** durch eine Leitung, oder 30 min ohne
  * Lebenszeichen. Das wird beim Lesen als „beendet" gewertet, auch aus dem
  * Cache; die Zeile raeumt CleanupOrphansJob ab.
@@ -84,12 +94,16 @@ class FollowService {
 	private const MEMBER_LOCK_TTL = 5;
 	private const MEMBER_LOCK_ATTEMPTS = 20;
 	private const MEMBER_LOCK_WAIT_US = 5000;
+	/** Transposition in Halbtoenen, wie im Player (H6). */
+	public const TRANSPOSE_LIMIT = 12;
 	/** Hoechste Taktnummer, die angenommen wird - Schutz vor Unsinn, keine Fachgrenze. */
 	public const MAX_MEASURE = 100000;
 	/** Laenge eines Studierbuchstabens samt Zusatz („C+3", „A1"). */
 	public const MAX_MARK_LENGTH = 16;
 	/** So oft wird ein verlorenes Vergleichen-und-Tauschen wiederholt. */
 	private const ATTEMPTS = 3;
+	/** Wie weit `end` die Kette der Umzuege zurueckgeht - eine Probe hat keine hundert Stuecke. */
+	private const MAX_CHAIN = 50;
 
 	/** Die Version, die „keine Sitzung" bedeutet. */
 	public const NO_SESSION = '0';
@@ -106,6 +120,7 @@ class FollowService {
 		private PushNotifier $push,
 		private ITimeFactory $time,
 		ICacheFactory $cacheFactory,
+		private IRootFolder $rootFolder,
 	) {
 		$this->localOnly = !$cacheFactory->isAvailable();
 		$this->cache = $this->localOnly
@@ -147,6 +162,12 @@ class FollowService {
 				$changed = false;
 				if ($row->getLeaderUid() !== $actor) {
 					$row->setLeaderUid($actor);
+					$changed = true;
+				}
+				// Wer hier startet, ist hier Leitung (requireLeader ohne Zeile) -
+				// eine getragene Leitung gilt fuer die neue Leitung nicht weiter.
+				if ($state['carriedFrom'] !== null) {
+					$state['carriedFrom'] = null;
 					$changed = true;
 				}
 				if ($position !== null) {
@@ -211,11 +232,11 @@ class FollowService {
 	 * sie dem alten Wert gleicht: „Nochmal ab C" ist ein neuer Befehl, auch
 	 * wenn C schon der letzte war.
 	 *
-	 * @param array{position?: array{measure: int, mark?: ?string}, loop?: ?array{from: int, to: int}, clearLoop?: bool, tone?: bool, heartbeat?: bool} $changes
+	 * @param array{position?: array{measure: int, mark?: ?string}, loop?: ?array{from: int, to: int}, clearLoop?: bool, tone?: bool, transpose?: ?int, heartbeat?: bool} $changes
 	 * @throws FollowException NOT_LEADER, NO_SESSION, OTHER_LEADER, INVALID, CONFLICT
 	 */
 	public function change(Node $node, string $actor, array $changes): array {
-		$this->requireLeader($node, $actor);
+		$this->requireLeader($node, $actor, $this->mapper->findByFileId($node->getId()));
 		$position = isset($changes['position'])
 			? $this->position((int)($changes['position']['measure'] ?? 0), $changes['position']['mark'] ?? null)
 			: null;
@@ -226,6 +247,13 @@ class FollowService {
 			$loop = $this->loopRange($changes['loop']);
 		}
 		$tone = !empty($changes['tone']);
+		$transpose = null;
+		if (array_key_exists('transpose', $changes) && $changes['transpose'] !== null) {
+			$transpose = (int)$changes['transpose'];
+			if (abs($transpose) > self::TRANSPOSE_LIMIT) {
+				throw new FollowException(FollowException::INVALID);
+			}
+		}
 		$fileId = $node->getId();
 
 		for ($attempt = 0; $attempt < self::ATTEMPTS; $attempt++) {
@@ -238,7 +266,7 @@ class FollowService {
 			}
 			$row->setHeartbeatAt($this->time->getDateTime());
 			$expected = $row->getVersion();
-			if ($position === null && $loop === null && !$tone) {
+			if ($position === null && $loop === null && !$tone && $transpose === null) {
 				// Nur das Lebenszeichen (alle 60 s): kein Zaehler, keine neue
 				// Version. Geschrieben nur, wenn die Zeile noch die gelesene
 				// Version traegt: Hat derweil jemand die Sitzung beendet, bleibt
@@ -257,11 +285,17 @@ class FollowService {
 				continue;
 			}
 			$state = $this->decode($row);
+			// Stelle und Loop tragen ihre Datei: Waehrend eines Umzugs kann ein
+			// Stand der alten noch unterwegs sein, und Takt 12 dort ist ein
+			// anderer Takt 12 (src/lib/followState.js verwirft fremde).
 			if ($position !== null) {
-				$state['position'] = ['seq' => $state['position']['seq'] + 1] + $position;
+				$state['position'] = ['seq' => $state['position']['seq'] + 1] + $position + ['fileId' => $fileId];
 			}
 			if ($loop !== null) {
-				$state['loop'] = ['seq' => $state['loop']['seq'] + 1] + $loop;
+				$state['loop'] = ['seq' => $state['loop']['seq'] + 1] + $loop + ['fileId' => $fileId];
+			}
+			if ($transpose !== null) {
+				$state['transpose'] = ['seq' => $state['transpose']['seq'] + 1, 'semitones' => $transpose];
 			}
 			if ($tone) {
 				// Serverzeit, nicht die des Leitungsgeraets: Verglichen wird
@@ -286,14 +320,139 @@ class FollowService {
 	 * @throws FollowException NOT_LEADER
 	 */
 	public function end(Node $node, string $actor): array {
-		$this->requireLeader($node, $actor);
 		$fileId = $node->getId();
+		$row = $this->mapper->findByFileId($fileId);
+		$this->requireLeader($node, $actor, $row);
 		$this->mapper->deleteByFileId($fileId);
+		// Die Dateien, von denen die Sitzung hierher umgezogen ist, verweisen
+		// noch hierher - sie enden mit, sonst schickten sie Nachzuegler an ein
+		// beendetes Stueck. Rueckwaerts ueber `movedFrom`, und je Glied nur,
+		// wenn dort noch DIESELBE Sitzung steht und auf genau den Nachfolger
+		// zeigt: eine inzwischen neu gestartete Sitzung einer anderen Leitung
+		// bleibt unberuehrt.
+		if ($row !== null) {
+			$state = $this->decode($row);
+			$this->endPredecessors($state['movedFrom'], $fileId, $state['session']);
+		}
 		$none = self::none();
 		$this->cache->set($this->key($fileId), $this->entry($none), $this->ttl);
 		$this->push->notify($this->members($fileId, $actor), $fileId, $none['version']);
 		$this->cache->remove($this->membersKey($fileId));
 		return $none;
+	}
+
+	/**
+	 * Zieht die Sitzung von `$from` auf `$to` um (V6, H7): Die Leitung hat in
+	 * der Setliste weitergeschaltet. Auf `$to` entsteht eine Sitzung mit
+	 * derselben Kennung und den Zaehlern von `$from` - Folgende behalten ihre
+	 * gesehenen Zaehler und springen erst beim naechsten Stand. Auf `$from`
+	 * steht danach `moved`, das Folgende dorthin bringt.
+	 *
+	 * Geschrieben wird erst das Ziel, dann der Verweis: Wer dem Verweis folgt,
+	 * findet die Sitzung schon vor.
+	 *
+	 * @throws FollowException NOT_LEADER, NO_SESSION, OTHER_LEADER, INVALID, CONFLICT
+	 */
+	public function move(Node $from, Node $to, string $actor, ?int $setlistId): array {
+		$fromId = $from->getId();
+		$toId = $to->getId();
+		if ($fromId === $toId) {
+			throw new FollowException(FollowException::INVALID);
+		}
+		$source = $this->mapper->findByFileId($fromId);
+		$this->requireLeader($from, $actor, $source);
+		if ($source === null || $this->expired($source)) {
+			throw new FollowException(FollowException::NO_SESSION);
+		}
+		if ($source->getLeaderUid() !== $actor) {
+			throw new FollowException(FollowException::OTHER_LEADER);
+		}
+		$sourceState = $this->decode($source);
+
+		$target = $this->mapper->findByFileId($toId);
+		if ($target !== null && !$this->expired($target) && $target->getLeaderUid() !== $actor) {
+			// Dort fuehrt schon jemand anderes - nicht ungefragt uebernehmen.
+			throw new FollowException(FollowException::OTHER_LEADER);
+		}
+		if ($target !== null) {
+			$this->mapper->deleteIfVersion($toId, $target->getVersion());
+		}
+
+		// Die Herkunft bleibt die erste Datei der Kette: Leiten darf auf dem
+		// neuen Stueck, wer dort Leitung ist - oder wer es auf der Datei ist,
+		// von der die Sitzung ausging.
+		$origin = $this->leaders->isLeader($from, $actor) ? $fromId : ($sourceState['carriedFrom'] ?? $fromId);
+		// Der Zaehler dieses Umzugs - die neue Sitzung zaehlt von hier weiter,
+		// damit ein spaeterer Umzug fuer Folgende wieder „neu" ist.
+		$seq = $sourceState['movedSeq'] + 1;
+		$state = $sourceState;
+		$state['moved'] = ['seq' => 0, 'fileId' => null, 'setlistId' => null];
+		$state['movedSeq'] = $seq;
+		$state['carriedFrom'] = $this->leaders->isLeader($to, $actor) ? null : (int)$origin;
+		$state['movedFrom'] = $fromId;
+		$now = $this->time->getDateTime();
+		$row = new FollowSession();
+		$row->setFileId($toId);
+		$row->setLeaderUid($actor);
+		$row->setStartedAt($now);
+		$row->setHeartbeatAt($now);
+		$row->setVersion(random_int(1, 1000000000));
+		$row->setState($this->encode($state));
+		try {
+			$this->mapper->insert($row);
+		} catch (DbException $e) {
+			if ($e->getReason() !== DbException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
+				throw $e;
+			}
+			throw new FollowException(FollowException::CONFLICT);
+		}
+		$snapshot = $this->publish($toId, $row, $actor);
+
+		for ($attempt = 0; $attempt < self::ATTEMPTS; $attempt++) {
+			$expected = $source->getVersion();
+			$sourceState = $this->decode($source);
+			$seq = max($seq, $sourceState['movedSeq'] + 1);
+			$sourceState['moved'] = ['seq' => $seq, 'fileId' => $toId, 'setlistId' => $setlistId];
+			$sourceState['movedSeq'] = $seq;
+			$source->setState($this->encode($sourceState));
+			$source->setVersion($expected + 1);
+			$source->setHeartbeatAt($now);
+			if ($this->mapper->updateIfVersion($source, $expected)) {
+				$this->publish($fromId, $source, $actor);
+				return $snapshot;
+			}
+			$source = $this->mapper->findByFileId($fromId);
+			if ($source === null) {
+				break;
+			}
+		}
+		throw new FollowException(FollowException::CONFLICT);
+	}
+
+	/**
+	 * Laeuft auf dieser Datei eine Sitzung - fuer die Ausgabe eines
+	 * Begleit-Tokens an Folgende in der App (S1, FollowController::companion).
+	 */
+	public function isActive(int $fileId): bool {
+		return $this->current($fileId)['active'] === true;
+	}
+
+	/**
+	 * Ob die Sitzung auf `$fromId` nach `$toId` umgezogen ist - direkt oder
+	 * ueber weitere Stuecke: Ein Umzug traegt die Sitzungskennung mit, beide
+	 * Dateien fuehren also dieselbe. Nur dafuer gibt es ein Begleit-Token
+	 * (S1, FollowController::companion); eine beliebige Datei mit einer
+	 * fremden laufenden Sitzung ist kein Umzugsziel.
+	 */
+	public function isMoveTarget(int $fromId, int $toId): bool {
+		$from = $this->mapper->findByFileId($fromId);
+		$to = $this->mapper->findByFileId($toId);
+		if ($from === null || $to === null || $this->expired($to) || $fromId === $toId) {
+			return false;
+		}
+		$fromState = $this->decode($from);
+		return $fromState['moved']['seq'] > 0
+			&& $fromState['session'] === $this->decode($to)['session'];
 	}
 
 	/**
@@ -333,6 +492,18 @@ class FollowService {
 			'position' => ['seq' => 0, 'measure' => null, 'mark' => null],
 			'loop' => ['seq' => 0, 'from' => null, 'to' => null],
 			'tone' => ['seq' => 0, 'issuedAt' => null],
+			// H6: die Transposition, die die Leitung fuer alle setzt.
+			'transpose' => ['seq' => 0, 'semitones' => 0],
+			// H7: wohin die Sitzung umgezogen ist; `movedSeq` zaehlt Umzuege
+			// ueber die Kette hinweg (die neue Sitzung setzt ihn fort).
+			'moved' => ['seq' => 0, 'fileId' => null, 'setlistId' => null],
+			'movedSeq' => 0,
+			// Die Datei, von der die Sitzung ausging, wenn die Leitung hier
+			// selbst keine ist (D16) - sonst null.
+			'carriedFrom' => null,
+			// Die Datei unmittelbar davor in der Kette der Umzuege - fuer das
+			// Aufraeumen beim Beenden, nicht fuer Rechte.
+			'movedFrom' => null,
 		];
 	}
 
@@ -433,8 +604,18 @@ class FollowService {
 			'leaderUid' => $uid,
 			'leaderName' => $this->userManager->getDisplayName($uid) ?? $uid,
 			'heartbeat' => $row->getHeartbeatAt()->getTimestamp(),
-			'state' => $this->decode($row),
+			'state' => self::public($this->decode($row)),
 		];
+	}
+
+	/**
+	 * Was Geraete sehen: ohne die Kette der Umzuege. `carriedFrom` und
+	 * `movedFrom` nennen fileIds, die Folgende womoeglich nicht lesen duerfen
+	 * (S8), und kein Geraet braucht sie.
+	 */
+	private static function public(array $state): array {
+		unset($state['carriedFrom'], $state['movedFrom']);
+		return $state;
 	}
 
 	private function expired(FollowSession $row): bool {
@@ -450,12 +631,15 @@ class FollowService {
 		$raw = json_decode((string)$row->getState(), true);
 		$raw = is_array($raw) ? $raw : [];
 		$state = self::initialState((int)($raw['session'] ?? $row->getVersion()));
-		foreach (['position', 'loop', 'tone'] as $part) {
+		foreach (['position', 'loop', 'tone', 'transpose', 'moved'] as $part) {
 			if (isset($raw[$part]) && is_array($raw[$part])) {
 				$state[$part] = array_merge($state[$part], $raw[$part]);
 				$state[$part]['seq'] = (int)$state[$part]['seq'];
 			}
 		}
+		$state['movedSeq'] = (int)($raw['movedSeq'] ?? 0);
+		$state['carriedFrom'] = isset($raw['carriedFrom']) && is_numeric($raw['carriedFrom']) ? (int)$raw['carriedFrom'] : null;
+		$state['movedFrom'] = isset($raw['movedFrom']) && is_numeric($raw['movedFrom']) ? (int)$raw['movedFrom'] : null;
 		return $state;
 	}
 
@@ -491,11 +675,61 @@ class FollowService {
 		return ['from' => $from, 'to' => $to];
 	}
 
-	/** @throws FollowException */
-	private function requireLeader(Node $node, string $actor): void {
-		if (!$this->leaders->isLeader($node, $actor)) {
-			throw new FollowException(FollowException::NOT_LEADER);
+	/**
+	 * Leitung dieser Datei - oder die getragene Leitung einer umgezogenen
+	 * Sitzung (D16): wer die Sitzung hierher gebracht hat und auf deren
+	 * Herkunft weiterhin Leitung ist.
+	 *
+	 * @throws FollowException
+	 */
+	private function requireLeader(Node $node, string $actor, ?FollowSession $row = null): void {
+		if ($this->leaders->isLeader($node, $actor)) {
+			return;
 		}
+		if ($row !== null && !$this->expired($row) && $row->getLeaderUid() === $actor) {
+			$from = $this->decode($row)['carriedFrom'];
+			$origin = $from === null ? null : $this->nodeFor($actor, $from);
+			if ($origin !== null && $this->leaders->isLeader($origin, $actor)) {
+				return;
+			}
+		}
+		throw new FollowException(FollowException::NOT_LEADER);
+	}
+
+	private function nodeFor(string $uid, int $fileId): ?Node {
+		try {
+			return $this->rootFolder->getUserFolder($uid)->getById($fileId)[0] ?? null;
+		} catch (\Throwable) {
+			return null;
+		}
+	}
+
+	/**
+	 * Beendet die Vorgaenger einer umgezogenen Sitzung, solange sie noch
+	 * dieselbe Sitzung tragen und auf ihren Nachfolger zeigen.
+	 */
+	private function endPredecessors(?int $fileId, int $successor, int $session): void {
+		for ($i = 0; $fileId !== null && $i < self::MAX_CHAIN; $i++) {
+			$row = $this->mapper->findByFileId($fileId);
+			if ($row === null) {
+				return;
+			}
+			$state = $this->decode($row);
+			if ($state['session'] !== $session || $state['moved']['fileId'] !== $successor) {
+				return;
+			}
+			$this->endQuietly($fileId);
+			$successor = $fileId;
+			$fileId = $state['movedFrom'];
+		}
+	}
+
+	/** Beendet eine Sitzung ohne Rechtepruefung - nur fuer die Herkunft eines Umzugs. */
+	private function endQuietly(int $fileId): void {
+		$this->mapper->deleteByFileId($fileId);
+		$none = self::none();
+		$this->cache->set($this->key($fileId), $this->entry($none), $this->ttl);
+		$this->push->notify($this->members($fileId, ''), $fileId, $none['version']);
 	}
 
 	/**

@@ -265,3 +265,105 @@ describe('followState.reduce - Sitzungswechsel, Uebernahme, Ende', () => {
 		expect(start).toEqual(kopie)
 	})
 })
+
+describe('followState.reduce - Transposition (H6, V7)', () => {
+	const withTranspose = (seqNo, semitones, extra = {}) => {
+		const b = body(extra)
+		b.state.transpose = { seq: seqNo, semitones }
+		return b
+	}
+
+	it('uebernimmt die Transposition der Leitung', () => {
+		const { steps, local } = run([state(withTranspose(1, -2))])
+		expect(steps[0]).toEqual([{ type: 'setTranspose', semitones: -2 }])
+		expect(local.sessionTranspose).toBe(true)
+	})
+
+	it('wendet denselben Zaehler nicht zweimal an', () => {
+		const { steps } = run([state(withTranspose(1, -2)), state(withTranspose(1, -2, { version: '102' }))])
+		expect(steps[1]).toEqual([])
+	})
+
+	it('die Leitung selbst bekommt keine Aktion', () => {
+		const { steps } = run([state(withTranspose(1, -2, { me: true }))])
+		expect(steps[0]).toEqual([])
+	})
+
+	it('eigene Transposition loest und gibt die eigene zurueck', () => {
+		expect(UNFOLLOWING).toContain('transpose')
+		const { steps, local } = run([state(withTranspose(1, -2)), { type: 'navigate', kind: 'transpose' }])
+		expect(steps[1]).toEqual([{ type: 'restoreTranspose' }])
+		expect(local.following).toBe(false)
+	})
+
+	it('auch eigenes Navigieren gibt die eigene Transposition zurueck', () => {
+		const { steps } = run([state(withTranspose(1, 3)), { type: 'navigate', kind: 'seek' }])
+		expect(steps[1]).toEqual([{ type: 'restoreTranspose' }])
+	})
+
+	it('am Ende der Sitzung gilt wieder die eigene', () => {
+		const { steps } = run([state(withTranspose(1, -2)), state(ENDED)])
+		expect(steps[1]).toEqual([{ type: 'ended' }, { type: 'restoreTranspose' }])
+	})
+
+	it('ohne uebernommene Transposition kein Zuruecksetzen', () => {
+		const { steps } = run([state(body()), { type: 'navigate', kind: 'seek' }])
+		expect(steps[1]).toEqual([])
+	})
+
+	it('„Zurueck zur Leitung" setzt die Transposition wieder', () => {
+		const { steps } = run([state(withTranspose(1, -2)), { type: 'navigate', kind: 'seek' }, { type: 'resume' }])
+		expect(steps[2]).toContainEqual({ type: 'setTranspose', semitones: -2 })
+	})
+})
+
+describe('followState.reduce - Umzug zum naechsten Stueck (H7, V6)', () => {
+	const movedBody = (seqNo, fileId, extra = {}) => {
+		const b = body(extra)
+		b.state.moved = { seq: seqNo, fileId, setlistId: 900 }
+		return b
+	}
+
+	it('wer folgt, kommt mit', () => {
+		const { steps } = run([state(movedBody(1, 4712))])
+		expect(steps[0]).toEqual([{ type: 'openPiece', fileId: 4712, setlistId: 900 }])
+	})
+
+	it('wer sich geloest hat, bekommt nur den Hinweis', () => {
+		const { steps } = run([state(body()), { type: 'navigate', kind: 'seek' }, state(movedBody(1, 4712, { version: '102' }))])
+		expect(steps[2]).toEqual([{ type: 'leaderMoved', fileId: 4712, setlistId: 900 }])
+	})
+
+	it('die Leitung selbst ist schon dort', () => {
+		const { steps } = run([state(movedBody(1, 4712, { me: true }))])
+		expect(steps[0]).toEqual([])
+	})
+
+	it('„Zurueck zur Leitung" fuehrt zum neuen Stueck', () => {
+		const { steps } = run([state(body()), { type: 'navigate', kind: 'seek' }, state(movedBody(1, 4712, { version: '102' })), { type: 'resume' }])
+		expect(steps[3]).toEqual([{ type: 'openPiece', fileId: 4712, setlistId: 900 }])
+	})
+
+	it('auf der neuen Sitzung verfaellt der Umzug, Zurueckkehren springt zur Stelle', () => {
+		const onB = body({ version: '103', position: [8, 12, null] })
+		const { steps } = run([state(movedBody(1, 4712)), state(onB), { type: 'navigate', kind: 'seek' }, { type: 'resume' }])
+		expect(steps[3]).toEqual([{ type: 'seek', measure: 12, mark: null }])
+	})
+})
+
+describe('followState.reduce - Stand einer anderen Datei', () => {
+	it('verwirft Stelle und Loop, die einer anderen Partitur gelten', () => {
+		const b = body({ position: [3, 47, null], loop: [2, 9, 16] })
+		b.state.position.fileId = 4711
+		b.state.loop.fileId = 4711
+		const { steps } = run([{ type: 'state', body: b, fileId: 4712 }])
+		expect(steps[0]).toEqual([])
+	})
+
+	it('wendet Stand der eigenen Partitur an', () => {
+		const b = body({ position: [3, 47, null] })
+		b.state.position.fileId = 4712
+		const { steps } = run([{ type: 'state', body: b, fileId: 4712 }])
+		expect(steps[0]).toEqual([{ type: 'seek', measure: 47, mark: null }])
+	})
+})

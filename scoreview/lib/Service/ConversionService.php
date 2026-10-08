@@ -46,8 +46,12 @@ class ConversionService {
 	 *    Grundton einer Moll-Partitur als Dur-Tonika. Mit der Erhoehung konvertiert
 	 *    status() eine vorhandene Partitur beim naechsten Oeffnen neu, statt
 	 *    dass sie nur mit „Neu konvertieren" zu den Feldern kaeme.
+	 * 4: meta.json traegt auf dem Engine-Weg `lyricSyllables` und
+	 *    `noteSpellings` (E15). Ohne Erhoehung boten vorhandene Konvertierungen
+	 *    Liedtext-Ansicht und Tonnamen nie an - der Viewer entscheidet am
+	 *    Inhalt, und dort fehlten die Listen, obwohl der Server sie liefern kann.
 	 */
-	public const CURRENT_FORMAT_VERSION = 3;
+	public const CURRENT_FORMAT_VERSION = 4;
 
 	/**
 	 * Wie lange ein Lauf einen Datensatz halten darf, bevor er als tot gilt.

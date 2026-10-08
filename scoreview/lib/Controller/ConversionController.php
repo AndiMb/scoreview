@@ -11,6 +11,7 @@ use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
+use OCA\ScoreView\Service\PracticeTrackService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -170,6 +171,9 @@ class ConversionController extends Controller {
 			// instanzweite Ressource (siehe docs/architecture.md E1) -
 			// deshalb hier statt in buildFileUrls() mitgegeben.
 			$body['soundFontUrl'] = $this->soundFontUrl();
+			// Ob neben der Partitur angelegt werden darf - der Viewer bietet
+			// „Tracks fuer alle Stimmen" (E13, H10) nur dann an.
+			$body['canWriteFolder'] = PracticeTrackService::canWriteNextTo($node);
 			// Womit diese Darstellung erzeugt wurde, zum ANZEIGEN im Viewer
 			// (E3). Der aufgezeichnete Weg dieses Datensatzes, nicht die
 			// aktuelle Admin-Einstellung: nach einem Wechsel des
@@ -354,6 +358,7 @@ class ConversionController extends Controller {
 			'maxBytes' => $this->appConfig->getValueInt(
 				Application::APP_ID, 'client_max_score_bytes', self::DEFAULT_CLIENT_MAX_BYTES),
 			'soundFontUrl' => $this->soundFontUrl(),
+			'canWriteFolder' => PracticeTrackService::canWriteNextTo($node),
 			'etag' => $etag,
 			// Anders als bei einer gecachten Konvertierung ohne Rechtepruefung:
 			// Hier verwirft „neu konvertieren" nichts Gemeinsames, sondern

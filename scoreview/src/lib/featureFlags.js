@@ -14,11 +14,11 @@ const NUMBERS = {
 	maxRecordingSeconds: [600, 10, 3600],
 }
 
-const SWITCHES = ['followSession', 'recording', 'intonation', 'scoreFollower']
+const SWITCHES = ['followSession', 'recording', 'intonation', 'scoreFollower', 'practiceExport', 'offline']
 
 /**
  * @param {?object} raw der Anfangszustand `features`, oder null
- * @return {{followSession:boolean, recording:boolean, intonation:boolean, scoreFollower:boolean, followPollMs:number, maxRecordingsPerScore:number, maxRecordingSeconds:number}}
+ * @return {{followSession:boolean, recording:boolean, intonation:boolean, scoreFollower:boolean, practiceExport:boolean, offline:boolean, followPollMs:number, maxRecordingsPerScore:number, maxRecordingSeconds:number}}
  */
 export function normalizeFeatures(raw) {
 	const result = {}

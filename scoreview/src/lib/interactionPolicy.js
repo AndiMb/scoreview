@@ -43,17 +43,25 @@ export const ACTIONS = Object.freeze([
  */
 const PERFORMANCE_ALLOWED = new Set(['page', 'zoom', 'nextPiece', 'followJump'])
 
+/** Was offline nicht wirken kann, weil es den Server braucht (§7.4). */
+const OFFLINE_DENIED = new Set(['annotate', 'followJump'])
+
 /**
  * @param {string} action eine der ACTIONS
- * @param {{performance?: boolean, following?: boolean}} ctx
+ * @param {{performance?: boolean, following?: boolean, offline?: boolean}} ctx
  *   performance: Aufführungsmodus an; following: das Geraet folgt gerade
- *   einer Leitung
+ *   einer Leitung; offline: der Viewer laeuft auf der Offline-Seite (E14)
  * @return {boolean}
  */
-export function allowed(action, { performance = false, following = false } = {}) {
+export function allowed(action, { performance = false, following = false, offline = false } = {}) {
 	if (!ACTIONS.includes(action)) {
 		// Unbekannt heisst gesperrt: Ein Tippfehler im Aktionsnamen darf den
 		// Aufführungsmodus nicht unbemerkt aushebeln.
+		return false
+	}
+	if (offline && OFFLINE_DENIED.has(action)) {
+		// Offline gibt es keinen Server, der eine Notiz annaehme oder eine
+		// Leitung schickte. Gesperrt statt still verloren.
 		return false
 	}
 	if (action === 'followJump') {
