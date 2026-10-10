@@ -170,7 +170,11 @@ Release-URL, und die kennt keine Registry. Das übernimmt
 Engine-Release und öffnet dann einen Pull Request, der den Pin samt Lockfile
 hebt und, falls die MuseScore-Version mitspringt, im selben Zug die beiden
 `ARG`s in `sidecar/Dockerfile`. Die CI stößt es für diesen Branch selbst an;
-Gate ist der Konverter-Job.
+Gate ist der Konverter-Job. Damit es den Pull Request anlegen darf, muss im
+Repo unter **Settings → Actions → General** „Allow GitHub Actions to create
+and approve pull requests“ eingeschaltet sein. Fehlt das, scheitert der Lauf
+mit genau diesem Hinweis und räumt seinen Branch wieder ab, damit der nächste
+Lauf es erneut versucht.
 
 ## Übersetzungen
 

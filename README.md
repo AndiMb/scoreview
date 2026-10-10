@@ -75,8 +75,9 @@ zurückgenommen mit dem Namen der Stimme. Dazu kommen **Stempel** (Atemzeichen,
 Zäsur, Dynamik, Fermate …), die an der musikalischen Stelle im Notenbild stehen. Die
 Taktnavigation versteht **Studierbuchstaben**: „C“ und „C+3“ springen dorthin.
 Mit **„Folgt mir“** schickt die Leitung Stelle, Loop, Anfangston und eine
-Transposition an alle Geräte im Raum und nimmt sie in der Setliste zum
-nächsten Stück mit – wer selbst navigiert, löst sich und kommt mit einem Tipp
+Transposition an alle Geräte im Raum, lässt sie beim eigenen Abspielen stumm
+mitblättern und nimmt sie in der Setliste zum nächsten Stück mit – wer selbst
+navigiert, löst sich und kommt mit einem Tipp
 zurück.
 
 ![Die Leitung führt mit „Folgt mir“; eine Notiz erreicht gezielt eine Stimme](docs/img/rehearsal.png)

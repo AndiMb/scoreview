@@ -3,6 +3,7 @@ import { translate } from '@nextcloud/l10n'
 import { listen } from '@nextcloud/notify_push'
 import { generateUrl } from '@nextcloud/router'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { freshPlayback, leaderTimeMs, shouldSendPlayback } from '../lib/followPlayback.js'
 import { initialFollowState, reduce } from '../lib/followState.js'
 import { emptyQueue, enqueue, isBusy, recordSend, sendDelay, settle, takeNext } from '../lib/leaderQueue.js'
 
@@ -19,6 +20,9 @@ export const IDLE_POLL_MS = 15000
  * beendet - 60 s lassen also reichlich Luft fuer ein Funkloch.
  */
 export const HEARTBEAT_MS = 60000
+
+/** Takt, in dem die Leitung ihre Wiedergabe prueft (siehe updatePlaybackWatch). */
+export const PLAYBACK_WATCH_MS = 250
 /**
  * Laenger wartet eine Abfrage nicht. Ein haengendes Netz soll als „getrennt"
  * sichtbar werden, nicht als eine Anzeige, die still stehen bleibt.
@@ -110,9 +114,15 @@ function pushConnected() {
  *   zum Stueck wechseln, zu dem die Leitung umgezogen ist (H7)
  * @param {(target: ?{fileId: number, setlistId: ?number}) => void} [deps.leaderMoved]
  *   fuer Geloeste: wo die Leitung jetzt ist, null = wieder hier
+ * @param {() => ?{playing: boolean, timeMs: number, rate: number}} [deps.leaderPlayback]
+ *   der Stand der eigenen Wiedergabe - fuer die Leitung
+ * @param {(getter: ?(() => number)) => void} [deps.followPlayback] die Anzeige
+ *   stumm an die Zeit der Leitung haengen, null = loesen
+ * @param {(timeMs: number) => void} [deps.holdAt] dort stehen bleiben, wo die
+ *   Leitung angehalten hat
  * @return {object}
  */
-export function useFollowSession({ fileId, enabled, standalone, ready, permitted, seekToMeasure, setLoop, clearLoop, playTone, currentPosition, currentLoop, setTranspose = () => {}, openPiece = () => {}, leaderMoved = () => {} }) {
+export function useFollowSession({ fileId, enabled, standalone, ready, permitted, seekToMeasure, setLoop, clearLoop, playTone, currentPosition, currentLoop, setTranspose = () => {}, openPiece = () => {}, leaderMoved = () => {}, leaderPlayback = () => null, followPlayback = () => {}, holdAt = () => {} }) {
 	const t = (text) => translate('scoreview', text)
 
 	const local = shallowRef(initialFollowState())
@@ -141,6 +151,14 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	let generation = 0
 	let pendingSeek = null
 	let pendingLoop = null
+	// Serverzeit minus eigene Zeit, aus der letzten Antwort - fuer die
+	// Zeit der Leitung beim Mitblaettern. Der halbe Weg der Antwort bleibt
+	// als Fehler stehen; fuer das Umblaettern genuegt das.
+	let serverOffset = 0
+	// Leitung: zuletzt gemeldeter Stand der Wiedergabe und der Taktgeber,
+	// der ihn prueft.
+	let lastPlayback = null
+	let playbackTimer = null
 
 	/**
 	 * Die Andockstelle fuer das Mitverfolgen per Mikrofon: Ein Sprung der Leitung ist dort die neue Stelle, an der das
@@ -239,6 +257,10 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 			return
 		}
 		takePollMs(body.pollMs)
+		const serverNow = Number(body.serverNow)
+		if (Number.isFinite(serverNow) && serverNow > 0) {
+			serverOffset = serverNow - Date.now()
+		}
 		const wasActive = local.value.active
 		const session = local.value.session
 		const result = reduce(local.value, { type: 'state', body, fileId: Number(fileId()) })
@@ -295,6 +317,21 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 					break
 				case 'restoreTranspose':
 					setTranspose(null)
+					break
+				case 'playback':
+					// Wie ein Sprung nur, solange gefolgt wird.
+					if (!permitted('followJump')) {
+						break
+					}
+					if (action.playing) {
+						followPlayback(() => leaderTimeMs(action, Date.now() + serverOffset))
+					} else {
+						followPlayback(null)
+						holdAt(action.timeMs)
+					}
+					break
+				case 'stopPlayback':
+					followPlayback(null)
 					break
 				case 'openPiece':
 					leaderMoved(null)
@@ -429,7 +466,11 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		const gen = generation
 		let ok = false
 		try {
-			const res = await axios({ method: step.kind === 'session' ? step.method : 'patch', url: url(), data: step.data, timeout: REQUEST_TIMEOUT_MS })
+			// Ein Stand der Wiedergabe kann gewartet haben - auf jetzt nachziehen.
+			const data = step.data?.playback
+				? { ...step.data, playback: freshPlayback(step.data.playback, Date.now()) }
+				: step.data
+			const res = await axios({ method: step.kind === 'session' ? step.method : 'patch', url: url(), data, timeout: REQUEST_TIMEOUT_MS })
 			if (gen === generation) {
 				epoch++
 				connected.value = true
@@ -519,7 +560,33 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		}
 	}
 
+	/**
+	 * Leitung: die eigene Wiedergabe beobachten und melden, was sich nicht
+	 * vorhersagen laesst (lib/followPlayback.js). Ein Takt von 250 ms statt
+	 * jedes Bildes: Ein Sprung kommt so hoechstens eine Viertelsekunde
+	 * spaeter, und es laeuft keine Arbeit im Bildtakt mit.
+	 */
+	function updatePlaybackWatch() {
+		const wanted = mine.value
+		if (wanted && playbackTimer === null) {
+			lastPlayback = null
+			playbackTimer = setInterval(() => {
+				const now = leaderPlayback()
+				const nowMs = Date.now()
+				if (now && shouldSendPlayback(lastPlayback, now, nowMs)) {
+					lastPlayback = { ...now, sentAt: nowMs }
+					submit({ type: 'playback', playback: { ...now, capturedAt: nowMs } })
+				}
+			}, PLAYBACK_WATCH_MS)
+		} else if (!wanted && playbackTimer !== null) {
+			clearInterval(playbackTimer)
+			playbackTimer = null
+			lastPlayback = null
+		}
+	}
+
 	function updateHeartbeat() {
+		updatePlaybackWatch()
 		const wanted = mine.value
 		if (wanted && heartbeatTimer === null) {
 			heartbeatTimer = setInterval(() => {
@@ -566,6 +633,12 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 			clearInterval(heartbeatTimer)
 			heartbeatTimer = null
 		}
+		if (playbackTimer !== null) {
+			clearInterval(playbackTimer)
+			playbackTimer = null
+		}
+		lastPlayback = null
+		followPlayback(null)
 	}
 
 	/** Fuer eine andere Partitur von vorn - aufgerufen beim Dateiwechsel. */

@@ -209,7 +209,7 @@ describe('followState.reduce - Anfangston', () => {
 describe('followState.reduce - Sitzungswechsel, Uebernahme, Ende', () => {
 	it('Ende einer laufenden Sitzung meldet „ended" und setzt zurueck', () => {
 		const { local, steps } = run([state(body({ position: [2, 5, null] })), { type: 'navigate', kind: 'seek' }, state(ENDED)])
-		expect(steps.at(-1)).toEqual([{ type: 'ended' }])
+		expect(steps.at(-1)).toEqual([{ type: 'ended' }, { type: 'stopPlayback' }])
 		expect(local).toEqual({ ...initialFollowState(), version: '0' })
 	})
 
@@ -292,23 +292,23 @@ describe('followState.reduce - Transposition (H6, V7)', () => {
 	it('eigene Transposition loest und gibt die eigene zurueck', () => {
 		expect(UNFOLLOWING).toContain('transpose')
 		const { steps, local } = run([state(withTranspose(1, -2)), { type: 'navigate', kind: 'transpose' }])
-		expect(steps[1]).toEqual([{ type: 'restoreTranspose' }])
+		expect(steps[1]).toEqual([{ type: 'restoreTranspose' }, { type: 'stopPlayback' }])
 		expect(local.following).toBe(false)
 	})
 
 	it('auch eigenes Navigieren gibt die eigene Transposition zurueck', () => {
 		const { steps } = run([state(withTranspose(1, 3)), { type: 'navigate', kind: 'seek' }])
-		expect(steps[1]).toEqual([{ type: 'restoreTranspose' }])
+		expect(steps[1]).toEqual([{ type: 'restoreTranspose' }, { type: 'stopPlayback' }])
 	})
 
 	it('am Ende der Sitzung gilt wieder die eigene', () => {
 		const { steps } = run([state(withTranspose(1, -2)), state(ENDED)])
-		expect(steps[1]).toEqual([{ type: 'ended' }, { type: 'restoreTranspose' }])
+		expect(steps[1]).toEqual([{ type: 'ended' }, { type: 'stopPlayback' }, { type: 'restoreTranspose' }])
 	})
 
 	it('ohne uebernommene Transposition kein Zuruecksetzen', () => {
 		const { steps } = run([state(body()), { type: 'navigate', kind: 'seek' }])
-		expect(steps[1]).toEqual([])
+		expect(steps[1]).not.toContainEqual({ type: 'restoreTranspose' })
 	})
 
 	it('„Zurueck zur Leitung" setzt die Transposition wieder', () => {
@@ -365,5 +365,51 @@ describe('followState.reduce - Stand einer anderen Datei', () => {
 		b.state.position.fileId = 4712
 		const { steps } = run([{ type: 'state', body: b, fileId: 4712 }])
 		expect(steps[0]).toEqual([{ type: 'seek', measure: 47, mark: null }])
+	})
+})
+
+describe('followState.reduce - Mitblaettern', () => {
+	const withPlayback = (seq, playing, extra = {}) => {
+		const b = body(extra)
+		b.state.playback = { seq, playing, timeMs: 12000, rate: 0.9, at: NOW - 100, fileId: 4712 }
+		return b
+	}
+	const PLAY = { type: 'playback', playing: true, timeMs: 12000, rate: 0.9, at: NOW - 100 }
+
+	it('laeuft die Wiedergabe der Leitung, zieht die Anzeige mit', () => {
+		const { steps } = run([{ type: 'state', body: withPlayback(1, true), fileId: 4712 }])
+		expect(steps[0]).toEqual([PLAY])
+	})
+
+	it('ein Halt kommt als Stand ohne Lauf', () => {
+		const { steps } = run([
+			{ type: 'state', body: withPlayback(1, true), fileId: 4712 },
+			{ type: 'state', body: withPlayback(2, false, { version: '102' }), fileId: 4712 },
+		])
+		expect(steps[1]).toEqual([{ ...PLAY, playing: false }])
+	})
+
+	it('nicht auf einer anderen Partitur und nicht fuer die Leitung selbst', () => {
+		expect(run([{ type: 'state', body: withPlayback(1, true), fileId: 99 }]).steps[0]).toEqual([])
+		expect(run([{ type: 'state', body: withPlayback(1, true, { me: true }), fileId: 4712 }]).steps[0]).toEqual([])
+	})
+
+	it('eigenes Navigieren loest auch das Mitblaettern', () => {
+		const { steps } = run([
+			{ type: 'state', body: withPlayback(1, true), fileId: 4712 },
+			{ type: 'navigate', kind: 'measure' },
+			{ type: 'state', body: withPlayback(2, true, { version: '102' }), fileId: 4712 },
+		])
+		expect(steps[1]).toEqual([{ type: 'stopPlayback' }])
+		expect(steps[2]).toEqual([])
+	})
+
+	it('„Zurueck zur Leitung" haengt sich wieder an die laufende Wiedergabe', () => {
+		const { steps } = run([
+			{ type: 'state', body: withPlayback(1, true), fileId: 4712 },
+			{ type: 'navigate', kind: 'measure' },
+			{ type: 'resume' },
+		])
+		expect(steps[2]).toEqual([PLAY])
 	})
 })

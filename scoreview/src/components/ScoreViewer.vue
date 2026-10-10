@@ -90,7 +90,7 @@
 							:disabled="!can('seek')"
 							:aria-label="t('Playback position')"
 							@input="onSeekBarInput">
-						<span class="scoreview-time">{{ formatTime(value) }} / {{ formatTime(durationMs) }}</span>
+						<span v-node-text="`${formatTime(value)} / ${formatTime(durationMs)}`" class="scoreview-time" />
 					</LiveValue>
 					<!--
 					Taktanzeige und Sprungfeld sind DASSELBE Feld: getrennt zeigten
@@ -978,6 +978,7 @@ import { useStartTone } from '../composables/useStartTone.js'
 import { useViewerPreferences } from '../composables/useViewerPreferences.js'
 import { useWakeLock } from '../composables/useWakeLock.js'
 import { useZoom } from '../composables/useZoom.js'
+import nodeText from '../directives/nodeText.js'
 import { anyGroupActive, groupActive as isGroupActive, barGroups as visibleBarGroups } from '../lib/barGroups.js'
 import { capabilitiesOf, unavailableReason } from '../lib/capabilities.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
@@ -1018,6 +1019,8 @@ function readInitialState(key) {
 
 export default {
 	name: 'ScoreViewer',
+
+	directives: { nodeText },
 
 	components: {
 		AppearanceControls,
@@ -1365,6 +1368,18 @@ export default {
 			openPiece: (target) => openFollowPiece(target),
 			leaderMoved: (target) => {
 				leaderMovedTo.value = target
+			},
+			// Stummes Mitblaettern: Die Leitung meldet ihre Wiedergabe, die
+			// Folgenden haengen nur die Anzeige daran - ohne Ton (E10).
+			leaderPlayback: () => (clock.value
+				? { playing: playback.isPlaying.value, timeMs: playback.displayTimeMs.value, rate: playback.tempo.value }
+				: null),
+			followPlayback: (getter) => playback.followTime(getter),
+			holdAt: (timeMs) => {
+				// Wer selbst spielt, wird nicht angehalten.
+				if (!playback.isPlaying.value) {
+					playback.seek(timeMs)
+				}
 			},
 		})
 		isFollowing = () => follow.following.value

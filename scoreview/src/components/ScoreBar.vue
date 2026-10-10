@@ -16,7 +16,19 @@
 		:title="t('Show playback controls')"
 		@click="$emit('show')">
 		<LiveValue v-slot="{ value }" :get="readProgress">
-			<span class="scoreview-bar-line-fill" :style="{ inlineSize: value + '%' }" />
+			<!--
+				Ein SVG-Rechteck statt einer Breite im style-Attribut: Die Linie
+				waechst in jedem Bild, und in Files kostet jede Aenderung eines
+				style-Attributs eine Stil-Neuberechnung ueber den ganzen Baum
+				(siehe ScorePage.vue, Cursor) - ein SVG-Attribut nicht.
+			-->
+			<svg
+				class="scoreview-bar-line-fill"
+				viewBox="0 0 100 1"
+				preserveAspectRatio="none"
+				aria-hidden="true">
+				<rect :width="Math.round(value * 10) / 10" height="1" />
+			</svg>
 		</LiveValue>
 	</button>
 	<!--
@@ -275,8 +287,17 @@ export default {
 
 .scoreview-bar-line-fill {
 	display: block;
+	inline-size: 100%;
 	block-size: 100%;
-	background: var(--color-primary-element);
+}
+
+.scoreview-bar-line-fill rect {
+	fill: var(--color-primary-element);
+}
+
+/* Das SVG zeichnet von links; in RTL waechst die Linie von rechts. */
+.scoreview-bar-line-fill:dir(rtl) {
+	transform: scaleX(-1);
 }
 
 /*

@@ -44,7 +44,8 @@ der Tonart, eigene Stimme im Stereobild, Speed-Trainer im Loop, helle Noten auf
 dunklem Grund, Aufführungsmodus mit Blättern per Taste oder Pedal;
 Leitungsrolle je Partitur mit Stimmnotizen, Probenstempeln und
 Studierbuchstaben in der Navigation; „Folgt mir" - die Leitung schickt Stelle,
-Loop und Anfangston an alle Geräte (mit notify_push unter einer Sekunde);
+Loop und Anfangston an alle Geräte (mit notify_push unter einer Sekunde) und
+lässt sie beim Abspielen stumm mitblättern;
 Setlisten als Markdown-Datei mit Stückwechsel im Viewer; eigene Aufnahmen, die
 nur die Aufnehmende hört, und Rückmeldung zur Intonation beim Singen. Bis auf
 das Mikrofon in der Android-App geht das auch in den mobilen Nextcloud-Apps.
@@ -91,7 +92,8 @@ or the key note, your own voice in the stereo image, a speed trainer in the
 loop, light notes on a dark background, a performance mode with page turning by
 key or pedal; a leader role per score with voice notes, rehearsal stamps and
 rehearsal marks in the navigation; "Follow me" - the leader sends position,
-loop and starting note to every device (below one second with notify_push);
+loop and starting note to every device (below one second with notify_push)
+and lets them follow silently while it plays;
 setlists as a Markdown file with piece changes inside the viewer; own
 recordings only the person recording can hear, and intonation feedback while
 singing. Apart from the microphone in the Android app, this also works in
@@ -104,7 +106,7 @@ side, a lyrics view of your own voice, note names on the notes, and scores
 with sound without a network via an offline page in the browser. "Follow me"
 takes everyone along to the next piece of the setlist.
 	]]></description>
-	<version>1.12.0</version>
+	<version>1.13.0</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>

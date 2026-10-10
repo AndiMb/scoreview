@@ -100,6 +100,13 @@ class FollowService {
 	public const MAX_MEASURE = 100000;
 	/** Laenge eines Studierbuchstabens samt Zusatz („C+3", „A1"). */
 	public const MAX_MARK_LENGTH = 16;
+
+	/** Hoechste Wiedergabezeit, die eine Leitung melden kann (6 h, in ms). */
+	public const MAX_TIME_MS = 21600000;
+
+	/** Tempofaktor der Wiedergabe der Leitung, wie im Viewer begrenzt. */
+	public const MIN_RATE = 0.25;
+	public const MAX_RATE = 4.0;
 	/** So oft wird ein verlorenes Vergleichen-und-Tauschen wiederholt. */
 	private const ATTEMPTS = 3;
 	/** Wie weit `end` die Kette der Umzuege zurueckgeht - eine Probe hat keine hundert Stuecke. */
@@ -232,7 +239,7 @@ class FollowService {
 	 * sie dem alten Wert gleicht: „Nochmal ab C" ist ein neuer Befehl, auch
 	 * wenn C schon der letzte war.
 	 *
-	 * @param array{position?: array{measure: int, mark?: ?string}, loop?: ?array{from: int, to: int}, clearLoop?: bool, tone?: bool, transpose?: ?int, heartbeat?: bool} $changes
+	 * @param array{position?: array{measure: int, mark?: ?string}, loop?: ?array{from: int, to: int}, clearLoop?: bool, tone?: bool, transpose?: ?int, playback?: array{playing: bool, timeMs: int, rate: float}, heartbeat?: bool} $changes
 	 * @throws FollowException NOT_LEADER, NO_SESSION, OTHER_LEADER, INVALID, CONFLICT
 	 */
 	public function change(Node $node, string $actor, array $changes): array {
@@ -254,6 +261,7 @@ class FollowService {
 				throw new FollowException(FollowException::INVALID);
 			}
 		}
+		$playback = isset($changes['playback']) ? $this->playback($changes['playback']) : null;
 		$fileId = $node->getId();
 
 		for ($attempt = 0; $attempt < self::ATTEMPTS; $attempt++) {
@@ -266,7 +274,7 @@ class FollowService {
 			}
 			$row->setHeartbeatAt($this->time->getDateTime());
 			$expected = $row->getVersion();
-			if ($position === null && $loop === null && !$tone && $transpose === null) {
+			if ($position === null && $loop === null && !$tone && $transpose === null && $playback === null) {
 				// Nur das Lebenszeichen (alle 60 s): kein Zaehler, keine neue
 				// Version. Geschrieben nur, wenn die Zeile noch die gelesene
 				// Version traegt: Hat derweil jemand die Sitzung beendet, bleibt
@@ -302,6 +310,13 @@ class FollowService {
 				// spaeter mit `serverNow` derselben Uhr, so spielen
 				// Uhrabweichungen zwischen den Geraeten keine Rolle.
 				$state['tone'] = ['seq' => $state['tone']['seq'] + 1, 'issuedAt' => $this->nowMs()];
+			}
+			if ($playback !== null) {
+				// Mitblaettern: Stand der Wiedergabe der Leitung, gestempelt mit
+				// der Serverzeit wie der Anfangston - ein Geraet rechnet daraus
+				// mit `serverNow` die Zeit der Leitung hoch, ohne die Uhr des
+				// Leitungsgeraets zu kennen.
+				$state['playback'] = ['seq' => $state['playback']['seq'] + 1] + $playback + ['at' => $this->nowMs(), 'fileId' => $fileId];
 			}
 			$row->setState($this->encode($state));
 			$row->setVersion($expected + 1);
@@ -494,6 +509,9 @@ class FollowService {
 			'tone' => ['seq' => 0, 'issuedAt' => null],
 			// H6: die Transposition, die die Leitung fuer alle setzt.
 			'transpose' => ['seq' => 0, 'semitones' => 0],
+			// Die Wiedergabe der Leitung, zum stummen Mitblaettern: laeuft sie,
+			// ab welcher Stelle (ms) zu welcher Serverzeit, mit welchem Tempo.
+			'playback' => ['seq' => 0, 'playing' => false, 'timeMs' => 0, 'rate' => 1.0, 'at' => null],
 			// H7: wohin die Sitzung umgezogen ist; `movedSeq` zaehlt Umzuege
 			// ueber die Kette hinweg (die neue Sitzung setzt ihn fort).
 			'moved' => ['seq' => 0, 'fileId' => null, 'setlistId' => null],
@@ -631,7 +649,7 @@ class FollowService {
 		$raw = json_decode((string)$row->getState(), true);
 		$raw = is_array($raw) ? $raw : [];
 		$state = self::initialState((int)($raw['session'] ?? $row->getVersion()));
-		foreach (['position', 'loop', 'tone', 'transpose', 'moved'] as $part) {
+		foreach (['position', 'loop', 'tone', 'transpose', 'playback', 'moved'] as $part) {
 			if (isset($raw[$part]) && is_array($raw[$part])) {
 				$state[$part] = array_merge($state[$part], $raw[$part]);
 				$state[$part]['seq'] = (int)$state[$part]['seq'];
@@ -645,6 +663,23 @@ class FollowService {
 
 	private function encode(array $state): string {
 		return json_encode($state, JSON_THROW_ON_ERROR);
+	}
+
+	/**
+	 * @return array{playing: bool, timeMs: int, rate: float}
+	 * @throws FollowException INVALID
+	 */
+	private function playback(mixed $playback): array {
+		if (!is_array($playback) || !is_bool($playback['playing'] ?? null)
+			|| !is_numeric($playback['timeMs'] ?? null) || !is_numeric($playback['rate'] ?? 1)) {
+			throw new FollowException(FollowException::INVALID);
+		}
+		$timeMs = (int)$playback['timeMs'];
+		$rate = (float)($playback['rate'] ?? 1);
+		if ($timeMs < 0 || $timeMs > self::MAX_TIME_MS || $rate < self::MIN_RATE || $rate > self::MAX_RATE) {
+			throw new FollowException(FollowException::INVALID);
+		}
+		return ['playing' => $playback['playing'], 'timeMs' => $timeMs, 'rate' => $rate];
 	}
 
 	/**

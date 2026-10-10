@@ -50,8 +50,8 @@ export function initialFollowState() {
 		// Voreingestellt wird gefolgt - auch schon vor der Sitzung, damit
 		// der erste Stand gleich wirkt.
 		following: true,
-		seen: { position: 0, loop: 0, tone: 0, transpose: 0, moved: 0 },
-		latest: { position: null, loop: null, transpose: null, moved: null },
+		seen: { position: 0, loop: 0, tone: 0, transpose: 0, playback: 0, moved: 0 },
+		latest: { position: null, loop: null, transpose: null, playback: null, moved: null },
 		// Ob dieses Geraet gerade die Transposition der Leitung traegt - dann
 		// gehoert beim Loesen oder Ende die eigene zurueck.
 		sessionTranspose: false,
@@ -72,6 +72,7 @@ export function initialFollowState() {
  *   | `{type: 'leaderChanged', name}` | `{type: 'setTranspose', semitones}`
  *   | `{type: 'restoreTranspose'}` | `{type: 'openPiece', fileId, setlistId}`
  *   | `{type: 'leaderMoved', fileId, setlistId}`
+ *   | `{type: 'playback', playing, timeMs, rate, at}` | `{type: 'stopPlayback'}`
  */
 export function reduce(local, event) {
 	switch (event?.type) {
@@ -93,7 +94,7 @@ function applyState(local, body, fileId) {
 	if (!body.active) {
 		// Beendet oder abgelaufen. Loop und Stelle bleiben, wie sie sind:
 		// Mitten in der Probe soll das Ende der Sitzung nichts verstellen.
-		const actions = local.active ? [{ type: 'ended' }] : []
+		const actions = local.active ? [{ type: 'ended' }, { type: 'stopPlayback' }] : []
 		if (local.sessionTranspose) {
 			actions.push({ type: 'restoreTranspose' })
 		}
@@ -180,6 +181,20 @@ function applyState(local, body, fileId) {
 		}
 	}
 
+	// Mitblaettern: Laeuft die Wiedergabe der Leitung, zieht die Anzeige
+	// stumm mit (`at` ist Serverzeit, siehe useFollowSession.js). Wie die
+	// Stelle nur auf der Partitur, auf der die Leitung spielt.
+	const playback = state.playback
+	if (playback && seq(playback) > 0) {
+		latest.playback = here(playback) ? playbackAction(playback) : null
+		if (seq(playback) > seen.playback) {
+			if (applies && latest.playback) {
+				actions.push(latest.playback)
+			}
+			seen.playback = seq(playback)
+		}
+	}
+
 	const moved = state.moved
 	if (!moved || seq(moved) === 0) {
 		// Die Sitzung, in der dieses Geraet jetzt steht, ist nicht (mehr)
@@ -222,6 +237,7 @@ function navigate(local, kind) {
 		return { local, actions: [] }
 	}
 	const actions = local.sessionTranspose ? [{ type: 'restoreTranspose' }] : []
+	actions.push({ type: 'stopPlayback' })
 	return { local: { ...local, following: false, sessionTranspose: false }, actions }
 }
 
@@ -237,7 +253,7 @@ function resume(local) {
 		return { local, actions: [] }
 	}
 	const actions = []
-	const { position, loop, transpose, moved } = local.latest
+	const { position, loop, transpose, playback, moved } = local.latest
 	// Ist die Leitung inzwischen bei einem anderen Stueck, geht es zuerst
 	// dorthin; Stelle und Loop der neuen Datei kommen mit ihrer Sitzung.
 	if (moved) {
@@ -255,7 +271,26 @@ function resume(local) {
 			? { type: 'setLoop', from: Number(loop.from), to: Number(loop.to) }
 			: { type: 'clearLoop' })
 	}
+	// Nach dem Sprung: Laeuft die Wiedergabe der Leitung, gilt ihre Zeit.
+	if (playback?.playing) {
+		actions.push(playback)
+	}
 	return { local: { ...local, following: true, sessionTranspose: Boolean(transpose) }, actions }
+}
+
+/**
+ * @param {object} playback der Stand vom Server
+ * @return {{type: 'playback', playing: boolean, timeMs: number, rate: number, at: number}}
+ */
+function playbackAction(playback) {
+	const rate = Number(playback.rate)
+	return {
+		type: 'playback',
+		playing: playback.playing === true,
+		timeMs: Math.max(0, Number(playback.timeMs) || 0),
+		rate: Number.isFinite(rate) && rate > 0 ? rate : 1,
+		at: Number(playback.at) || 0,
+	}
 }
 
 function seq(part) {

@@ -1530,12 +1530,12 @@ sie sollen sehen, wer leitet, nicht die Kontonamen der Instanz sammeln.
 ### E10: „Folgt mir“ – ein Zustand mit Zählern, abgefragt oder gepusht
 
 Eine Leitung schickt ihre Stelle, einen Loop, den Anfangston und eine
-Transposition an alle Geräte, die dieselbe Partitur offen haben, und nimmt sie
-in der Setliste zum nächsten Stück mit (`Service\FollowService`,
-`useFollowSession.js`).
+Transposition an alle Geräte, die dieselbe Partitur offen haben, lässt sie
+stumm mitblättern, solange sie selbst abspielt, und nimmt sie in der Setliste
+zum nächsten Stück mit (`Service\FollowService`, `useFollowSession.js`).
 
 **Zustand statt Ereignisse.** Gespeichert wird je Datei *ein* Zustand –
-`position`, `loop`, `tone`, `transpose` und `moved`, jeder mit eigenem Zähler
+`position`, `loop`, `tone`, `transpose`, `playback` und `moved`, jeder mit eigenem Zähler
 `seq`, dazu eine
 `version`, die bei jeder Änderung steigt. Ein Gerät vergleicht nur die Version
 und holt bei Abweichung den ganzen Zustand; was daraus folgt, entscheidet
@@ -1594,6 +1594,22 @@ geschrieben hat.
 **Die Dateiprüfung bleibt bei jeder Abfrage.** Sie macht nur einen kleinen Teil
 der 50 ms aus; sie zu cachen spart kaum etwas und ließe nach einem
 Freigabeentzug ein Fenster offen.
+
+**Mitblättern ohne Ton.** Spielt die Leitung ab, folgen Cursor, Mitscrollen
+und Zeitanzeige der Folgegeräte ihrer Wiedergabe – die Geräte selbst bleiben
+stumm: In der Probe wird live gesungen, und 40 Lautsprecher mit je eigener
+Verzögerung wären ein Echo. Gesendet wird dafür kein Strom von Zeiten, sondern
+ein Stand `playback` („spielt ab *t* mit Tempo *r*“), den der Server wie den
+Anfangston mit seiner Uhr stempelt (`at`); jedes Gerät rechnet mit
+`serverNow` selbst weiter (`lib/followPlayback.js`). Neu gemeldet wird nur,
+was sich so nicht vorhersagen lässt – Start, Halt, Tempo, ein Sprung über
+400 ms (Suchlauf, Loop) – und alle 15 s zum Nachstellen; geprüft wird im
+250-ms-Takt, nicht je Bild. Die fremde Zeit treibt im Viewer nur die
+Anzeigezeit (`usePlayback.followTime`): Die eigene Audiouhr steht, Loop und
+Metronom hängen an ihr und bleiben still. Wer selbst Play drückt, hört sich
+selbst; wer selbst navigiert, löst wie bei jedem Sprung das Folgen. Hält die
+Leitung an, bleibt das Gerät an ihrer Stelle stehen. Im Stillstand bewegt
+die Leitung niemanden stumm – eine Stelle zeigt sie ausdrücklich.
 
 **Die Leitung sendet nacheinander, der letzte Tipp gewinnt**
 (`leaderQueue.js`). Zwei Änderungen, die gleichzeitig unterwegs wären, kämen

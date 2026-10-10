@@ -16,6 +16,8 @@
  * - **Loop** (setzen oder fuer alle aufheben): ebenso nur der neueste.
  * - **Transposition** (H6): ebenso nur die neueste - „−1, nein −2" kommt als
  *   −2 an.
+ * - **Wiedergabe** (stummes Mitblaettern): nur der neueste Stand - er wird
+ *   beim Absenden auf jetzt nachgezogen (lib/followPlayback.js).
  * - **Anfangston**: ein Ausloeser, kein Zustand - er wird nie von einem
  *   anderen Tipp verdraengt. Mehrere Tontipps waehrend EINER laufenden Anfrage
  *   werden aber zu einem: Der zweite Ton striche den ersten nach Sekunden-
@@ -87,6 +89,10 @@ function mergeInto(data, action) {
 		case 'transpose':
 			next.transpose = action.semitones
 			break
+		case 'playback':
+			// Der Stand der Wiedergabe: nur der neueste zaehlt.
+			next.playback = action.playback
+			break
 		default:
 			break
 	}
@@ -97,7 +103,7 @@ function mergeInto(data, action) {
  * Einen Tipp einreihen.
  *
  * @param {{inflight: ?object, pending: object[]}} queue
- * @param {{type: 'start'|'end'|'position'|'loop'|'tone'|'transpose', data?: object, position?: object, loop?: ?object, semitones?: number}} action
+ * @param {{type: 'start'|'end'|'position'|'loop'|'tone'|'transpose'|'playback', data?: object, position?: object, loop?: ?object, semitones?: number, playback?: object}} action
  * @param {unknown} [waiter] wird an den Schritt gehaengt, der den Tipp traegt
  * @return {{inflight: ?object, pending: object[]}}
  */

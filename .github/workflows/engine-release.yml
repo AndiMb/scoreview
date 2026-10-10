@@ -205,8 +205,16 @@ jobs:
           - [ ] \`CHANGELOG.md\`
           EOF
 
-          URL=$(gh pr create --base master --head "$BRANCH" \
-                  --title "Engine-Pin auf $TAG heben" --body-file pr.md)
+          # Scheitert der PR, muss der Branch wieder weg: Sonst haelt ihn das
+          # Tor oben an jedem Folgetag fuer einen gemachten Vorschlag, und es
+          # kommt nie einer. Haeufigster Grund ist die Repo-Einstellung
+          # "Allow GitHub Actions to create and approve pull requests".
+          if ! URL=$(gh pr create --base master --head "$BRANCH" \
+                  --title "Engine-Pin auf $TAG heben" --body-file pr.md); then
+            git push origin --delete "$BRANCH" || true
+            echo "::error::Pull Request fuer $TAG liess sich nicht anlegen. Unter Settings > Actions > General muss 'Allow GitHub Actions to create and approve pull requests' an sein; der Branch ist wieder entfernt, der naechste Lauf versucht es erneut."
+            exit 1
+          fi
           echo "angelegt: $URL"
 
           # workflow_dispatch ist das einzige Ereignis, das GITHUB_TOKEN noch

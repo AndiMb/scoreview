@@ -202,6 +202,21 @@ class FollowServiceTest extends TestCase {
 		$this->assertSame((string)($v0 + 4), $d['version']);
 	}
 
+	public function testWiedergabeTraegtServerzeitTempoUndDatei(): void {
+		$service = $this->service();
+		$service->start($this->node(), 'anna');
+
+		$stand = $service->change($this->node(), 'anna', ['playback' => ['playing' => true, 'timeMs' => 12500, 'rate' => 0.8]]);
+
+		$this->assertSame(
+			['seq' => 1, 'playing' => true, 'timeMs' => 12500, 'rate' => 0.8, 'at' => 1790000000250, 'fileId' => 42],
+			$stand['state']['playback'],
+		);
+		$halt = $service->change($this->node(), 'anna', ['playback' => ['playing' => false, 'timeMs' => 15000, 'rate' => 1]]);
+		$this->assertSame(2, $halt['state']['playback']['seq']);
+		$this->assertFalse($halt['state']['playback']['playing']);
+	}
+
 	public function testLebenszeichenAendertKeineVersion(): void {
 		$service = $this->service();
 		$start = $service->start($this->node(), 'anna');
@@ -223,6 +238,10 @@ class FollowServiceTest extends TestCase {
 			['position' => ['measure' => 5, 'mark' => str_repeat('X', 17)]],
 			['loop' => ['from' => 10, 'to' => 9]],
 			['loop' => ['from' => 0, 'to' => 3]],
+			['playback' => ['playing' => 'ja', 'timeMs' => 0, 'rate' => 1]],
+			['playback' => ['playing' => true, 'timeMs' => -1, 'rate' => 1]],
+			['playback' => ['playing' => true, 'timeMs' => 0, 'rate' => 9]],
+			['playback' => ['playing' => true, 'timeMs' => FollowService::MAX_TIME_MS + 1, 'rate' => 1]],
 		] as $aenderung) {
 			try {
 				$service->change($this->node(), 'anna', $aenderung);

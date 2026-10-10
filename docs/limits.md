@@ -270,6 +270,12 @@ Daraus folgt für den Betrieb:
   Wer den Viewer vor der Leitung öffnet, folgt also erst nach bis zu 15 s. In
   einem Tab im Hintergrund fragt es dann gar nicht und holt die Frage beim
   Zurückkehren sofort nach.
+- **Mitblättern** folgt der Wiedergabe der Leitung mit dem Abfrageabstand als
+  Verzögerung für Start, Halt und Sprünge; dazwischen rechnet jedes Gerät
+  selbst. Gemessen am Desktop mit einem Folgegerät: nach 8 s Wiedergabe
+  dieselbe Sekunde und derselbe Takt wie die Leitung; in der Nextcloud-App
+  am Galaxy S23 läuft es ebenso mit, ohne Ton. Ein Fehler bleibt um
+  die halbe Antwortzeit stehen (die Serverzeit wird an der Antwort geschätzt).
 - **Starten, Beenden und Beitreten sind auf je 30 Aufrufe je Minute
   begrenzt**, das Senden der Stelle auf 120. Mobile Apps zählen dabei je
   IP-Adresse (siehe unten bei der Leitung).
@@ -495,23 +501,29 @@ mehrere Minuten ist nicht gemessen.
   [Bekannte Lücken](#bekannte-lücken)), leuchtet die falsche Strophe.
 - **Systemband:** gemessen an einem Chorsatz mit 10 Systemen, Scrollen mit
   rund 60 fps am Desktop. Am Galaxy S23 (Chrome, ohne Energiesparmodus)
-  während der Wiedergabe: Seiten 29–30 fps, Systemband 18–20 fps (p95 150 ms).
-  Die Ursache lag nicht im Band: In Files kostet **jede Änderung eines
-  `style`-Attributs** eine Stil-Neuberechnung über rund 7000 Elemente
-  (Nextclouds `:has()`-Regeln, u. a. mit `[style*=…]`, an `body` und am
-  Viewer; gemessen ~70 ms je Änderung am Desktop) – und der Cursor wurde bei
-  jedem Notenschritt, der Positionsregler in jedem Bild neu geschrieben. Seit
-  der Cursor ein SVG-Rechteck ist und der Regler in 250-ms-Schritten läuft,
-  sinkt die Stilzeit am Desktop auf ein Viertel; die Nachmessung am Telefon
-  steht aus (siehe [Am Gerät offen](#am-gerät-offen)). Mit drei geladenen
-  Seiten-SVGs bleibt das Band teurer als die Seitenansicht. Im
-  Energiesparmodus drosselt das Telefon schon eine leere Seite auf 24 fps.
+  während der Wiedergabe: Seiten 49 fps (10 % der Bilder über 33 ms),
+  Systemband 33 fps (p95 67 ms). In Files kostet **jede Änderung eines
+  `style`-Attributs und jedes Ersetzen von Kindknoten** eine
+  Stil-Neuberechnung über rund 7000 Elemente (Nextclouds `:has()`-Regeln,
+  u. a. mit `[style*=…]`, an `body` und am Viewer; gemessen ~70 ms je
+  Änderung am Desktop). Was sich während der Wiedergabe bewegt, vermeidet
+  beides: Cursor und Fortschrittslinie sind SVG-Rechtecke, die Zeitanzeige
+  ändert nur ihren Textknoten (`directives/nodeText.js`), der
+  Positionsregler läuft in 250-ms-Schritten. Am Desktop bleiben damit 19 ms
+  Stilzeit je 4 s Wiedergabe. Das Band bleibt teurer als die Seitenansicht:
+  Es färbt die klingenden Noten in drei geladenen Seiten-SVGs (am S23 rund
+  1,5 s Stilzeit je 15 s). Im Energiesparmodus drosselt das Telefon schon
+  eine leere Seite auf 24 fps.
   Die Grenzen der Systeme kommen aus den Notenlinien, mit begrenztem Rand
   darüber und darunter – was weit darüber hinausragt, kann angeschnitten
   werden.
-- **Tonnamen stehen links neben dem Kopf** und sind bei Seitenbreite klein
-  (mindestens 9 px). Am ersten Kopf nach einem Wiederholungszeichen stoßen sie
-  an dessen Punkte.
+- **Tonnamen stehen links neben dem Kopf**, wo Platz ist; sonst darunter,
+  darüber oder rechts davon (`lib/noteLabelLayout.js`). Hindernisse sind
+  Vorzeichen, Wiederholungspunkte, Hälse, Punkte, Pausen, Liedtext und
+  Nachbarköpfe; Bögen, Balken und Hilfslinien nicht. Die Breite eines Namens
+  ist geschätzt, nicht gemessen. Bei Seitenbreite am Telefon (Köpfe rund
+  4 px) bleiben sie bei 9 px und drängen sich – lesbar werden sie erst mit
+  Zoom, bei Systemhöhe etwa 16 px.
 - **„Nur meine Stimme“ bei Tonnamen** wirkt nur, wo sich Notenzeilen den
   Stimmen zuordnen lassen; sonst stehen Namen an allen Zeilen.
 - **Passt die Zahl der Köpfe eines Segments nicht zur Liste**, bleibt dieses
@@ -568,14 +580,13 @@ vom Netz kommt die Seite aus dem Cache.
 Am Galaxy S23 im Browser (Chrome) abgenommen: Übe-Track in 8,8 s
 (Duckwerk, ganzer Mix), Vormerken in 1,1 s, die Offline-Seite und die
 Wiedergabe ohne erreichbaren Server, Systemband, Liedtext-Ansicht und
-Tonnamen im Bild. **Noch offen:**
+Tonnamen im Bild. In der Nextcloud-App (Android) folgt das S23 einer
+Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
+(Begleit-Token für das neue Stück). **Noch offen:**
 
 - eine Sperre über mehrere Minuten bei laufender Wiedergabe;
 - ein Übe-Track aus der Nextcloud-App heraus und an einem Mittelklassegerät;
-- der Wechsel zum nächsten Stück mit drei Folgegeräten, davon eines in der
-  Nextcloud-App (Begleit-Token für das neue Stück);
-- die Bildrate des Systembands am Telefon nach der Korrektur von Cursor und
-  Positionsregler (siehe oben);
+- der Stückwechsel mit drei Folgegeräten zugleich;
 - ein Pedal im Systemband – Tasten erreichen den Viewer nur, wenn er den
   Fokus hat; das galt schon vorher für das Blättern der Seiten.
 

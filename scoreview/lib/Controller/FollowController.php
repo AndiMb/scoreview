@@ -139,12 +139,16 @@ class FollowController extends Controller {
 		bool $tone = false,
 		bool $heartbeat = false,
 		?int $transpose = null,
+		?array $playback = null,
 	): JSONResponse {
 		[$node, $userId] = $this->resolve($fileId);
 		if ($node === null) {
 			return $this->notFound();
 		}
 		$changes = ['clearLoop' => $clearLoop, 'tone' => $tone, 'heartbeat' => $heartbeat];
+		if ($playback !== null) {
+			$changes['playback'] = $playback;
+		}
 		if ($transpose !== null) {
 			$changes['transpose'] = $transpose;
 		}

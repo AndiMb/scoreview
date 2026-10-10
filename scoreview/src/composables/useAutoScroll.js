@@ -11,6 +11,12 @@ const MANUAL_SCROLL_RESUME_MS = 2500
 // eine Heuristik, die nach Zeitfenstern statt nach Strecke entscheidet.
 const BIG_JUMP_VIEWPORTS = 1.5
 
+// Wie oft und in welchem Abstand das Nachfuehren erneut misst, solange die
+// Zielseite ihren Cursor noch nicht hat (Seite wird erst geladen) - zusammen
+// rund 3 s, so lange braucht eine Seite am Telefon hoechstens.
+const RETRY_MS = 150
+const RETRY_MAX = 20
+
 /**
  * Führt das Notenbild der Wiedergabe nach und hält sich zurück, solange
  * jemand selbst scrollt.
@@ -38,6 +44,9 @@ export function useAutoScroll({ scrollEl }) {
 	// letzten Geste - fuer die Deutung von `scrollend` (scrollPlan.js).
 	let ownScrollAt = null
 	let lastGestureAt = null
+	// Nachmessen, bis die Zielseite geladen ist (siehe update()).
+	let retryTimer = null
+	let retries = 0
 
 	function setPageRef(el, index) {
 		if (el) {
@@ -86,8 +95,16 @@ export function useAutoScroll({ scrollEl }) {
 	 *
 	 * @param {{page:number,x:number,y:number,w:number,h:number}|null} rect
 	 * @param {boolean} [force] Nachführen auch kurz nach manuellem Scrollen
+	 * @param {boolean} [retry] ein Nachmessen aus update() selbst
 	 */
-	function update(rect, force = false) {
+	function update(rect, force = false, retry = false) {
+		if (retryTimer !== null) {
+			clearTimeout(retryTimer)
+			retryTimer = null
+		}
+		if (!retry) {
+			retries = 0
+		}
 		const el = scrollEl()
 		if (!rect || !el) {
 			return
@@ -114,6 +131,15 @@ export function useAutoScroll({ scrollEl }) {
 			const pageClientRect = pageEl?.$el?.getBoundingClientRect?.()
 			if (pageClientRect) {
 				scrollTo(el.scrollTop + (pageClientRect.top - containerRect.top))
+			}
+			// Im Stillstand kommt kein naechster Notenwechsel - nach einem
+			// Sprung der Leitung oder ins Taktfeld bliebe die Ansicht am
+			// Seitenanfang stehen, waagerecht womoeglich ganz woanders. Also
+			// selbst nachmessen, bis die Seite ihren Cursor hat; ein neuer
+			// Aufruf loest das ab.
+			if (retries < RETRY_MAX) {
+				retries++
+				retryTimer = setTimeout(() => update(rect, force, true), RETRY_MS)
 			}
 			return
 		}
@@ -195,6 +221,10 @@ export function useAutoScroll({ scrollEl }) {
 	}
 
 	function reset() {
+		if (retryTimer !== null) {
+			clearTimeout(retryTimer)
+			retryTimer = null
+		}
 		pageRefs.length = 0
 		lastManualScrollAt = null
 		gestureActive = false

@@ -76,6 +76,10 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	// lib/playbackTime.js.
 	const displayTimeMs = ref(0)
 	const isPlaying = ref(false)
+	// Stummes Mitblaettern („Folgt mir"): liefert die Zeit der Leitung, oder
+	// null. Treibt nur die Anzeigezeit - die eigene Uhr steht, es klingt
+	// nichts, und Loop und Metronom (rohe Zeit) bleiben unberuehrt.
+	let externalTime = null
 	const hasRealPlayer = ref(false)
 	// Warum es keinen Ton gibt, im Klartext für die Nutzerin - nicht pauschal
 	// "nicht konfiguriert", wenn in Wahrheit der SoundFont-Abruf oder der
@@ -339,6 +343,16 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		}
 	}
 
+	/**
+	 * Die Anzeige an eine fremde Zeit haengen (stummes Mitblaettern) oder
+	 * wieder loesen.
+	 *
+	 * @param {?(() => number)} getter Zeit der Leitung in ms, oder null
+	 */
+	function followTime(getter) {
+		externalTime = typeof getter === 'function' ? getter : null
+	}
+
 	function seek(timeMs) {
 		clock.value?.seek(timeMs)
 		// Nach einem Sprung ist jede Vorhersage aus der alten Position
@@ -489,6 +503,12 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 			: rohe
 		if (!isPlaying.value) {
 			timeSmoother.reset()
+			// Wer selbst spielt, hoert sich selbst - die Zeit der Leitung
+			// gilt nur, solange das eigene Geraet still steht.
+			const fremd = externalTime?.()
+			if (Number.isFinite(fremd)) {
+				displayTimeMs.value = Math.min(Math.max(0, fremd), durationMs.value || fremd)
+			}
 		}
 
 		// Bewusst mit der ROHEN Zeit: Die geglaettete versteckt genau das
@@ -654,6 +674,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		setNoSoundFontConfigured,
 		toggle,
 		seek,
+		followTime,
 		onSeekInput,
 		onTempoBpmInput,
 		setTempoBpm,

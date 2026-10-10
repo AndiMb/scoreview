@@ -3,6 +3,7 @@
 // Laden liess die Artefakte des alten Stuecks ueber dem neuen stehen, und
 // eine zweite Frame-Schleife lief nach dem Schliessen ohne Griff weiter.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick } from 'vue'
 
 const axiosGet = vi.fn()
 vi.mock('@nextcloud/axios', () => ({ default: { get: axiosGet } }))
@@ -191,9 +192,13 @@ describe('useScoreSession', () => {
 		const rect = { page: 0, x: 1, y: 2, w: 3, h: 4 }
 		onCursorChange(rect)
 		expect(session.cursorRect.value).toEqual(rect)
+		// Das Nachfuehren misst den Cursor im DOM - erst nach dem Rendern.
+		expect(hooks.updateAutoScroll).not.toHaveBeenCalled()
+		await nextTick()
 		expect(hooks.updateAutoScroll).toHaveBeenLastCalledWith(rect, false)
 		session.forceAutoScrollFor(60_000)
 		onCursorChange(rect)
+		await nextTick()
 		expect(hooks.updateAutoScroll).toHaveBeenLastCalledWith(rect, true)
 	})
 

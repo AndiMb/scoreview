@@ -137,7 +137,7 @@
 			v-for="label in noteLabels"
 			:key="label.key"
 			class="score-page-note-name"
-			:style="{ left: label.left + '%', top: label.top + '%', fontSize: label.size + 'px' }"
+			:style="{ left: label.left + '%', top: label.top + '%', fontSize: label.size + 'px', lineHeight: label.lineHeight + 'px', width: label.width + 'px', textAlign: label.align }"
 			aria-hidden="true">{{ label.text }}</span>
 		<span
 			v-if="tapBubble"
@@ -183,6 +183,7 @@ import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import ScoreStamps from './ScoreStamps.vue'
 import { formatCents } from '../lib/intonation.js'
+import { placeNoteLabels } from '../lib/noteLabelLayout.js'
 import { nameOf } from '../lib/noteNames.js'
 import { hitNotehead, matchNoteheads } from '../lib/noteSpellingIndex.js'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
@@ -204,6 +205,11 @@ const CLICK_MOVE_TOLERANCE_PX = 8
 // Sanitizer-Durchlauf.
 const LOAD_MARGIN_PX = 600
 const UNLOAD_MARGIN_PX = 2400
+
+// Was ein Tonname nicht verdecken soll (siehe obstacles()). Wiederholungs-
+// punkte zeichnet MuseScore als Teil der BarLine.
+const LABEL_OBSTACLES = 'Accidental BarLine NoteDot Stem Hook Rest Clef KeySig TimeSig Articulation Fermata Dynamic Lyrics Tuplet'
+	.split(' ').map((c) => `.${c}`).join(',')
 
 /**
  * Eine Seite als eingebettetes SVG (E2: MuseScore-eigenes Rendering statt
@@ -394,8 +400,8 @@ export default {
 			// selbst steht bewusst ausserhalb von data() (siehe created()); dieses
 			// eine Bit liest das Template, es entscheidet, ob das Band malt.
 			notesHighlighted: false,
-			// Die Tonnamen dieser Seite: {key, left, top, size, text} in
-			// Prozent der Seite. Einmal je Seite und Einstellung berechnet,
+			// Die Tonnamen dieser Seite: {key, left, top, size, text}, die
+			// linke obere Ecke in Prozent der Seite. Einmal je Seite und Einstellung berechnet,
 			// nicht je Rahmen (die Arbeit aus 1.10.2 bleibt so erhalten).
 			noteLabels: [],
 			// Der Name des zuletzt angetippten Kopfs, kurz eingeblendet (D13).
@@ -710,6 +716,8 @@ export default {
 		// Notenkoepfe mit Tonhoehe und Schreibweise (lib/noteSpellingIndex.js)
 		// - DOM-Knoten, also ebenfalls nicht reaktiv.
 		this.noteItems = []
+		// Hindernisse fuer die Tonnamen, gemessen beim ersten Bedarf.
+		this.labelObstacles = null
 		this.tapTimer = null
 	},
 
@@ -746,6 +754,7 @@ export default {
 		 * Layoutabfrage, je Rahmen waere sie zu teuer.
 		 */
 		indexSpellings() {
+			this.labelObstacles = null
 			this.noteItems = []
 			if (this.spellings && this.noteIndex) {
 				this.noteItems = matchNoteheads(this.noteIndex, this.spellings).map((item) => {
@@ -769,18 +778,62 @@ export default {
 				return
 			}
 			const staves = this.noteNameStaves ? new Set(this.noteNameStaves) : null
-			// Schriftgroesse aus der Kopfhoehe: etwas groesser als ein
-			// Notenkopf, damit sie am Notenstaender lesbar bleibt.
+			// Schriftgroesse aus der Kopfhoehe: deutlich groesser als ein
+			// Notenkopf, damit sie am Notenstaender lesbar bleibt; wo es dafuer
+			// zu eng ist, weicht der Name aus (lib/noteLabelLayout.js). Die
+			// Untergrenze bleibt klein: Bei Seitenbreite am Telefon sind die
+			// Koepfe nur 4 px hoch, groessere Namen deckten dort alles zu.
 			const pxPerUnit = (BASE_PAGE_WIDTH_PX * this.zoom) / box.width
-			this.noteLabels = this.noteItems
-				.filter((item) => staves === null || staves.has(item.staff))
-				.map((item, i) => ({
-					key: `${item.elid}:${item.staff}:${item.voice}:${i}`,
-					left: ((item.box.x - box.minX) / box.width) * 100,
-					top: ((item.box.y + item.box.height / 2 - box.minY) / box.height) * 100,
-					size: Math.max(9, Math.min(22, item.box.height * pxPerUnit * 1.15)),
+			const items = this.noteItems
+				.map((item, id) => ({ item, id }))
+				.filter(({ item }) => staves === null || staves.has(item.staff))
+				.map(({ item, id }) => ({
+					key: `${item.elid}:${item.staff}:${item.voice}:${id}`,
+					id,
+					head: item.box,
+					sizePx: Math.round(Math.max(9, Math.min(24, item.box.height * pxPerUnit * 1.4))),
 					text: nameOf({ tpc: item.tpc, system: this.noteNameSystem, concertKey: this.keyOfElid(item.elid) }),
 				}))
+			this.noteLabels = placeNoteLabels(items, this.obstacles(), pxPerUnit).map((label) => ({
+				key: label.key,
+				text: label.text,
+				size: label.sizePx,
+				lineHeight: label.box.height * pxPerUnit,
+				// Die Breite ist geschaetzt - zum Kopf hin buendig, damit eine
+				// Abweichung nach aussen geht und nicht auf den Kopf.
+				width: label.box.width * pxPerUnit,
+				align: { left: 'right', right: 'left' }[label.side] ?? 'center',
+				left: ((label.box.x - box.minX) / box.width) * 100,
+				top: ((label.box.y - box.minY) / box.height) * 100,
+			}))
+		},
+
+		/**
+		 * Was ein Tonname nicht verdecken soll, einmal je Seite gemessen und
+		 * erst, wenn Tonnamen gebraucht werden: die Koepfe selbst und alles,
+		 * was links, ueber oder unter ihnen stehen kann. Notenlinien und
+		 * Hilfslinien nicht - ueber ihnen steht ein Name zwangslaeufig.
+		 *
+		 * @return {Array<{box: object, id: number}>}
+		 */
+		obstacles() {
+			if (this.labelObstacles) {
+				return this.labelObstacles
+			}
+			const out = this.noteItems.map((item, id) => ({ box: item.box, id }))
+			const svg = this.$refs.root?.querySelector('.score-page-svg')
+			for (const node of svg?.querySelectorAll(LABEL_OBSTACLES) ?? []) {
+				try {
+					const b = node.getBBox()
+					if (b.width > 0 || b.height > 0) {
+						out.push({ box: { x: b.x, y: b.y, width: b.width, height: b.height }, id: -1 })
+					}
+				} catch {
+					// Ohne Layout kein Hindernis.
+				}
+			}
+			this.labelObstacles = out
+			return out
 		},
 
 		/**
@@ -1002,6 +1055,7 @@ export default {
 			this.liveMarked = []
 			this.noteItems = []
 			this.noteLabels = []
+			this.labelObstacles = null
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid: "Klick auf eine Note springt
@@ -1320,11 +1374,11 @@ export default {
 }
 
 .score-page-note-name {
+	/* Linke obere Ecke und Zeilenhoehe kommen aus lib/noteLabelLayout.js,
+	   das den Platz neben dem Kopf schon gewaehlt hat. */
 	position: absolute;
-	transform: translate(calc(-100% - 2px), -50%);
 	pointer-events: none;
 	font-weight: 600;
-	line-height: 1;
 	white-space: nowrap;
 	color: var(--color-primary-element, #00679e);
 	text-shadow: 0 0 2px var(--color-main-background, #fff), 0 0 2px var(--color-main-background, #fff);

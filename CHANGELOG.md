@@ -4,6 +4,41 @@ Alle nennenswerten Änderungen an ScoreView. Format angelehnt an
 [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach
 [Semantic Versioning](https://semver.org/lang/de/).
 
+## [1.13.0] – unveröffentlicht
+
+### Neu
+
+- **Mitblättern bei „Folgt mir“.** Spielt die Leitung ab, laufen Cursor,
+  Mitscrollen und Zeitanzeige der Folgegeräte mit – ohne Ton, in der Probe
+  wird live gesungen. Hält die Leitung an, bleiben die Geräte an ihrer
+  Stelle stehen; wer selbst navigiert, löst sich wie bei einem Sprung.
+  Übertragen wird ein Stand mit Serverzeit, kein Strom von Zeiten.
+
+### Behoben
+
+- **Sprung der Leitung kommt bei starkem Zoom nicht ins Bild.** Bei
+  „Folgt mir“ sprang auf dem Folgegerät zwar die Markierung, die Ansicht
+  blieb aber stehen oder fuhr zur vorigen Stelle: Das Nachführen maß den
+  Cursor, bevor er neu gezeichnet war, und lag die Stelle auf einer noch
+  nicht geladenen Seite, scrollte es nur grob zu deren Anfang. Während der
+  Wiedergabe richtete das die nächste Note, im Stillstand kam keine. Das
+  gilt ebenso für einen Sprung über das Taktfeld.
+- **Ruckeln bei der Wiedergabe in Files, zweiter Teil.** Die Zeitanzeige
+  ersetzte jede Sekunde ihren Textknoten, und die Fortschrittslinie der
+  eingefahrenen Leiste im Vollbild schrieb in jedem Bild ihre Breite ins
+  `style`-Attribut – beides löst in Files über Nextclouds `:has()`-Regeln
+  eine Stil-Neuberechnung über den ganzen Baum aus. Am Desktop sinkt die
+  Stilzeit während der Wiedergabe von 331 auf 19 ms je 4 s, am Galaxy S23
+  laufen die Seiten mit 49 statt 44 fps, das Systemband mit 33 statt 29.
+- **Tonnamen überdecken Vorzeichen und Wiederholungspunkte.** Sie standen
+  immer links vom Kopf; jetzt weichen sie nach unten, oben oder rechts aus,
+  wo links kein Platz ist, auch im Akkord. Bei lesbarem Zoom sind sie
+  größer.
+- **Engine-Vorschlag blieb nach einem Fehlschlag für immer aus.** Konnte der
+  tägliche Lauf den Pull Request nicht anlegen, blieb sein Branch stehen und
+  galt an allen Folgetagen als „schon vorgeschlagen“. Jetzt räumt der Lauf
+  den Branch wieder ab und nennt die nötige Repo-Einstellung.
+
 ## [1.12.0] – 2026-10-08
 
 ### Neu
@@ -996,5 +1031,6 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.md](docs/limits.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.13.0]: https://github.com/AndiMb/scoreview/compare/v1.12.0...HEAD
 [1.12.0]: https://github.com/AndiMb/scoreview/compare/v1.11.0...v1.12.0
 [1.0.0]: https://github.com/AndiMb/scoreview/releases/tag/v1.0.0

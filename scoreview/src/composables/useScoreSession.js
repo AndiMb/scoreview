@@ -189,7 +189,13 @@ export function useScoreSession() {
 				// einem Sprung der Leitung auch dann, wenn gerade von Hand
 				// geblaettert wurde: Blaettern loest das Folgen nicht, der
 				// Sprung soll also sichtbar werden (forceAutoScrollFor).
-				hooks.updateAutoScroll(rect, Date.now() < forceScrollUntil)
+				// Erst nach dem Rendern: Das Nachfuehren misst den Cursor im
+				// DOM, und der steht bis dahin noch an der alten Stelle. In der
+				// Wiedergabe faellt das nicht auf, weil die naechste Note es
+				// richtet - nach einem Sprung im Stillstand kommt keine, und
+				// die Ansicht fuhr zur vorigen Stelle statt zur neuen.
+				const force = Date.now() < forceScrollUntil
+				nextTick(() => hooks.updateAutoScroll(rect, force))
 			})
 
 			pumpTimeDisplay()
