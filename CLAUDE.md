@@ -8,7 +8,7 @@ nicht offensichtlich ist – **die fachliche Wahrheit steht in `docs/`**.
 
 | Frage | Dokument |
 |---|---|
-| Warum ist das so gebaut? | `docs/architecture.md` – Aufbau, Sicherheitsregeln S1–S10, Entscheidungen E1–E15, Formatgrundlagen M1–M12 |
+| Warum ist das so gebaut? | `docs/architecture.md` – Aufbau, Sicherheitsregeln S1–S10, Entscheidungen E1–E15, Formatgrundlagen M1–M12 (ohne M5) |
 | Was ist gemessen, was ist offen? | `docs/limits.md` |
 | Wie baue/teste ich? | `docs/development.md` |
 | Wie wird das installiert? | `docs/installation.md` |
@@ -30,8 +30,9 @@ eine Referenz.
 | `docs/` | Die gepflegte Dokumentation |
 
 Konvertiert wird über **einen von zwei Wegen** – Sidecar oder lokal –, die
-dieselben Artefakte erzeugen (E3). Die Wahl wird an genau einer Stelle
-ausgewertet (`ConvertScoreJob`); das Frontend kennt ausschließlich die HTTP-API
+dieselben Artefakte erzeugen (E3). Welcher Weg konvertiert, entscheidet
+nur `ConvertScoreJob` (Diagnose, SoundFont-Herkunft und Rückfallprüfung fragen
+`ConversionBackend` nur ab); das Frontend kennt ausschließlich die HTTP-API
 der App und **verzweigt nie** danach, welcher Weg gelaufen ist. Kann der Server
 keinen von beiden ausführen, konvertiert der Browser (E7) – ein Rückfall, keine
 dritte Wahl; auch er wird an genau einer Stelle entschieden
@@ -49,7 +50,7 @@ Frontend, aus `scoreview/`:
 ```sh
 npm run build       # Pflicht nach jeder Änderung unter src/ - js/ ist gitignored
 npm run watch       # während der Frontend-Arbeit
-npm test            # vitest, die reinen Module unter src/lib/ plus die l10n-Vollständigkeit
+npm test            # vitest: src/lib/, Composables, Konverter-Umformung, l10n-Vollständigkeit
 npm run lint        # ESLint (@nextcloud/eslint-config), --fix über npm run lint:fix
 npm run stylelint   # Stylelint für die <style scoped>-Blöcke
 npm run l10n:extract  # nach jedem neuen/geänderten t()/$l->t() - meldet fehlende/verwaiste Übersetzungen
@@ -116,8 +117,8 @@ Testinstanz stehen in `docs/development.md#testumgebung`.
   `sidecar/README.md`. **`--network scoreview-net` nicht vergessen** – ohne
   das Flag startet der Container fehlerfrei, ist aber von Nextcloud aus
   nicht per Containernamen erreichbar (Dockers Standard-Bridge kennt keine
-  Namensauflösung), und die Betriebsdiagnose meldet nur
-  „Konvertierungsdienst nicht erreichbar".
+  Namensauflösung), und die Betriebsdiagnose zeigt nur die
+  Zeile „Konvertierung“ rot, mit einer cURL-Meldung zur Namensauflösung.
 - **Kein System-Cron im Image.** Ohne den manuellen Loop laufen
   Background-Jobs nicht, und Konvertierungen bleiben auf „pending" stehen.
   Vor der Fehlersuche prüfen: `docker exec nextcloud-test ps aux | grep cron.php`.
@@ -155,7 +156,7 @@ misst er nur den Effektbus und meldet fälschlich „kein Ton".
   Entscheidungen, die von außen falsch aussehen. Der Bestand ist so
   geschrieben; bitte in dieser Dichte weiterführen statt sie zu verwässern.
   **Keine Prozess-Chronik im Code**: nicht „Phase 17 hat gemessen, dass …",
-  sondern „gemessen: …". Referenzen auf `S1`–`S10`/`E1`–`E15`/`M1`–`M12` sind erwünscht,
+  sondern „gemessen: …". Referenzen auf `S1`–`S10`/`E1`–`E15`/`M1`–`M12` (ohne M5) sind erwünscht,
   sie zeigen auf `docs/architecture.md`.
 - Commit-Messages beschreiben Ursache und Wirkung, nicht nur den Fix. Kurze
   Betreffzeile, dann ein Fließtext-Body.
@@ -176,7 +177,7 @@ Alle ausführlich in `docs/troubleshooting.md`:
   kompilierte Routentabelle eine Stunde lang, keyed nach Host-Header.
   Version hochzählen + `occ upgrade`, oder Container neu starten.
 - **`.mscz` bietet nur „Herunterladen" an.** Ein Mimetype-Problem. Den
-  Mimetype trägt die App seit 1.9.2 selbst ein (Repair-Step beim Update,
+  Mimetype trägt die App selbst ein (Repair-Step beim Update,
   Background-Job nach dem Upload) – bleibt er falsch, lief entweder kein
   `occ upgrade` oder kein Cron.
 - **Antivirus unter Windows** quarantäniert `scoreview/node_modules/stb-vorbis/dist/index.js`

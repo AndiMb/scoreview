@@ -28,7 +28,8 @@ liefern. Voreingestellt und ohne Einstellung betriebsbereit ist der Weg ohne
 Container: MuseScore als WebAssembly, ausgeführt von der Node.js-Laufzeit des
 Servers - alles Nötige liegt im App-Paket, und das SoundFont für die Wiedergabe
 holt der Server selbst. Wahlweise übernimmt ein MuseScore-Container neben
-Nextcloud die Konvertierung.
+Nextcloud die Konvertierung. Kann der Server keinen der beiden Wege ausführen,
+konvertiert der Browser - ohne Cache, als Rückfall.
 
 Funktionsumfang: Zoom-Presets, Vollbild und Autoscroll im Takt der Wiedergabe;
 frei wählbare Hervorhebung der klingenden Stelle (Notenköpfe oder Band, eigene
@@ -47,8 +48,9 @@ Studierbuchstaben in der Navigation; „Folgt mir" - die Leitung schickt Stelle,
 Loop und Anfangston an alle Geräte (mit notify_push unter einer Sekunde) und
 lässt sie beim Abspielen stumm mitblättern;
 Setlisten als Markdown-Datei mit Stückwechsel im Viewer; eigene Aufnahmen, die
-nur die Aufnehmende hört, und Rückmeldung zur Intonation beim Singen. Bis auf
-das Mikrofon in der Android-App geht das auch in den mobilen Nextcloud-Apps.
+nur die Aufnehmende hört, und Rückmeldung zur Intonation beim Singen. Die mobilen
+Nextcloud-Apps öffnen den Viewer ebenfalls - die Android-App ohne Mikrofon;
+geprüft ist bisher nur Android.
 
 Für unterwegs und das Handy: Übe-Tracks als MP3 in Files - die aktuelle
 Mischung, auf Wunsch je Stimme für alle -, Coach (eigene Stimme als Klavier),
@@ -76,7 +78,8 @@ default one needs no configuration at all and no container: MuseScore as
 WebAssembly, executed by the server's Node.js runtime - everything it needs
 ships with the app, and the server fetches the SoundFont for playback on its
 own. Alternatively a MuseScore container next to Nextcloud does the
-converting.
+converting. If the server can run neither, the browser converts instead -
+without a cache, as a fallback.
 
 Feature set: zoom presets, fullscreen and auto-scrolling in time with playback;
 a freely configurable playback highlight (sounding notes or a bar, in a colour
@@ -96,8 +99,8 @@ loop and starting note to every device (below one second with notify_push)
 and lets them follow silently while it plays;
 setlists as a Markdown file with piece changes inside the viewer; own
 recordings only the person recording can hear, and intonation feedback while
-singing. Apart from the microphone in the Android app, this also works in
-the Nextcloud mobile apps.
+singing. The Nextcloud mobile apps open the viewer too - the Android app
+without the microphone; so far only Android has been tested.
 
 On the go and on a phone: practice tracks as MP3 files in Files - the current
 mix, optionally one per voice for everyone -, a coach mode (your own voice on

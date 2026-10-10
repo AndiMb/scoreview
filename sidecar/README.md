@@ -35,8 +35,9 @@ entgegennimmt und darauf MuseScore loslässt, soll nicht aus Versehen entstehen.
 Namensauflösung zwischen Containern; `http://scoreview-sidecar:8765` – die
 Adresse, die in den Admin-Einstellungen steht – läuft dann ins Leere, während
 `curl` vom Host aus tadellos funktioniert. Der Container startet trotzdem
-fehlerfrei, und die Betriebsdiagnose meldet nur „Konvertierungsdienst nicht
-erreichbar". Beide Container müssen in dasselbe benutzerdefinierte Netz; der
+fehlerfrei, und die Betriebsdiagnose zeigt nur die Zeile „Konvertierung“
+rot, mit einer cURL-Meldung zur Namensauflösung; Partituren konvertiert dann
+der Browser. Beide Container müssen in dasselbe benutzerdefinierte Netz; der
 Netzname hängt von der Installation ab, deshalb steht hier ein Beispiel und kein
 fertiger Befehl. Einrichtung siehe
 [Installation](../docs/installation.md#1b-weg-b-sidecar-starten).

@@ -144,10 +144,10 @@ Der Statusendpunkt trägt zusätzlich `canWriteFolder`: ob die Person neben der
 Partitur anlegen darf. Daran hängt, ob der Viewer „Tracks für alle Stimmen“
 anbietet.
 
-Die Endpunkte von „Folgt mir“, Aufnahme, Intonation, Übe-Tracks und der
-Offline-Seite hängen an je einem
-Schalter der Verwaltung (`FeatureConfig`). Ist er aus, antworten sie 404, und
-der Viewer zeigt nichts davon – wer eine Funktion nicht nutzt, bemerkt sie
+Die Endpunkte von „Folgt mir“, Aufnahme, Übe-Tracks und der Offline-Seite
+hängen an je einem Schalter der Verwaltung (`FeatureConfig`). Ist er aus,
+antworten sie 404, und der Viewer zeigt nichts davon; die Intonation hat keinen
+eigenen Endpunkt, ihren Schalter wertet nur der Viewer aus – wer eine Funktion nicht nutzt, bemerkt sie
 nicht, auch nicht als zusätzliche Anfrage. Die Leitungsrolle hängt an keinem
 Schalter: Auf ihr bauen Stimmnotizen ebenso auf wie „Folgt mir“.
 
@@ -223,7 +223,7 @@ Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 | `scoreview_recordings` | `file_id`, `user_id`, `created_at`, `duration_ms`, `size_bytes`, `score_start_ms`, `tempo_factor`, `with_accompaniment` – die WAV selbst liegt in IAppData |
 
 `backend` hält fest, welcher Konvertierungsweg **diese** Darstellung erzeugt hat
-(`sidecar`, `local`, oder `NULL` für Datensätze aus der Zeit vor der Spalte).
+(`sidecar`, `local`, oder `NULL`, wo der Weg nicht festgehalten ist).
 Nur so bleibt die Frage später beantwortbar: Die Admin-Einstellung sagt, was
 *jetzt* gilt, nicht, was beim Konvertieren dieser Datei galt. Die Spalte ist
 rein beschreibend – nichts im Server und nichts im Viewer verzweigt danach.
@@ -260,13 +260,14 @@ Aufnahme antwortet 404, nicht 403.
 `CleanupOrphansJob` räumt Cache-Einträge, Notizen, Leitungen, Folgesitzungen,
 Aufnahmen, die gemerkte Stimmwahl („Meine Stimme“, `my_part.<fileId>` in den
 Nutzereinstellungen) und die Übe-Einstellungen (`practice.<fileId>`)
-gelöschter Dateien ab. Übe-Tracks räumt die App nicht: Sie sind gewöhnliche
-Dateien in Files ([E13](#e13-übe-tracks-sind-dateien-in-files)). Das geschieht bewusst erst, wenn die Datei
+gelöschter Dateien ab. Das geschieht bewusst erst, wenn die Datei
 auch aus dem Papierkorb verschwunden ist – eine Wiederherstellung aus dem
 Papierkorb soll nichts davon verlieren. Nur den Cache nimmt schon
 `Listener\NodeDeletedListener` beim Verschieben in den Papierkorb weg: Er ist
-regenerierbar, das nächste Öffnen baut ihn neu auf. Folgesitzungen ohne Lebenszeichen
-der Leitung (30 min) entfernt er unabhängig davon. `UserDeletedListener`
+regenerierbar, das nächste Öffnen baut ihn neu auf. Folgesitzungen ohne
+Lebenszeichen der Leitung (30 min) entfernt `CleanupOrphansJob` unabhängig
+davon. Übe-Tracks räumt die App nicht: Sie sind gewöhnliche Dateien in Files
+([E13](#e13-übe-tracks-sind-dateien-in-files)). `UserDeletedListener`
 löscht beim Löschen eines Kontos dessen Notizen, Ernennungen, geleitete
 Sitzungen und Aufnahmen. Zeilen und WAV-Dateien der Aufnahmen verschwinden
 dabei immer zusammen (`RecordingStorage`), und ein leer gewordener Ordner
@@ -307,6 +308,12 @@ Aufbau:
   Wiedergabezeit an Stelle des Viewers: Was sich mit jedem Frame ändert, hängt
   nur an diesem kleinen Teilbaum, der Viewer selbst rendert beim Abspielen
   nicht mit.
+- `src/directives/` – `nodeText.js` (`v-node-text`) für Text, der sich
+  während der Wiedergabe laufend ändert: Es ändert den Wert des vorhandenen
+  Textknotens, statt ihn wie Vue über `textContent` zu ersetzen. Ersetzte
+  Kindknoten lösen in Files über Nextclouds `:has()`-Regeln eine
+  Stil-Neuberechnung über den ganzen Baum aus (gemessen ~70 ms je Änderung,
+  siehe [Grenzwerte](limits.md#darstellungen)).
 - `src/composables/` – der Zustand des Viewers, nach Themen getrennt: die
   offene Partitur mit Laden, Zurücksetzen und Zeitschleife (`useScoreSession`),
   Taktnavigation, Gestalt der Leiste, Konvertierungsstatus, Notizen, Zoom,
@@ -315,7 +322,7 @@ Aufbau:
 - `src/lib/` – **reine Logik ohne DOM, ohne `AudioContext`, ohne Nextcloud** und
   damit ohne Browser testbar: `scoreLayout.js`, `mixerLayout.js`,
   `timingSync.js`, `scrollPlan.js`, `metronome.js`, `svgSanitizer.js`,
-  `silentClock.js`, `player.js`, `scoreSync.js`, `scoreFile.js`,
+  `scoreSync.js`, `scoreFile.js`,
   `playbackTime.js`, `audioHealth.js`, `directToken.js`, `mobileBridge.js`,
   `svgIndex.js`, `highlightStyle.js`, `staffBands.js`, `generation.js`,
   `assetVersion.js`, `viewerFormat.js`, `viewerTexts.js`, für die Leiste
@@ -323,7 +330,10 @@ Aufbau:
   `artifactUrls.js` ([E7](#e7-konvertierung-im-browser-als-rückfall)), für die
   Fähigkeiten der Artefakte `capabilities.js`
   ([E15](#e15-fähigkeiten-statt-weg)) und die Module der beiden Tabellen
-  unten. Neue Logik gehört hierhin, nicht in die Komponenten.
+  unten. Neue Logik gehört hierhin, nicht in die Komponenten. Ausnahmen
+  sind drei dünne Hüllen, die bewusst neben der reinen Logik liegen und ohne
+  Browser nicht testbar sind: `player.js` und `metronomeClick.js` um Web Audio
+  (`AudioContext`), `silentClock.js` um die Uhr (`performance.now()`).
 
 `ScoreViewer.vue` ist auf allen drei Seiten mit Partituren dieselbe
 Komponente und weiß nicht, über welche sie geladen wurde. Was den Seiten eigen
@@ -375,6 +385,10 @@ nicht zur Person – am Desktop 0, am Telefon mit Kopfhörern 250.
 (`useAutoScroll.js`): Mobile Browser blenden ihre Adressleiste beim Scrollen ein
 und aus und erzeugen dabei Ereignisse, die von keinem Finger stammen. Ob einer
 auf dem Glas liegt, meldet der Browser aber – es wird gefragt statt erschlossen.
+Mausrad und Tastatur zählen ebenfalls als Eingriff. Das Ende eines
+Trägheitsscrollens (`scrollend`) zählt nur, wenn seit dem eigenen Nachführen
+eine Geste begann (`scrollPlan.js#isManualScrollEnd`) – sonst hielte das Ende
+des eigenen weichen Nachführens das Mitscrollen an.
 
 Was auf dem Gerät gemessen wurde, steht im Aufklapper „Darstellung" neben der
 Herkunft: Ausgabelatenz, Tonausgabe, Aussetzer und Bildrate (`audioHealth.js`).
@@ -432,7 +446,7 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | Aufführungsmodus, Blättern per Taste/Pedal | `interactionPolicy.js`, `pagingPlan.js`, `keyMap.js` | `usePerformanceMode`, `usePaging`, `useWakeLock` | `ScoreLockButton.vue` |
 | Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | `leaders.js` | `useLeaders` | `LeaderPanel.vue` |
 | Stimmnotizen, Stempel, Studierbuchstaben | `annotationFilter.js`, `stampLayout.js`, `scoreFacts.js` | `useAnnotations`, `useScoreFacts` | `ScoreStamps.vue`, `StampSymbol.vue` |
-| „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js`, `leaderQueue.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
+| „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js`, `leaderQueue.js`, `followPlayback.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
 | Setliste ([E11](#e11-die-setliste-als-markdown-datei)) | `setlistNav.js`, `setlistEdit.js`, `soundFontCache.js` | `useSetlist` | `SetlistBar.vue`, `SetlistEditor.vue` |
 | Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js` | `useMicrophone`, `useRecorder`, `useIntonation` | `MicIndicator.vue`, `RecordingPanel.vue` |
 | Schalter der Verwaltung | `featureFlags.js` | – | – |
@@ -471,7 +485,7 @@ Derselbe Schnitt wie oben – reines Modul, Composable, Komponente:
 | Übe-Track als MP3, Tracks für alle Stimmen ([E13](#e13-übe-tracks-sind-dateien-in-files)) | `exportPlan.js`, `practiceTrackName.js`, `id3.js` | `usePracticeExport` | `PracticeExportControls.vue` |
 | Titel und Medientasten, Hinweis bei gesperrtem Bildschirm | – | `useMediaSession` | – |
 | Darstellung: Seiten, Systemband, Liedtext ([E15](#e15-fähigkeiten-statt-weg)) | `capabilities.js`, `systemBand.js`, `lyricsLayout.js` | `useViewerPreferences` | `LayoutControls.vue`, `SystemBand.vue`, `LyricsView.vue` |
-| Tonnamen, Note antippen | `noteNames.js`, `noteSpellingIndex.js` | `useViewerPreferences` | `NoteNameControls.vue`, Overlay in `ScorePage.vue` |
+| Tonnamen, Note antippen | `noteNames.js`, `noteSpellingIndex.js`, `noteLabelLayout.js` | `useViewerPreferences` | `NoteNameControls.vue`, Overlay in `ScorePage.vue` |
 | Offline vormerken ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)) | `offlinePlan.js` | `useOffline` | `PinControls.vue`, `OfflineApp.vue` |
 
 **Ein Versatz für alle Verbraucher.** Die Transposition (−12 … +12 Halbtöne)
@@ -528,7 +542,7 @@ MIDI-Tonhöhe allein ist Fis von Ges nicht zu unterscheiden. Zugeordnet wird
 der Reihe nach je Segment, Notenzeile und Stimme; stimmt die Zahl einer Gruppe
 nicht, bleibt sie ohne Namen – lieber keiner als ein falscher. Das relative Do
 braucht keinen Modus: do sitzt auf der Dur-Tonika der Vorzeichnung, Moll ist
-la-basiert. Ein Tipp auf eine Note springt wie bisher und spielt bei stehender
+la-basiert. Ein Tipp auf eine Note springt dorthin und spielt bei stehender
 Wiedergabe zusätzlich deren Ton (mit Transposition), der Name erscheint kurz am
 Kopf.
 
@@ -1002,8 +1016,8 @@ Angaben deshalb bei jedem Lauf, und `engine-release.yml` hebt sie nur gemeinsam:
 Der Wächter sieht täglich nach, ob
 [scoreview-engine](https://github.com/AndiMb/scoreview-engine) ein neues Release
 hat, und macht daraus einen Pull Request, der den Engine-Pin und – falls das
-Release eine neue MuseScore-Version mitbringt – die beiden Dockerfile-ARGs in
-einem Zug hebt. Dependabot kann das nicht übernehmen, weil eine Release-URL
+Release eine neue MuseScore-Version mitbringt – die drei Dockerfile-ARGs
+(Version, Build, SHA-256 des AppImage) in einem Zug hebt. Dependabot kann das nicht übernehmen, weil eine Release-URL
 keiner Registry gehört (siehe `.github/dependabot.yml`). Auf der anderen Seite
 hängt daran eine zweite Automatik: Im Engine-Repo bereitet
 `musescore-release.yml` den MuseScore-Sprung als Entwurf vor, sobald upstream
@@ -1222,8 +1236,8 @@ allein in `ConvertScoreJob` fällt:
 | `sidecar` | die Lebendprüfung schlägt fehl – oder ein Lauf ist mit `sidecar_unreachable` gescheitert | Ein konfigurierter Sidecar *soll* laufen; sein Ausfall ist ein Betriebsproblem. Beide Auslöser zusammen fangen sowohl den Dauerzustand als auch den Ausfall zwischen zwei Prüfungen |
 
 Das Urteil ist gespeichert und gilt fünf Minuten – die ehrliche Antwort kostet
-einen Prozessstart oder eine HTTP-Anfrage, und der Viewer fragt den Status im
-Sekundentakt. Ein Selbsttest und jedes Speichern der Admin-Einstellungen
+einen Prozessstart oder eine HTTP-Anfrage, und der Viewer fragt den Status
+alle 2 s. Ein Selbsttest und jedes Speichern der Admin-Einstellungen
 verwerfen es sofort.
 
 **Ein Inhaltsfehler löst ihn nicht aus.** Wenn die Partitur kaputt ist,
@@ -1248,8 +1262,8 @@ wird nur, wo es nichts gibt.
 **Warum keine Zeile im Viewer.** Der Vertrag ist der Körper von `onReady()`,
 nicht die HTTP-Antwort, aus der er stammt: Der Rückfall baut dasselbe
 `files`-Objekt, nur mit Blob-URLs statt Serverrouten. `ScoreViewer.vue`,
-`ScorePage.vue`, `usePlayback.js` und `useAnnotations.js` sind unverändert; die
-Verzweigung sitzt an einer Stelle in `useConversionStatus.js`. Dass der Viewer
+`ScorePage.vue`, `usePlayback.js` und `useAnnotations.js` kennen den Rückfall
+nicht; die Verzweigung sitzt an einer Stelle in `useConversionStatus.js`. Dass der Viewer
 `renderer.backend === 'client'` **anzeigt**, ist wie bei den beiden anderen
 Wegen eine Angabe für Menschen, kein `if`.
 
@@ -1381,8 +1395,10 @@ Einen zweiten Anlass zur Ausgabe gibt es: Zieht eine Leitung ihre Sitzung von
 braucht ein Folgegerät in der App ein Token für dieses Stück, auch ohne
 Setliste. `GET …/follow/companion?target=` gibt es aus – wieder nur gegen das
 Direct-Editing-Token der geöffneten Partitur, nur für eine Datei, die die
-Person lesen darf, und nur, solange dort eine Sitzung läuft. Ein abgegriffenes
-Token der Seite öffnet so keine beliebigen Dateien.
+Person lesen darf, und nur, wenn die Sitzung der geöffneten Partitur dorthin
+umgezogen ist (dieselbe Sitzungskennung, `FollowService::isMoveTarget`); eine
+beliebige Datei mit laufender Sitzung reicht nicht. Ein abgegriffenes Token
+der Seite öffnet so keine beliebigen Dateien.
 
 **Push gibt es dort nicht.** `notify_push` meldet sich über eine Sitzung an,
 die die Seite nicht hat. Folgegeräte in den Apps fragen deshalb immer ab
@@ -1463,11 +1479,10 @@ eine vergessene Transposition hieße in der Probe falsch ansingen. Die Folgen-An
 sondern über den Noten (`FollowBadge.vue`) – dort kostet sie keine Höhe und
 bleibt im Aufführungsmodus sichtbar.
 
-Breit oder kompakt (Werkzeuge auf Abruf hinter „Mehr“) entscheidet der
+Breit oder kompakt (Werkzeuge auf Abruf hinter „Werkzeuge“) entscheidet der
 **Überlauf des Transports**, keine Breitenschwelle (`lib/barFit.js`,
-gemessen in `ScoreBar.vue`). Eine feste Schwelle war aus einer Knopfzahl
-gerechnet und veraltete mit jedem neuen Werkzeug; dazwischen schob sich der
-Transport unter die Werkzeuge. Nach „breit“ zurück geht es erst 24 px über der
+gemessen in `ScoreBar.vue`). Eine feste Schwelle müsste aus einer Knopfzahl
+gerechnet werden und veraltete mit jedem neuen Werkzeug. Nach „breit“ zurück geht es erst 24 px über der
 Breite, bei der der Überlauf auftrat, oder wenn sich der Inhalt der Leiste
 ändert (Aufführungsmodus, Folgen, Leitung, Studierbuchstaben, Mikrofon).
 Gemessen wird der Überlauf und nicht ein Umbruch, weil der Transport ein
@@ -1615,8 +1630,8 @@ die Leitung niemanden stumm – eine Stelle zeigt sie ausdrücklich.
 (`leaderQueue.js`). Zwei Änderungen, die gleichzeitig unterwegs wären, kämen
 in beliebiger Reihenfolge an – der ältere Sprung läge dann über dem neueren.
 Also läuft je Gerät höchstens eine Anfrage; was währenddessen getippt wird,
-geht gleich danach als *ein* PATCH hinaus: von Stelle und Loop nur der neueste
-Stand, ein Anfangston als Auslöser immer (mehrere Tontipps während einer
+geht gleich danach als *ein* PATCH hinaus: von Stelle, Loop, Transposition
+und Wiedergabestand nur der neueste, ein Anfangston als Auslöser immer (mehrere Tontipps während einer
 Anfrage als einer). Starten und Beenden verdrängen, was vor ihnen wartete. Die
 Knöpfe bleiben dabei bedienbar – gesperrte Knöpfe verlören den zweiten Tipp
 von „B – nein, C“. Die Warteschlange hält sich selbst unter 100 Anfragen je
@@ -1645,7 +1660,7 @@ und springen erst beim nächsten neuen Stand; fingen die Zähler bei 0 an,
 ohne Setliste; wer sich gelöst hat, bekommt nur den Hinweis mit „Dorthin
 wechseln“. Wer das neue Stück direkt öffnet, findet die Sitzung dort.
 
-- **Stelle und Loop tragen ihre Datei** (`fileId`). Während eines Umzugs kann
+- **Stelle, Loop und Wiedergabestand tragen ihre Datei** (`fileId`). Während eines Umzugs kann
   ein Stand der alten noch unterwegs sein, und Takt 12 dort ist ein anderer
   Takt 12; `followState.js` verwirft fremde.
 - **Nur Partituren.** `move` nimmt als Ziel nur eine `.mscz`
@@ -1769,8 +1784,8 @@ sonst kommt die Lage aus dem MIDI und landet damit von selbst in der Zählung
 des Viewers. Den Modus übernimmt der Rückfall dann aus der Engine, wo er je
 Vorzeichnung eindeutig ist.
 
-**Liedtext und Schreibweisen kommen ebenfalls aus der Engine.** Seit
-`v4.7.5-engine.4` schreibt sie zwei weitere Listen in `meta.json`
+**Liedtext und Schreibweisen kommen ebenfalls aus der Engine.** Sie schreibt
+(ab `v4.7.5-engine.4`) zwei weitere Listen in `meta.json`
 ([Artefaktschema](#artefaktschema)): `lyricSyllables`, jede sichtbare Silbe
 mit Segment, Notenzeile, Stimme, Strophe und Silbenart, und `noteSpellings`,
 je Notenkopf die klingende Tonhöhe und die gezeigte Schreibweise (`tpc`).
@@ -1783,10 +1798,9 @@ Selbsttest prüft beide Listen an `lyrics-test.mscz` – drei Strophen unter ein
 Wiederholung, 56 Silben, jede an einer `elid` aus `timing.json`, und je Segment,
 Notenzeile und Stimme so viele Schreibweisen wie Notenköpfe im SVG.
 
-**Bestehende Partituren bekommen die Felder durch eine Neukonvertierung.**
-`CURRENT_FORMAT_VERSION` steht auf 4; ein älterer Cache-Eintrag gilt beim
-nächsten Öffnen als nicht fertig und wird neu erzeugt
-([Konvertierung und Cache](#konvertierung-und-cache)).
+**Ein Cache-Eintrag mit kleinerer `format_version` wird beim nächsten Öffnen
+neu erzeugt** (`CURRENT_FORMAT_VERSION` = 4) – so bekommt jede Partitur die
+Felder ([Konvertierung und Cache](#konvertierung-und-cache)).
 
 ### E13: Übe-Tracks sind Dateien in Files
 
@@ -1873,8 +1887,9 @@ eine eigene Seite, `/apps/scoreview/offline`, mit einem Worker, dessen Scope
 sonst, wie es ist).
 
 **Tragende Idee: dieselben URLs.** Der Viewer fragt auf der Offline-Seite
-genau die Adressen ab, die er auch in Files abfragt – Status, Artefakte samt
-`?v=`, Notizen, „Meine Stimme“, Setliste, SoundFont. „Offline vormerken“ legt
+genau die Adressen ab, die er auch in Files abfragt – unter anderem Status,
+Artefakte samt `?v=`, Notizen, Leitungen, „Meine Stimme“, Setliste samt
+Angeboten, SoundFont und Worklet. „Offline vormerken“ legt
 die Antworten unter genau diesen URLs in den Cache `scoreview-offline-data`
 (`offlinePlan.js` nennt sie, `useOffline.js` lädt sie), und der Worker
 beantwortet sie von dort, wenn das Netz fehlt. Der Viewer braucht dadurch
@@ -1938,8 +1953,8 @@ denselben Daten dazu, würde er ohne eine Zeile im Viewer mitgenutzt.
 |---|---|
 | Seiten | nichts |
 | Systemband | nichts – die Systemgrenzen kommen aus den Notenlinien, auf beiden Wegen |
-| Liedtext | `lyricSyllables` mit mindestens einer Silbe |
-| Tonnamen, Ton beim Antippen | `noteSpellings` |
+| Liedtext | `lyricSyllables` mit mindestens einer Silbe **und** Kennungen nach M10 (`segIds`) |
+| Tonnamen, Ton beim Antippen | `noteSpellings` **und** Kennungen nach M10 (`segIds`) |
 
 **Kein stiller Rückfall.** Anders als die Färbung der Notenköpfe, die still auf
 das Band zurückfällt, sagen die neuen Darstellungen, warum sie nicht gehen
@@ -1957,7 +1972,8 @@ gespeichert.
 
 Eigenschaften des MuseScore-Exports, auf denen die Umsetzung aufbaut. Alle gegen
 das gebaute Image bzw. die Engine gemessen, nicht angenommen. Die Kennungen
-`M1`…`M12` sind im Code referenziert.
+`M1`…`M12` sind im Code referenziert; M5 ist entfallen und bleibt frei,
+damit die übrigen Verweise gelten.
 
 ### M1: `--score-media` liefert alles in einem Aufruf
 
@@ -2119,8 +2135,7 @@ Damit ist die Umkehrung von [M4](#m4-koordinaten-passen-mit-faktor-12-auf-das-sv
 nicht mehr nur geometrisch möglich: Zu einem Zeitpunkt liefert `timing.json` die
 `elid`, und die zeigt direkt auf die Knoten, die dafür gezeichnet wurden.
 
-An der Selbsttest-Partitur gemessen (`v4.7.4-engine.2`, an `v4.7.5-engine.1`
-und `v4.7.5-engine.2` unverändert nachgemessen): 20 Segmente, 44
+An der Selbsttest-Partitur gemessen (`v4.7.5-engine.2`): 20 Segmente, 44
 Elemente mit Kennung, **jede Kennung hat ein Element in `spos`, und kein
 `spos`-Element bleibt ungezeichnet**. Der größte Abstand zwischen einem
 Notenkopf und der x-Position seines Segments beträgt **0,98 SVG-Einheiten** bei

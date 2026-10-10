@@ -35,7 +35,7 @@ Daraus abgeleitet:
   etwa 0,1 s pro Seite. Der lokale Weg gewinnt vor allem, weil er keine
   PNG/PDF/MusicXML mitrendert, die anschließend verworfen werden
   ([M2](architecture.md#m2-schlüssel-im---score-media-json)).
-- **Die SVG-Größe schwankt stark pro Seite** (303 KB gegen 1041 KB je nach
+- **Die SVG-Größe schwankt stark pro Seite** (302 KB gegen 1040 KB je nach
   Notendichte, Faktor ~3,4). Eine Hochrechnung „Seitenzahl × Durchschnitt" ist
   deshalb grob. Für 30 Seiten dichten Satzes sind ~30 MB SVG im Cache plausibel.
 - **Eingebettete Bilder wiegen schwer.** Sie stecken als Daten-URI in der
@@ -57,12 +57,12 @@ Daraus abgeleitet:
   Hergeleitet aus der 300-s-Frist bei rund 10 s je Auftrag. Ein wartender
   Auftrag verfällt nach `SCOREVIEW_PENDING_MAX_AGE_SECONDS` (Vorgabe 3600 s).
 - **Upload-Limit** (`SCOREVIEW_MAX_UPLOAD_BYTES`, Default 200 MB) liegt weit
-  jenseits echter Partituren (größte Testdatei: 114 KB) und schützt nur gegen
+  jenseits echter Partituren (größte Testdatei: 566 KB) und schützt nur gegen
   pathologische Uploads. Die App lehnt schon vorher ab: `max_score_bytes`,
   Vorgabe 100 MB, auf beiden Wegen.
 
-**Die Messreihe stammt von 1–5-seitigen Partituren.** Alles darüber ist
-Hochrechnung.
+**Die Server-Messreihe stammt von 1–5-seitigen Partituren.** Alles darüber
+ist Hochrechnung.
 
 ### Konvertierung im Browser
 
@@ -80,7 +80,8 @@ derselben Maschine in einem Chromium ohne Fenster:
 Auf einem Rechner ist der Browser damit nicht langsamer als der Node-Weg. Dazu
 kommt einmalig der Download der Engine: 14 MB roh, rund **7,3 MB über die
 Leitung** – das Wasm wird komprimiert übertragen (9,0 → 2,6 MB), das
-Ressourcenpaket nicht (4,7 MB). Der Glue selbst wiegt 48 KB.
+Ressourcenpaket nicht (4,7 MB). Der Glue geht komprimiert mit 48 KB über die
+Leitung.
 
 Die Artefakte sind dieselben: `timing.json`, `measures.json` und `meta.json`
 sind Byte für Byte identisch zu `node convert.mjs` derselben Partitur, die
@@ -96,13 +97,14 @@ ungeprüft. Wirkung im Fehlerfall: Der Cursor bleibt an einem Sprung stehen,
 statt mitzuspringen; die restliche Partitur bleibt normal navigierbar. Reguläre
 Wiederholungen und Volten funktionieren gemessen korrekt.
 
-**Große Partituren.** Orchesterpartituren sind nicht gemessen. Die Zahlen oben
-stammen von Chorsätzen bis fünf Seiten.
+**Große Partituren.** Orchesterpartituren sind nicht gemessen. Die
+Server-Messreihe oben stammt von Chorsätzen bis fünf Seiten; im Browser ist
+zusätzlich ein 28-seitiger Chorsatz gemessen.
 
 **Die Bedienung auf Telefonbreite.** Dass der Viewer in den mobilen Apps
 überhaupt läuft, ist gemessen (siehe unten). Die Bedienleiste ist auf
-Telefonbreite einzeilig – Play, Taktfeld, Anfangston, Schloss und „Mehr“, alles
-Weitere steckt im Überlaufmenü –, geprüft in einem Chromium bei 360 × 780 px,
+Telefonbreite einzeilig – Play, Taktfeld, Anfangston, Schloss und „Werkzeuge“,
+alles Weitere steckt im Überlaufmenü –, geprüft in einem Chromium bei 360 × 780 px,
 nicht am Gerät. Mixer, Notizen und der Setlisten-Editor sind dort benutzbar,
 nicht bequem. Zum Lesen auf dem Telefon gibt es das Systemband und die
 Liedtext-Ansicht; ihre Grenzen stehen unter
@@ -123,8 +125,8 @@ und `audioWorklet` ersatzlos – die Messung fällt dann negativ aus, ohne über
 die WebView etwas auszusagen (in Chromium gegengeprüft).
 
 **Der Rückfall im Browser über die mobilen Apps.** Er funktioniert dort
-(gemessen), kostet aber dieselben rund 14 MB Engine je Öffnen wie am Desktop –
-auf einer Mobilfunkverbindung ist das viel. Wo der Server konvertieren kann,
+(gemessen) und kostet wie am Desktop einmal je Engine-Version rund 7,3 MB
+Download (14 MB entpackt) – auf einer Mobilfunkverbindung ist das viel. Wo der Server konvertieren kann,
 tritt der Fall nicht ein.
 
 **Konvertierung im Browser auf echten Geräten.** Alle Zahlen dazu stammen von
@@ -197,16 +199,15 @@ Ein Satzunterschied ist auf den Weg zurückführbar, nicht auf eine
 Versionsnummer.
 
 **Tablet- und Telefon-Hardware.** Touch-Bedienung, Pinch-Zoom und Wachhalten des
-Bildschirms sind umgesetzt und im Browser verifiziert. Eine erste Erprobung auf
-einem Android-Telefon (Chrome und Opera, Ton über Bluetooth-Kopfhörer) hat drei
-Dinge gefunden, die auf dem Desktop unsichtbar bleiben. Alle drei sind behoben:
+Bildschirms sind umgesetzt und im Browser verifiziert. Erprobt auf einem
+Android-Telefon (Chrome und Opera, Ton über Bluetooth-Kopfhörer) sind drei
+Dinge, die auf dem Desktop unsichtbar bleiben:
 
-- Der Cursor lief dem Ton um die Ausgabelatenz voraus (Bluetooth). Sie wird
-  jetzt ausgeglichen.
-- Das automatische Nachführen setzte auf dem Telefon aus und holte ruckweise
-  nach, weil die ein- und ausfahrende Browserleiste als manuelles Scrollen galt.
-- Die Transportleiste brach auf Telefonbreite auf drei Zeilen um (~18 % der
-  Bildschirmhöhe, auch im Vollbild).
+- Die Ausgabelatenz (Bluetooth) wird ausgeglichen; der Cursor läuft dem Ton
+  nicht voraus.
+- Das Nachführen erkennt manuelles Scrollen an der Geste; die ein- und
+  ausfahrende Browserleiste gilt nicht als Eingriff.
+- Die Transportleiste bleibt auf Telefonbreite einzeilig.
 
 **Gemessene Ausgabelatenz**, abgelesen an der Diagnose im Aufklapper
 „Darstellung":
@@ -217,8 +218,8 @@ Dinge gefunden, die auf dem Desktop unsichtbar bleiben. Alle drei sind behoben:
 | Arbeitsmaschine | eingebaut | **51 ms** |
 
 Beide Werte stammen aus der **Automatik**, bei unangetastetem Regler. Damit ist
-die Frage beantwortet, für die es zunächst nur eine Vermutung gab: **Chrome auf
-Android meldet den Bluetooth-Anteil der Ausgabelatenz**, die App trägt ihn ohne
+belegt: **Chrome auf Android meldet den Bluetooth-Anteil der
+Ausgabelatenz**, die App trägt ihn ohne
 Zutun. Bild und Ton passen auf beiden Geräten zusammen.
 
 Der Regler „Bild und Ton abgleichen" bleibt für den Fall, dass ein Kopfhörer
@@ -228,8 +229,8 @@ Kopfhörer das betrifft, ist ungeprüft**; gemessen ist ein einziges Paar an
 einem einzigen Telefon.
 
 Nicht erprobt ist weiterhin **eine ganze Probe am Notenständer**, und
-gegengeprüft ist die Wirkung nur in Chrome – **ob Operas hakendes Scrollen
-tatsächlich an der früheren Zeitfenster-Heuristik lag, steht aus.**
+gegengeprüft ist die Wirkung nur in Chrome – **ob das Nachführen in Opera
+ebenso glatt läuft, ist nicht geprüft.**
 
 **Offlinebetrieb nur über die Offline-Seite.** Der Viewer in Files lädt ohne
 Netz nicht; ohne Netz geht nur, was vorher vorgemerkt wurde, und nur über die
@@ -285,8 +286,8 @@ Daraus folgt für den Betrieb:
   [E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
 - **Der Wechsel zum nächsten Stück dauert gemessen rund 3 s** bis zum
   Folgegerät, einschließlich Laden der neuen Partitur (zwei Browser an der
-  Testinstanz, Desktop). Mit einem Folgegerät in der App ist das nicht
-  gemessen.
+  Testinstanz, Desktop). Mit einem Folgegerät in der Nextcloud-App ist der
+  Wechsel abgenommen (Galaxy S23), die Dauer dort nicht gemessen.
 - **Nur die Leitung, die die Sitzung führt, nimmt sie mit.** Führt auf dem
   nächsten Stück schon jemand anderes, bleibt diese Sitzung; die Leitung
   wechselt allein, ihre Folgenden bleiben stehen.
@@ -321,7 +322,7 @@ Daraus folgt für den Betrieb:
 ### Setliste
 
 - **Grenzen:** höchstens 256 KB und 200 Einträge je Setliste. Aus einer
-  Partitur heraus („Weg 2“) sucht der Viewer nur im Ordner dieser Partitur und
+  Partitur heraus sucht der Viewer nur im Ordner dieser Partitur und
   nimmt höchstens 20 Setlisten. Die Auswahl um die Partitur für den Editor
   reicht bis Tiefe 2, mit höchstens 200 Treffern und 100 besuchten Ordnern.
 - **Rohe Pfade werden nicht %-dekodiert** – nur Linkziele. Wer in einen rohen
@@ -379,7 +380,7 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
 - **Uploads brauchen eine Webserver-Grenze von mindestens ~20 MB** (bei nginx
   `client_max_body_size`). Eine Aufnahme von 10 min wiegt rund 19 MB; darunter
   scheitert das Speichern mit 413 vom Webserver, bevor die App die Anfrage
-  sieht ([Installation](installation.md#probe-und-konzert)).
+  sieht ([Installation](installation.md#uploadgröße-für-aufnahmen)).
 - **Ein Upload belegt Platz im temporären Verzeichnis, nicht im
   `memory_limit`.** Der Rumpf geht ab 2 MB in eine Zwischendatei
   (`php://temp`), geprüft wird nur der Kopf, und IAppData schreibt aus dem
@@ -452,8 +453,8 @@ Umgesetzt und im Browser geprüft, aber **nicht am Gerät**:
 | Messaufbau mit demselben Kern (spessasynth im Worker, lamejs, 128 kbit/s), Desktop | 76 s in 6,7 s · 191 s in 14,2 s (3,08 MB) |
 | derselbe Messaufbau, Galaxy S23, Chrome | 76 s in 8,3 s · 191 s in **15,9 s**, davon 11,8 s Kodieren |
 
-- **Das Kodieren kostet rund dreimal so viel wie das Rendern.** Am S23 ist
-  der Export so schnell wie am Desktop. Ein Mittelklassegerät ist nicht
+- **Das Kodieren kostet rund dreimal so viel wie das Rendern.** Am S23 dauert
+  der Export 10–25 % länger als am Desktop. Ein Mittelklassegerät ist nicht
   gemessen; das Ziel „4 min Musik in höchstens 60 s“ ist am S23 mit großem
   Abstand erfüllt.
 - **Rund 1 MB je Minute Musik** (128 kbit/s stereo). Die Grenze
@@ -490,9 +491,8 @@ mehrere Minuten ist nicht gemessen.
   dort ändert daran nichts
   ([E15](architecture.md#e15-fähigkeiten-statt-weg)). Das Systemband geht auf
   beiden Wegen.
-- **Partituren, die vor dem Formatwechsel konvertiert wurden,** bekommen die
-  Listen beim nächsten Öffnen durch eine Neukonvertierung
-  (`CURRENT_FORMAT_VERSION` 4).
+- **Ein Cache-Eintrag unter `CURRENT_FORMAT_VERSION` 4** wird beim nächsten
+  Öffnen neu konvertiert und bekommt dabei die Listen.
 - **Über 20 000 Silben gibt es keine Liedtext-Ansicht** – die Engine lässt die
   Liste dann ganz weg, statt sie abzuschneiden.
 - **Die gesungene Strophe folgt den ausgerollten Wiederholungen:** Das n-te
@@ -588,7 +588,7 @@ Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
 - ein Übe-Track aus der Nextcloud-App heraus und an einem Mittelklassegerät;
 - der Stückwechsel mit drei Folgegeräten zugleich;
 - ein Pedal im Systemband – Tasten erreichen den Viewer nur, wenn er den
-  Fokus hat; das galt schon vorher für das Blättern der Seiten.
+  Fokus hat, wie beim Blättern der Seiten.
 
 ## Was die App bewusst nicht tut
 
@@ -600,7 +600,7 @@ Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
   **Betreibbar ist die App dort trotzdem**, aber anders: Der Browser
   konvertiert ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
   Was dabei entfällt, steht dort und ist kein Kleingedrucktes – es gibt keinen
-  Cache, jedes Gerät lädt einmal rund 14 MB und rechnet jede Partitur bei jedem
+  Cache, jedes Gerät lädt einmal gut 7 MB (14 MB entpackt) und rechnet jede Partitur bei jedem
   Öffnen neu.
 - **Kein Servercache für das, was der Browser gesetzt hat.** Die Artefakte
   aus dem Rückfall gehen nicht zum Server zurück. Ein Upload wäre eine neue
@@ -608,7 +608,8 @@ Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
   einzelner Browser erzeugt hat ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
 - **Kein Reflow.** Das Seitenbild ist MuseScores A4-Satz
   ([E2](architecture.md#e2-musescore-svg-statt-neusatz-im-browser)).
-  „Bildschirmfüllend" ist eine Skalierung, kein Umbruch. Echter Umbruch bräuchte
+  „Seitenbreite einpassen“ und „Ganze Seite einpassen“ skalieren, sie brechen
+  nicht um. Echter Umbruch bräuchte
   ein zweites serverseitiges Layout. Das Systemband schneidet aus demselben
   Seitenbild aus; umbrechen darf nur der Text der Liedtext-Ansicht.
 - **Kein Bearbeiten von Partituren.** ScoreView zeigt und spielt; es korrigiert
@@ -653,8 +654,8 @@ Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
   Sandbox-Schicht. Siehe [Sicherheit](../sidecar/README.md#sicherheit).
 - **Nur Deutsch und Englisch.** Eine weitere Sprache ist das Hinzufügen einer
   Datei, keine Umstellung ([E4](architecture.md#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung)).
-- **Keine Verpackung als AppAPI/ExApp.** Der Sidecar wird heute als eigener
-  Container betrieben, nicht von Nextcloud verwaltet.
+- **Keine Verpackung als AppAPI/ExApp.** Der Sidecar läuft als eigener
+  Container, nicht von Nextcloud verwaltet.
 - **Keine mitgelieferte Node-Laufzeit.** Der lokale Weg benutzt das `node` des
   Servers; die App bringt keines mit und lädt auch keines nach (wie es etwa
   Nextclouds `recognize` tut).

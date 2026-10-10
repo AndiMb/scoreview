@@ -24,8 +24,8 @@ Browser der Nutzerin
 ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)). Dafür ist
 nichts einzurichten: Der Rückfall greift von selbst, sobald der Server nicht
 kann, und meldet sich in der Betriebsdiagnose. Zu wissen ist nur, was er
-kostet – jedes Gerät lädt einmal rund 14 MB, und zwischengespeichert wird
-nichts. Wo der Server konvertieren kann, ist er nicht aktiv.
+kostet – jedes Gerät lädt einmal gut 7 MB (14 MB entpackt), und auf dem Server
+wird nichts zwischengespeichert. Wo der Server konvertieren kann, ist er nicht aktiv.
 
 ## Voraussetzungen
 
@@ -166,8 +166,8 @@ occ config:system:set allow_local_remote_servers --value=true --type=boolean
 
 ### Prüfen
 
-Auf der Verwaltungsseite prüft ein Knopf den Zustand und ein zweiter startet den
-**Selbsttest**: eine echte Konvertierung der mitgelieferten Minipartitur über
+Auf der Verwaltungsseite prüft ein Knopf den Zustand und ein zweiter, **„Konvertierung selbst
+testen“**, startet den Selbsttest: eine echte Konvertierung der mitgelieferten Minipartitur über
 den gewählten Weg, samt Prüfung aller Zusagen, auf denen die App aufbaut. Nach
 jedem Wechsel der MuseScore-Version einmal auslösen.
 
@@ -258,8 +258,10 @@ MuseScore mitbringt) als Release-Asset dieses Projekts.
 
 Das Feld **SoundFont-Download-URL** überschreibt diese Adresse. Sie muss nur vom
 Server aus erreichbar sein und braucht kein CORS. Geholt wird einmal je URL –
-wer dieselbe Adresse später mit einer anderen Datei belegt, speichert die
-Einstellung einmal neu.
+wer unter derselben Adresse später eine andere Datei ablegt, trägt eine neue
+Adresse ein (etwa mit angehängtem `?v=2`) oder verwirft den Stand mit
+`occ config:app:delete scoreview soundfont_cache_version`; erneutes Speichern
+derselben Adresse lädt nichts neu.
 
 **Weg B: aus dem Container.** Läuft ein Sidecar, holt die App das SoundFont von
 dort, denn dessen MuseScore-Installation bringt bereits eines mit – nichts wird
@@ -270,7 +272,7 @@ Der erste Abruf nach einer Neuinstallation überträgt das SoundFont einmal zum
 Browser: ~23 MB bei Weg A (`FluidR3Mono_GM`), ~40 MB bei Weg B
 (`MuseScore_General_Lite` aus dem Sidecar-Image). Danach greifen der serverseitige Cache und `Cache-Control: immutable`.
 
-Das Feld **SoundFont-URL** ist etwas anderes: eine Übersteuerung, bei der der
+Das Feld **Eigene SoundFont-URL** ist etwas anderes: eine Übersteuerung, bei der der
 **Browser** direkt von dieser Adresse lädt. Sie muss dann vom Browser aus
 erreichbar sein und CORS erlauben; den Host trägt die App automatisch in die
 `connect-src`-Richtlinie ein. Ein leeres Feld bedeutet: die App liefert selbst

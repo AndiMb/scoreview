@@ -8,7 +8,7 @@ letzten Cron-Laufs und die Zahl der Konvertierungen je Status.
 
 ## Eine `.mscz`-Datei bietet nur „Herunterladen" an
 
-Fast immer ein Mimetype-Problem. Den Mimetype trägt die App seit 1.9.2 selbst
+Fast immer ein Mimetype-Problem. Den Mimetype trägt die App selbst
 ein – bei Installation, Update und nach jedem Upload
 ([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)). Bleibt er
 falsch, sind drei Dinge zu prüfen, in dieser Reihenfolge:
@@ -63,7 +63,7 @@ curl -u <Nutzerin> -H 'OCS-APIRequest: true' -H 'Accept: application/json'   htt
 
 In der Antwort muss unter `editors` ein Eintrag `scoreview` stehen – mit
 `"mimetypes":["application/x-musescore"]`. Fehlt der Eintrag ganz, ist die App
-nicht aktiviert oder älter als 1.9.0. Steht er da und der Menüpunkt fehlt
+nicht aktiviert. Steht er da und der Menüpunkt fehlt
 trotzdem, ist der **Mimetype der Datei** nicht `application/x-musescore` –
 siehe den Abschnitt ganz oben.
 
@@ -170,7 +170,8 @@ Setlisten aus demselben Ordner an ([Grenzwerte](limits.md#setliste)).
 Cron spielt hier **keine** Rolle – alles läuft in den Anfragen selbst.
 
 - **Folgt das Gerät überhaupt?** Eigenes Navigieren (Takteingabe, Klick auf
-  eine Note, Suchlauf, Loop) löst es von der Leitung; das Abzeichen zeigt
+  eine Note, Suchlauf, Sprung zu Studierbuchstabe oder Notiz, Loop) und eine
+  eigene Transposition lösen es von der Leitung; das Abzeichen zeigt
   dann „Folgt … nicht“ und den Knopf „Zurück zur Leitung“. Blättern und Zoom lösen es nicht.
 - **Hat es die Sitzung schon bemerkt?** Ohne laufende Sitzung fragt ein Gerät
   nur alle 15 s nach. Wer vor dem Start geöffnet hat, wartet also bis zu 15 s.
@@ -220,11 +221,12 @@ Meldung nennt den Grund:
 
 | Antwort | Bedeutung | Was hilft |
 |---|---|---|
+| `400` | Die Datei ist keine mit ScoreView gemachte Aufnahme | in ScoreView neu aufnehmen |
 | `409` | Die Höchstzahl an Aufnahmen für diese Partitur ist erreicht | die älteste ersetzen (die App fragt) oder eine löschen |
 | `413` mit Meldung der App | Die Aufnahme ist länger als `max_recording_seconds` | kürzer aufnehmen oder die Grenze anheben |
 | `413` ohne Meldung der App (Seite des Webservers) | Der Webserver nimmt so große Anfragen nicht an | `client_max_body_size` (nginx) auf mindestens `20M`, siehe [Installation](installation.md#uploadgröße-für-aufnahmen) |
-| `507` „… all the storage allowed per person“ | Der Speicher je Person ist voll | ältere Aufnahmen löschen, oder `max_recording_bytes_per_user` anheben |
-| `507` „… storage for recordings on this server is full“ | Der Speicher der Instanz für Aufnahmen ist voll | `max_recording_bytes_total` anheben |
+| `507` „… den ganzen Speicher, der je Person erlaubt ist“ | Der Speicher je Person ist voll | ältere Aufnahmen löschen, oder `max_recording_bytes_per_user` anheben |
+| `507` „Der Speicher für Aufnahmen auf diesem Server ist voll …“ | Der Speicher der Instanz für Aufnahmen ist voll | `max_recording_bytes_total` anheben |
 | `404` | Die Partitur ist nicht (mehr) erreichbar, oder die Aufnahme gehört jemand anderem | – |
 
 ## Ein Übe-Track lässt sich nicht speichern
@@ -353,8 +355,8 @@ Gilt für den Sidecar-Weg. Drei Ursachen, in dieser Reihenfolge zu prüfen:
    Hostnamen. Ohne
    `occ config:system:set allow_local_remote_servers --value=true --type=boolean`
    scheitert jeder Aufruf mit „violates local access rules".
-3. **Falsches Secret.** Der Sidecar antwortet dann 401. Der Selbsttest-Knopf auf
-   der Verwaltungsseite unterscheidet die Fälle.
+3. **Falsches Secret.** Der Sidecar antwortet dann 401. Der Knopf „Konvertierung selbst
+   testen“ auf der Verwaltungsseite unterscheidet die Fälle.
 
 ## Der lokale Konvertierungsweg läuft nicht
 
@@ -376,7 +378,8 @@ getrennt, weil sie von außen alle gleich aussehen:
   statt aus einem Release-Tarball installiert wurde; dort ist das Verzeichnis
   gitignored. Nachholen mit `npm ci` in `scoreview/converter/`.
 
-Der Selbsttest-Knopf konvertiert eine mitgelieferte Minipartitur über den
+Der Knopf „Konvertierung selbst testen“ konvertiert eine mitgelieferte
+Minipartitur über den
 gewählten Weg und nennt die Ursache im Klartext. Dasselbe von Hand:
 
 ```sh
@@ -393,7 +396,8 @@ Fehler, sondern die Notlösung – die Partituren sind sichtbar und spielbar.
 dem der Server nicht konvertiert (siehe die beiden Abschnitte davor). Solange
 er besteht, gilt für jede Nutzerin:
 
-- Jedes Gerät lädt beim ersten Öffnen einmal rund 14 MB Konverter.
+- Jedes Gerät lädt beim ersten Öffnen einmal gut 7 MB Konverter (14 MB
+  entpackt).
 - Nichts wird auf Dauer zwischengespeichert: Jede Partitur wird nach jedem
   Neuladen der Seite neu gesetzt, auf jedem Gerät.
 - Der Schalter „sofort konvertieren" ist wirkungslos, der Selbsttest prüft
@@ -413,7 +417,7 @@ Browser entstehen:
 
 - **„… ist zu groß, um in diesem Browser gesetzt zu werden"** – die Partitur
   liegt über `client_max_score_bytes` (Vorgabe 10 MB). Geprüft wird das
-  absichtlich **vor** dem Laden des Konverters, damit nicht erst 14 MB umsonst
+  absichtlich **vor** dem Laden des Konverters, damit nicht erst gut 7 MB umsonst
   über die Leitung gehen. Die Grenze ist eine reine `occ`-Einstellung:
   ```sh
   occ config:app:set scoreview client_max_score_bytes --value 20971520
@@ -427,23 +431,6 @@ Browser entstehen:
   dieses Dokument noch die engere CSP, und ein Neuladen genügt. Bleibt es
   dabei, in der Browser-Konsole nach `securitypolicyviolation` sehen: Ein
   blockierter Web Worker meldet sich **nur** dort und sonst nirgends.
-
-## „scoreview-engine: engine initialisation failed" beim Konvertieren im Browser
-
-Steht als technisches Detail unter „Die Partitur konnte nicht konvertiert
-werden", bei jedem Öffnen und durch kein Neuladen zu beheben. Der Browser hält
-dann einen Engine-Teil (`.wasm`) einer früheren Engine-Fassung im Cache und
-setzt ihn unter die neue. Ab 1.10.1 trägt die Engine-Route die Version im Pfad
-(`/api/engine/{version}/{name}`); ein solcher Cache wird damit nicht mehr
-getroffen und heilt sich von selbst. **Abhilfe: den Server mindestens auf
-1.10.1 bringen** – am Gerät ist nichts zu tun. Betroffen ist vor allem die
-Android-App, deren WebView ihren Cache nicht von selbst räumt.
-
-Dass der Browser überhaupt konvertiert, heißt, der Server kann es nicht
-([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)). Den Grund
-nennt die Betriebsdiagnose, häufig ist es eine fehlende Node.js-Laufzeit (siehe
-[oben](#der-lokale-konvertierungsweg-läuft-nicht) und
-[Installation](installation.md#1a-weg-a-nodejs-bereitstellen)).
 
 ## „Kein Ton: …" über der Notenansicht
 
@@ -463,7 +450,7 @@ dem Doppelpunkt nennt die Ursache.
   unter **SoundFont-Download-URL** eintragen; siehe
   [Installation](installation.md#soundfont).
 - **HTTP-Fehler bei einer selbst eingetragenen SoundFont-URL** – bei der
-  **SoundFont-URL** muss die Adresse vom **Browser** aus erreichbar sein, nicht
+  **Eigenen SoundFont-URL** muss die Adresse vom **Browser** aus erreichbar sein, nicht
   nur vom Server, und CORS erlauben. Bei der **SoundFont-Download-URL** genügt
   Erreichbarkeit vom Server; ein leeres Feld bedeutet dort die voreingestellte
   Adresse, nicht „kein SoundFont".
@@ -479,7 +466,7 @@ aus der Automatik, bei unangetastetem Regler).
 
 Bleibt trotzdem ein Versatz, nennt der Kopfhörer seine Verzögerung nicht
 selbst, und genau dieser Anteil fehlt der Automatik. Abhilfe:
-**Tempo und Metronom → „Bild und Ton abgleichen"**. Den Regler bei laufender
+**Üben → Tempo und Metronom → „Bild und Ton abgleichen"**. Den Regler bei laufender
 Wiedergabe verschieben, bis die hervorgehobene Note zum Gehörten passt. Der
 Wert wird pro Gerät gemerkt – am Telefon mit Kopfhörern also ein anderer als am
 Rechner.
@@ -490,7 +477,7 @@ Gerät, mit denselben Kopfhörern. Ist es lippensynchron, kennt der Audio-Stack
 die Latenz und die Automatik trägt sie; ist es das nicht, weiß der Browser es
 selbst nicht und der Regler trägt die Hauptlast.
 
-**Darstellung → Diagnose der Wiedergabe** zeigt die Zahlen dazu: „gemessen"
+**Ansicht → Darstellung → Diagnose der Wiedergabe** zeigt die Zahlen dazu: „gemessen"
 stammt aus `getOutputTimestamp()`, „gemeldet" aus `baseLatency + outputLatency`,
 „von Hand" ist der Regler. Ein Strich statt einer Zahl heißt, dass der Browser
 dazu nichts sagt.
@@ -499,7 +486,7 @@ dazu nichts sagt.
 
 Etwas anderes als der Fall darüber, auch wenn es sich ähnlich anfühlt: Hier
 stimmt die Zeitrechnung, aber die Synthese kommt auf dem Gerät nicht mit. Zu
-sehen unter **Darstellung → Diagnose der Wiedergabe** an der Zeile
+sehen unter **Ansicht → Darstellung → Diagnose der Wiedergabe** an der Zeile
 **„Aussetzer"** – steht dort eine wachsende Zahl, ist es die Rechenlast; bleibt
 sie bei 0, liegt es an der Latenz und der Abschnitt darüber gilt.
 
@@ -516,6 +503,7 @@ daneben. Die Fehlercodes:
 | Code | Bedeutung | Was hilft |
 |---|---|---|
 | `sidecar_unreachable` | Dienst nicht erreichbar | siehe oben |
+| `sidecar_busy` | Der Sidecar war über viele Versuche ausgelastet (volle Warteschlange) | beim nächsten Öffnen wird neu eingereicht; bei Dauerlast `SCOREVIEW_MAX_CONCURRENT`/`SCOREVIEW_MAX_QUEUED` anheben, siehe [Sidecar](../sidecar/README.md) |
 | `sidecar_rejected` | Datei abgelehnt (z. B. Secret, Größe) | Secret und `SCOREVIEW_MAX_UPLOAD_BYTES` prüfen |
 | `too_large` | Partitur überschreitet das Limit | `max_score_bytes` (Vorgabe 100 MB) anheben oder Partitur teilen |
 | `timeout` | Konvertierung nicht rechtzeitig fertig | Sidecar: Die App wartet ab dem Einreichen fest höchstens 300 s – bei rund 6 s pro Seite etwa 50 Seiten, siehe [Grenzwerte](limits.md). `MSCORE_TIMEOUT_SECONDS` (Vorgabe 600 s) anzuheben hilft deshalb nicht; bricht der Sidecar selbst ab, heißt das `conversion_failed`. Lokal: `local_timeout` (Vorgabe 120 s) |
@@ -532,22 +520,20 @@ Zwei Ursachen, die sich ähnlich anfühlen und getrennt zu behandeln sind.
 
 **Serverseitig** bleibt eine fertige Konvertierung liegen, solange niemand die
 Datei anfasst – auch wenn eine neuere Fassung der App sie besser setzen würde
-oder die Herkunft noch „unbekannt" meldet. Der Knopf **„Neu konvertieren"** im
-Aufklapper „Darstellung" verwirft sie und lässt sie neu erzeugen; er
+oder die Herkunft noch „unbekannt" meldet. Der Knopf **„Neu konvertieren"** unter
+**Ansicht → Darstellung** verwirft sie und lässt sie neu erzeugen; er
 erscheint nur mit Schreibrecht auf die Datei. Für alle Partituren einer Instanz
 auf einmal ist `CURRENT_FORMAT_VERSION` der Hebel (siehe
 [Architektur](architecture.md#konvertierung-und-cache)).
 
-**Im Browser** kann eine ältere Fassung der App nachwirken: Vor 1.4.0 trugen
-die Artefakt-Links keinen Cache-Schlüssel, wurden aber als `immutable`
-ausgeliefert. Solche Einträge liegen weiterhin im Browsercache, und Neuladen
-räumt sie nicht weg – Chrome revalidiert Unterressourcen dabei nicht. Einmal
-hart neu laden (`Strg`+`Umschalt`+`R`) genügt; danach zeigen die Links den
-Zeitstempel der Konvertierung und lösen sich von selbst ab.
+**Im Browser** kann ein Eintrag im Browsercache nachwirken, den normales
+Neuladen nicht wegräumt – Chrome revalidiert Unterressourcen dabei nicht.
+Einmal hart neu laden (`Strg`+`Umschalt`+`R`) genügt; die Artefakt-Links
+tragen den Zeitstempel der Konvertierung und lösen sich danach von selbst ab.
 
 ## Der Viewer meldet HTTP 500
 
-Ein Cache-Formatwechsel ist **kein** möglicher Grund mehr: Die Spalte
+Ein Cache-Formatwechsel ist **kein** möglicher Grund: Die Spalte
 `format_version` markiert jeden Eintrag, und ein Eintrag mit älterer Version –
 oder mit fehlender Cache-Datei – stößt automatisch eine Neukonvertierung an
 (siehe [Architektur](architecture.md#konvertierung-und-cache)). Tritt ein 500er

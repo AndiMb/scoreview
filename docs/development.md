@@ -21,7 +21,7 @@ Aus `scoreview/`:
 npm ci
 npm run build        # Pflicht nach jeder Änderung unter src/ - js/ ist gitignored
 npm run watch        # während der Frontend-Arbeit
-npm test             # vitest: die reinen Module unter src/lib/ plus die l10n-Vollständigkeit
+npm test             # vitest: src/lib/, Composables, Konverter-Umformung, l10n-Vollständigkeit
 npm run lint         # ESLint (@nextcloud/eslint-config), --fix über npm run lint:fix
 npm run stylelint    # Stylelint für die <style scoped>-Blöcke
 npm run l10n:extract # nach jedem neuen/geänderten t() - meldet fehlende und verwaiste Übersetzungen
@@ -168,8 +168,8 @@ GitHub Actions; jeder dieser Pull Requests läuft durch dieselbe CI. Für
 Release-URL, und die kennt keine Registry. Das übernimmt
 `.github/workflows/engine-release.yml`: Es schaut täglich nach einem neuen
 Engine-Release und öffnet dann einen Pull Request, der den Pin samt Lockfile
-hebt und, falls die MuseScore-Version mitspringt, im selben Zug die beiden
-`ARG`s in `sidecar/Dockerfile`. Die CI stößt es für diesen Branch selbst an;
+hebt und, falls die MuseScore-Version mitspringt, im selben Zug die drei
+`ARG`s in `sidecar/Dockerfile` (Version, Build, Prüfsumme des AppImage). Die CI stößt es für diesen Branch selbst an;
 Gate ist der Konverter-Job. Damit es den Pull Request anlegen darf, muss im
 Repo unter **Settings → Actions → General** „Allow GitHub Actions to create
 and approve pull requests“ eingeschaltet sein. Fehlt das, scheitert der Lauf

@@ -135,7 +135,7 @@ Der lokale Weg ist voreingestellt, weil er der einzige ist, der nach
 
 Kann der Server **keinen von beiden** ausführen – verwaltetes Hosting ohne
 Node-Laufzeit und ohne Container –, konvertiert der Browser der Nutzerin:
-dieselbe Engine, dasselbe Ergebnis, aber ohne Cache und mit rund 14 MB
+dieselbe Engine, dasselbe Ergebnis, aber ohne Cache und mit gut 7 MB
 einmaligem Download je Gerät
 ([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall)). Dieser
 Rückfall ist nirgends wählbar und greift nur, wo sonst gar nichts liefe.
@@ -218,7 +218,8 @@ ScoreView steht unter AGPL-3.0-or-later, siehe [LICENSE](LICENSE).
 - Das **SoundFont** für die Wiedergabe ist voreingestellt `FluidR3Mono_GM`
   (MIT), dasselbe, das MuseScore mitbringt. Mit Sidecar stammt es aus dessen
   MuseScore-Installation (MuseScore General von S. Christian Collins, MIT),
-  sonst aus der Quelle, die der Betreiber hinterlegt.
+  sonst holt der Server es von einer voreingestellten, überschreibbaren
+  Adresse.
 - Übe-Tracks kodiert im Browser
   [`@breezystack/lamejs`](https://www.npmjs.com/package/@breezystack/lamejs) (LGPL-3.0).
 - Die Partitur auf den Bildern ist Anton Bruckners *Aequale Nr. 1* in der

@@ -16,10 +16,10 @@ if not APP_SECRET:
 
 MSCORE_BIN = "/opt/musescore/bin/mscore4portable"
 
-# Measured on real conversions: ~5.4s per rendered page plus ~1s startup
-# (1/4/5-page scores took 6.3s/23.0s/27.7s on the test machine). A timeout
+# Measured on real conversions: ~6s per rendered page plus ~2s startup
+# (linear fit over 1/4/5-page scores, see docs/limits.md). A timeout
 # too close to that rate would fail the orchestral scores (30+ pages) the
-# app is meant to handle, as an opaque "timeout" error. 600s covers ~110
+# app is meant to handle, as an opaque "timeout" error. 600s covers ~100
 # pages while still bounding a runaway/pathological process. See
 # docs/limits.md.
 TIMEOUT_SECONDS = os.environ.get("MSCORE_TIMEOUT_SECONDS", "600")

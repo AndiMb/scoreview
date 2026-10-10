@@ -56,7 +56,8 @@ class FeatureConfig {
 	 * Vorgabe, Untergrenze, Obergrenze.
 	 *
 	 * `follow_poll_ms` (E10): 800 ms ist der gemessene Kompromiss -
-	 * p95 knapp unter 0,8 s bei ~50 ms CPU je Abfrage. Unter 500 ms waere die
+	 * p95 knapp unter 1 s (gemessen 945 ms, docs/limits.md) bei ~50 ms CPU
+	 * je Abfrage. Unter 500 ms waere die
 	 * Last bei 40 Geraeten nicht mehr vertretbar, ueber 3 s ist ein Sprung
 	 * zur Leitung keiner mehr, sondern ein Nachziehen.
 	 *

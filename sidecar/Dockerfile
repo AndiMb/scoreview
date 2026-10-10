@@ -81,8 +81,8 @@ ARG MUSESCORE_BUILD
 ENV SCOREVIEW_MUSESCORE_VERSION="${MUSESCORE_VERSION} (${MUSESCORE_BUILD})"
 
 # Minipartitur fuer den Selbsttest (`GET /selftest`). Kopie von
-# sidecar/testdata/repeat-test.mscz - die einzige selbst erstellte und
-# damit committbare Testpartitur (siehe sidecar/testdata/README.md). Sie
+# sidecar/testdata/repeat-test.mscz - eine der selbst erstellten und
+# damit committbaren Testpartituren (siehe sidecar/testdata/README.md). Sie
 # deckt Wiederholung und Volta ab, also genau die Struktur, an der ein
 # Formatwechsel in `--score-media` zuerst auffiele (docs/architecture.md
 # M7).
@@ -92,7 +92,7 @@ COPY selftest-score.mscz /opt/scoreview-sidecar/selftest-score.mscz
 # this as a hard wall-clock guard so a hung MuseScore process cannot hang a
 # conversion job indefinitely.
 #
-# Measured ~5.4s per rendered page (+1s startup) - see docs/limits.md. A
+# Measured ~6s per rendered page (+2s startup) - see docs/limits.md. A
 # too-small timeout would abort the orchestral scores (30+ pages) this app
 # targets. Kept in sync with config.py's own fallback default on purpose -
 # this ENV wins over that fallback, so the two must not drift apart.

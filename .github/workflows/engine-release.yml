@@ -181,8 +181,8 @@ jobs:
           | Sidecar-AppImage | $SIDECAR |
 
           Gehoben wurden \`scoreview/converter/package.json\` samt Lock und,
-          falls die MuseScore-Version mitgesprungen ist, die beiden ARGs in
-          \`sidecar/Dockerfile\`. Beide zusammen, damit die Zusage aus
+          falls die MuseScore-Version mitgesprungen ist, die drei ARGs in
+          \`sidecar/Dockerfile\` (Version, Build, Pruefsumme). Beide zusammen, damit die Zusage aus
           docs/architecture.md - derselbe MuseScore auf beiden
           Konvertierungswegen - durchgehend gilt; der Job \`versionen\` in
           ci.yml prueft sie.

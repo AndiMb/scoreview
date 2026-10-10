@@ -170,9 +170,11 @@ class SoundFontService {
 
 	/**
 	 * Quelle 1: eine konfigurierte URL. Geholt wird sie genau einmal je
-	 * URL - die Version ist ihr Hash, nicht der Inhalt. Wer dieselbe URL mit
-	 * einer anderen Datei belegt, muss die Einstellung einmal neu speichern;
-	 * bei jedem Aufruf einen HEAD-Request zu schicken waere fuer eine Datei,
+	 * URL - die Version ist ihr Hash, nicht der Inhalt. Wer unter derselben URL
+	 * eine andere Datei ablegt, traegt eine neue URL ein oder verwirft den
+	 * Stand (`occ config:app:delete scoreview soundfont_cache_version`) -
+	 * erneutes Speichern derselben URL aendert die Version nicht. Bei jedem
+	 * Aufruf einen HEAD-Request zu schicken waere fuer eine Datei,
 	 * die sich praktisch nie aendert, der teurere Fehler.
 	 *
 	 * @throws ConverterException wenn nichts zu holen und nichts im Cache ist
