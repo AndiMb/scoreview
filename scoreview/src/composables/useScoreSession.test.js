@@ -93,6 +93,7 @@ describe('useScoreSession', () => {
 
 	afterEach(() => {
 		vi.unstubAllGlobals()
+		vi.restoreAllMocks()
 	})
 
 	/** Einen Frame laufen lassen: alle wartenden Rueckrufe genau einmal. */
@@ -220,5 +221,83 @@ describe('useScoreSession', () => {
 		expect(hooks.destroyMetronome).toHaveBeenCalled()
 		expect(hooks.destroyPlayback).toHaveBeenCalled()
 		expect(hooks.stopZoomObserver).toHaveBeenCalled()
+	})
+	it('falls asleep after the settle window while nothing plays', async () => {
+		let now = 0
+		vi.spyOn(performance, 'now').mockImplementation(() => now)
+		const session = useScoreSession()
+		connectHooks(session)
+		await session.load({ files: FILES, soundFontUrl: 'sf', renderer: null, canReconvert: false })
+		expect(frames.size).toBe(1)
+		now = 500
+		runFrame()
+		expect(frames.size).toBe(1)
+		now = 1500
+		runFrame()
+		expect(frames.size).toBe(0)
+	})
+
+	it('wakes up when the clock announces a change, and runs while playing', async () => {
+		let now = 0
+		vi.spyOn(performance, 'now').mockImplementation(() => now)
+		let playing = false
+		const listeners = new Set()
+		const session = useScoreSession()
+		const hooks = connectHooks(session)
+		hooks.useRealPlayer.mockImplementation(async () => {
+			session.clock.value = {
+				isPlaying: () => playing,
+				addEventListener: (type, cb) => type === 'wake' && listeners.add(cb),
+				removeEventListener: (type, cb) => listeners.delete(cb),
+			}
+		})
+		await session.load({ files: FILES, soundFontUrl: 'sf', renderer: null, canReconvert: false })
+		await nextTick()
+		now = 5000
+		runFrame()
+		expect(frames.size).toBe(0)
+
+		playing = true
+		listeners.forEach((cb) => cb())
+		expect(frames.size).toBe(1)
+		now = 60000
+		runFrame()
+		expect(frames.size).toBe(1)
+		expect(hooks.sampleTime).toHaveBeenCalled()
+
+		// The piece ends by itself: one more step, then the window decides.
+		playing = false
+		now = 60001
+		runFrame()
+		expect(frames.size).toBe(0)
+	})
+
+	it('keeps running while the display follows the leader', async () => {
+		let now = 0
+		vi.spyOn(performance, 'now').mockImplementation(() => now)
+		const session = useScoreSession()
+		const hooks = connectHooks(session)
+		let following = true
+		hooks.isFollowing = () => following
+		await session.load({ files: FILES, soundFontUrl: 'sf', renderer: null, canReconvert: false })
+		now = 10000
+		runFrame()
+		expect(frames.size).toBe(1)
+		following = false
+		runFrame()
+		expect(frames.size).toBe(0)
+	})
+
+	it('drives frame listeners and stops them with the loop', async () => {
+		const session = useScoreSession()
+		connectHooks(session)
+		await session.load({ files: FILES, soundFontUrl: 'sf', renderer: null, canReconvert: false })
+		const listener = vi.fn()
+		const off = session.onFrame(listener)
+		runFrame()
+		expect(listener).toHaveBeenCalledTimes(1)
+		off()
+		runFrame()
+		expect(listener).toHaveBeenCalledTimes(1)
 	})
 })

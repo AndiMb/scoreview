@@ -21,13 +21,14 @@ vi.mock('./useClientConversion.js', () => ({
 }))
 
 const { useConversionStatus } = await import('./useConversionStatus.js')
+const { STATUS_POLL_MAX_MS } = await import('../lib/conversionPoll.js')
 
 /**
- * Die Frist aus dem Modul, plus drei Poll-Takte: Gepollt wird alle 2 s, die
- * Frist wird also erst vom ERSTEN Abruf dahinter bemerkt - genau auf ihr
- * laeuft das Warten noch.
+ * Die Frist aus dem Modul, plus zwei Poll-Takte: Die Frist wird erst vom
+ * ERSTEN Abruf dahinter bemerkt - genau auf ihr laeuft das Warten noch. By
+ * then the delay has grown to its ceiling (lib/conversionPoll.js).
  */
-const NACH_DER_FRIST_MS = 1_860_000 + 3 * 2000
+const NACH_DER_FRIST_MS = 1_860_000 + 2 * STATUS_POLL_MAX_MS
 const LANGE_WARTEZEIT_MS = 120_000
 
 describe('useConversionStatus', () => {
@@ -72,7 +73,7 @@ describe('useConversionStatus', () => {
 		await status.poll()
 		expect(status.langeWartezeit.value).toBe(false)
 
-		await vi.advanceTimersByTimeAsync(LANGE_WARTEZEIT_MS + 2000)
+		await vi.advanceTimersByTimeAsync(LANGE_WARTEZEIT_MS + STATUS_POLL_MAX_MS)
 
 		expect(status.langeWartezeit.value).toBe(true)
 		// Der Kreisel dreht weiter - der Hinweis ist eine Auskunft, kein Urteil.
@@ -94,7 +95,7 @@ describe('useConversionStatus', () => {
 		const status = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
 
 		await status.poll()
-		await vi.advanceTimersByTimeAsync(LANGE_WARTEZEIT_MS + 2000)
+		await vi.advanceTimersByTimeAsync(LANGE_WARTEZEIT_MS + STATUS_POLL_MAX_MS)
 		expect(status.langeWartezeit.value).toBe(true)
 
 		// Ohne das Zuruecksetzen des Startzeitpunkts truege die naechste
@@ -143,5 +144,39 @@ describe('useConversionStatus', () => {
 		await vi.advanceTimersByTimeAsync(10_000)
 
 		expect(axiosGet).toHaveBeenCalledTimes(1)
+	})
+	it('polls less often the longer the conversion takes', async () => {
+		bleibtPending()
+		const status = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
+
+		await status.poll()
+		await vi.advanceTimersByTimeAsync(60_000)
+		// At 0, 2, 4, 6, 10, 18, 33 and 48 s - where a fixed 2 s rate made 31.
+		expect(axiosGet.mock.calls.length).toBe(8)
+		status.stop()
+	})
+
+	it('pauses on a hidden page and polls at once when it is visible again', async () => {
+		bleibtPending()
+		let hidden = false
+		// The tests run without a DOM: a minimal document is enough.
+		const doc = new EventTarget()
+		Object.defineProperty(doc, 'visibilityState', { get: () => (hidden ? 'hidden' : 'visible') })
+		globalThis.document = doc
+		const status = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
+
+		await status.poll()
+		hidden = true
+		await vi.advanceTimersByTimeAsync(2000)
+		const abrufe = axiosGet.mock.calls.length
+		await vi.advanceTimersByTimeAsync(120_000)
+		expect(axiosGet.mock.calls.length).toBe(abrufe)
+
+		hidden = false
+		doc.dispatchEvent(new Event('visibilitychange'))
+		await vi.advanceTimersByTimeAsync(0)
+		expect(axiosGet.mock.calls.length).toBe(abrufe + 1)
+		status.stop()
+		delete globalThis.document
 	})
 })

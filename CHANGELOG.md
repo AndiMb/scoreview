@@ -31,6 +31,27 @@ All notable changes to ScoreView. The format follows
   unchanged.
 - The bug report template is in English; reports in German are still
   welcome.
+- **Less battery drain on phones and tablets.** A paused score now costs
+  next to nothing besides the screen:
+  - The viewer's time loop sleeps while nothing moves. It used to redraw
+    60 times a second for as long as the viewer was open.
+  - The audio output rests a few seconds after the music stops. Microphone,
+    count-in and listening back keep it awake for as long as they need it.
+  - The live intonation needle redraws only when its value changes, at most
+    about 12 times a second, and switches off when the page is hidden.
+  - The Files page loads only a small entry point. The viewer itself is
+    loaded when a score is opened: 0.2 MB instead of 2.2 MB of JavaScript
+    on every folder change.
+- **"Follow me" polls by role.** Followers keep the full rate, so jumps still
+  arrive within a second. The leader's own device asks every 5 s and a
+  detached device every 15 s. Without a session, the search slows down to
+  every 60 s after two minutes without use, and a tap makes it fast again.
+  A detached device no longer keeps the screen on.
+- **Waiting for a conversion** polls every 2 s at first, then less often (up
+  to every 15 s), and not at all while the page is hidden.
+- Pages scrolled slightly out of view are no longer fetched and sanitised
+  again, and one-finger scrolling over the score no longer waits for the
+  page's script.
 - **Technical messages are in English.** The technical detail of a failed
   conversion, log messages, `occ` and migration output, and the error texts
   of the sidecar and the local converter are now English. The messages shown

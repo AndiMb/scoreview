@@ -59,6 +59,14 @@ export default {
 		ScorePage,
 	},
 
+	// The band scrolls in its own container - the pages' observers watch
+	// that one, not the viewer's (ScorePage.vue).
+	provide() {
+		return {
+			scoreviewScrollRoot: () => this.$refs.scroller ?? null,
+		}
+	},
+
 	props: {
 		pageUrls: {
 			type: Array,

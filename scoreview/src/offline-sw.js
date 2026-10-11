@@ -44,6 +44,13 @@ self.addEventListener('message', (event) => {
 			if (u.origin !== self.location.origin || !isShellAsset(u)) {
 				continue
 			}
+			// Already there from an earlier visit: the page sends its list
+			// on every visit, and fetching the ~2 MB bundle again each time
+			// would cost exactly what the cache is meant to save. The cache
+			// name carries the app version, so an update starts afresh.
+			if (await cache.match(url)) {
+				continue
+			}
 			try {
 				const res = await fetch(url, { credentials: 'same-origin' })
 				if (res.ok) {

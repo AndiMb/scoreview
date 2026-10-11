@@ -40,6 +40,7 @@ export const PENDING = 'pending'
  * @param {object} deps.microphone useMicrophone()
  * @param {() => ?object} deps.clock Zeitquelle (player.js/silentClock.js)
  * @param {() => ?AudioContext} deps.audioContext der der Wiedergabe
+ * @param {(reason: string) => (() => void)} [deps.holdAudio] keeps it awake while listening back
  * @param {() => boolean} deps.isPlaying sofort, an der Zeitquelle gefragt
  * @param {() => boolean} deps.playing reaktiv (usePlayback.isPlaying)
  * @param deps.play
@@ -62,6 +63,7 @@ export function useRecorder({
 	microphone,
 	clock,
 	audioContext,
+	holdAudio = () => () => {},
 	isPlaying,
 	playing,
 	play,
@@ -134,6 +136,7 @@ export function useRecorder({
 	let tempoBeforeListen = null
 	const audioCache = new Map()
 	const decodedCache = new WeakMap()
+	let releaseListenAudio = null
 	let ownContext = null
 	// Nach einem Suchlauf meldet der Sequencer kurz die alte Stelle (siehe
 	// lib/player.js, 'timechange') - so lange wird nicht angesetzt, sonst
@@ -214,14 +217,19 @@ export function useRecorder({
 			}
 			chunks.push(samples)
 			samplesTotal += samples.length
-			elapsedMs.value = Math.round((samplesTotal / WAV_SAMPLE_RATE) * 1000)
+			const elapsed = Math.round((samplesTotal / WAV_SAMPLE_RATE) * 1000)
+			// The display shows whole seconds; setting the ref for every
+			// 20 ms block re-rendered the viewer 50 times a second.
+			if (Math.floor(elapsed / 1000) !== Math.floor(elapsedMs.value / 1000)) {
+				elapsedMs.value = elapsed
+			}
 			// Der Anker, solange der Sequencer laeuft: beide Werte im selben
 			// Moment abgelesen, die Partiturzeit rechnet der Sequencer selbst
 			// aus der Kontextzeit (lib/recordingAlign.js).
 			if (isPlaying()) {
 				anchor = { contextTimeSec: context.currentTime, scoreMs: clock()?.getCurrentTimeMs() ?? 0 }
 			}
-			if (elapsedMs.value >= maxSeconds() * 1000) {
+			if (elapsed >= maxSeconds() * 1000) {
 				stop()
 			}
 		})
@@ -423,6 +431,10 @@ export function useRecorder({
 		if (isPlaying()) {
 			pause()
 		}
+		// The recording sounds through the playback context, also past the
+		// end of the score - keep it awake until listening stops.
+		releaseListenAudio?.()
+		releaseListenAudio = holdAudio('listening')
 		seek(Math.max(0, listenMeta.scoreStartMs))
 		await play()
 		schedule()
@@ -458,6 +470,8 @@ export function useRecorder({
 
 	function stopListening() {
 		listenGeneration.invalidate()
+		releaseListenAudio?.()
+		releaseListenAudio = null
 		const restore = tempoAfterListening({
 			before: tempoBeforeListen,
 			listened: listenMeta?.tempoFactor ?? null,

@@ -326,7 +326,8 @@ Aufbau:
   `playbackTime.js`, `audioHealth.js`, `directToken.js`, `mobileBridge.js`,
   `svgIndex.js`, `highlightStyle.js`, `staffBands.js`, `generation.js`,
   `assetVersion.js`, `viewerFormat.js`, `viewerTexts.js`, für die Leiste
-  `barGroups.js` und `barFit.js`, für den Rückfall im Browser `clientConversion.js` und
+  `barGroups.js` und `barFit.js`, für den sparsamen Betrieb `timeLoopWake.js`,
+  `audioIdle.js`, `followPoll.js` und `conversionPoll.js`, für den Rückfall im Browser `clientConversion.js` und
   `artifactUrls.js` ([E7](#e7-konvertierung-im-browser-als-rückfall)), für die
   Fähigkeiten der Artefakte `capabilities.js`
   ([E15](#e15-fähigkeiten-statt-weg)) und die Module der beiden Tabellen
@@ -346,6 +347,36 @@ Wiedergabe: `spessasynth_lib` synthetisiert das MIDI im Browser gegen das
 ausgelieferte SoundFont. Eine einzige `requestAnimationFrame`-Schleife treibt
 Cursor, Autoscroll, Loop und Metronom; SVG-Seiten werden beim Wegscrollen wieder
 aus dem DOM genommen.
+
+**Im Stillstand ruht alles außer dem Bildschirm.** Ein Tablet zeigt am
+Notenständer meist eine *angehaltene* Partitur, eine ganze Probe lang. Gemessen
+lief dabei früher die Zeitschleife mit 60 Bildern je Sekunde weiter, und der
+AudioContext renderte Stille, ohne dass sich am Bild etwas änderte. Beides
+läuft heute nur noch mit Grund:
+
+- **Die Zeitschleife** (`useScoreSession`) läuft, solange abgespielt wird,
+  solange die Anzeige der Leitung folgt, und für ein kurzes Fenster nach jeder
+  Änderung, die die Uhr meldet (`timeLoopWake.js`). Gemeldet wird an der Uhr
+  selbst – `player.js` und `silentClock.js` lösen bei `play`, `pause`, `seek`,
+  Tempo und bei `timeChange` des Sequencers das Ereignis `wake` aus –, nicht an
+  den vielen Stellen, die sie bewegen. Das Fenster ist nötig, weil ein
+  Suchlauf im Sequencer nicht sofort wirkt; ohne es bliebe der Cursor nach
+  einem Sprung im Stillstand an der alten Stelle. Wer den Takt der Schleife
+  sonst noch braucht (`LyricsView`), meldet sich mit `onFrame()` an, statt
+  eine eigene Schleife zu drehen.
+- **Der AudioContext** ruht (`suspend()`), sobald nichts klingt und niemand
+  ihn hält, nach einer kurzen Nachlaufzeit (`audioIdle.js`). Er ist geteilt:
+  Einzähler, Mikrofon und das Abhören einer Aufnahme klingen oder hören durch
+  ihn, der Einzähler sogar *vor* `play()`. Jede dieser Nutzungen hält ihn mit
+  `hold()` wach und gibt ihn beim Abbau frei. Ein ruhender Kontext meldet
+  keine Latenz; die Wiedergabe behält dann den zuletzt gemessenen Wert.
+- **Die Seiten** bekommen Cursor, klingendes `elid` und Nadel nur, wenn der
+  Cursor auf ihnen steht – Vue rendert ein Kind schon dann neu, wenn sich
+  irgendeine seiner Props ändert, und sonst lief bei jedem Notenschritt jede
+  geladene Seite mit. Ihre Lade- und Entladebeobachter hängen am Scroll-
+  Container (`provide`/`inject`), nicht am Viewport; sonst wirkten die Ränder
+  nicht, und eine Seite wurde schon beim kleinsten Hin- und Herscrollen neu
+  geholt und bereinigt.
 
 **Zwei Zeiten, nicht eine.** `AudioContext.currentTime` – und damit
 `sequencer.currentTime` – ist die Zeit des Audios, das gerade an das
@@ -367,8 +398,8 @@ nicht der Ton kommt früher, das *Bild* wird später gezeigt. Genauso hier
 
 Ein pauschaler Abzug schon in der Zeitquelle wäre deshalb falsch – er verschöbe
 die Metronom-Terminierung gleich mit, und der Klick käme um die Latenz zu spät.
-Die Zuordnung fällt an genau einer Stelle, in der rAF-Schleife in
-`ScoreViewer.vue`. Aus demselben Grund hält `pause()` nicht an der Renderzeit
+Die Zuordnung fällt an genau einer Stelle, in der Zeitschleife in
+`useScoreSession.js`. Aus demselben Grund hält `pause()` nicht an der Renderzeit
 an, sondern stellt auf die zuletzt *gehörte* Stelle zurück: Was beim Anhalten
 noch im Ausgabepuffer stand, wird verworfen und hat nie geklungen.
 
@@ -419,7 +450,7 @@ das Dokument zu durchsuchen.
 Beides ist **je Nutzerin serverseitig** gespeichert (`ViewerPreferences`), nicht
 im `localStorage`: Vorbereitet wird am Rechner, gelesen am Tablet auf dem
 Notenständer. Gelesen wird trotzdem ohne eigene Anfrage – der Anfangszustand
-hängt schon an der Files-Seite, auf der das Viewer-Bundle ohnehin geladen wird.
+hängt schon an der Files-Seite, auf der der Einstieg des Viewers ohnehin geladen wird.
 Geschrieben wird verzögert, sonst wäre jede Bewegung im Farbwähler ein POST.
 
 Im selben Aufklapper steht, **womit die angezeigten Seiten gesetzt wurden**:
@@ -467,7 +498,9 @@ die dort nicht eingetragen ist, gilt als gesperrt – wer eine neue einbaut und
 das vergisst, bekommt eine gesperrte, keine offene. Ein Pedal sendet an das
 Dokument, nicht an den Viewer; solange der Modus an ist, hängt deshalb ein
 zweiter Tastenlistener am `document`. Der Bildschirm bleibt wach, solange
-gespielt wird, der Aufführungsmodus an ist oder einer Leitung gefolgt wird.
+gespielt wird, der Aufführungsmodus an ist, man selbst leitet oder einer
+Leitung folgt – ein gelöstes Gerät nimmt keine Sprünge an und darf dunkel
+werden; der Bildschirm ist der größte Verbraucher von allen.
 
 **Studierbuchstaben in der Navigation.** Die Takteingabe nimmt „47“, „C“ und
 die Form der Taktanzeige „C+3“ an, damit sich eine abgelesene Angabe
@@ -652,10 +685,18 @@ Update einen alten Stand im Browser-Cache ablöst:
 | Datei | Geladen über | Woher | Cache-Busting |
 |---|---|---|---|
 | `spessasynth_processor.min.js`, `scoreview-capture-worklet.js` | `audioWorklet.addModule(url)` | `generateFilePath()` | `?v=<App-Version>`, beim Bauen aus `info.xml` (`assetVersion.js`) |
-| Tonhöhen-Worker, Teile von `@nextcloud/dialogs` | webpack-Nachladen (`new Worker(new URL(…))`, `import()`) | `__webpack_public_path__`, zur Laufzeit gesetzt (`publicPath.js`) | Inhalts-Hash als `?v=` im Dateinamen der Teile |
+| Der Viewer selbst auf der Files-Seite (`viewerUi.js`), Tonhöhen-Worker, Teile von `@nextcloud/dialogs` | webpack-Nachladen (`new Worker(new URL(…))`, `import()`) | `__webpack_public_path__`, zur Laufzeit gesetzt (`publicPath.js`) | Inhalts-Hash als `?v=` im Dateinamen der Teile |
 | scoreview-engine (`scoreview.mjs`, `.lib.wasm`, `.lib.data`), nur für [E7](#e7-konvertierung-im-browser-als-rückfall) | nativer `import(engineUrl)`; `.wasm`/`.data` fordert der Glue relativ zu seiner eigenen URL an | `GET /api/engine/{version}/{name}` (`EngineController`) | Engine-Version im **Pfad** – ein `?v=` am Glue erbten die Geschwister nicht; eine fremde Version antwortet 404 |
 | `scoreview-render-worker.js` ([E13](#e13-übe-tracks-sind-dateien-in-files)) | `new Worker(url)` | `generateFilePath()` | `?v=<App-Version>`, wie die Worklets |
 | `scoreview-offline-sw.js` ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)) | `navigator.serviceWorker.register()` | `GET /offline/sw.js` (`PageController`), damit `Service-Worker-Allowed` gesetzt werden kann | `?v=<App-Version>`; der Worker benennt danach seinen Cache für die Hülle der Seite und räumt ältere |
+
+Der Viewer selbst wird auf der Files-Seite erst beim Öffnen einer Partitur
+nachgeladen: `viewer.js` läuft auf *jeder* Files-Seite, auch ohne Partitur in
+Sicht, und trug früher den ganzen Viewer mit (~2,2 MB, bei jedem Ordnerwechsel
+neu zu parsen und zu übersetzen). Handler und Dateiaktion registriert er
+weiterhin sofort – sonst böte Files für eine `.mscz` nur „Herunterladen“ an.
+Die eigenständige Seite und die Offline-Seite zeigen immer eine Partitur und
+laden den Viewer deshalb gleich mit.
 
 Die Laufzeit-Adresse ist nötig, weil die Vorgabe von
 `@nextcloud/webpack-vue-config` fest `/apps/scoreview/js/` lautet – liegt die App
@@ -1268,7 +1309,7 @@ allein in `ConvertScoreJob` fällt:
 
 Das Urteil ist gespeichert und gilt fünf Minuten – die ehrliche Antwort kostet
 einen Prozessstart oder eine HTTP-Anfrage, und der Viewer fragt den Status
-alle 2 s. Ein Selbsttest und jedes Speichern der Admin-Einstellungen
+anfangs alle 2 s (später seltener, `conversionPoll.js`). Ein Selbsttest und jedes Speichern der Admin-Einstellungen
 verwerfen es sofort.
 
 **Ein Inhaltsfehler löst ihn nicht aus.** Wenn die Partitur kaputt ist,
@@ -1601,11 +1642,19 @@ neuen zufällig wieder auf 3 träfe, bekäme sonst ein 204 und sähe die neue
 Sitzung nie.
 
 **Transport: abfragen, mit Push als Abkürzung.** `GET …/follow?since=<version>`
-antwortet 204, wenn sich nichts geändert hat. Während einer Sitzung und bei
-sichtbarer Seite fragt ein Gerät im Takt von `follow_poll_ms` (Vorgabe 800 ms,
-erlaubt 500–3000, in der Verwaltung einstellbar und mit jeder Antwort
-mitgeschickt, damit eine Änderung auch laufende Sitzungen erreicht), sonst
-alle 15 s („läuft eine Sitzung?“). Ist `notify_push` eingerichtet, schickt der
+antwortet 204, wenn sich nichts geändert hat. Wie oft ein Gerät fragt, hängt an
+seiner Rolle (`followPoll.js`): Ein **folgendes** Gerät mit sichtbarer Seite
+fragt im Takt von `follow_poll_ms` (Vorgabe 800 ms, erlaubt 500–3000, in der
+Verwaltung einstellbar und mit jeder Antwort mitgeschickt, damit eine Änderung
+auch laufende Sitzungen erreicht) – auch dann, wenn die Leitung lange steht,
+denn gerade im Stillstand sagt sie „ab B“. Das **Gerät der Leitung** kennt den
+Stand aus den Antworten auf seine eigenen Änderungen und fragt nur alle 5 s
+(für ein zweites Gerät derselben Leitung); ein **gelöstes** Gerät und jedes im
+Hintergrund alle 15 s. **Ohne Sitzung** („läuft eine Sitzung?“) fragt ein
+Gerät alle 15 s, solange es in den letzten zwei Minuten geöffnet, sichtbar
+geworden oder benutzt wurde, danach alle 60 s; eine Berührung macht es wieder
+schnell. Push hilft beim Entdecken nicht: Der Server schickt nur an Geräte, die
+einer laufenden Sitzung beigetreten sind. Ist `notify_push` eingerichtet, schickt der
 Server bei jeder Änderung ein Ereignis `scoreview_follow` an die angemeldeten
 Teilnehmenden (`POST …/follow/join`), und jedes Gerät holt einmal den Zustand;
 das Abfragen tritt dann in den Hintergrund. Die Abhängigkeit ist **optional**:
@@ -1650,7 +1699,8 @@ Anfangston mit seiner Uhr stempelt (`at`); jedes Gerät rechnet mit
 `serverNow` selbst weiter (`lib/followPlayback.js`). Neu gemeldet wird nur,
 was sich so nicht vorhersagen lässt – Start, Halt, Tempo, ein Sprung über
 400 ms (Suchlauf, Loop) – und alle 15 s zum Nachstellen; geprüft wird im
-250-ms-Takt, nicht je Bild. Die fremde Zeit treibt im Viewer nur die
+250-ms-Takt, nicht je Bild, und nur, solange die Leitung spielt. Start und Halt
+meldet der Viewer sofort, im Stillstand gibt es nichts zu melden. Die fremde Zeit treibt im Viewer nur die
 Anzeigezeit (`usePlayback.followTime`): Die eigene Audiouhr steht, Loop und
 Metronom hängen an ihr und bleiben still. Wer selbst Play drückt, hört sich
 selbst; wer selbst navigiert, löst wie bei jedem Sprung das Folgen. Hält die

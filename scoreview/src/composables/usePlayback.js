@@ -42,6 +42,9 @@ const MAX_TEMPO_FACTOR = 1.5
 // lib/soundFontCache.js).
 const soundFontCache = createSoundFontCache()
 
+/** What holdAudio() returns when there is no context to hold. */
+const NO_HOLD = Object.assign(() => {}, { ready: Promise.resolve() })
+
 /**
  * Die Zeitquelle und alles, was unmittelbar an ihr hängt: SoundFont holen,
  * Player oder stummen Platzhalter aufsetzen, Transport, Tempo und
@@ -359,6 +362,11 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		externalTime = typeof getter === 'function' ? getter : null
 	}
 
+	/** Whether the display hangs on the leader's time - the time loop then keeps running. */
+	function hasExternalTime() {
+		return externalTime !== null
+	}
+
 	function seek(timeMs) {
 		clock.value?.seek(timeMs)
 		// Nach einem Sprung ist jede Vorhersage aus der alten Position
@@ -532,9 +540,21 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	 * umgeschaltet wird - und genau dann faellt der Versatz auf.
 	 */
 	function updateLatency() {
-		const report = clock.value?.getLatencyReport?.() ?? null
+		const reports = typeof clock.value?.getLatencyReport === 'function'
+		const report = reports ? clock.value.getLatencyReport() : null
+		if (reports && !report) {
+			// The real player while its context rests (lib/audioIdle.js):
+			// nothing sounds, nothing to measure - keep the last value instead
+			// of falling back to 0, which would shift the cursor on the next
+			// play until the smoothing caught up again.
+			return
+		}
 		if (report) {
-			audioInfo.value = report
+			// Only a different report: the diagnostics read it, and a new
+			// object every frame marks them stale for nothing.
+			if (audioInfo.value?.measuredMs !== report.measuredMs || audioInfo.value?.reportedMs !== report.reportedMs) {
+				audioInfo.value = report
+			}
 			automaticLatencyMs.value = latencySmoother.update(resolveLatencyMs({ measuredMs: report.measuredMs, reportedMs: report.reportedMs }))
 		} else {
 			// Stummer Platzhalter (silentClock.js): keine Audioausgabe, also
@@ -576,6 +596,18 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	 */
 	function getAudioContext() {
 		return clock.value?.getAudioContext?.() ?? null
+	}
+
+	/**
+	 * Keep the playback context awake while something besides the sequencer
+	 * uses it - microphone, listening back, count-in (lib/audioIdle.js). The
+	 * silent clock has no context, so there is nothing to hold.
+	 *
+	 * @param {string} reason
+	 * @return {(() => void) & {ready: Promise<void>}} release
+	 */
+	function holdAudio(reason) {
+		return clock.value?.hold?.(reason) ?? NO_HOLD
 	}
 
 	/**
@@ -658,6 +690,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		setManualOffsetMs,
 		onManualOffsetInput,
 		getAudioContext,
+		holdAudio,
 		isPlaying,
 		hasRealPlayer,
 		playbackError,
@@ -681,6 +714,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		toggle,
 		seek,
 		followTime,
+		hasExternalTime,
 		onSeekInput,
 		onTempoBpmInput,
 		setTempoBpm,

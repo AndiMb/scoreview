@@ -7,20 +7,18 @@ import { findStepIndex } from './timingSync.js'
  * Reine Fabrikfunktion, keine Reaktivität, kein Lifecycle - deshalb hier in
  * `lib/`, bei den anderen DOM-freien Modulen.
  *
- * **Keine eigene rAF-Schleife**: die Schleife der Transportanzeige in
- * `ScoreViewer.vue` treibt diese Funktion mit, statt eine zweite
- * Dauerschleife mit eigener Binärsuche pro Frame nebenherlaufen zu lassen.
- * Beide brauchen dieselbe Zeitquelle und denselben Takt, ununterbrochen,
- * solange der Viewer offen ist - das zählt gegen genau das Ziel, für das der
- * Wake Lock eingebaut ist: ein Tablet am Notenständer, über eine ganze Probe.
+ * **Keine eigene rAF-Schleife**: die Zeitschleife in `useScoreSession.js`
+ * treibt diese Funktion mit, statt eine zweite Schleife mit eigener
+ * Binärsuche pro Frame nebenherlaufen zu lassen. Beide brauchen dieselbe
+ * Zeitquelle und denselben Takt.
  *
- * Die Auflösung läuft JEDEN Frame, nicht nur während der Wiedergabe: der
- * Setter `sequencer.currentTime` in `player.js` wirkt NICHT synchron - der
- * unmittelbar danach im `seeked`-Ereignis gelesene Zeitwert wäre noch der
- * alte. Ohne Auflösung pro Frame bliebe der Cursor bei einem Sprung mit
- * angehaltener Wiedergabe stehen, während die Transportanzeige längst die
- * neue Zeit zeigte (gemessen an einem Sprung zu Takt 30: Zeit 1:29, Cursor
- * in Takt 1).
+ * The resolution also runs while stopped, for a moment after every change
+ * the clock announces (lib/timeLoopWake.js): the setter
+ * `sequencer.currentTime` in `player.js` does NOT take effect synchronously -
+ * the time read right after it in the `seeked` event is still the old one.
+ * Without resolving on the following frames the cursor would stay put after
+ * a jump while stopped, while the transport already showed the new time
+ * (measured on a jump to measure 30: time 1:29, cursor in measure 1).
  *
  * Tempo-unabhängig: die Zeitquelle liefert bereits Original-Partiturzeit,
  * kein Umrechnen hier - eine Tempoänderung skaliert `getCurrentTimeMs()` an

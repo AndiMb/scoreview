@@ -35,9 +35,11 @@ const TORN_DOWN = 'ScoreViewTornDown'
  *
  * @param {object} deps
  * @param {() => ?AudioContext} deps.audioContext der der Wiedergabe, falls es einen gibt
+ * @param {(reason: string) => () => void} [deps.holdAudio] keeps that context
+ *   awake while the microphone captures through it (lib/audioIdle.js)
  * @return {object}
  */
-export function useMicrophone({ audioContext }) {
+export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 	/** Wer das Mikrofon gerade nutzt, in Anmeldereihenfolge. */
 	const consumers = ref([])
 	/** Der letzte Fehler: {kind: 'blocked'|'noDevice'|'busy'|'other', name}. */
@@ -50,6 +52,9 @@ export function useMicrophone({ audioContext }) {
 	let source = null
 	let captureNode = null
 	let inputLatency = 0
+	// Releases the hold on the shared playback context - a resting context
+	// delivers no blocks, and intonation and recording would stand still.
+	let releaseAudio = null
 	// Wer gerade die Strecke aufbaut - ein zweiter Aufruf waehrend der
 	// Rueckfrage des Browsers wartet darauf, statt ein zweites Mal zu fragen.
 	let starting = null
@@ -157,6 +162,10 @@ export function useMicrophone({ audioContext }) {
 		const neu = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS)
 		stream = neu
 		context = audioContext() ?? (ownContext = ownContext ?? new AudioContext())
+		if (context !== ownContext) {
+			releaseAudio?.()
+			releaseAudio = holdAudio('microphone')
+		}
 		await context.resume()
 		source = context.createMediaStreamSource(stream)
 		const settings = stream.getAudioTracks()[0]?.getSettings?.() ?? {}
@@ -219,6 +228,8 @@ export function useMicrophone({ audioContext }) {
 		stream?.getTracks().forEach((track) => track.stop())
 		stream = null
 		blockListeners.clear()
+		releaseAudio?.()
+		releaseAudio = null
 		if (ownContext) {
 			ownContext.close().catch(() => {})
 			ownContext = null

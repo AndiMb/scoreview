@@ -686,6 +686,7 @@
 						:timeline="timeline"
 						:measureRectsByPage="systemRectsByPage"
 						:readTimeMs="readDisplayTimeMs"
+						:subscribeFrame="sessionOnFrame"
 						:canSeek="can('seek')"
 						@seek="onLyricsSeek"
 						@loop="onLyricsLoop" />
@@ -702,17 +703,17 @@
 					<div
 						v-else
 						class="scoreview-pages"
-						@touchstart="onTouchStart"
-						@touchmove="onTouchMove"
-						@touchend="onTouchEnd">
+						@touchstart.passive="onTouchStart"
+						@touchmove.passive="onTouchMove"
+						@touchend.passive="onTouchEnd">
 						<ScorePage
 							v-for="(url, i) in pageUrls"
 							:key="url"
 							:ref="(el) => setPageRef(el, i)"
 							:svgUrl="url"
 							:pageIndex="i"
-							:cursorRect="cursorRect"
-							:cursorElid="currentElid"
+							:cursorRect="onCursorPage(i, cursorRect)"
+							:cursorElid="onCursorPage(i, currentElid)"
 							:zoom="zoom"
 							:markers="annotationMarkers"
 							:stamps="annotationStamps"
@@ -726,7 +727,7 @@
 							:noteTheme="resolvedNoteTheme"
 							:noteMarks="intonationMarks"
 							:liveNoteMarks="intonationLiveMarks"
-							:needle="intonationNeedle"
+							:needle="onCursorPage(i, intonationNeedle)"
 							:spellings="spellings"
 							:noteNameSystem="noteNameSystem"
 							:noteNameStaves="noteNameStaves"
@@ -1082,6 +1083,14 @@ export default {
 		ZoomControls,
 	},
 
+	// The scrolling container for the pages' load/unload observers
+	// (ScorePage.vue).
+	provide() {
+		return {
+			scoreviewScrollRoot: () => this.$refs.scroll ?? null,
+		}
+	},
+
 	props: {
 		// Von OCA.Viewer übergeben (siehe registerHandler in src/viewer.js).
 		// Die Partitur, mit der der Viewer oeffnet - welche gerade offen ist,
@@ -1186,6 +1195,7 @@ export default {
 			// eine gibt - sonst waeren es auf Android zwei unabhaengig
 			// gepufferte Ausgabe-Streams (siehe lib/metronomeClick.js).
 			audioContext: playback.getAudioContext,
+			holdAudio: playback.holdAudio,
 		})
 
 		// Anzeigeeinstellungen der Nutzerin (Farbe/Form der Hervorhebung).
@@ -1374,7 +1384,12 @@ export default {
 			leaderPlayback: () => (clock.value
 				? { playing: playback.isPlaying.value, timeMs: playback.displayTimeMs.value, rate: playback.tempo.value }
 				: null),
-			followPlayback: (getter) => playback.followTime(getter),
+			followPlayback: (getter) => {
+				playback.followTime(getter)
+				// The leader's time moves without own playback - the
+				// sleeping time loop has to run for it.
+				session.wakeTimeDisplay()
+			},
 			holdAt: (timeMs) => {
 				// Wer selbst spielt, wird nicht angehalten.
 				if (!playback.isPlaying.value) {
@@ -1384,6 +1399,9 @@ export default {
 		})
 		isFollowing = () => follow.following.value
 		noteNavigation = follow.noteNavigation
+		// The leader reports start and stop at once; its watch beat only
+		// runs while playing (useFollowSession.updatePlaybackWatch).
+		watch(() => playback.isPlaying.value, () => follow.playbackChanged())
 
 		const standalonePage = readInitialState('standalone')?.directEditing === true
 		const setlist = useSetlist({
@@ -1436,7 +1454,9 @@ export default {
 		// Wach auch im Aufführungsmodus, wenn gar nichts spielt - und
 		// waehrend einer Folgesitzung: Am Notenstaender wird gesungen, nicht
 		// getippt, und ein dunkler Bildschirm verpasste den naechsten Sprung.
-		useWakeLock({ wanted: () => playback.isPlaying.value || performance.active.value || follow.active.value })
+		// Only while leading or following, though: a detached device takes
+		// no jumps, and the screen is the largest consumer of all.
+		useWakeLock({ wanted: () => playback.isPlaying.value || performance.active.value || follow.mine.value || follow.following.value })
 
 		useMyPartSound({
 			hasRealPlayer: () => playback.hasRealPlayer.value,
@@ -1453,7 +1473,7 @@ export default {
 
 		// Die Mikrofonstrecke (docs/architecture.md, Abschnitt Mikrofon) - eine fuer Aufnahme, Intonation und
 		// spaeter das Mitverfolgen, am AudioContext der Wiedergabe.
-		const microphone = useMicrophone({ audioContext: playback.getAudioContext })
+		const microphone = useMicrophone({ audioContext: playback.getAudioContext, holdAudio: playback.holdAudio })
 		const myChannels = () => channelsOfPart(playback.mixerChannels.value, myPart.myPartId.value)
 		const clockPlaying = () => clock.value?.isPlaying() ?? false
 
@@ -1463,6 +1483,7 @@ export default {
 			microphone,
 			clock: () => clock.value,
 			audioContext: playback.getAudioContext,
+			holdAudio: playback.holdAudio,
 			isPlaying: clockPlaying,
 			playing: () => playback.isPlaying.value,
 			play: async () => {
@@ -1589,6 +1610,7 @@ export default {
 			destroyMetronome: metronome.destroy,
 			destroyPlayback: playback.destroy,
 			stopZoomObserver: zoomApi.stop,
+			isFollowing: playback.hasExternalTime,
 		})
 
 		// Erst hier, weil der Inhaltsschluessel der Leiste auf Modus, Folgen,
@@ -1780,6 +1802,7 @@ export default {
 			recordings: recorder.recordings,
 			recordPhase: recorder.phase,
 			recordElapsedMs: recorder.elapsedMs,
+			sessionOnFrame: session.onFrame,
 			recordWithAccompaniment: recorder.withAccompaniment,
 			recordCountIn: recorder.countIn,
 			recordConfirmReplace: recorder.confirmReplace,
@@ -2208,6 +2231,21 @@ export default {
 	},
 
 	methods: {
+		/**
+		 * A value that only the page under the cursor needs (cursor, sounding
+		 * elid, live needle) - every other page gets null. Vue re-renders a
+		 * child whenever one of its props changes, so handing the cursor to
+		 * all pages re-rendered every mounted page on every note step; this
+		 * way only the page the cursor enters or leaves updates.
+		 *
+		 * @param {number} pageIndex
+		 * @param {?(object|number)} value
+		 * @return {?(object|number)}
+		 */
+		onCursorPage(pageIndex, value) {
+			return this.cursorRect?.page === pageIndex ? value : null
+		},
+
 		/**
 		 * Eigene Transposition. Gilt gerade die der Leitung, loest das das
 		 * Folgen (V7) - sonst ueberschriebe der naechste Stand der Leitung die
@@ -2956,6 +2994,12 @@ export default {
  */
 .scoreview-pages {
 	display: block;
+	/* The browser's own pinch zoom would enlarge the whole Nextcloud page;
+	 * here two fingers zoom the score (useZoom.js). Declared in CSS instead
+	 * of preventDefault() so the touch listeners can be passive - a
+	 * non-passive touchmove made every one-finger scroll over the score wait
+	 * for the main thread. */
+	touch-action: pan-x pan-y;
 }
 
 /*

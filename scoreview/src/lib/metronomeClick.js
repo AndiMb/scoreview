@@ -17,12 +17,18 @@
 // durch deren Kette mit - und der Latenzausgleich (playbackTime.js) gilt für
 // beide gleichzeitig.
 
+/** Silence after which the metronome's own context rests. */
+const OWN_REST_MS = 3000
+
 /**
  * @param {?() => ?AudioContext} [getSharedContext] liefert den AudioContext
  *   der Wiedergabe, solange es einen gibt (siehe player.js)
  */
 export function createMetronomeClick(getSharedContext = null) {
 	let ownContext = null
+	// The own context (silent mode only) rests a while after the last click,
+	// like the playback context does (lib/audioIdle.js).
+	let ownRestTimer = null
 
 	function ensureContext() {
 		const shared = getSharedContext?.() ?? null
@@ -54,6 +60,16 @@ export function createMetronomeClick(getSharedContext = null) {
 	 */
 	function click(accent = false, delaySeconds = 0) {
 		const ctx = ensureContext()
+		// A safeguard: whoever clicks should hold the context awake
+		// (useMetronome), but a click on a resting context would only sound
+		// once something else woke it - late, together with the next ones.
+		if (ctx.state === 'suspended') {
+			ctx.resume().catch(() => {})
+		}
+		if (ctx === ownContext) {
+			clearTimeout(ownRestTimer)
+			ownRestTimer = setTimeout(() => ownContext?.suspend().catch(() => {}), OWN_REST_MS)
+		}
 		const at = ctx.currentTime + Math.max(0, delaySeconds)
 		const osc = ctx.createOscillator()
 		const gain = ctx.createGain()
@@ -69,6 +85,7 @@ export function createMetronomeClick(getSharedContext = null) {
 	// Nur der eigene wird geschlossen - der geteilte gehört der Wiedergabe
 	// und wird von dort abgeräumt (player.js, destroy()).
 	function destroy() {
+		clearTimeout(ownRestTimer)
 		ownContext?.close()
 		ownContext = null
 	}

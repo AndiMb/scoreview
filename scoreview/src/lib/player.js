@@ -1,7 +1,7 @@
 // Echte Wiedergabe im Browser (E1: Synthese statt vorgerendertem MP3 - siehe
 // docs/architecture.md). Dünner spessasynth_lib-Wrapper, der dieselbe kleine
 // Zeitquellen-Schnittstelle wie lib/silentClock.js erfüllt
-// (getCurrentTimeMs/play/pause/seek/isPlaying/addEventListener('seeked')),
+// (getCurrentTimeMs/play/pause/seek/isPlaying/addEventListener('seeked'|'wake')),
 // damit useScoreSync.js und ScoreViewer.vue nicht wissen müssen, ob gerade
 // echte Wiedergabe oder (mangels konfiguriertem SoundFont) der stumme
 // Platzhalter läuft. Mute/Solo-Semantik selbst steckt NICHT hier,
@@ -11,6 +11,7 @@
 import { generateFilePath } from '@nextcloud/router'
 import { Sequencer, WorkletSynthesizer } from 'spessasynth_lib'
 import { withAppVersion } from './assetVersion.js'
+import { createAudioIdle } from './audioIdle.js'
 import { pickToneChannel } from './startTone.js'
 
 // spessasynth_lib's AudioWorklet-Prozessor läuft in einem eigenen
@@ -108,11 +109,26 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	// liest Vergangenes. Die eigene Aufnahme richtet sich an genau dieser
 	// Zeit aus (useRecorder.js) und wartet deshalb auf dieses Ereignis.
 	const timeChangeListeners = new Set()
+	// Everything that moves the time: play, pause, seek, tempo, and the
+	// moment a seek has really landed (timeChange). The viewer's time loop
+	// sleeps while stopped and is woken through this (lib/timeLoopWake.js) -
+	// announced here, at the one place every movement passes, rather than by
+	// each of the many callers.
+	const wakeListeners = new Set()
+	const announceWake = () => wakeListeners.forEach((cb) => cb())
 	sequencer.eventHandler.addEvent('timeChange', 'scoreview-player-time', () => {
 		timeChangeListeners.forEach((cb) => cb())
+		announceWake()
 	})
 	// Der gerade klingende Anfangston: {channel, pitch, timer} oder null.
 	let tone = null
+	// The context rests while nothing sounds and nobody holds it
+	// (lib/audioIdle.js) - a sounding start tone counts as playing.
+	const idle = createAudioIdle({
+		isPlaying: () => !sequencer.paused || tone !== null,
+		suspend: () => context.suspend(),
+		resume: () => context.resume(),
+	})
 
 	// Bewusst die ROHE Zeit der Audiouhr, ohne Latenzausgleich: Sie ist die
 	// Bezugsgroesse fuer alles, was gegen dieselbe Uhr terminiert (Metronom)
@@ -143,6 +159,11 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	 * @return {{measuredMs: ?number, reportedMs: number}}
 	 */
 	function getLatencyReport() {
+		// A resting context reports nothing useful - the caller keeps the
+		// last value (usePlayback.updateLatency).
+		if (context.state !== 'running') {
+			return null
+		}
 		let measuredMs = null
 		try {
 			const timestamp = context.getOutputTimestamp?.()
@@ -191,17 +212,32 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		// Nutzerinteraktion vorliegt (Autoplay-Policy) - play() wird nur über
 		// einen Klick ausgelöst (ScoreViewer.vue), erfüllt diese Bedingung
 		// also garantiert.
-		await context.resume()
+		await idle.wake()
 		sequencer.play()
+		announceWake()
 	}
 
 	function pause() {
 		sequencer.pause()
+		idle.settle()
+		announceWake()
 	}
 
 	function seek(ms) {
 		sequencer.currentTime = ms / 1000
 		seekedListeners.forEach((cb) => cb())
+		announceWake()
+	}
+
+	/**
+	 * Keep the context awake - for everything that sounds or listens through
+	 * it besides the sequencer: microphone, listening back, count-in.
+	 *
+	 * @param {string} reason
+	 * @return {(() => void) & {ready: Promise<void>}} release
+	 */
+	function hold(reason) {
+		return idle.hold(reason)
 	}
 
 	function addEventListener(type, cb) {
@@ -209,6 +245,8 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 			seekedListeners.add(cb)
 		} else if (type === 'timechange') {
 			timeChangeListeners.add(cb)
+		} else if (type === 'wake') {
+			wakeListeners.add(cb)
 		}
 	}
 
@@ -217,6 +255,8 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 			seekedListeners.delete(cb)
 		} else if (type === 'timechange') {
 			timeChangeListeners.delete(cb)
+		} else if (type === 'wake') {
+			wakeListeners.delete(cb)
 		}
 	}
 
@@ -227,6 +267,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	// für den Verifikationsweg.
 	function setTempo(factor) {
 		sequencer.playbackRate = factor
+		announceWake()
 	}
 
 	function getTempo() {
@@ -334,7 +375,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		// Bei gestoppter Wiedergabe kann der Context noch suspendiert sein
 		// (Autoplay-Policy) - der Druck auf den Knopf ist die Nutzergeste,
 		// die ihn wecken darf.
-		await context.resume()
+		await idle.wake()
 		// Der Programmwechsel jedes Mal: Ein Suchlauf setzt den Kanal zurueck
 		// (siehe setController), und ein spaeter geladenes Stueck koennte ihn
 		// benutzen.
@@ -397,6 +438,8 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	}
 
 	function destroy() {
+		idle.destroy()
+		wakeListeners.clear()
 		stopTone()
 		sequencer.pause()
 		synth.disconnect()
@@ -404,6 +447,10 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		master.disconnect()
 		context.close()
 	}
+
+	// Until somebody plays, nothing sounds: a score opened only for reading
+	// lets its context rest right away instead of after the first pause.
+	idle.settle()
 
 	return {
 		getCurrentTimeMs,
@@ -413,6 +460,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		play,
 		pause,
 		seek,
+		hold,
 		addEventListener,
 		removeEventListener,
 		get durationMs() {

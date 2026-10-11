@@ -271,10 +271,16 @@ For operation this means:
   `notify_push`. A latency measurement with it is still pending.
 - **The mobile apps always poll.** `notify_push` registers via a session,
   which the Direct Editing page does not have.
-- **Without a running session**, a device only asks every 15 s whether one has
-  started. Anyone who opens the viewer before the leader thus only follows
-  after up to 15 s. In a background tab it does not ask at all and catches up
-  immediately on returning.
+- **Without a running session**, a device asks every 15 s whether one has
+  started, for two minutes after it was opened, became visible or was
+  touched, and every 60 s after that. Anyone who opens the viewer well before
+  the leader and does not touch it thus follows only after up to 60 s; a tap
+  on the screen makes it ask quickly again. In a background tab it does not
+  ask at all and catches up immediately on returning. Push does not shorten
+  this: the server only pushes to devices that joined a running session.
+- **The leader's own device and a detached device poll slowly** (every 5 s
+  and every 15 s): the leader learns the state from the answers to its own
+  changes, a detached device only has to notice the end of the session.
 - **Following playback** tracks the leader's playback with the polling
   interval as the delay for start, stop and jumps; in between, each device
   calculates by itself. Measured on the desktop with one following device:

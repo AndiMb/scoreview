@@ -72,6 +72,11 @@ export function useZoom({ rootEl, scrollEl }) {
 	let followedWidthBeforeFullscreen = false
 	let viewportObserver = null
 	let isPinching = false
+	// One zoom change per frame during a pinch: touchmove fires faster than
+	// the screen refreshes on many devices, and every change re-lays out all
+	// pages.
+	let pinchFrame = null
+	let pinchZoom = null
 	let pinchStartDistance = 0
 	let pinchStartZoom = 1
 
@@ -221,7 +226,9 @@ export function useZoom({ rootEl, scrollEl }) {
 
 	// --- Pinch ---------------------------------------------------------------
 	// Reagiert nur auf echte Zweifinger-Gesten; ein einzelner Finger scrollt
-	// normal weiter (kein preventDefault dafür).
+	// normal weiter. The browser's own pinch zoom is switched off by
+	// `touch-action` on the pages (ScoreViewer.vue), so the listeners are
+	// passive and call no preventDefault().
 
 	function touchDistance(touches) {
 		const dx = touches[0].clientX - touches[1].clientX
@@ -239,11 +246,20 @@ export function useZoom({ rootEl, scrollEl }) {
 
 	function onTouchMove(event) {
 		if (isPinching && event.touches.length === 2) {
-			// Unterdrueckt den nativen Browser-Seiten-Zoom waehrend der Geste
-			// (der wuerde sonst die GESAMTE Nextcloud-Oberflaeche vergroessern,
-			// nicht nur die Partitur).
-			event.preventDefault()
-			set(computePinchZoom(pinchStartDistance, touchDistance(event.touches), pinchStartZoom))
+			pinchZoom = computePinchZoom(pinchStartDistance, touchDistance(event.touches), pinchStartZoom)
+			if (pinchFrame === null) {
+				pinchFrame = requestAnimationFrame(() => {
+					pinchFrame = null
+					set(pinchZoom)
+				})
+			}
+		}
+	}
+
+	function cancelPinchFrame() {
+		if (pinchFrame !== null) {
+			cancelAnimationFrame(pinchFrame)
+			pinchFrame = null
 		}
 	}
 
@@ -256,6 +272,7 @@ export function useZoom({ rootEl, scrollEl }) {
 	function stop() {
 		viewportObserver?.disconnect()
 		viewportObserver = null
+		cancelPinchFrame()
 	}
 
 	/**

@@ -5,6 +5,7 @@ import {
 	classify,
 	evaluateRecording,
 	frameCents,
+	needleChanged,
 	noteMarks,
 	problemList,
 	targetAt,
@@ -17,6 +18,13 @@ import { decodeWav } from '../lib/wavCodec.js'
  * mit jedem Vibrato-Ausschlag, laenger kommt sie beim Tonwechsel zu spaet.
  */
 const LIVE_SMOOTHING_FRAMES = 5
+
+/**
+ * The needle is redrawn at most this often (~12 Hz). Frames arrive every
+ * 20 ms and each redraw re-renders the viewer; the eye does not follow a
+ * needle faster than this, and the smoothing still sees every frame.
+ */
+const NEEDLE_MIN_INTERVAL_MS = 80
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -85,6 +93,8 @@ export function useIntonation({
 	let liveInputLatency = 0
 	let recent = []
 	let recentPitch = null
+	let needleShownAt = -Infinity
+	let liveMarksKey = null
 	let requestId = 0
 	const waiting = new Map()
 	// Zwei getrennte Zaehler: Eine laufende Auswertung und ein wartendes
@@ -200,6 +210,8 @@ export function useIntonation({
 		liveInputLatency = handle.inputLatencyMs
 		recent = []
 		recentPitch = null
+		needleShownAt = -Infinity
+		liveMarksKey = null
 		w.postMessage({ type: 'live-reset' })
 		unsubscribe = handle.onBlocks(({ samples, contextTimeSec }) => {
 			// Eine Kopie: Den Block behaelt womoeglich gleichzeitig die Aufnahme.
@@ -222,6 +234,7 @@ export function useIntonation({
 		live.value = false
 		needle.value = null
 		liveMarks.value = []
+		liveMarksKey = null
 		liveContext = null
 		microphone.release('intonation')
 	}
@@ -250,9 +263,8 @@ export function useIntonation({
 			: displayTimeMs()
 		const target = targetAt(notes(), myChannels(), scoreMs, frame.hz)
 		if (!target) {
-			needle.value = { cents: null, cls: 'rest' }
-			liveMarks.value = []
 			recent = []
+			showNeedle({ cents: null, cls: 'rest' }, null, () => [])
 			return
 		}
 		if (recentPitch !== target.pitch || (recent.length > 0 && recent[recent.length - 1].onMs !== target.onMs)) {
@@ -265,8 +277,32 @@ export function useIntonation({
 		// Mehrheit stimmlos: ehrlich „nicht auswertbar".
 		const cents = werte.length * 2 > recent.length ? median(werte) : null
 		const cls = classify(cents)
-		needle.value = { cents, cls }
-		liveMarks.value = noteMarks([{ note: target, class: cls }], notes(), myChannels(), events(), myStaff())
+		showNeedle({ cents, cls }, `${target.onMs}:${target.pitch}:${cls}`, () => noteMarks([{ note: target, class: cls }], notes(), myChannels(), events(), myStaff()))
+	}
+
+	/**
+	 * Hand a new needle state to the view - only if it looks different and
+	 * not more often than NEEDLE_MIN_INTERVAL_MS. A dropped frame is not
+	 * lost: the next one, 20 ms later, carries the same or a newer state.
+	 *
+	 * @param {{cents: ?number, cls: string}} next
+	 * @param {?string} marksKey target note and class - the marks change only with these
+	 * @param {() => Array} buildMarks
+	 */
+	function showNeedle(next, marksKey, buildMarks) {
+		const now = performance.now()
+		if (now - needleShownAt < NEEDLE_MIN_INTERVAL_MS) {
+			return
+		}
+		if (needleChanged(needle.value, next)) {
+			needle.value = next
+			needleShownAt = now
+		}
+		if (marksKey !== liveMarksKey) {
+			liveMarksKey = marksKey
+			liveMarks.value = buildMarks()
+			needleShownAt = now
+		}
 	}
 
 	/**
@@ -372,6 +408,21 @@ export function useIntonation({
 	// aufgerufen schadet der Abbau nicht.
 	if (getCurrentScope()) {
 		onScopeDispose(destroy)
+	}
+
+	// Nobody watches a needle on a hidden page, but microphone, worklet and
+	// pitch detection would keep running. It does not come back by itself:
+	// switching the microphone on is a deliberate act (S3).
+	const onVisibilityChange = () => {
+		if (document.visibilityState === 'hidden') {
+			stopLive()
+		}
+	}
+	if (typeof document !== 'undefined') {
+		document.addEventListener('visibilitychange', onVisibilityChange)
+		if (getCurrentScope()) {
+			onScopeDispose(() => document.removeEventListener('visibilitychange', onVisibilityChange))
+		}
 	}
 
 	return {

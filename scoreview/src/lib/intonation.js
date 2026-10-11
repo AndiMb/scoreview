@@ -310,3 +310,26 @@ function nearestEvent(events, timeMs) {
 	const b = lo > 0 ? events[lo - 1] : null
 	return b && Math.abs(b.timeMs - timeMs) <= Math.abs(a.timeMs - timeMs) ? b : a
 }
+
+/**
+ * Whether the live needle has to be redrawn. The microphone delivers a frame
+ * every 20 ms, and setting the needle re-renders the whole viewer (measured:
+ * 174 ms CPU per second and 60 style recalculations per second with the
+ * needle on, even with no note under the cursor). A change below one cent is
+ * invisible on the needle, so only a different rounded value or class counts.
+ *
+ * @param {?{cents: ?number, cls: string}} prev
+ * @param {{cents: ?number, cls: string}} next
+ * @return {boolean}
+ */
+export function needleChanged(prev, next) {
+	if (!prev) {
+		return true
+	}
+	if (prev.cls !== next.cls) {
+		return true
+	}
+	const a = prev.cents === null || prev.cents === undefined ? null : Math.round(prev.cents)
+	const b = next.cents === null || next.cents === undefined ? null : Math.round(next.cents)
+	return a !== b
+}

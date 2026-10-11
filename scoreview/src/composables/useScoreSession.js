@@ -1,7 +1,8 @@
 import axios from '@nextcloud/axios'
-import { computed, nextTick, ref, shallowRef } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { buildTimeline, groupRectsByPage } from '../lib/scoreLayout.js'
 import { createScoreSync } from '../lib/scoreSync.js'
+import { createWakeWindow } from '../lib/timeLoopWake.js'
 
 /**
  * Geteiltes leeres Array fuer Seiten ohne Takte - ein `[]` im Template waere
@@ -80,6 +81,13 @@ export function useScoreSession() {
 	let generation = 0
 	let sync = null
 	let frameHandle = null
+	// Whether the loop is switched on at all (between pumpTimeDisplay() and
+	// stopTimeDisplay()) - it may still be asleep (frameHandle === null).
+	let pumping = false
+	const wakeWindow = createWakeWindow()
+	// Others that need the loop's beat (LyricsView) - they run when it runs
+	// and sleep when it sleeps, instead of keeping a loop of their own.
+	const frameListeners = new Set()
 	// Bis wann das Nachfuehren auch gegen manuelles Blaettern gilt
 	// (forceAutoScrollFor).
 	let forceScrollUntil = 0
@@ -109,6 +117,8 @@ export function useScoreSession() {
 	 * @param {() => void} deps.destroyMetronome
 	 * @param {() => void} deps.destroyPlayback
 	 * @param {() => void} deps.stopZoomObserver
+	 * @param {() => boolean} [deps.isFollowing] the display hangs on the
+	 *   leader's time ("Folgt mir") - the loop has to keep running
 	 */
 	function connect(deps) {
 		hooks = deps
@@ -228,43 +238,97 @@ export function useScoreSession() {
 	 * Die Schleife schreibt nur in Refs, die der Viewer selbst NICHT rendert
 	 * (die Zeit liest LiveValue.vue) oder die sich nur mit der Note aendern
 	 * (Cursor, elid) - sonst rendete der ganze Viewer in jedem Frame neu.
+	 *
+	 * It runs only while the time moves - playing, following the leader, or
+	 * shortly after the clock announced a change - and sleeps otherwise
+	 * (lib/timeLoopWake.js). A paused score costs no frames.
 	 */
 	function pumpTimeDisplay() {
 		// Nie zwei Schleifen: Wer zweimal startet (erneutes Laden), liesse
 		// die erste sonst ohne Griff weiterlaufen - auch nach dem Schliessen.
 		stopTimeDisplay()
-		const step = () => {
-			if (clock.value) {
-				hooks.sampleTime()
-				// Eine Auflösung für beides: der Cursor braucht das Rechteck,
-				// eine Notiz das elid (currentAnchor) - so wird nicht zweimal
-				// nach demselben elid gesucht.
-				currentElid.value = sync?.update(hooks.displayTimeMs()) ?? null
-				// Loop (Kernfunktion für Probenarbeit): sobald das Ende
-				// erreicht/überschritten ist, zurück zum Anfang - hier statt in
-				// silentClock.js/player.js geprüft, weil beide Zeitquellen
-				// dieselbe kleine seek()-Schnittstelle erfüllen und Looping keine
-				// Eigenschaft der Zeitquelle selbst ist.
-				//
-				// Mit der ROHEN Zeit: So springt der Ton rechtzeitig, und der
-				// Cursor springt (auf der Anzeigezeit) genau dann, wenn der
-				// Sprung hörbar wird. Mit der Anzeigezeit käme der Rücksprung
-				// um die Ausgabelatenz zu spät - man hörte über das
-				// Loop-Ende hinaus.
-				hooks.wrapLoop(hooks.currentTimeMs())
-				// Ebenfalls die rohe Zeit: Der Klick wird über die Uhr des
-				// AudioContext terminiert (metronomeClick.js) und geht damit
-				// durch dieselbe Ausgabelatenz wie die Musik. Mit der
-				// Anzeigezeit käme er um genau diese Latenz zu spät - der
-				// Fehler wäre verdoppelt statt behoben.
-				hooks.tickMetronome(hooks.currentTimeMs())
-			}
-			frameHandle = requestAnimationFrame(step)
-		}
+		pumping = true
+		wakeWindow.wake(performance.now())
 		step()
 	}
 
+	function step() {
+		frameHandle = null
+		if (!pumping) {
+			return
+		}
+		if (clock.value) {
+			hooks.sampleTime()
+			// Eine Auflösung für beides: der Cursor braucht das Rechteck,
+			// eine Notiz das elid (currentAnchor) - so wird nicht zweimal
+			// nach demselben elid gesucht.
+			currentElid.value = sync?.update(hooks.displayTimeMs()) ?? null
+			// Loop (Kernfunktion für Probenarbeit): sobald das Ende
+			// erreicht/überschritten ist, zurück zum Anfang - hier statt in
+			// silentClock.js/player.js geprüft, weil beide Zeitquellen
+			// dieselbe kleine seek()-Schnittstelle erfüllen und Looping keine
+			// Eigenschaft der Zeitquelle selbst ist.
+			//
+			// Mit der ROHEN Zeit: So springt der Ton rechtzeitig, und der
+			// Cursor springt (auf der Anzeigezeit) genau dann, wenn der
+			// Sprung hörbar wird. Mit der Anzeigezeit käme der Rücksprung
+			// um die Ausgabelatenz zu spät - man hörte über das
+			// Loop-Ende hinaus.
+			hooks.wrapLoop(hooks.currentTimeMs())
+			// Ebenfalls die rohe Zeit: Der Klick wird über die Uhr des
+			// AudioContext terminiert (metronomeClick.js) und geht damit
+			// durch dieselbe Ausgabelatenz wie die Musik. Mit der
+			// Anzeigezeit käme er um genau diese Latenz zu spät - der
+			// Fehler wäre verdoppelt statt behoben.
+			hooks.tickMetronome(hooks.currentTimeMs())
+		}
+		for (const listener of frameListeners) {
+			listener()
+		}
+		const keepRunning = wakeWindow.shouldRun({
+			playing: clock.value?.isPlaying?.() ?? false,
+			following: hooks?.isFollowing?.() ?? false,
+			nowMs: performance.now(),
+		})
+		if (keepRunning) {
+			frameHandle = requestAnimationFrame(step)
+		}
+	}
+
+	/**
+	 * Something moved the time (play, pause, seek, tempo - announced by the
+	 * clock itself, or the leader's time being attached): run the loop again
+	 * for at least the settle window. Cheap when it already runs.
+	 */
+	function wakeTimeDisplay() {
+		wakeWindow.wake(performance.now())
+		if (pumping && frameHandle === null) {
+			frameHandle = requestAnimationFrame(step)
+		}
+	}
+
+	/**
+	 * Run `listener` on every step of the loop.
+	 *
+	 * @param {() => void} listener
+	 * @return {() => void} unsubscribe
+	 */
+	function onFrame(listener) {
+		frameListeners.add(listener)
+		wakeTimeDisplay()
+		return () => frameListeners.delete(listener)
+	}
+
+	// Every movement of the time passes through the clock - so the clock
+	// wakes the loop, not the many places that call play/seek (lib/player.js).
+	watch(clock, (neu, alt) => {
+		alt?.removeEventListener?.('wake', wakeTimeDisplay)
+		neu?.addEventListener?.('wake', wakeTimeDisplay)
+		wakeTimeDisplay()
+	})
+
 	function stopTimeDisplay() {
+		pumping = false
 		if (frameHandle) {
 			cancelAnimationFrame(frameHandle)
 			frameHandle = null
@@ -336,6 +400,8 @@ export function useScoreSession() {
 		connect,
 		load,
 		pumpTimeDisplay,
+		wakeTimeDisplay,
+		onFrame,
 		forceAutoScrollFor,
 		cleanup,
 		reset,

@@ -4,17 +4,12 @@ import { listen } from '@nextcloud/notify_push'
 import { generateUrl } from '@nextcloud/router'
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { freshPlayback, leaderTimeMs, shouldSendPlayback } from '../lib/followPlayback.js'
+import { followPollDelay, IDLE_POLL_MS } from '../lib/followPoll.js'
 import { initialFollowState, reduce } from '../lib/followState.js'
 import { emptyQueue, enqueue, isBusy, recordSend, sendDelay, settle, takeNext } from '../lib/leaderQueue.js'
 
-/**
- * Abfrageabstand ohne laufende Sitzung, im Hintergrund und neben Push
- * (E10): „laeuft eine Sitzung?" - eine Anfrage alle 15 s je offenem
- * Viewer. Nur waehrend einer Sitzung und bei sichtbarer Seite wird im
- * Takt von `pollMs` gefragt; gemessene Kosten: ~50 ms CPU je
- * Geraet und Abfrage).
- */
-export const IDLE_POLL_MS = 15000
+// Which device polls how often: lib/followPoll.js.
+export { IDLE_POLL_MS }
 /**
  * Lebenszeichen der Leitung. Ohne eines gilt eine Sitzung nach 30 min als
  * beendet - 60 s lassen also reichlich Luft fuer ein Funkloch.
@@ -141,6 +136,10 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	const leaderName = computed(() => local.value.leaderName)
 
 	let timer = null
+	// Opening, becoming visible and touching the viewer keep the search for a
+	// session fast for a while (lib/followPoll.js).
+	let attentionAt = Date.now()
+	let scheduledDelay = null
 	let heartbeatTimer = null
 	let inflight = false
 	// Jede Antwort der Leitungs-Aktionen zaehlt die Epoche hoch. Eine Abfrage,
@@ -175,13 +174,27 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	const url = (suffix = '') => generateUrl(`/apps/scoreview/api/scores/{fileId}/follow${suffix}`, { fileId: fileId() })
 
 	function interval() {
-		if (!visible.value || !local.value.active) {
-			return IDLE_POLL_MS
+		return followPollDelay({
+			visible: visible.value,
+			active: local.value.active,
+			mine: mine.value,
+			following: following.value,
+			push: pushJoined.value && pushConnected(),
+			pollMs: pollMs.value,
+			sinceAttentionMs: Date.now() - attentionAt,
+		})
+	}
+
+	/**
+	 * Someone uses the viewer: if the search for a session has slowed down,
+	 * speed it up again - a rehearsal starts when people pick up their
+	 * devices.
+	 */
+	function noteAttention() {
+		attentionAt = Date.now()
+		if (timer !== null && !local.value.active && scheduledDelay > IDLE_POLL_MS) {
+			schedule(IDLE_POLL_MS)
 		}
-		if (pushJoined.value && pushConnected()) {
-			return IDLE_POLL_MS
-		}
-		return pollMs.value
 	}
 
 	function schedule(delay = interval()) {
@@ -197,6 +210,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		if (!visible.value && !local.value.active) {
 			return
 		}
+		scheduledDelay = delay
 		timer = setTimeout(poll, delay)
 	}
 
@@ -565,24 +579,38 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	 * vorhersagen laesst (lib/followPlayback.js). Ein Takt von 250 ms statt
 	 * jedes Bildes: Ein Sprung kommt so hoechstens eine Viertelsekunde
 	 * spaeter, und es laeuft keine Arbeit im Bildtakt mit.
+	 *
+	 * The beat runs only while the leader plays: standing still there is
+	 * nothing to report (shouldSendPlayback), and the transitions - start and
+	 * stop - arrive through playbackChanged() from the viewer at once.
 	 */
 	function updatePlaybackWatch() {
-		const wanted = mine.value
-		if (wanted && playbackTimer === null) {
+		if (!mine.value) {
 			lastPlayback = null
-			playbackTimer = setInterval(() => {
-				const now = leaderPlayback()
-				const nowMs = Date.now()
-				if (now && shouldSendPlayback(lastPlayback, now, nowMs)) {
-					lastPlayback = { ...now, sentAt: nowMs }
-					submit({ type: 'playback', playback: { ...now, capturedAt: nowMs } })
-				}
-			}, PLAYBACK_WATCH_MS)
+		} else {
+			checkPlayback()
+		}
+		const wanted = mine.value && leaderPlayback()?.playing === true
+		if (wanted && playbackTimer === null) {
+			playbackTimer = setInterval(checkPlayback, PLAYBACK_WATCH_MS)
 		} else if (!wanted && playbackTimer !== null) {
 			clearInterval(playbackTimer)
 			playbackTimer = null
-			lastPlayback = null
 		}
+	}
+
+	function checkPlayback() {
+		const now = leaderPlayback()
+		const nowMs = Date.now()
+		if (now && shouldSendPlayback(lastPlayback, now, nowMs)) {
+			lastPlayback = { ...now, sentAt: nowMs }
+			submit({ type: 'playback', playback: { ...now, capturedAt: nowMs } })
+		}
+	}
+
+	/** The own playback started or stopped - for the leader's report. */
+	function playbackChanged() {
+		updatePlaybackWatch()
 	}
 
 	function updateHeartbeat() {
@@ -605,6 +633,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	function onVisibilityChange() {
 		visible.value = document.visibilityState !== 'hidden'
 		if (visible.value) {
+			attentionAt = Date.now()
 			// Zurueck im Vordergrund: gleich fragen, nicht erst nach 15 s.
 			schedule(0)
 		}
@@ -655,6 +684,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		disabled.value = false
 		error.value = ''
 		pushJoined.value = false
+		attentionAt = Date.now()
 		if (enabled()) {
 			schedule(0)
 		}
@@ -678,15 +708,27 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		}
 	})
 
+	// Back to the leader: a detached device polled slowly, so its picture of
+	// the session may be seconds old - ask at once instead of waiting.
+	watch(following, (now, before) => {
+		if (now && !before) {
+			schedule(0)
+		}
+	})
+
 	pushSubscribers.add(onPush)
 	if (typeof document !== 'undefined') {
 		document.addEventListener('visibilitychange', onVisibilityChange)
+		document.addEventListener('pointerdown', noteAttention, { passive: true })
+		document.addEventListener('keydown', noteAttention, { passive: true })
 	}
 
 	onBeforeUnmount(() => {
 		stop()
 		pushSubscribers.delete(onPush)
 		document.removeEventListener('visibilitychange', onVisibilityChange)
+		document.removeEventListener('pointerdown', noteAttention)
+		document.removeEventListener('keydown', noteAttention)
 	})
 
 	return {
@@ -704,6 +746,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		resume,
 		start,
 		end,
+		playbackChanged,
 		sendPosition,
 		sendLoop,
 		sendTone,

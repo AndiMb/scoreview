@@ -197,6 +197,9 @@ import { sanitizeSvg } from '../lib/svgSanitizer.js'
 // hineinfaellt.
 const CLICK_MOVE_TOLERANCE_PX = 8
 
+// Cursor bands of a page the cursor is not on (see cursorRects()).
+const NO_CURSOR_RECTS = Object.freeze([])
+
 // Abstand zum Sichtbereich, ab dem eine Seite geladen (LOAD) bzw. wieder
 // freigegeben wird (UNLOAD). Der Unterschied ist
 // Absicht: laden knapp vorher, entladen erst deutlich weiter weg. Waeren
@@ -225,6 +228,15 @@ export default {
 	name: 'ScorePage',
 
 	components: { NcButton, ScoreStamps },
+
+	// The element the pages scroll in. The load/unload margins of the
+	// observers below only widen their ROOT; without one the root is the
+	// viewport, and a page clipped by the scrolling container counted as
+	// gone the moment it left the container - measured: 12 reloads (fetch,
+	// sanitizer, index) while scrolling just +-1500 px back and forth.
+	inject: {
+		scrollRoot: { from: 'scoreviewScrollRoot', default: () => () => null },
+	},
 
 	props: {
 		svgUrl: {
@@ -518,7 +530,9 @@ export default {
 			const rect = this.cursorRect
 			const box = this.viewBox
 			if (!rect || !box || rect.page !== this.pageIndex) {
-				return []
+				// The same frozen array every time: a fresh [] counts as a
+				// change and would re-render the page for nothing.
+				return NO_CURSOR_RECTS
 			}
 			const system = this.staffSystems.find((s) => rect.y < s.bottom + 1 && rect.y + rect.h > s.top - 1)
 			if (!system) {
@@ -730,14 +744,14 @@ export default {
 			if (entries.some((e) => e.isIntersecting)) {
 				this.load()
 			}
-		}, { rootMargin: `${LOAD_MARGIN_PX}px 0px` })
+		}, { root: this.scrollRoot(), rootMargin: `${LOAD_MARGIN_PX}px 0px` })
 		this.loadObserver.observe(this.$refs.root)
 
 		this.unloadObserver = new IntersectionObserver((entries) => {
 			if (entries.every((e) => !e.isIntersecting)) {
 				this.unload()
 			}
-		}, { rootMargin: `${UNLOAD_MARGIN_PX}px 0px` })
+		}, { root: this.scrollRoot(), rootMargin: `${UNLOAD_MARGIN_PX}px 0px` })
 		this.unloadObserver.observe(this.$refs.root)
 	},
 

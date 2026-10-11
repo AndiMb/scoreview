@@ -73,6 +73,16 @@ export async function cachedUrls() {
 }
 
 /**
+ * @param {Cache} cache
+ * @param {string} url
+ * @return {Promise<?number>} bytes of what is stored under `url`, or null
+ */
+async function storedSize(cache, url) {
+	const hit = await cache.match(url)
+	return hit ? (await hit.blob()).size : null
+}
+
+/**
  * Eine URL holen und unter GENAU dieser URL ablegen - der Viewer fragt sie
  * offline wieder so ab, und der Worker antwortet aus dem Cache. Gleiche
  * Herkunft ueber axios (traegt den requesttoken der Sitzung), ein fremder
@@ -223,7 +233,10 @@ export function useOffline({ uid }) {
 		let bytes = 0
 		let sharedBytes = 0
 		for (const [i, url] of all.entries()) {
-			const size = await store(cache, url)
+			// The shared files (SoundFont ~24 MB, worklet) are the same for
+			// every entry: once in the cache, pinning or refreshing another
+			// piece does not copy them again.
+			const size = i >= urls.length ? await storedSize(cache, url) ?? await store(cache, url) : await store(cache, url)
 			if (i < urls.length) {
 				bytes += size
 			} else {

@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:1ff1cf4318a1 -->
+<!-- translation-of: limits.md sha256:45e9505e9d26 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -270,10 +270,17 @@ Daraus folgt für den Betrieb:
   `notify_push`. Eine Latenzmessung damit steht aus.
 - **Die mobilen Apps fragen immer ab.** `notify_push` meldet sich über eine
   Sitzung an, die die Direct-Editing-Seite nicht hat.
-- **Ohne laufende Sitzung** fragt ein Gerät nur alle 15 s, ob eine begonnen hat.
-  Wer den Viewer vor der Leitung öffnet, folgt also erst nach bis zu 15 s. In
-  einem Tab im Hintergrund fragt es dann gar nicht und holt die Frage beim
-  Zurückkehren sofort nach.
+- **Ohne laufende Sitzung** fragt ein Gerät alle 15 s, ob eine begonnen hat –
+  zwei Minuten lang, nachdem es geöffnet, sichtbar oder berührt wurde, danach
+  alle 60 s. Wer den Viewer lange vor der Leitung öffnet und nicht berührt,
+  folgt also erst nach bis zu 60 s; ein Tipp auf den Bildschirm lässt es
+  wieder schnell fragen. In einem Tab im Hintergrund fragt es gar nicht und
+  holt die Frage beim Zurückkehren sofort nach. Push verkürzt das nicht: Der
+  Server schickt nur an Geräte, die einer laufenden Sitzung beigetreten sind.
+- **Das Gerät der Leitung und ein gelöstes Gerät fragen selten** (alle 5 s
+  und alle 15 s): Die Leitung kennt den Stand aus den Antworten auf ihre
+  eigenen Änderungen, ein gelöstes Gerät muss nur das Ende der Sitzung
+  bemerken.
 - **Mitblättern** folgt der Wiedergabe der Leitung mit dem Abfrageabstand als
   Verzögerung für Start, Halt und Sprünge; dazwischen rechnet jedes Gerät
   selbst. Gemessen am Desktop mit einem Folgegerät: nach 8 s Wiedergabe

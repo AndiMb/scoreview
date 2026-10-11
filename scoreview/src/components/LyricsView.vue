@@ -80,6 +80,14 @@ export default {
 			required: true,
 		},
 
+		// The viewer's time loop as a subscription (useScoreSession.onFrame):
+		// the active syllable follows its beat and sleeps with it - a loop
+		// of its own ran every frame, paused or not.
+		subscribeFrame: {
+			type: Function,
+			required: true,
+		},
+
 		// Ob ein Tipp springen darf (interactionPolicy 'seek')
 		canSeek: {
 			type: Boolean,
@@ -139,21 +147,18 @@ export default {
 		this.nodes = new Map()
 		this.activeNode = null
 		this.activeId = null
-		this.frame = null
+		this.offFrame = null
 		this.dragFrom = null
 	},
 
 	mounted() {
 		this.indexNodes()
-		const tick = () => {
-			this.updateActive()
-			this.frame = requestAnimationFrame(tick)
-		}
-		this.frame = requestAnimationFrame(tick)
+		this.offFrame = this.subscribeFrame(() => this.updateActive())
+		this.updateActive()
 	},
 
 	beforeUnmount() {
-		cancelAnimationFrame(this.frame)
+		this.offFrame?.()
 	},
 
 	methods: {

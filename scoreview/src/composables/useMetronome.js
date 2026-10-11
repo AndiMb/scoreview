@@ -34,6 +34,8 @@ const LOOKAHEAD_MS = 60
  * @param {() => ?AudioContext} deps.audioContext der AudioContext der
  *   Wiedergabe, solange es einen gibt - der Klick geht dann durch dieselbe
  *   Pufferkette wie die Musik (siehe lib/metronomeClick.js)
+ * @param {(reason: string) => (() => void)} [deps.holdAudio] keeps that
+ *   context awake during the count-in (lib/audioIdle.js)
  */
 export function useMetronome({
 	measuresTimeline,
@@ -44,6 +46,7 @@ export function useMetronome({
 	isPlaying,
 	play,
 	audioContext,
+	holdAudio = () => Object.assign(() => {}, { ready: Promise.resolve() }),
 }) {
 	const enabled = ref(false)
 	// 'all' = jeder Schlag (Voreinstellung), 'downbeat' = nur der
@@ -61,6 +64,11 @@ export function useMetronome({
 	let lastTimeMs = 0
 	let countInTimers = []
 	let isCountingIn = false
+	// The count-in clicks BEFORE play(): without a hold the playback context
+	// may rest, and clicks scheduled on a suspended context sound late, all
+	// at once, when it wakes (lib/audioIdle.js).
+	let releaseCountIn = null
+	let countInGeneration = 0
 
 	function ensureClick() {
 		if (!click) {
@@ -70,9 +78,12 @@ export function useMetronome({
 	}
 
 	function clearCountIn() {
+		countInGeneration++
 		countInTimers.forEach((id) => clearTimeout(id))
 		countInTimers = []
 		isCountingIn = false
+		releaseCountIn?.()
+		releaseCountIn = null
 	}
 
 	/**
@@ -147,6 +158,18 @@ export function useMetronome({
 		const delays = computeCountInDelaysMs(beatsInMeasure, beatIntervalMs)
 		isCountingIn = true
 		const clicker = ensureClick()
+		const mine = ++countInGeneration
+		releaseCountIn = holdAudio('count-in')
+		// Schedule only once the context runs - the first click is due at once.
+		releaseCountIn.ready.then(() => {
+			if (mine !== countInGeneration) {
+				return
+			}
+			scheduleCountIn(clicker, delays, beatIntervalMs)
+		})
+	}
+
+	function scheduleCountIn(clicker, delays, beatIntervalMs) {
 		countInTimers = delays.map((delay, i) => setTimeout(() => clicker.click(i === 0), delay))
 		// Die Wiedergabe startet einen Schlag NACH dem letzten Einzähler-Klick:
 		// würde sie auf dem letzten Klick starten, zählte der Einzähler bei
@@ -157,6 +180,9 @@ export function useMetronome({
 			isCountingIn = false
 			countInTimers = []
 			play()
+			// play() keeps the context awake from here on.
+			releaseCountIn?.()
+			releaseCountIn = null
 		}, delays[delays.length - 1] + beatIntervalMs))
 	}
 

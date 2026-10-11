@@ -2,8 +2,10 @@ import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
+import { nextStatusDelay } from '../lib/conversionPoll.js'
 import { useClientConversion } from './useClientConversion.js'
 
+/** Only for the one automatic retry after a stored error. */
 const POLL_INTERVAL_MS = 2000
 
 /**
@@ -85,6 +87,14 @@ export function useConversionStatus({ fileId, onReady }) {
 	let autoRetried = false
 	/** Beginn des Wartens, für beide Fristen oben. Verworfen in reset(). */
 	let pollBegonnenAm = null
+	/** "Not yet" answers so far - the delay grows with them (lib/conversionPoll.js). */
+	let attempts = 0
+	/**
+	 * A poll that was due while the page was hidden, as the generation it
+	 * belongs to - or null. Nobody watches a spinner on a hidden page; the
+	 * poll runs when the page comes back.
+	 */
+	let deferredGeneration = null
 
 	const client = useClientConversion()
 	/** Gesetzt, solange die Artefakte aus dem Browser stammen - siehe reconvert(). */
@@ -167,12 +177,13 @@ export function useConversionStatus({ fileId, onReady }) {
 			// ein dauerhaft kaputtes Setup nicht endlos weiterpollt.
 			if (!autoRetried) {
 				autoRetried = true
-				pollTimer = setTimeout(poll, POLL_INTERVAL_MS)
+				later(POLL_INTERVAL_MS)
 			}
 		} else {
 			state.value = 'converting'
-			// Kein eigener Timer: Der Zweisekundentakt kommt ohnehin hier
-			// vorbei, die verstrichene Zeit ist damit gratis.
+			// Kein eigener Timer: Der Abfragetakt kommt ohnehin hier
+			// vorbei, die verstrichene Zeit ist damit gratis. Wall-clock time
+			// on purpose: a hidden page pauses the polls, not the deadline.
 			const gewartet = Date.now() - pollBegonnenAm
 			if (gewartet > POLL_DEADLINE_MS) {
 				// Derselbe Code wie serverseitig, weil es derselbe Befund ist:
@@ -184,7 +195,32 @@ export function useConversionStatus({ fileId, onReady }) {
 				return
 			}
 			langeWartezeit.value = gewartet > LANGE_WARTEZEIT_MS
-			pollTimer = setTimeout(poll, POLL_INTERVAL_MS)
+			later(nextStatusDelay(attempts++))
+		}
+	}
+
+	/**
+	 * The next poll after `delay` - or, on a hidden page, once it is visible
+	 * again.
+	 *
+	 * @param {number} delay
+	 */
+	function later(delay) {
+		if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+			deferredGeneration = generation
+			return
+		}
+		pollTimer = setTimeout(poll, delay)
+	}
+
+	function onVisibilityChange() {
+		if (document.visibilityState === 'hidden' || deferredGeneration === null) {
+			return
+		}
+		const due = deferredGeneration === generation
+		deferredGeneration = null
+		if (due) {
+			poll()
 		}
 	}
 
@@ -261,6 +297,7 @@ export function useConversionStatus({ fileId, onReady }) {
 
 	function stop() {
 		generation++
+		deferredGeneration = null
 		if (pollTimer) {
 			clearTimeout(pollTimer)
 			pollTimer = null
@@ -279,6 +316,7 @@ export function useConversionStatus({ fileId, onReady }) {
 		autoRetried = false
 		langeWartezeit.value = false
 		pollBegonnenAm = null
+		attempts = 0
 	}
 
 	// Raeumt sich selbst ab, wenn der Besitzer geht - ScoreViewer ruft den
@@ -287,6 +325,13 @@ export function useConversionStatus({ fileId, onReady }) {
 	// aufgerufen schadet der Abbau nicht.
 	if (getCurrentScope()) {
 		onScopeDispose(stop)
+	}
+
+	if (typeof document !== 'undefined') {
+		document.addEventListener('visibilitychange', onVisibilityChange)
+		if (getCurrentScope()) {
+			onScopeDispose(() => document.removeEventListener('visibilitychange', onVisibilityChange))
+		}
 	}
 
 	// `clientProgress` ist null, solange nichts im Browser gerechnet wird -

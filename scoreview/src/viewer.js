@@ -3,8 +3,6 @@ import { DefaultType, registerFileAction } from '@nextcloud/files'
 import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { createApp, h, nextTick } from 'vue'
-import ScoreModal from './components/ScoreModal.vue'
-import ScoreViewer from './components/ScoreViewer.vue'
 import { isSetlistFile, MSCZ_MIME, needsOwnFileAction } from './lib/scoreFile.js'
 import { firstPlayableIndex } from './lib/setlistNav.js'
 
@@ -14,6 +12,22 @@ import './publicPath.js'
 // Extraktionswerkzeug sucht nach genau diesem Aufrufmuster
 // (siehe tools/l10n.mjs).
 const t = (text, vars) => translate('scoreview', text, vars)
+
+/**
+ * The viewer, loaded on first use (viewerUi.js). One promise for the page:
+ * opening a second score does not load it again.
+ *
+ * @type {?Promise<{ScoreModal: object, ScoreViewer: object}>}
+ */
+let viewerUi = null
+function loadViewerUi() {
+	viewerUi ??= import(/* webpackChunkName: "viewer-ui" */ './viewerUi.js').catch((err) => {
+		// A failed load (network) may succeed on the next click.
+		viewerUi = null
+		throw err
+	})
+	return viewerUi
+}
 
 // Nextclouds Viewer-App bündelt ihre eigene, separate Kopie von Vue 3
 // (jede NC-App bündelt ihre eigene Vue-Instanz, siehe
@@ -92,7 +106,21 @@ const ScoreViewerWrapper = {
 	},
 
 	methods: {
-		mountInner() {
+		async mountInner() {
+			// Unmounting or a file change while the chunk loads makes this
+			// mount obsolete.
+			const token = this.mountToken = (this.mountToken ?? 0) + 1
+			let ScoreViewer
+			try {
+				({ ScoreViewer } = await loadViewerUi())
+			} catch (err) {
+				// eslint-disable-next-line no-console
+				console.error('ScoreView: could not load the viewer.', err)
+				return
+			}
+			if (token !== this.mountToken || !this.$el?.parentNode) {
+				return
+			}
 			this.mountEl = document.createElement('div')
 			this.mountEl.style.width = '100%'
 			this.mountEl.style.height = '100%'
@@ -109,6 +137,7 @@ const ScoreViewerWrapper = {
 			this.innerApp.mount(this.mountEl)
 		},
 		unmountInner() {
+			this.mountToken = (this.mountToken ?? 0) + 1
 			if (this.innerApp) {
 				this.innerApp.unmount()
 				this.innerApp = null
@@ -172,9 +201,24 @@ function closeModal() {
  * @param {string} name Ueberschrift
  * @param {{setlistId?: number, setlistData?: object}} [setlist] Weg 1
  */
-function openModal(fileid, name, setlist = {}) {
+let modalToken = 0
+
+async function openModal(fileid, name, setlist = {}) {
 	// Ein zweites Modal ueber dem ersten waere ein Zustand ohne Ausweg.
 	closeModal()
+	const token = ++modalToken
+	let ScoreModal
+	try {
+		({ ScoreModal } = await loadViewerUi())
+	} catch (err) {
+		// eslint-disable-next-line no-console
+		console.error('ScoreView: could not load the viewer.', err)
+		return
+	}
+	// A second click while loading: the later one wins.
+	if (token !== modalToken) {
+		return
+	}
 
 	modalEl = document.createElement('div')
 	document.body.appendChild(modalEl)

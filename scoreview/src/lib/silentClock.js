@@ -3,7 +3,7 @@
 // (spessasynth_lib, E1: Synthese im Browser statt vorgerendertem MP3, siehe
 // docs/architecture.md). Erfüllt bewusst dieselbe kleine Schnittstelle wie
 // der Player (play/pause/seek/getCurrentTimeMs/isPlaying/
-// addEventListener('seeked')), damit useScoreSync.js und ScoreViewer.vue
+// addEventListener('seeked'|'wake')), damit useScoreSync.js und ScoreViewer.vue
 // beim Wechsel zwischen beiden nicht angefasst werden müssen - nur die
 // Quelle wird getauscht. Treibt Zeit rein über performance.now(), erzeugt
 // keinen Ton.
@@ -16,6 +16,10 @@ export function createSilentClock(durationMs) {
 	let startedAtWallClock = 0
 	let elapsedAtStart = 0
 	const seekedListeners = new Set()
+	// Same contract as lib/player.js: every movement of the time wakes the
+	// viewer's sleeping time loop.
+	const wakeListeners = new Set()
+	const announceWake = () => wakeListeners.forEach((cb) => cb())
 
 	function getCurrentTimeMs() {
 		if (!playing) {
@@ -25,14 +29,20 @@ export function createSilentClock(durationMs) {
 	}
 
 	function play() {
-		if (playing) {
+		if (isPlaying()) {
 			return
+		}
+		// Ran out at the end without anyone pausing: settle there first.
+		if (playing) {
+			elapsedAtStart = durationMs
+			playing = false
 		}
 		if (elapsedAtStart >= durationMs) {
 			elapsedAtStart = 0
 		}
 		startedAtWallClock = performance.now()
 		playing = true
+		announceWake()
 	}
 
 	function pause() {
@@ -41,27 +51,36 @@ export function createSilentClock(durationMs) {
 		}
 		elapsedAtStart = getCurrentTimeMs()
 		playing = false
+		announceWake()
 	}
 
 	function seek(ms) {
 		elapsedAtStart = Math.max(0, Math.min(durationMs, ms))
 		startedAtWallClock = performance.now()
 		seekedListeners.forEach((cb) => cb())
+		announceWake()
 	}
 
+	// Stops at the end of the piece like the real player does - otherwise the
+	// viewer's time loop, which runs while playing, would never fall asleep
+	// after a piece played to its end.
 	function isPlaying() {
-		return playing
+		return playing && getCurrentTimeMs() < durationMs
 	}
 
 	function addEventListener(type, cb) {
 		if (type === 'seeked') {
 			seekedListeners.add(cb)
+		} else if (type === 'wake') {
+			wakeListeners.add(cb)
 		}
 	}
 
 	function removeEventListener(type, cb) {
 		if (type === 'seeked') {
 			seekedListeners.delete(cb)
+		} else if (type === 'wake') {
+			wakeListeners.delete(cb)
 		}
 	}
 

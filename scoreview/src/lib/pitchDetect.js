@@ -208,6 +208,26 @@ function yinPitch(frame, sampleRate, o) {
 	return { hz: sampleRate / tauExact, aperiodicity: Math.max(0, cmnd[best]) }
 }
 
+// The window depends only on the frame length, which never changes during a
+// session - computed once instead of 1024 cosines for every 20 ms frame.
+const hannWindows = new Map()
+
+/**
+ * @param {number} n
+ * @return {Float64Array}
+ */
+function hannWindow(n) {
+	let hann = hannWindows.get(n)
+	if (!hann) {
+		hann = new Float64Array(n)
+		for (let i = 0; i < n; i++) {
+			hann[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1))
+		}
+		hannWindows.set(n, hann)
+	}
+	return hann
+}
+
 /**
  * Wie viel der Energie auf den Vielfachen von `hz` liegt, und ob der
  * Grundton selbst traegt.
@@ -222,10 +242,11 @@ function harmonicAnalysis(frame, sampleRate, hz, o) {
 	const re = new Float64Array(FFT_SIZE)
 	const im = new Float64Array(FFT_SIZE)
 	const n = Math.min(frame.length, FFT_SIZE)
+	// Hann-Fenster: Ohne es verschmieren die Teiltoene ueber das ganze
+	// Spektrum und saehen aus wie Energie zwischen den Harmonischen.
+	const hann = hannWindow(n)
 	for (let i = 0; i < n; i++) {
-		// Hann-Fenster: Ohne es verschmieren die Teiltoene ueber das ganze
-		// Spektrum und saehen aus wie Energie zwischen den Harmonischen.
-		re[i] = frame[i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1)))
+		re[i] = frame[i] * hann[i]
 	}
 	fft(re, im)
 	const binHz = sampleRate / FFT_SIZE
