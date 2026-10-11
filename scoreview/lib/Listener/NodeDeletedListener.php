@@ -63,7 +63,7 @@ class NodeDeletedListener implements IEventListener {
 		} catch (\Throwable $e) {
 			// Aufraeumen darf das Loeschen der Datei niemals scheitern lassen -
 			// der Job unten holt es ohnehin nach.
-			$this->logger->warning('ScoreView: Cache von fileId={fileId} konnte nicht aufgeraeumt werden: {message}', [
+			$this->logger->warning('ScoreView: cache of fileId={fileId} could not be cleaned up: {message}', [
 				'fileId' => $fileId,
 				'message' => $e->getMessage(),
 				'exception' => $e,

@@ -21,8 +21,8 @@ stays wrong, check three things, in this order:
    background job, not by an upload path. Without cron the job is never picked up (see
    [Installation, step 5](installation.md#5-make-sure-background-jobs-run)).
 3. **Does the server report an error?** `apply()` deliberately swallows every
-   failure and writes it to the log – where it then reads “Mimetype konnte nicht
-   registriert werden”.
+   failure and writes it to the log – where it then reads “mimetype could not be
+   registered”.
 
 Without a shell, you can check the mimetype over WebDAV:
 
@@ -54,8 +54,8 @@ foreach ($qb->executeQuery()->fetchAll() as $row) { print_r($row); }
 
 The mobile apps get in through Nextcloud's Direct Editing
 ([E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps) (German)), and
-its choice of editor depends **on the mimetype alone**. The substitute file action on the
-file extension, which steps in in the browser, has no counterpart there.
+its choice of editor depends **on the mimetype alone**. The fallback file action keyed to
+the file extension, which takes over in the browser, has no counterpart there.
 
 First check: does the server report the editor at all?
 
@@ -69,14 +69,14 @@ is not enabled. If it is there and the menu item is still
 missing, the **file's mimetype** is not `application/x-musescore` –
 see the section at the very top.
 
-Two quirks of the Android app that have already cost time (both looked up in
-nextcloud/android):
+Two quirks of the Android app that have already cost time (both verified in
+the nextcloud/android source):
 
 - **The editor list is cached.** The app reads it from its
   own database (`EditorUtils.getEditors()`) and only fetches it again when syncing the
   **root folder**, and even then only if the ETag of the
-  server capabilities has changed (`RefreshFolderOperation`). Pull down once on the
-  top level.
+  server capabilities has changed (`RefreshFolderOperation`). Pull to refresh once at
+  the top level.
 - **The app also keeps each file's mimetype locally.** If it was
   corrected on the server, the **folder containing the score** must also be reloaded
   – otherwise `FileMenuFilter.filterEdit()` keeps comparing against the old
@@ -91,8 +91,8 @@ the fallback there (“first always try to use available apps”). Anyone who ha
 MuseScore app on the phone ends up there when tapping, and that app's
 error message then looks as if it came from ScoreView.
 
-In that case you reach ScoreView via **⋮ → “Edit”**. Nothing can be changed about
-this from the server; the decision is made on the device.
+In that case you reach ScoreView via **⋮ → “Edit”**. This cannot be changed
+from the server; the decision is made on the device.
 
 ## The page in the app stays blank or only shows an error
 
@@ -153,7 +153,7 @@ application” – refer to the device, not to the page.
 A `*.setlist.md` is Markdown, and Markdown otherwise opens in the text editor in Files.
 ScoreView claims the click through the order of the file actions
 ([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste) (German)).
-If text opens anyway:
+If the Text app opens anyway:
 
 - **Does the file name really end in `.setlist.md`?** `Concert.md` is not a
   setlist, `Concert.setlist.md` is.
@@ -163,7 +163,7 @@ If text opens anyway:
   differently.** The **“Open as setlist”** entry in the file's (⋯) menu
   remains the way out.
 
-In the mobile apps this is not a bug: they offer text for Markdown.
+In the mobile apps this is not a bug: they offer the Text app for Markdown.
 There you open a score from the list, and ScoreView offers the
 setlists from the same folder ([Limits](limits.md#setlist)).
 
@@ -212,8 +212,8 @@ Cron plays **no** part here – everything runs within the requests themselves.
 **Everything sounds higher or lower than written:** a transposition is
 set – by the person themselves (stored per score) or by a
 leader for everyone. The “Practice” group then shows a dot; under
-“Transpose” the value is shown and can be reset. Anyone following a leader
-who transposes on their own no longer follows afterwards.
+“Transpose” the value is shown and can be reset. Anyone who follows a leader
+and then transposes on their own stops following.
 
 ## A recording cannot be saved
 
@@ -243,7 +243,7 @@ The message names the reason:
 | `507` “Not enough storage space.” | The quota of the owner of the target folder is full | free up space or choose a folder of your own |
 | `403` “Saving here is not possible from the mobile app.” | In the app there is no freely chosen folder, and no export at all from a piece of a setlist | in the app, open the score itself and save next to it, or use the browser |
 | `403` “You cannot save files in this folder.” | No write permission in the target folder, or the existing file cannot be modified | choose a folder of your own |
-| `400` “This is not an MP3 file.” | The body was not an MP3 – in the viewer only conceivable after an aborted render | save again |
+| `400` “This is not an MP3 file.” | The request body was not an MP3 – in the viewer only conceivable after an aborted render | save again |
 | `404` | The score is not (or no longer) reachable, or practice tracks are turned off on this server | – |
 
 **“Tracks for all parts” is missing:** only people who may create files next to the
@@ -279,7 +279,7 @@ is not loaded, it says “The sound is not loaded yet.”
 ## “Removed by the browser – save it again”
 
 The browser has deleted parts of the saved content. It is allowed to do so when space runs low,
-because, as measured, it does not grant persistent storage (`navigator.storage.persist()`)
+because, in our measurements, it does not grant persistent storage (`navigator.storage.persist()`)
 ([Limits](limits.md#offline)). Remedy: save the piece or setlist
 for offline use again in the viewer with a network, free up space on the device, and before
 a concert open the offline page once more with a network – it then checks
@@ -310,7 +310,7 @@ The selection names the reason:
   ([E15](architecture.md#e15-fähigkeiten-statt-weg) (German)). A reconversion on
   the same instance does not change that, only the local conversion path does.
 - **“This score has too much text for the lyrics view.”** More than
-  20 000 syllables.
+  20,000 syllables.
 - **If the lyrics view shows “This part has no lyrics.”**, your
   own part has no text; change or deselect “My voice” (then the
   top part with text is used).
@@ -392,17 +392,17 @@ cd /var/www/html/custom_apps/scoreview/converter && node convert.mjs --selftest
 
 Then the **browser** is currently converting, because the server cannot
 ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall) (German)). That is not
-an error, but the emergency solution – the scores are visible and playable.
+an error, but a stopgap – the scores are visible and playable.
 
 **The red row above it still matters**: it names the reason
 why the server is not converting (see the two sections before this one). As long as
 that reason persists, the following applies to every user:
 
-- Every device downloads a good 7 MB of converter once on first open (14 MB
+- Every device downloads just over 7 MB of converter once on first open (14 MB
   unpacked).
 - Nothing is cached permanently: every score is set again after every
   reload of the page, on every device.
-- The “convert immediately” switch has no effect, and the self-test still
+- The “Convert new/changed scores immediately” switch has no effect, and the self-test still
   only checks the server path.
 
 This is not fixed at the fallback but at its cause: provide Node
@@ -419,8 +419,8 @@ originate in the browser:
 
 - **“… is too large to be set in this browser”** – the score
   is above `client_max_score_bytes` (default 10 MB). This is deliberately checked
-  **before** the converter is loaded, so that a good 7 MB do not first travel
-  over the line for nothing. The limit is an `occ`-only setting:
+  **before** the converter is loaded, so that just over 7 MB are not
+  downloaded for nothing. The limit is an `occ`-only setting:
   ```sh
   occ config:app:set scoreview client_max_score_bytes --value 20971520
   ```
@@ -439,7 +439,7 @@ originate in the browser:
 The score view keeps working, only playback does not. If the text after the
 colon reads “The server could not provide the SoundFont”, the cause is on the
 server: the **SoundFont** row of the status diagnostics names it, the
-Nextcloud log has it as “SoundFont konnte nicht bereitgestellt werden”, and
+Nextcloud log has it as “SoundFont could not be provided”, and
 the browser console shows it as well. The usual causes:
 
 - **The sidecar does not serve a SoundFont** – the image does not contain one
@@ -479,8 +479,8 @@ computer.
 Whether the browser knows the latency on its own can also be checked without the app in
 30 seconds: a YouTube video with a talking face on the same
 device, with the same headphones. If it is lip-synchronous, the audio stack knows
-the latency and the automatic compensation carries it; if it is not, the browser itself does not
-know it and the slider carries the main load.
+the latency and the automatic compensation handles it; if it is not, the browser itself does not
+know it and the slider does most of the work.
 
 **View → Appearance → Playback diagnostics** shows the numbers for this: “measured”
 comes from `getOutputTimestamp()`, “reported” from `baseLatency + outputLatency`,
@@ -534,7 +534,7 @@ at once, `CURRENT_FORMAT_VERSION` is the lever (see
 **In the browser**, an entry in the browser cache can linger that a normal
 reload does not clear – Chrome does not revalidate subresources in that case.
 A single hard reload (`Ctrl`+`Shift`+`R`) is enough; the artifact links
-carry the conversion's timestamp and are replaced by themselves afterwards.
+carry the conversion's timestamp and are then replaced automatically.
 
 ## The viewer reports HTTP 500
 
@@ -555,7 +555,7 @@ MySQL/PostgreSQL.
 Concerns development, not operation. Nextcloud's `CachingRouter` stores the
 complete compiled route table in the local cache for 3600 s, with the
 **Host header as part of the key**. A new route therefore does not exist for requests
-with the same host for up to an hour – and that per host:
+with the same host for up to an hour – and separately for each host:
 the same request with `Host: localhost` instead of `Host: localhost:8080` hits a
 different cache key and works immediately. That makes the symptom very
 misleading.

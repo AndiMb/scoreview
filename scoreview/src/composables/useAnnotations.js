@@ -178,7 +178,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			// Notizen sind eine Zusatzfunktion - ein Fehler hier soll die
 			// eigentliche Notenansicht nicht mit in den Fehlerzustand reißen.
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Notizen konnten nicht geladen werden.', err)
+			console.error('ScoreView: could not load the annotations.', err)
 		}
 	}
 
@@ -202,7 +202,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			}
 		} catch (err) {
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Notiz konnte nicht gespeichert werden.', err)
+			console.error('ScoreView: could not save the annotation.', err)
 			if (mine !== generation) {
 				return
 			}
@@ -220,7 +220,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			}
 		} catch (err) {
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Notiz konnte nicht aktualisiert werden.', err)
+			console.error('ScoreView: could not update the annotation.', err)
 			if (mine !== generation) {
 				return
 			}
@@ -238,7 +238,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			}
 		} catch (err) {
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Notiz konnte nicht gelöscht werden.', err)
+			console.error('ScoreView: could not delete the annotation.', err)
 			if (mine !== generation) {
 				return
 			}

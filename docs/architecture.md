@@ -1099,6 +1099,13 @@ der Maintainer selbst und hält es vollständig. Jede weitere Sprache kommt aus
 der Community per Pull Request und darf Lücken haben: Was fehlt, erscheint
 englisch.
 
+„Deutsch (Sie)“ (`de_DE`) bekommt keine eigene Übersetzung, sondern beim Build
+eine Kopie von `de`. Nextcloud führt die Sie-Fassung als eigene Sprache und fällt
+von ihr nicht auf `de` zurück; ohne Kopie sähe, wer sie gewählt hat, Englisch.
+Eine zweite, vollständig gepflegte deutsche Fassung kostete bei jedem neuen
+String doppelte Arbeit, und Du statt Sie ist für diese Nutzer die kleinere
+Abweichung als Englisch. Eine `translationfiles/de_DE/` lehnt `l10n:check` ab.
+
 Was Nextcloud liest – `l10n/<sprache>.js` für den Browser, `l10n/<sprache>.json`
 für PHP –, ist **Build-Artefakt** (`npm run build`, gitignored wie `js/`). Der
 Grund ist der Beitragsweg: Eine Übersetzung kommt als Pull Request aus dem

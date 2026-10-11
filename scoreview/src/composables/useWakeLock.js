@@ -53,7 +53,7 @@ export function useWakeLock({ wanted }) {
 			pending = null
 			// z.B. Permissions-Policy verbietet Wake Lock im umgebenden iframe.
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Bildschirm konnte nicht wachgehalten werden.', err)
+			console.error('ScoreView: could not keep the screen awake.', err)
 		}
 	}
 

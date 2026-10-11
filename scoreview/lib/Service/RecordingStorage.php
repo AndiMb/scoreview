@@ -42,7 +42,7 @@ class RecordingStorage {
 	 */
 	public function folderFor(string $userId, int $fileId): ISimpleFolder {
 		if (!self::isSafeSegment($userId)) {
-			throw new \InvalidArgumentException('Unbrauchbare Nutzerkennung fuer den Aufnahmeordner.');
+			throw new \InvalidArgumentException('Unusable user ID for the recordings folder.');
 		}
 		$root = $this->getOrCreate(null, self::ROOT_FOLDER);
 		$byUser = $this->getOrCreate($root, $userId);
@@ -176,7 +176,7 @@ class RecordingStorage {
 	 */
 	private function userFolder(string $userId): ISimpleFolder {
 		if (!self::isSafeSegment($userId)) {
-			throw new NotFoundException('Unbrauchbare Nutzerkennung fuer den Aufnahmeordner.');
+			throw new NotFoundException('Unusable user ID for the recordings folder.');
 		}
 		return $this->appData->getFolder(self::ROOT_FOLDER)->getFolder($userId);
 	}

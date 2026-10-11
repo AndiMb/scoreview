@@ -148,7 +148,7 @@ class SoundFontServiceTest extends TestCase {
 		// Der Download schreibt hier nichts (leerer Pfad), der Dienst muss das
 		// als leere Datei erkennen und melden statt sie als gueltig zu fuehren.
 		$this->expectException(SidecarException::class);
-		$this->expectExceptionMessageMatches('/leere Datei/');
+		$this->expectExceptionMessageMatches('/empty file/');
 		$this->service()->getOrFetch();
 	}
 

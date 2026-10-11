@@ -210,7 +210,7 @@ class ConversionService {
 			// zwei Namen waere zweimal derselbe halbe Megabyte im Browsercache.
 			// Erzeugt werden die Namen ohnehin serverseitig (buildFileUrls).
 			if ($number === '' || !ctype_digit($number) || (int)$number < 1 || $number !== (string)(int)$number) {
-				throw new NotFoundException("Unbekanntes Artefakt: {$name}");
+				throw new NotFoundException("Unknown artifact: {$name}");
 			}
 			return [
 				$this->getFolder($fileId, $etag)->getFile($this->pageFileName((int)$number)),
@@ -218,7 +218,7 @@ class ConversionService {
 			];
 		}
 		if (!isset(self::ARTIFACTS[$name])) {
-			throw new NotFoundException("Unbekanntes Artefakt: {$name}");
+			throw new NotFoundException("Unknown artifact: {$name}");
 		}
 		[$fileName, $mimeType] = self::ARTIFACTS[$name];
 		return [$this->getFolder($fileId, $etag)->getFile($fileName), $mimeType];

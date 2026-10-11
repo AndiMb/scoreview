@@ -119,7 +119,7 @@ class SoundFontService {
 			if ($cached !== null) {
 				return $cached;
 			}
-			throw new SidecarException('Der Sidecar liefert kein SoundFont aus (SCOREVIEW_SOUNDFONT_PATH im Sidecar setzen oder eine SoundFont-URL in den Einstellungen hinterlegen).');
+			throw new SidecarException('The sidecar does not serve a SoundFont (set SCOREVIEW_SOUNDFONT_PATH in the sidecar or enter a SoundFont URL in the settings).');
 		}
 
 		$remoteVersion = (string)($info['version'] ?? '');
@@ -197,7 +197,7 @@ class SoundFontService {
 			if ($cached !== null) {
 				return $cached;
 			}
-			throw new ConverterException('SoundFont-Download von ' . $url . ' fehlgeschlagen: ' . $e->getMessage(), 0, $e);
+			throw new ConverterException('SoundFont download from ' . $url . ' failed: ' . $e->getMessage(), 0, $e);
 		}
 	}
 
@@ -213,7 +213,7 @@ class SoundFontService {
 			$this->sidecarClient->downloadSoundFontTo($tempPath);
 		}
 		if (!is_file($tempPath) || filesize($tempPath) === 0) {
-			throw new SidecarException('SoundFont-Download lieferte eine leere Datei.');
+			throw new SidecarException('SoundFont download returned an empty file.');
 		}
 
 		$folder = $this->getOrCreateFolder();

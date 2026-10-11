@@ -41,7 +41,7 @@ export function parseMidiNotes(input) {
 	const reader = createReader(bytes)
 
 	if (reader.ascii(4) !== 'MThd') {
-		throw new Error('Keine MIDI-Datei (MThd fehlt)')
+		throw new Error('Not a MIDI file (MThd missing)')
 	}
 	const headerLength = reader.uint32()
 	reader.uint16() // Format: 0 und 1 werden gleich behandelt - alle Spuren laufen parallel.

@@ -121,7 +121,7 @@ class ConversionController extends Controller {
 		if ($this->conversionService->isStale($conversion)) {
 			$this->conversionService->markError(
 				$conversion,
-				'Der Konvertierungslauf wurde nie abgeschlossen.',
+				'The conversion run never finished.',
 				ScoreConversion::ERROR_STALE,
 			);
 		}

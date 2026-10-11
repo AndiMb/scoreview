@@ -39,7 +39,7 @@ export function useScoreFacts({ midiData, meta, measuresTimeline }) {
 			return parseMidiNotes(bytes)
 		} catch (err) {
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: MIDI fuer die Partiturfakten nicht lesbar.', err)
+			console.error('ScoreView: MIDI for the score facts is not readable.', err)
 			return null
 		}
 	})
@@ -77,7 +77,7 @@ export function useScoreFacts({ midiData, meta, measuresTimeline }) {
 			// Ohne Buchstaben geht die Navigation allein ueber Taktnummern
 			// - kein Banner fuer eine Zusatzfunktion.
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: MIDI fuer die Studierbuchstaben nicht ladbar.', err)
+			console.error('ScoreView: could not load the MIDI for the rehearsal marks.', err)
 		}
 	}
 

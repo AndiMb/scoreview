@@ -293,7 +293,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 				// SoundFont evtl. nicht erreichbar (falsche URL, CORS, Netzwerk) -
 				// Notenansicht bleibt trotzdem nutzbar, nur ohne Ton.
 				// eslint-disable-next-line no-console
-				console.error('ScoreView: echte Wiedergabe konnte nicht initialisiert werden, falle auf stummen Modus zurück.', err)
+				console.error('ScoreView: real playback could not be initialised, falling back to silent mode.', err)
 				playbackError.value = err.message
 			}
 			// buildTimeline({events: []}) wäre eine leere Zeitachse: der

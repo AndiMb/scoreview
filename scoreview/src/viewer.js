@@ -289,7 +289,7 @@ async function setlistAusfuehren(node) {
 		data = (await axios.get(generateUrl('/apps/scoreview/api/setlists/{id}', { id: node.fileid }))).data
 	} catch (err) {
 		// eslint-disable-next-line no-console
-		console.error('ScoreView: Setliste konnte nicht gelesen werden.', err)
+		console.error('ScoreView: could not read the setlist.', err)
 		return false
 	}
 	const first = firstPlayableIndex(data.entries)

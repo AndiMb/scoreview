@@ -81,7 +81,7 @@ export function encodeWav(chunks, sampleRate = WAV_SAMPLE_RATE) {
 export function decodeWav(buffer) {
 	const view = new DataView(buffer)
 	if (buffer.byteLength < HEADER_BYTES || readAscii(view, 0) !== 'RIFF' || readAscii(view, 8) !== 'WAVE') {
-		throw new Error('Keine WAV-Datei')
+		throw new Error('Not a WAV file')
 	}
 	let offset = 12
 	let format = null
@@ -98,7 +98,7 @@ export function decodeWav(buffer) {
 			}
 		} else if (id === 'data') {
 			if (!format || format.audioFormat !== 1 || format.bits !== 16 || format.channels < 1) {
-				throw new Error('Nur PCM mit 16 bit wird gelesen')
+				throw new Error('Only 16-bit PCM is supported')
 			}
 			const available = Math.min(size, buffer.byteLength - body)
 			const frames = Math.floor(available / (2 * format.channels))
@@ -114,7 +114,7 @@ export function decodeWav(buffer) {
 		}
 		offset = body + size + (size % 2)
 	}
-	throw new Error('Kein data-Block')
+	throw new Error('No data chunk')
 }
 
 function writeAscii(view, offset, text) {

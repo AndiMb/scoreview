@@ -184,7 +184,7 @@ def test_selftest_wartet_nur_begrenzt_auf_einen_platz(client, monkeypatch, tmp_p
     assert antwort.status_code == 200
     body = antwort.get_json()
     assert body["ok"] is False
-    assert "Konvertierungsplaetze" in body["error"]
+    assert "conversion slots" in body["error"]
 
 
 def test_selftest_laeuft_auf_einem_konvertierungsplatz(client, monkeypatch, tmp_path):

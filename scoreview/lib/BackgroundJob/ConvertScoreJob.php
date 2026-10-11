@@ -109,7 +109,7 @@ class ConvertScoreJob extends QueuedJob {
 
 		$node = $this->resolveNode($userId, $fileId);
 		if ($node === null) {
-			$this->logger->warning('ScoreView: Datei fileId={fileId} für userId={userId} nicht auffindbar, Job übersprungen.', [
+			$this->logger->warning('ScoreView: file fileId={fileId} for userId={userId} not found, job skipped.', [
 				'fileId' => $fileId,
 				'userId' => $userId,
 			]);
@@ -157,7 +157,7 @@ class ConvertScoreJob extends QueuedJob {
 		if ($maxBytes > 0 && $node->getSize() > $maxBytes) {
 			$this->conversionService->markError(
 				$conversion,
-				sprintf('Datei ist mit %d Byte groesser als das Limit von %d Byte.', $node->getSize(), $maxBytes),
+				sprintf('File is %d bytes, larger than the limit of %d bytes.', $node->getSize(), $maxBytes),
 				ScoreConversion::ERROR_TOO_LARGE,
 			);
 			return;
@@ -175,14 +175,14 @@ class ConvertScoreJob extends QueuedJob {
 			// nicht als PHP-String (siehe SidecarClient::submitConversion()).
 			$stream = $node->fopen('rb');
 			if ($stream === false) {
-				throw new SidecarException('Partitur konnte nicht zum Lesen geoeffnet werden.');
+				throw new SidecarException('Score could not be opened for reading.');
 			}
 			$jobId = $this->sidecarClient->submitConversion($stream, $node->getName());
 		} catch (SidecarBusyException $e) {
 			$this->retryWhenBusy($conversion, $userId, $fileId, $busyRetry, $e);
 			return;
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: Einreichen beim Sidecar fehlgeschlagen für fileId={fileId}: {message}', [
+			$this->logger->error('ScoreView: submitting to the sidecar failed for fileId={fileId}: {message}', [
 				'fileId' => $fileId,
 				'message' => $e->getMessage(),
 				'exception' => $e,
@@ -217,7 +217,7 @@ class ConvertScoreJob extends QueuedJob {
 	 */
 	private function retryWhenBusy(ScoreConversion $conversion, string $userId, int $fileId, int $busyRetry, SidecarBusyException $e): void {
 		if ($busyRetry >= self::MAX_BUSY_RETRIES) {
-			$this->logger->warning('ScoreView: Sidecar nach {retries} Neuversuchen weiter ausgelastet, fileId={fileId} aufgegeben.', [
+			$this->logger->warning('ScoreView: sidecar still busy after {retries} retries, giving up on fileId={fileId}.', [
 				'retries' => $busyRetry,
 				'fileId' => $fileId,
 			]);
@@ -231,7 +231,7 @@ class ConvertScoreJob extends QueuedJob {
 			'fileId' => $fileId,
 			'busyRetry' => $busyRetry + 1,
 		]);
-		$this->logger->info('ScoreView: Sidecar ausgelastet, fileId={fileId} in {delay} s erneut (Versuch {retry}).', [
+		$this->logger->info('ScoreView: sidecar busy, retrying fileId={fileId} in {delay} s (attempt {retry}).', [
 			'fileId' => $fileId,
 			'delay' => $delay,
 			'retry' => $busyRetry + 1,
@@ -264,7 +264,7 @@ class ConvertScoreJob extends QueuedJob {
 				ConversionBackend::LOCAL,
 			);
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: lokale Konvertierung fehlgeschlagen für fileId={fileId}: {message}', [
+			$this->logger->error('ScoreView: local conversion failed for fileId={fileId}: {message}', [
 				'fileId' => $conversion->getFileId(),
 				'message' => $e->getMessage(),
 				'exception' => $e,
@@ -288,16 +288,16 @@ class ConvertScoreJob extends QueuedJob {
 	private function copyToTempFile(Node $node): string {
 		$target = $this->tempManager->getTemporaryFile('.mscz');
 		if ($target === false) {
-			throw new \RuntimeException('Kein temporaerer Dateiname fuer die Partitur verfuegbar.');
+			throw new \RuntimeException('No temporary file name available for the score.');
 		}
 		$source = $node->fopen('rb');
 		if ($source === false) {
-			throw new \RuntimeException('Partitur konnte nicht zum Lesen geoeffnet werden.');
+			throw new \RuntimeException('Score could not be opened for reading.');
 		}
 		$sink = fopen($target, 'wb');
 		if ($sink === false) {
 			fclose($source);
-			throw new \RuntimeException('Temporaere Datei konnte nicht geschrieben werden.');
+			throw new \RuntimeException('Temporary file could not be written.');
 		}
 		try {
 			stream_copy_to_stream($source, $sink);

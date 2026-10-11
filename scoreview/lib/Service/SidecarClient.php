@@ -54,7 +54,7 @@ class SidecarClient {
 	 */
 	public function submitConversion($mscz, string $filename): string {
 		if (!$this->isConfigured()) {
-			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).', errorCode: ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+			throw new SidecarException('Sidecar is not configured (Settings → ScoreView).', errorCode: ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
 		$client = $this->clientService->newClient();
 		try {
@@ -73,7 +73,7 @@ class SidecarClient {
 			// abgelehnt (falsches Secret, Upload-Groessenlimit, …) - das ist ein
 			// anderer Befund als "nicht erreichbar" und verdient einen eigenen
 			// Code (siehe ScoreConversion::ERROR_*).
-			throw new SidecarException('Sidecar-Anfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
+			throw new SidecarException('Sidecar request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
 		} catch (ServerException $e) {
 			// 503 heisst beim Sidecar genau eines: Warteschlange voll. Er ist
 			// also erreichbar und gesund, nur gerade ausgelastet - ein
@@ -82,18 +82,18 @@ class SidecarClient {
 			// "nicht erreichbar".
 			if ($e->getResponse()->getStatusCode() === 503) {
 				throw new SidecarBusyException(
-					'Sidecar ausgelastet: ' . $e->getMessage(),
+					'Sidecar busy: ' . $e->getMessage(),
 					self::retryAfterSeconds($e->getResponse()->getHeaderLine('Retry-After')),
 					$e,
 				);
 			}
-			throw new SidecarException('Sidecar-Anfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+			throw new SidecarException('Sidecar request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar-Anfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+			throw new SidecarException('Sidecar request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
 		$body = json_decode($response->getBody(), true);
 		if (!is_array($body) || !isset($body['jobId'])) {
-			throw new SidecarException('Sidecar-Antwort auf /convert ohne jobId.');
+			throw new SidecarException('Sidecar response to /convert without jobId.');
 		}
 		return (string)$body['jobId'];
 	}
@@ -123,13 +123,13 @@ class SidecarClient {
 				'headers' => $this->headers(),
 			]);
 		} catch (ClientException $e) {
-			throw new SidecarException('Sidecar-Statusabfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
+			throw new SidecarException('Sidecar status request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
 		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar-Statusabfrage fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+			throw new SidecarException('Sidecar status request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
 		$body = json_decode($response->getBody(), true);
 		if (!is_array($body) || !isset($body['status'])) {
-			throw new SidecarException('Sidecar-Antwort auf /convert/{jobId} ohne status.');
+			throw new SidecarException('Sidecar response to /convert/{jobId} without status.');
 		}
 		return $body;
 	}
@@ -146,7 +146,7 @@ class SidecarClient {
 	 */
 	public function checkHealth(): array {
 		if ($this->getBaseUrl() === '') {
-			return ['reachable' => false, 'error' => 'Keine Sidecar-URL konfiguriert.'];
+			return ['reachable' => false, 'error' => 'No sidecar URL configured.'];
 		}
 		try {
 			$response = $this->clientService->newClient()->get($this->getBaseUrl() . '/health', ['timeout' => 5]);
@@ -167,7 +167,7 @@ class SidecarClient {
 	 */
 	public function runSelfTest(): array {
 		if (!$this->isConfigured()) {
-			return ['ok' => false, 'error' => 'Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).'];
+			return ['ok' => false, 'error' => 'Sidecar is not configured (Settings → ScoreView).'];
 		}
 		try {
 			// Grosszuegiger Timeout: der Selbsttest laesst eine echte
@@ -182,7 +182,7 @@ class SidecarClient {
 		}
 		$body = json_decode($response->getBody(), true);
 		if (!is_array($body) || !isset($body['ok'])) {
-			return ['ok' => false, 'error' => 'Sidecar-Antwort auf /selftest ohne ok-Feld (zu alter Sidecar?).'];
+			return ['ok' => false, 'error' => 'Sidecar response to /selftest without an ok field (sidecar too old?).'];
 		}
 		return $body;
 	}
@@ -200,7 +200,7 @@ class SidecarClient {
 	 */
 	public function fetchSoundFontInfo(): array {
 		if (!$this->isConfigured()) {
-			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).');
+			throw new SidecarException('Sidecar is not configured (Settings → ScoreView).');
 		}
 		$client = $this->clientService->newClient();
 		try {
@@ -208,11 +208,11 @@ class SidecarClient {
 				'headers' => $this->headers(),
 			]);
 		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar-Abfrage des SoundFonts fehlgeschlagen: ' . $e->getMessage(), 0, $e);
+			throw new SidecarException('Sidecar SoundFont request failed: ' . $e->getMessage(), 0, $e);
 		}
 		$body = json_decode($response->getBody(), true);
 		if (!is_array($body) || !isset($body['available'])) {
-			throw new SidecarException('Sidecar-Antwort auf /soundfont/info ohne available-Feld.');
+			throw new SidecarException('Sidecar response to /soundfont/info without an available field.');
 		}
 		return $body;
 	}
@@ -226,7 +226,7 @@ class SidecarClient {
 	 */
 	public function downloadSoundFontTo(string $targetPath): void {
 		if (!$this->isConfigured()) {
-			throw new SidecarException('Sidecar ist nicht konfiguriert (Einstellungen → ScoreView).');
+			throw new SidecarException('Sidecar is not configured (Settings → ScoreView).');
 		}
 		$client = $this->clientService->newClient();
 		try {
@@ -239,7 +239,7 @@ class SidecarClient {
 				'timeout' => 120,
 			]);
 		} catch (\Exception $e) {
-			throw new SidecarException('SoundFont-Download vom Sidecar fehlgeschlagen: ' . $e->getMessage(), 0, $e);
+			throw new SidecarException('SoundFont download from the sidecar failed: ' . $e->getMessage(), 0, $e);
 		}
 	}
 
@@ -275,7 +275,7 @@ class SidecarClient {
 	public function fetchFile(string $relativeUrl): string {
 		if (preg_match(self::ARTEFAKTPFAD, $relativeUrl) !== 1 || str_contains($relativeUrl, '..')) {
 			throw new SidecarException(
-				'Sidecar nannte einen unbrauchbaren Artefaktpfad: ' . $relativeUrl,
+				'Sidecar named an unusable artifact path: ' . $relativeUrl,
 				0, null, ScoreConversion::ERROR_SIDECAR_REJECTED);
 		}
 		$client = $this->clientService->newClient();
@@ -284,9 +284,9 @@ class SidecarClient {
 				'headers' => $this->headers(),
 			]);
 		} catch (ClientException $e) {
-			throw new SidecarException('Sidecar-Dateiabruf fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
+			throw new SidecarException('Sidecar file download failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
 		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar-Dateiabruf fehlgeschlagen: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+			throw new SidecarException('Sidecar file download failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
 		return $response->getBody();
 	}

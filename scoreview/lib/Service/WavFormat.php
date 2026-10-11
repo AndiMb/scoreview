@@ -62,7 +62,7 @@ class WavFormat {
 	public static function inspectHead(string $head, int $totalLength): array {
 		$headLength = strlen($head);
 		if ($totalLength < 44 || $headLength < 44 || substr($head, 0, 4) !== 'RIFF' || substr($head, 8, 4) !== 'WAVE') {
-			throw new \InvalidArgumentException('Kein RIFF/WAVE-Kopf');
+			throw new \InvalidArgumentException('No RIFF/WAVE header');
 		}
 
 		$offset = 12;
@@ -73,7 +73,7 @@ class WavFormat {
 			$body = $offset + 8;
 			if ($id === 'fmt ') {
 				if ($size < 16 || $body + 16 > $headLength) {
-					throw new \InvalidArgumentException('fmt-Block zu kurz');
+					throw new \InvalidArgumentException('fmt chunk too short');
 				}
 				$format = [
 					'audioFormat' => self::u16($head, $body),
@@ -84,22 +84,22 @@ class WavFormat {
 				];
 			} elseif ($id === 'data') {
 				if ($format === null) {
-					throw new \InvalidArgumentException('data vor fmt');
+					throw new \InvalidArgumentException('data before fmt');
 				}
 				self::assertFormat($format);
 				if ($size === 0) {
 					// Eine Aufnahme ohne ein einziges Sample ist kein Ton, belegte
 					// aber einen der Plaetze je Partitur.
-					throw new \InvalidArgumentException('data-Block leer');
+					throw new \InvalidArgumentException('data chunk empty');
 				}
 				if ($body + $size > $totalLength) {
-					throw new \InvalidArgumentException('data-Block laenger als die Datei');
+					throw new \InvalidArgumentException('data chunk longer than the file');
 				}
 				if ($body + $size < $totalLength) {
-					throw new \InvalidArgumentException('Bytes nach dem data-Block');
+					throw new \InvalidArgumentException('Bytes after the data chunk');
 				}
 				if ($size % 2 !== 0) {
-					throw new \InvalidArgumentException('Ungerade Zahl von Datenbytes bei 16 bit');
+					throw new \InvalidArgumentException('Odd number of data bytes at 16 bit');
 				}
 				return [
 					'dataBytes' => $size,
@@ -112,7 +112,7 @@ class WavFormat {
 			// RIFF-Bloecke sind auf gerade Laengen aufgefuellt.
 			$offset = $body + $size + ($size % 2);
 		}
-		throw new \InvalidArgumentException('Kein data-Block im Kopf');
+		throw new \InvalidArgumentException('No data chunk in the header');
 	}
 
 	/**
@@ -120,11 +120,11 @@ class WavFormat {
 	 */
 	private static function assertFormat(array $format): void {
 		if ($format['audioFormat'] !== 1) {
-			throw new \InvalidArgumentException('Kein PCM');
+			throw new \InvalidArgumentException('Not PCM');
 		}
 		if ($format['channels'] !== self::CHANNELS || $format['sampleRate'] !== self::SAMPLE_RATE
 			|| $format['bits'] !== self::BITS || $format['blockAlign'] !== 2) {
-			throw new \InvalidArgumentException('Nicht 16 kHz mono 16 bit');
+			throw new \InvalidArgumentException('Not 16 kHz mono 16 bit');
 		}
 	}
 

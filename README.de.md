@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:52a5cd301261 -->
+<!-- translation-of: README.md sha256:2b4021d1d47c -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -103,13 +103,15 @@ Datei selbst. Die Offline-Seite gibt es nur im Browser, nicht in den Apps.
 Liedtext-Ansicht und Tonnamen brauchen den lokalen Konvertierungsweg (siehe
 unten). Die Verwaltung kann „Folgt mir“, Aufnahme, Intonation, Übe-Tracks und
 die Offline-Seite einzeln abschalten; was die Funktionen kosten und wo sie
-enden, steht in [docs/limits.de.md](docs/limits.de.md#probe--und-konzertfunktionen)
-und [docs/limits.de.md](docs/limits.de.md#üben-und-lesen-auf-dem-handy).
+enden, steht in docs/limits.de.md unter
+[Probe- und Konzertfunktionen](docs/limits.de.md#probe--und-konzertfunktionen)
+und [Üben und Lesen auf dem Handy](docs/limits.de.md#üben-und-lesen-auf-dem-handy).
 
 Tastatur im Viewer: `Leertaste` Start/Stopp · `←` `→` Takt zurück/vor · `L` Loop
 · `+` `−` Zoom · `0` Seitenbreite · `Bild↓` `Bild↑` blättern.
 
-Oberfläche auf Deutsch und Englisch.
+Oberfläche auf Deutsch und Englisch; weitere Sprachen sind willkommen (siehe
+[Mitarbeiten](#mitarbeiten)).
 
 ## Wie es funktioniert
 
@@ -208,7 +210,8 @@ Was sich von Fassung zu Fassung geändert hat, steht im
 ## Mitarbeiten
 
 Siehe [CONTRIBUTING.md](CONTRIBUTING.md). Fehler und Wünsche gehören in die
-[Issues](https://github.com/AndiMb/scoreview/issues).
+[Issues](https://github.com/AndiMb/scoreview/issues). Wie man eine Übersetzung
+beiträgt, steht englisch in [docs/translating.md](docs/translating.md).
 
 ## Lizenz und Herkunft
 

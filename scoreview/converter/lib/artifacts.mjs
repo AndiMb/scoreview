@@ -122,22 +122,22 @@ export function svgSegments(svgText) {
 export function checkPromises({ pages, timing, midi, meta, svgs = [] }) {
 	const problems = []
 	if (pages < 1) {
-		problems.push('keine SVG-Seite geliefert')
+		problems.push('no SVG page returned')
 	}
 	if (!midi || midi.length === 0) {
-		problems.push('kein MIDI geliefert')
+		problems.push('no MIDI returned')
 	}
 	if (!meta || Object.keys(meta).length === 0) {
-		problems.push('keine Metadaten geliefert')
+		problems.push('no metadata returned')
 	}
 
 	const events = timing?.events ?? []
 	const elements = Object.keys(timing?.elements ?? {})
 	if (events.length === 0) {
-		problems.push('spos enthaelt keine Events')
+		problems.push('spos contains no events')
 	}
 	if (elements.length === 0) {
-		problems.push('spos enthaelt keine Elementkoordinaten')
+		problems.push('spos contains no element coordinates')
 	}
 
 	// M7: Takt 1 der mitgelieferten Testpartitur wird wiederholt, sein elid
@@ -149,12 +149,12 @@ export function checkPromises({ pages, timing, midi, meta, svgs = [] }) {
 	}
 	const repeated = [...counts.values()].filter((c) => c > 1).length
 	if (repeated === 0) {
-		problems.push('kein elid kommt mehrfach vor - Wiederholung wird nicht mehr ausgerollt (M7 verletzt)')
+		problems.push('no elid occurs more than once - repeats are no longer unrolled (M7 violated)')
 	}
 
 	const times = events.map((e) => e.timeMs)
 	if (times.some((t, i) => i > 0 && t < times[i - 1])) {
-		problems.push('Event-Zeiten sind nicht monoton steigend')
+		problems.push('event times are not monotonically increasing')
 	}
 
 	// M10: Das SVG traegt die Segmentkennung, die spos vergibt - sonst kann
@@ -198,13 +198,13 @@ export function checkPromises({ pages, timing, midi, meta, svgs = [] }) {
 
 	if (svgs.length > 0) {
 		if (markiert === 0) {
-			problems.push('das SVG traegt keine Segmentkennungen - der klingende Notenkopf ist nicht auffindbar (M10 verletzt)')
+			problems.push('the SVG carries no segment IDs - the sounding notehead cannot be located (M10 violated)')
 		}
 		if (unbekannt > 0) {
-			problems.push(`${unbekannt} Segmentkennungen im SVG haben kein Element in spos (M10 verletzt)`)
+			problems.push(`${unbekannt} segment IDs in the SVG have no element in spos (M10 violated)`)
 		}
 		if (verrutscht > 0) {
-			problems.push(`${verrutscht} Notenkoepfe liegen nicht auf ihrer Segmentposition - Notenbild und Zeitachse zaehlen auseinander (M10 verletzt)`)
+			problems.push(`${verrutscht} noteheads are not at their segment position - notation and timeline are numbered differently (M10 violated)`)
 		}
 	}
 
@@ -247,24 +247,24 @@ export function checkScoreFacts(meta) {
 	const marks = Array.isArray(meta?.rehearsalMarks) ? meta.rehearsalMarks : null
 
 	if (keySigs === null) {
-		problems.push('meta.json hat keine keySigs - Dur/Moll fehlt dem Anfangston')
+		problems.push('meta.json has no keySigs - the starting note lacks major/minor')
 	} else {
 		const erste = keySigs.find((k) => k.measure === 1)
 		if (erste?.concertKey !== -3 || erste?.mode !== 'minor') {
-			problems.push(`Tonart in Takt 1 ist nicht c-Moll: ${JSON.stringify(erste ?? null)}`)
+			problems.push(`Key in measure 1 is not C minor: ${JSON.stringify(erste ?? null)}`)
 		}
 		const wechsel = keySigs.find((k) => k.measure === 4)
 		if (wechsel?.concertKey !== 2 || wechsel?.mode !== 'major') {
-			problems.push(`Tonartwechsel in Takt 4 ist nicht D-Dur: ${JSON.stringify(wechsel ?? null)}`)
+			problems.push(`Key change in measure 4 is not D major: ${JSON.stringify(wechsel ?? null)}`)
 		}
 	}
 
 	if (marks === null) {
-		problems.push('meta.json hat keine rehearsalMarks - Studierbuchstaben kommen nur noch aus dem MIDI')
+		problems.push('meta.json has no rehearsalMarks - rehearsal marks now come from the MIDI only')
 	} else {
 		const gefunden = marks.map((m) => `${m.text}@${m.measure}`).join(',')
 		if (gefunden !== 'A@1,B@3,C@4') {
-			problems.push(`Studierbuchstaben sind nicht A/B/C in den Takten 1/3/4: ${gefunden}`)
+			problems.push(`Rehearsal marks are not A/B/C in measures 1/3/4: ${gefunden}`)
 		}
 	}
 
@@ -295,27 +295,27 @@ export function checkLyrics({ meta, timing, svgs }) {
 	const elemente = new Set(Object.keys(timing?.elements ?? {}).map(Number))
 
 	if (silben === null) {
-		problems.push('meta.json hat keine lyricSyllables - die Liedtext-Ansicht fehlt')
+		problems.push('meta.json has no lyricSyllables - the lyrics view is missing')
 	} else {
 		if (silben.length !== 56) {
-			problems.push(`erwartet 56 Silben, gefunden ${silben.length}`)
+			problems.push(`expected 56 syllables, found ${silben.length}`)
 		}
 		const strophen = [...new Set(silben.map((s) => s.verse))].sort().join(',')
 		if (strophen !== '0,1,2') {
-			problems.push(`Strophen sind nicht 0,1,2: ${strophen}`)
+			problems.push(`Verses are not 0,1,2: ${strophen}`)
 		}
 		const erste = silben.filter((s) => s.staff === 0 && s.verse === 0).slice(0, 4).map((s) => `${s.text}/${s.syllabic}`).join(' ')
 		if (erste !== 'Hal/begin le/middle lu/middle ja/end') {
-			problems.push(`Sopran, Strophe 1 beginnt nicht mit Hal-le-lu-ja: ${erste}`)
+			problems.push(`Soprano, verse 1 does not start with Hal-le-lu-ja: ${erste}`)
 		}
 		const fremd = silben.filter((s) => !elemente.has(s.elid)).length
 		if (fremd > 0) {
-			problems.push(`${fremd} Silben zeigen auf eine elid, die timing.json nicht kennt`)
+			problems.push(`${fremd} syllables point to an elid that timing.json does not know`)
 		}
 	}
 
 	if (spellings === null) {
-		problems.push('meta.json hat keine noteSpellings - Tonnamen und „Note antippen" fehlen')
+		problems.push('meta.json has no noteSpellings - note names and "tap a note" are missing')
 	} else {
 		// Notenkoepfe je (elid, Zeile, Stimme) im SVG gegen die Liste
 		const imSvg = new Map()
@@ -328,7 +328,7 @@ export function checkLyrics({ meta, timing, svgs }) {
 		const inListe = new Map(spellings.map((s) => [`${s.elid}:${s.staff}:${s.voice}`, s.notes.length]))
 		const abweichend = [...new Set([...imSvg.keys(), ...inListe.keys()])].filter((k) => imSvg.get(k) !== inListe.get(k))
 		if (abweichend.length > 0) {
-			problems.push(`Notenköpfe weichen vom SVG ab bei ${abweichend.slice(0, 5).join(', ')}`)
+			problems.push(`Noteheads differ from the SVG at ${abweichend.slice(0, 5).join(', ')}`)
 		}
 	}
 

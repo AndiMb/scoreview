@@ -89,7 +89,7 @@ describe('checkPromises', () => {
 	it('erkennt nicht monoton steigende Zeiten', () => {
 		const result = healthy()
 		result.timing.events = [{ elid: 0, timeMs: 1000 }, { elid: 0, timeMs: 0 }]
-		expect(checkPromises(result).problems).toContain('Event-Zeiten sind nicht monoton steigend')
+		expect(checkPromises(result).problems).toContain('event times are not monotonically increasing')
 	})
 
 	it('meldet jede verletzte Zusage einzeln, damit ein Versionswechsel diagnostizierbar bleibt', () => {
@@ -125,7 +125,7 @@ describe('checkPromises', () => {
 		const result = healthy()
 		result.svgs = [seite('<path class="Note seg-7 st-0 vc-0" d="M0,0"/>')]
 		expect(checkPromises(result).problems).toEqual([
-			expect.stringContaining('kein Element in spos'),
+			expect.stringContaining('no element in spos'),
 		])
 	})
 
@@ -138,7 +138,7 @@ describe('checkPromises', () => {
 		result.timing.elements = { 0: { page: 0, x: 1000, y: 0, w: 107, h: 900 } }
 		result.svgs = [seite('<path class="Note seg-0 st-0 vc-0" d="M1300,500 C1 1"/>')]
 		expect(checkPromises(result).problems).toEqual([
-			expect.stringContaining('nicht auf ihrer Segmentposition'),
+			expect.stringContaining('not at their segment position'),
 		])
 	})
 
@@ -172,7 +172,7 @@ describe('checkPromises', () => {
 		result.timing.elements = { 0: { page: 0, x: 1000, y: 0, w: 107, h: 900 } }
 		result.svgs = [seite('<g class="Note seg-0 st-0 vc-0">\n<g transform="matrix(1 0 0 1 1300 500)">\n<use xlink:href="#g4"/>\n</g>\n</g>')]
 		expect(checkPromises(result).problems).toEqual([
-			expect.stringContaining('nicht auf ihrer Segmentposition'),
+			expect.stringContaining('not at their segment position'),
 		])
 	})
 })
@@ -213,7 +213,7 @@ describe('checkScoreFacts', () => {
 	it('erkennt ein verlorenes Moll (mode null wie bei "unknown")', () => {
 		const meta = engineMeta()
 		meta.keySigs[0].mode = null
-		expect(checkScoreFacts(meta).problems).toEqual([expect.stringContaining('c-Moll')])
+		expect(checkScoreFacts(meta).problems).toEqual([expect.stringContaining('C minor')])
 	})
 
 	it('erkennt Buchstaben mit Markup oder im falschen Takt', () => {

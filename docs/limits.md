@@ -4,7 +4,9 @@
 
 What ScoreView does, where its measured limits lie and what it deliberately
 does not cover. All numbers were measured on the running installation, not
-estimated; where something is an extrapolation, it says so.
+estimated; where something is an extrapolation, it says so. References such
+as E1 or M2 point to the design decisions and format notes in
+[docs/architecture.md](architecture.md), which is in German.
 
 ## Measured values
 
@@ -81,10 +83,10 @@ on the same machine in a headless Chromium:
 | Choral piece | 28 | 185 KB | **1.0 s** | 0.74 s |
 | Choral piece | 4 | 566 KB | **0.4 s** | 0.34 s |
 
-On a single computer the browser is therefore no slower than the Node path. On
+On the same machine the browser is therefore no slower than the Node path. On
 top of that comes a one-time download of the engine: 14 MB raw, about
 **7.3 MB over the wire** – the Wasm is transferred compressed (9.0 → 2.6 MB),
-the resource package is not (4.7 MB). The glue goes over the wire compressed
+the resource package is not (4.7 MB). The glue code goes over the wire compressed,
 at 48 KB.
 
 The artifacts are the same: `timing.json`, `measures.json` and `meta.json` are
@@ -109,7 +111,7 @@ browser, a 28-page choral piece was measured as well.
 has been measured (see below). At phone width the control bar is a single row –
 play, measure field, starting note, lock and “Tools”, with everything else in
 the overflow menu – checked in a Chromium at 360 × 780 px, not on a device. The
-mixer, notes and the setlist editor are usable there, not comfortable. For
+mixer, notes and the setlist editor are usable there, but not comfortable. For
 reading on a phone there are the system band and the lyrics view; their limits
 are listed under
 [Practising and reading on a phone](#practising-and-reading-on-a-phone).
@@ -161,7 +163,7 @@ can therefore become noticeable.
 [AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) carries
 4.7.5 (MuseScore as a pinned, unpatched submodule revision, Qt-free); it does
 not follow along by itself when MuseScore moves on – a new core means building
-the engine and bumping the tarball URL. The self-test of the operational
+the engine and bumping the tarball URL. The self-test in the status
 diagnostics checks whether the guarantees from M2/M4/M7 still hold – it does
 not report that a newer MuseScore version would be available.
 
@@ -188,7 +190,7 @@ local path a gap remains at that spot; the rest of the page is unaffected.
 only coloured where the SVG carries the identifiers from
 [M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)
 – the local conversion path does that, the sidecar with its stock AppImage
-does not. There it stays with the band, without an error message: the setting
+does not. There it falls back to the band, without an error message: the setting
 “Colour the sounding notes” can still be selected but silently falls back to
 the band. Effect: the same controls, less guidance in the notation. The same
 applies to the coloured note heads of intonation (see
@@ -202,13 +204,13 @@ of the converter. Effect: a difference in engraving can be traced to the path,
 not to a version number.
 
 **Tablet and phone hardware.** Touch controls, pinch zoom and keeping the
-screen awake are implemented and verified in the browser. Tried on an Android
-phone (Chrome and Opera, sound via Bluetooth headphones) are three things that
-stay invisible on the desktop:
+screen awake are implemented and verified in the browser. Three things
+that stay invisible on the desktop have been tried on an Android phone (Chrome
+and Opera, sound via Bluetooth headphones):
 
 - The output latency (Bluetooth) is compensated; the cursor does not run ahead
   of the sound.
-- Auto-follow recognises manual scrolling by the gesture; the browser bar
+- Autoscroll recognises manual scrolling by the gesture; the browser bar
   sliding in and out does not count as an intervention.
 - The transport bar stays a single row at phone width.
 
@@ -232,7 +234,7 @@ ear. **How many headphones this affects has not been checked**; a single pair
 was measured on a single phone.
 
 Still untested is **a whole rehearsal at the music stand**, and the effect has
-only been cross-checked in Chrome – **whether auto-follow runs just as
+only been cross-checked in Chrome – **whether autoscroll runs just as
 smoothly in Opera has not been checked.**
 
 **Offline use only via the offline page.** The viewer in Files does not load
@@ -282,7 +284,7 @@ For operation this means:
   server time is estimated from the response).
 - **Starting, ending and joining are each limited to 30 calls per minute**,
   sending the position to 120. Mobile apps are counted per IP address (see
-  below under leaders).
+  Leaders below).
 - **Several web servers without a distributed cache:** the local cache is then
   valid for at most one second, after which the next call reads the
   database – one read per second and file (see
@@ -290,13 +292,13 @@ For operation this means:
 - **Switching to the next piece takes about 3 s, measured**, until it reaches
   the following device, including loading the new score (two browsers on the
   test instance, desktop). With a following device in the Nextcloud app the
-  switch has been accepted (Galaxy S23), the duration there not measured.
+  switch has passed acceptance testing (Galaxy S23), the duration there not measured.
 - **Only the leader who is leading the session takes it along.** If someone
   else is already leading on the next piece, that session stays; the leader
   switches alone, and their followers stay where they are.
 - **On a piece the session was taken along to, the leader lacks the role** if
   they are not a leader there: position, loop, starting note and
-  transposition work, notes for parts and stamps do not
+  transposition work, notes for voices and stamps do not
   ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
 - **Anyone not allowed to read the next piece sees an error message there.**
   This cannot be checked in advance from the leader's side – the leader cannot
@@ -378,9 +380,9 @@ re-measured on real devices and with real input latency.
 - **With repeats, the colouring shows the most recently evaluated pass.** The
   same note head stands for both passes
   ([M7](architecture.md#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)).
-- **The accompaniment takes the recording's tempo at the start of
-  playback** – a recording cannot be stretched. A later change of tempo during
-  playback is not tracked.
+- **The accompaniment takes the recording's tempo when playback of the
+  recording starts** – a recording cannot be stretched. A later change of tempo
+  while the recording is played back is not tracked.
 - **Uploads need a web server limit of at least ~20 MB** (with nginx,
   `client_max_body_size`). A 10 min recording weighs about 19 MB; below that,
   saving fails with 413 from the web server before the app sees the request
@@ -493,7 +495,7 @@ plays with controls. A lock lasting several minutes has not been measured.
 - **Lyrics view and note names only with the engine's data.** They need
   `lyricSyllables` or `noteSpellings`, and only the engine writes those – on
   the local conversion path and in the browser fallback. On the sidecar path
-  both cannot be selected and say why; a reconversion there does not change
+  neither can be selected, and both say why; a reconversion there does not change
   that ([E15](architecture.md#e15-fähigkeiten-statt-weg) (German)). The system band
   works on both paths.
 - **A cache entry below `CURRENT_FORMAT_VERSION` 4** is reconverted the next
@@ -585,7 +587,7 @@ after disconnecting from the network the page comes from the cache.
 
 ### Open on the device
 
-Accepted on the Galaxy S23 in the browser (Chrome): practice track in 8.8 s
+Passed acceptance testing on the Galaxy S23 in the browser (Chrome): practice track in 8.8 s
 (Duckwerk, full mix), saving for offline use in 1.1 s, the offline page and
 playback without a reachable server, system band, lyrics view and note names
 in the picture. In the Nextcloud app (Android), the S23 follows a leader in the

@@ -45,6 +45,6 @@ class Version000100Date20260824100000 extends SimpleMigrationStep {
 			return;
 		}
 		$this->appConfig->updateSensitive(Application::APP_ID, 'sidecar_secret', true);
-		$output->info('ScoreView: sidecar_secret ist jetzt als sensibel markiert und wird in Systemberichten ausgeblendet.');
+		$output->info('ScoreView: sidecar_secret is now marked as sensitive and hidden in system reports.');
 	}
 }

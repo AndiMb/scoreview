@@ -100,7 +100,7 @@ class LocalConverter {
 	public function convert(string $msczPath): array {
 		$outDir = $this->tempManager->getTemporaryFolder('scoreview-out');
 		if ($outDir === false) {
-			throw new LocalConverterException('Kein temporaeres Verzeichnis fuer die Konvertierung verfuegbar.');
+			throw new LocalConverterException('No temporary directory available for the conversion.');
 		}
 
 		$this->run([$msczPath, $outDir]);
@@ -124,7 +124,7 @@ class LocalConverter {
 		}
 		$result = json_decode($output, true);
 		if (!is_array($result) || !isset($result['ok'])) {
-			return ['ok' => false, 'error' => 'Antwort des lokalen Konverters ohne ok-Feld: ' . substr($output, 0, 200)];
+			return ['ok' => false, 'error' => 'Local converter response without an ok field: ' . substr($output, 0, 200)];
 		}
 		return $result;
 	}
@@ -151,13 +151,13 @@ class LocalConverter {
 		$reason = null;
 		if (!$procOpen) {
 			$reason = 'process';
-			$error = 'PHP darf keine Prozesse starten (proc_open ist per disable_functions gesperrt).';
+			$error = 'PHP is not allowed to start processes (proc_open is blocked by disable_functions).';
 		} elseif ($nodePath === null) {
 			$reason = 'node';
-			$error = 'Keine Node.js-Laufzeit gefunden. Pfad in den Einstellungen eintragen.';
+			$error = 'No Node.js runtime found. Enter its path in the settings.';
 		} elseif (!$installed) {
 			$reason = 'engine';
-			$error = 'Das Engine-Paket (scoreview-engine) fehlt neben dem Konverter (converter/node_modules).';
+			$error = 'The engine package (scoreview-engine) is missing next to the converter (converter/node_modules).';
 		}
 
 		return [
@@ -194,7 +194,7 @@ class LocalConverter {
 		if (is_string($manifest) && preg_match('#/download/v?([^/]+)/#', $manifest, $treffer) === 1) {
 			return $treffer[1];
 		}
-		return 'unbekannt';
+		return 'unknown';
 	}
 
 	private function isConverterInstalled(): bool {
@@ -245,20 +245,20 @@ class LocalConverter {
 	private function run(array $arguments): string {
 		if (!$this->canStartProcesses()) {
 			throw new LocalConverterException(
-				'PHP darf keine Prozesse starten (proc_open gesperrt) - der lokale Konvertierungsweg ist auf dieser Instanz nicht moeglich.',
+				'PHP is not allowed to start processes (proc_open is blocked) - the local conversion path is not possible on this instance.',
 				errorCode: ScoreConversion::ERROR_LOCAL_UNAVAILABLE,
 			);
 		}
 		$node = $this->findNode();
 		if ($node === null) {
 			throw new LocalConverterException(
-				'Keine lauffaehige Node.js-Laufzeit gefunden (Einstellungen, Feld "Pfad zu node").',
+				'No working Node.js runtime found (settings, field "Path to node").',
 				errorCode: ScoreConversion::ERROR_LOCAL_UNAVAILABLE,
 			);
 		}
 		if (!$this->isConverterInstalled()) {
 			throw new LocalConverterException(
-				'Der mitgelieferte Konverter ist unvollstaendig: ' . $this->getConverterDir() . '/node_modules fehlt.',
+				'The bundled converter is incomplete: ' . $this->getConverterDir() . '/node_modules is missing.',
 				errorCode: ScoreConversion::ERROR_LOCAL_UNAVAILABLE,
 			);
 		}
@@ -294,7 +294,7 @@ class LocalConverter {
 
 		if ($result['timedOut']) {
 			throw new LocalConverterException(
-				sprintf('Lokale Konvertierung nach %d s abgebrochen.', $timeout),
+				sprintf('Local conversion aborted after %d s.', $timeout),
 				errorCode: ScoreConversion::ERROR_TIMEOUT,
 			);
 		}
@@ -303,18 +303,18 @@ class LocalConverter {
 			// Qt-Meldungen von MuseScore (convert.mjs leitet stdout dorthin
 			// um) - fuer die Fehlersuche ist genau das die Spur, im
 			// Fehlertext der Oberflaeche waere es Rauschen.
-			$this->logger->error('ScoreView: lokaler Konverter beendet mit {code}: {stderr}', [
+			$this->logger->error('ScoreView: local converter exited with {code}: {stderr}', [
 				'code' => $result['exitCode'],
 				'stderr' => substr($result['stderr'], -4000),
 			]);
 			throw new LocalConverterException(
-				'Lokale Konvertierung fehlgeschlagen: ' . $this->lastLine($result['stderr']),
+				'Local conversion failed: ' . $this->lastLine($result['stderr']),
 				errorCode: ScoreConversion::ERROR_CONVERSION_FAILED,
 			);
 		}
 		if ($result['stdoutOverflow']) {
 			throw new LocalConverterException(
-				sprintf('Der lokale Konverter schrieb mehr als %d Bytes auf stdout - erwartet ist eine Zeile JSON.', self::MAX_STDOUT_BYTES),
+				sprintf('The local converter wrote more than %d bytes to stdout - expected a single line of JSON.', self::MAX_STDOUT_BYTES),
 				errorCode: ScoreConversion::ERROR_CONVERSION_FAILED,
 			);
 		}
@@ -342,7 +342,7 @@ class LocalConverter {
 		];
 		$process = @proc_open($command, $descriptors, $pipes, $cwd);
 		if (!is_resource($process)) {
-			throw new LocalConverterException('Konnte den Konverterprozess nicht starten: ' . implode(' ', $command));
+			throw new LocalConverterException('Could not start the converter process: ' . implode(' ', $command));
 		}
 
 		fclose($pipes[0]);
@@ -479,7 +479,7 @@ class LocalConverter {
 		}
 		if ($pages === []) {
 			throw new LocalConverterException(
-				'Die lokale Konvertierung erzeugte keine SVG-Seite.',
+				'The local conversion produced no SVG page.',
 				errorCode: ScoreConversion::ERROR_NO_PAGES,
 			);
 		}
@@ -497,7 +497,7 @@ class LocalConverter {
 	private function readFile(string $path): string {
 		$content = @file_get_contents($path);
 		if ($content === false) {
-			throw new LocalConverterException('Erwartetes Artefakt fehlt: ' . basename($path));
+			throw new LocalConverterException('Expected artifact is missing: ' . basename($path));
 		}
 		return $content;
 	}
@@ -519,6 +519,6 @@ class LocalConverter {
 		if ($meldungen !== []) {
 			return end($meldungen);
 		}
-		return $lines === [] ? 'keine Fehlerausgabe' : end($lines);
+		return $lines === [] ? 'no error output' : end($lines);
 	}
 }

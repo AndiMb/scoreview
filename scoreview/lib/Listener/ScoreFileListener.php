@@ -73,7 +73,7 @@ class ScoreFileListener implements IEventListener {
 
 		$owner = $node->getOwner();
 		if ($owner === null) {
-			$this->logger->warning('ScoreView: .mscz-Datei ohne ermittelbaren Owner, Eager-Konvertierung übersprungen: {name}', [
+			$this->logger->warning('ScoreView: .mscz file without a determinable owner, eager conversion skipped: {name}', [
 				'name' => $node->getName(),
 			]);
 			return;

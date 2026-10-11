@@ -319,7 +319,7 @@ export function useIntonation({
 				return
 			}
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Auswertung der Aufnahme gescheitert.', err)
+			console.error('ScoreView: analysing the recording failed.', err)
 			error.value = err?.message ?? String(err)
 		} finally {
 			if (analysisGeneration.isCurrent(mine)) {

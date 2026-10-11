@@ -97,7 +97,7 @@ class CleanupOrphansJob extends TimedJob {
 			} catch (\Throwable $e) {
 				// Eine einzelne kaputte fileId darf den Durchlauf nicht beenden -
 				// der naechste Lauf versucht es erneut.
-				$this->logger->warning('ScoreView: Aufraeumen von fileId={fileId} fehlgeschlagen: {message}', [
+				$this->logger->warning('ScoreView: cleanup of fileId={fileId} failed: {message}', [
 					'fileId' => $fileId,
 					'message' => $e->getMessage(),
 					'exception' => $e,
@@ -106,7 +106,7 @@ class CleanupOrphansJob extends TimedJob {
 		}
 
 		if ($caches > 0 || $annotations > 0 || $others > 0) {
-			$this->logger->info('ScoreView: {caches} verwaiste Cache-Eintraege, {annotations} Notizen und {others} Leitungen, Sitzungen, Aufnahmen und Stimmwahlen entfernt.', [
+			$this->logger->info('ScoreView: removed {caches} orphaned cache entries, {annotations} annotations and {others} leader roles, sessions, recordings and part selections.', [
 				'caches' => $caches,
 				'annotations' => $annotations,
 				'others' => $others,
@@ -124,7 +124,7 @@ class CleanupOrphansJob extends TimedJob {
 			$cutoff = $this->time->getDateTime()->modify('-' . FollowSession::TIMEOUT_SECONDS . ' seconds');
 			$this->followMapper->deleteHeartbeatBefore($cutoff);
 		} catch (\Throwable $e) {
-			$this->logger->warning('ScoreView: Abgelaufene Folge-Sitzungen konnten nicht entfernt werden: {message}', [
+			$this->logger->warning('ScoreView: expired follow sessions could not be removed: {message}', [
 				'message' => $e->getMessage(),
 				'exception' => $e,
 			]);

@@ -216,7 +216,7 @@ class SetlistController extends Controller {
 					'token' => $this->companions->issue($uid, $id, CompanionTokenService::PURPOSE_SCORE, $digest),
 				];
 			}
-			$this->logger->info('ScoreView: Begleit-Token ausgegeben', [
+			$this->logger->info('ScoreView: companion token issued', [
 				'uid' => $uid,
 				'fileId' => $fileId,
 				'setlistId' => $setlistId,
@@ -242,7 +242,7 @@ class SetlistController extends Controller {
 	 */
 	private function allowedForTokenWrite(): ?array {
 		if (!$this->access->resolved()) {
-			$this->logger->error('ScoreView: Setliste ohne eingeordneten Ausweis geschrieben - DirectAccessContext nicht geteilt?', [
+			$this->logger->error('ScoreView: setlist written without a resolved credential - DirectAccessContext not shared?', [
 				'token' => $this->request->getHeader(DirectAccessMiddleware::HEADER) !== '',
 				'companion' => $this->request->getHeader(DirectAccessMiddleware::COMPANION_HEADER) !== '',
 			]);

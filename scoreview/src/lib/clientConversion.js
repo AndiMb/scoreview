@@ -133,14 +133,14 @@ export async function convertInBrowser({ fetchSource, loadEngine, maxBytes = 0, 
 	if (maxBytes > 0 && bytes.byteLength > maxBytes) {
 		throw new ClientConversionError(
 			CLIENT_TOO_LARGE,
-			`Partitur ist ${bytes.byteLength} Byte gross, erlaubt sind ${maxBytes}.`,
+			`Score is ${bytes.byteLength} bytes, the limit is ${maxBytes}.`,
 		)
 	}
 
 	onProgress({ phase: 'engine' })
 	let Engine
 	try {
-		Engine = await withDeadline(loadEngine(), grenze.import, CLIENT_ENGINE_UNAVAILABLE, 'Engine nicht ladbar.')
+		Engine = await withDeadline(loadEngine(), grenze.import, CLIENT_ENGINE_UNAVAILABLE, 'Engine could not be loaded.')
 	} catch (fehler) {
 		throw alsClientFehler(fehler, CLIENT_ENGINE_UNAVAILABLE)
 	}
@@ -157,7 +157,7 @@ export async function convertInBrowser({ fetchSource, loadEngine, maxBytes = 0, 
 			Engine.load('mscz', bytes, []),
 			grenze.start,
 			CLIENT_ENGINE_UNAVAILABLE,
-			'Die Engine hat die Partitur nicht angenommen.',
+			'The engine did not accept the score.',
 		)
 	} catch (fehler) {
 		throw alsClientFehler(fehler, CONVERSION_FAILED)
@@ -168,7 +168,7 @@ export async function convertInBrowser({ fetchSource, loadEngine, maxBytes = 0, 
 			erzeugeArtefakte(score, onProgress),
 			grenze.convert,
 			CONVERSION_FAILED,
-			'Die Konvertierung wurde nicht rechtzeitig fertig.',
+			'The conversion did not finish in time.',
 		)
 	} catch (fehler) {
 		throw alsClientFehler(fehler, CONVERSION_FAILED)
@@ -194,7 +194,7 @@ export async function convertInBrowser({ fetchSource, loadEngine, maxBytes = 0, 
 async function erzeugeArtefakte(score, onProgress) {
 	const pageCount = await score.npages()
 	if (pageCount < 1) {
-		throw new ClientConversionError(CONVERSION_FAILED, 'Die Engine lieferte keine SVG-Seite.')
+		throw new ClientConversionError(CONVERSION_FAILED, 'The engine returned no SVG page.')
 	}
 
 	const pages = []

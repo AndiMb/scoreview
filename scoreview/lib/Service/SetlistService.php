@@ -504,7 +504,7 @@ class SetlistService {
 				}
 			}
 		} catch (\Throwable $e) {
-			$this->logger->warning('ScoreView: Vorab-Konvertierung der Setliste fehlgeschlagen: {message}', [
+			$this->logger->warning('ScoreView: pre-conversion of the setlist failed: {message}', [
 				'message' => $e->getMessage(),
 				'exception' => $e,
 			]);

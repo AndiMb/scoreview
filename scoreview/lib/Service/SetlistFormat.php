@@ -86,7 +86,7 @@ class SetlistFormat {
 		foreach ($items as $item) {
 			foreach ([$item['content'], ...($item['tail'] ?? [])] as $line) {
 				if (preg_match('/[\r\n\x00]/', $line) === 1) {
-					throw new \InvalidArgumentException('Zeilenumbruch oder NUL in einem Eintrag');
+					throw new \InvalidArgumentException('Line break or NUL in an entry');
 				}
 			}
 		}
@@ -141,7 +141,7 @@ class SetlistFormat {
 		// Abgelehnt statt still ersetzt: Ein Eintrag mit Zeilenumbruch braeche
 		// die Liste, und wer ihn schickt, hat ihn nicht getippt.
 		if (self::hasControlChars($label) || self::hasControlChars($target)) {
-			throw new \InvalidArgumentException('Steuerzeichen in Titel oder Pfad');
+			throw new \InvalidArgumentException('Control character in title or path');
 		}
 		$label = trim($label);
 		$label = addcslashes($label, '\\[]');

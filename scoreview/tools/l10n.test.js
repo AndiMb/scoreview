@@ -1,5 +1,9 @@
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+	build,
 	buildRuntime,
 	buildTemplate,
 	checkPo,
@@ -63,6 +67,7 @@ describe('parsePo / serializePo', () => {
 			msgstr: 'Enregistrer',
 			references: ['src/A.vue', 'src/B.vue'],
 			comments: ['Button label'],
+			translatorComments: [],
 			flags: ['fuzzy'],
 		}])
 	})
@@ -84,9 +89,55 @@ describe('parsePo / serializePo', () => {
 	it('liest zurueck, was es schreibt - auch Anfuehrungszeichen, Backslash, Zeilenumbruch', () => {
 		const data = {
 			header: { Language: 'fr', 'Plural-Forms': 'nplurals=2; plural=(n > 1);' },
-			entries: [{ msgid: 'Say "hi"\\\nnow', msgstr: '« salut »', references: ['src/A.vue'], comments: [], flags: [] }],
+			headerComments: ['Translator note'],
+			entries: [{ msgid: 'Say "hi"\\\nnow', msgstr: '« salut »', references: ['src/A.vue'], comments: [], translatorComments: ['', 'Keep it short'], flags: [] }],
 		}
 		expect(parsePo(serializePo(data))).toEqual(data)
+	})
+})
+
+// What Poedit (and msgmerge/msgcat) write: lines wrapped at 79 columns, a
+// fuzzy header with tool fields, previous msgids (#|), obsolete entries (#~)
+// and translator comments. Checked against the real tools in a gettext
+// container; this keeps the parser from regressing on it.
+describe('Poedit output', () => {
+	const POEDIT = [
+		'# French translation of ScoreView.',
+		'#, fuzzy',
+		'msgid ""',
+		'msgstr ""',
+		'"Language: fr\\n"',
+		'"Plural-Forms: nplurals=2; plural=(n > 1);\\n"',
+		'"X-Generator: Poedit 3.5\\n"',
+		'',
+		'# Keep it short, the button is narrow.',
+		'#: src/components/ScoreViewer.vue',
+		'#, fuzzy',
+		'#| msgid "Measure"',
+		'msgid ""',
+		'"Measure {n}"',
+		'msgstr ""',
+		'"Mesu"',
+		'"re {n}"',
+		'',
+		'#~ msgid "Gone"',
+		'#~ msgstr "Parti"',
+		'',
+	].join('\r\n')
+
+	it('parses wrapped strings, tool headers and flags, and skips obsolete entries', () => {
+		const parsed = parsePo(POEDIT)
+		expect(parsed.header['X-Generator']).toBe('Poedit 3.5')
+		expect(parsed.entries).toHaveLength(1)
+		expect(parsed.entries[0]).toMatchObject({ msgid: 'Measure {n}', msgstr: 'Mesure {n}', flags: ['fuzzy'] })
+		expect(problemsOf('fr', checkPo('fr', parsed, template))).toEqual([])
+	})
+
+	it('keeps translator comments through extract', () => {
+		const merged = serializePo(mergePo(template, parsePo(POEDIT)))
+		expect(merged.startsWith('# French translation of ScoreView.\nmsgid ""\n')).toBe(true)
+		expect(merged).toContain('# Keep it short, the button is narrow.\n#: ')
+		expect(merged).not.toContain('#|')
 	})
 })
 
@@ -161,6 +212,45 @@ describe('buildRuntime', () => {
 			translations: { Save: 'Enregistrer', 'Measure {n}': 'Mesure {n}' },
 			plural: 'nplurals=2; plural=(n > 1);',
 		})
+	})
+})
+
+async function tempTree(languages) {
+	const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scoreview-l10n-'))
+	const pot = serializePo(buildTemplate(new Map()))
+	await fs.mkdir(path.join(root, 'translationfiles', 'templates'), { recursive: true })
+	await fs.writeFile(path.join(root, 'translationfiles', 'templates', 'scoreview.pot'), pot)
+	for (const lang of languages) {
+		await fs.mkdir(path.join(root, 'translationfiles', lang))
+		await fs.writeFile(path.join(root, 'translationfiles', lang, 'scoreview.po'), pot.replace('"Language: \\n"', `"Language: ${lang}\\n"`))
+	}
+	return root
+}
+
+describe('de_DE', () => {
+	it('is built as a copy of de, so "Deutsch (Sie)" does not fall back to English', async () => {
+		const root = await tempTree(['de'])
+		try {
+			await build(root)
+			const files = (await fs.readdir(path.join(root, 'l10n'))).sort()
+			expect(files).toEqual(['de.js', 'de.json', 'de_DE.js', 'de_DE.json'])
+			for (const ext of ['js', 'json']) {
+				expect(await fs.readFile(path.join(root, 'l10n', `de_DE.${ext}`), 'utf8'))
+					.toBe(await fs.readFile(path.join(root, 'l10n', `de.${ext}`), 'utf8'))
+			}
+		} finally {
+			await fs.rm(root, { recursive: true, force: true })
+		}
+	})
+
+	it('cannot be contributed as a .po of its own', async () => {
+		const root = await tempTree(['de', 'de_DE'])
+		try {
+			const { languages } = await checkTranslations(root)
+			expect(languages.find(({ lang }) => lang === 'de_DE').problems[0]).toMatch(/generated from de/)
+		} finally {
+			await fs.rm(root, { recursive: true, force: true })
+		}
 	})
 })
 

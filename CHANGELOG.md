@@ -14,7 +14,10 @@ All notable changes to ScoreView. The format follows
   A partial translation shows the untranslated strings in English, never in
   German. CI checks every language for broken placeholders and outdated
   entries; only German has to be complete. See
-  [docs/translating.md](docs/translating.md).
+  [docs/translating.md](docs/translating.md). Files saved with Poedit work
+  as they are, and translator comments are kept when the template changes.
+- **Formal German.** Users who chose "Deutsch (Sie)" (`de_DE`) see the German
+  interface instead of English. It uses the same informal wording as `de`.
 - **English documentation.** The README, installation guide, troubleshooting
   guide and limits are now written in English, with a maintained German
   translation next to each (`*.de.md`). CI reports a German file that is
@@ -28,6 +31,11 @@ All notable changes to ScoreView. The format follows
   unchanged.
 - The bug report template is in English; reports in German are still
   welcome.
+- **Technical messages are in English.** The technical detail of a failed
+  conversion, log messages, `occ` and migration output, and the error texts
+  of the sidecar and the local converter are now English. The messages shown
+  in the interface are still translated. Error messages already stored from
+  earlier conversions stay as they are until the score is converted again.
 
 ### Fixed
 

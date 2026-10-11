@@ -224,19 +224,19 @@ def check_promises(media: dict) -> tuple[list[str], dict]:
     problems = []
     for key in ("svgs", "sposXML", "mposXML", "midi", "metadata"):
         if not media.get(key):
-            problems.append(f"Schluessel '{key}' fehlt oder ist leer")
+            problems.append(f"key '{key}' missing or empty")
 
     pages = len(media.get("svgs") or [])
     if pages < 1:
-        problems.append("keine SVG-Seite geliefert")
+        problems.append("no SVG page returned")
 
     timing = parse_pos_xml(media["sposXML"]) if media.get("sposXML") else {"events": [], "elements": {}}
     events = timing.get("events") or []
     elements = timing.get("elements") or {}
     if not events:
-        problems.append("sposXML enthaelt keine Events")
+        problems.append("sposXML contains no events")
     if not elements:
-        problems.append("sposXML enthaelt keine Elementkoordinaten")
+        problems.append("sposXML contains no element coordinates")
 
     # M7: bar 1 of the bundled score is repeated, so its elid must appear
     # MORE THAN ONCE with increasing time. That is the promise the cursor
@@ -247,13 +247,13 @@ def check_promises(media: dict) -> tuple[list[str], dict]:
         elid_counts[e["elid"]] = elid_counts.get(e["elid"], 0) + 1
     if not any(c > 1 for c in elid_counts.values()):
         problems.append(
-            "kein elid kommt mehrfach vor - Wiederholung wird nicht mehr "
-            "ausgerollt (M7 verletzt)"
+            "no elid occurs more than once - repeats are no longer "
+            "unrolled (M7 violated)"
         )
 
     times = [e["timeMs"] for e in events]
     if times != sorted(times):
-        problems.append("Event-Zeiten sind nicht monoton steigend")
+        problems.append("event times are not monotonically increasing")
 
     return problems, {
         "pages": pages,

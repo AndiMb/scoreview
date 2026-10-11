@@ -72,7 +72,7 @@ class PushNotifier {
 				// Ein verlorenes Ereignis kostet nur Latenz: Das Geraet fragt
 				// ohnehin in groesserem Abstand nach (useFollowSession). Die
 				// Aktion der Leitung darf daran nicht scheitern.
-				$this->logger->info('ScoreView: Push an {uid} fehlgeschlagen: {message}', [
+				$this->logger->info('ScoreView: push to {uid} failed: {message}', [
 					'uid' => $uid,
 					'message' => $e->getMessage(),
 				]);

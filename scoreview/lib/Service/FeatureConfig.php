@@ -180,7 +180,7 @@ class FeatureConfig {
 	 */
 	public static function clamp(string $key, int $value): int {
 		if (!array_key_exists($key, self::NUMBERS)) {
-			throw new \InvalidArgumentException('Unbekannter Zahlenwert: ' . $key);
+			throw new \InvalidArgumentException('Unknown numeric setting: ' . $key);
 		}
 		[, $min, $max] = self::NUMBERS[$key];
 		return max($min, min($max, $value));

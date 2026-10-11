@@ -241,7 +241,7 @@ export default {
 			} catch (err) {
 				// Die Auswahl ist ein Angebot - die Dateiauswahl geht trotzdem.
 				// eslint-disable-next-line no-console
-				console.error('ScoreView: Partituren im Ordner konnten nicht geladen werden.', err)
+				console.error('ScoreView: could not load the scores in the folder.', err)
 			}
 		},
 

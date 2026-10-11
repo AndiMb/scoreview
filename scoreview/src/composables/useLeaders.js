@@ -64,7 +64,7 @@ export function useLeaders({ fileId }) {
 			// Ohne Liste geht die Partitur trotzdem - kein Banner ueber den
 			// Noten fuer eine Zusatzangabe.
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Leitungen konnten nicht geladen werden.', err)
+			console.error('ScoreView: could not load the leaders.', err)
 		}
 	}
 

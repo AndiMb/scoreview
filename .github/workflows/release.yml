@@ -187,6 +187,8 @@ jobs:
             lib/AppInfo/Application.php \
             l10n/de.js \
             l10n/de.json \
+            l10n/de_DE.js \
+            l10n/de_DE.json \
             vendor/autoload.php \
             converter/convert.mjs \
             converter/package.json \

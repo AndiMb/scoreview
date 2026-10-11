@@ -81,7 +81,7 @@ def conversion_slot(timeout=None):
         display = _FREE_SLOTS.get(timeout=timeout)
     except queue.Empty:
         raise NoSlotAvailable(
-            "alle Konvertierungsplaetze belegt - spaeter erneut versuchen"
+            "all conversion slots busy - try again later"
         ) from None
     try:
         yield display
@@ -111,7 +111,7 @@ def _worker_loop():
             # ankommt, ist ein Programmfehler. Den Worker zu verlieren waere
             # schlimmer: jeder verlorene Worker ist ein Platz weniger, bis
             # zum Stillstand ohne jede Fehlermeldung.
-            _LOG.exception("Konvertierungs-Worker: unerwarteter Fehler bei Auftrag %s", job_id)
+            _LOG.exception("conversion worker: unexpected error in job %s", job_id)
 
 
 def submit(uploaded_file) -> str:
@@ -124,7 +124,7 @@ def submit(uploaded_file) -> str:
         waiting = sum(1 for job in JOBS.values() if job["status"] == "pending")
         if waiting >= config.MAX_QUEUED_JOBS:
             raise QueueFull(
-                f"{waiting} Auftraege warten bereits (SCOREVIEW_MAX_QUEUED={config.MAX_QUEUED_JOBS})"
+                f"{waiting} jobs already waiting (SCOREVIEW_MAX_QUEUED={config.MAX_QUEUED_JOBS})"
             )
         # Eintrag VOR dem Speichern: so zaehlt der Warteplatz schon, waehrend
         # die Datei noch geschrieben wird, und gleichzeitige Uploads koennen

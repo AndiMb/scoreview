@@ -79,7 +79,7 @@ class MimetypeRegistration {
 			$id = $this->loader->getId(Application::MSCZ_MIMETYPE);
 			$rows = $this->loader->updateFilecache(self::EXTENSION, $id);
 		} catch (Throwable $e) {
-			$this->logger->warning('ScoreView: Mimetype konnte nicht registriert werden: {message}', [
+			$this->logger->warning('ScoreView: mimetype could not be registered: {message}', [
 				'message' => $e->getMessage(),
 				'exception' => $e,
 			]);
@@ -87,7 +87,7 @@ class MimetypeRegistration {
 		}
 
 		if ($rows > 0) {
-			$this->logger->info('ScoreView: {rows} Datei(en) auf {mimetype} berichtigt.', [
+			$this->logger->info('ScoreView: corrected {rows} file(s) to {mimetype}.', [
 				'rows' => $rows,
 				'mimetype' => Application::MSCZ_MIMETYPE,
 			]);

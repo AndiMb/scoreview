@@ -101,7 +101,7 @@ class AnnotationService {
 	 */
 	public function create(int $fileId, string $userId, int $measureNumber, float $fraction, ?int $elid, ?string $anchorEtag, string $content, string $visibility, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?string $targetPartsJson = null, bool $byLeader = false): Annotation {
 		if ($this->mapper->countByFileAndUser($fileId, $userId) >= self::MAX_PER_USER_AND_FILE) {
-			throw new AnnotationLimitException('Zu viele Notizen zu dieser Datei.');
+			throw new AnnotationLimitException('Too many annotations for this file.');
 		}
 		$now = new \DateTime();
 		$annotation = new Annotation();
@@ -149,7 +149,7 @@ class AnnotationService {
 			return null;
 		}
 		if ($annotation->getKind() !== Annotation::KIND_STAMP && trim($content) === '') {
-			throw new \InvalidArgumentException('Eine Textnotiz braucht Text.');
+			throw new \InvalidArgumentException('A text annotation needs text.');
 		}
 		$annotation->setContent($content);
 		if ($targetPartsJson !== null && $annotation->getVisibility() === Annotation::VISIBILITY_PARTS) {
@@ -192,7 +192,7 @@ class AnnotationService {
 		$visibility = $annotation->getVisibility();
 		if ($visibility === Annotation::VISIBILITY_SHARED) {
 			if (!$canWriteShared) {
-				throw new \RuntimeException('Kein Schreibrecht fuer geteilte Notizen dieser Datei.');
+				throw new \RuntimeException('No write permission for shared annotations of this file.');
 			}
 			return true;
 		}
@@ -201,7 +201,7 @@ class AnnotationService {
 			// anderen oder einer inzwischen abberufenen Leitung - sonst
 			// blieben deren Hinweise unkorrigierbar stehen.
 			if (!$isLeader) {
-				throw new \RuntimeException('Stimmnotizen aendern nur Leitungen.');
+				throw new \RuntimeException('Only leaders can change part annotations.');
 			}
 			return true;
 		}

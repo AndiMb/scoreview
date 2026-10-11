@@ -184,7 +184,7 @@ export function useSetlist({ fileId, setFileId, standalone, originFileId = fileI
 			}
 			// Nur ein Angebot - die Partitur geht auch ohne.
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Setlisten zur Partitur konnten nicht geladen werden.', err)
+			console.error('ScoreView: could not load the setlists for the score.', err)
 		}
 	}
 

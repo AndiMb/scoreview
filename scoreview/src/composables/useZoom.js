@@ -201,7 +201,7 @@ export function useZoom({ rootEl, scrollEl }) {
 			// z.B. Fullscreen per Permissions-Policy im umgebenden iframe
 			// gesperrt - Notenansicht bleibt trotzdem nutzbar, nur ohne Vollbild.
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Vollbild konnte nicht umgeschaltet werden.', err)
+			console.error('ScoreView: could not toggle fullscreen.', err)
 		}
 	}
 

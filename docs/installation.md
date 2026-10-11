@@ -10,9 +10,9 @@ ScoreView consists of the Nextcloud app and a conversion path. There are
 |---|---|---|
 | Requires | Node.js ≥ 18 on the Nextcloud server | a Docker host |
 | MuseScore | MuseScore 4.7.5 as WebAssembly, in the app package | real MuseScore 4 in the container |
-| SoundFont | fetched by the server itself, address preset | shipped with the container |
+| SoundFont | fetched by the server itself from a preset address | shipped with the container |
 | To set up | nothing | start the container, enter address and secret |
-| Coloured noteheads, lyrics view, note names | yes | no – stock MuseScore does not deliver the data ([E15](architecture.md#e15-fähigkeiten-statt-weg)) |
+| Coloured noteheads, lyrics view, note names | yes | no – stock MuseScore does not deliver the data ([E15](architecture.md#e15-fähigkeiten-statt-weg), German) |
 | Recommended if | no containers are running | containers are running anyway |
 
 **Path A is the default and needs no configuration.** Where a Node runtime is
@@ -22,10 +22,10 @@ remains are steps 4 and 5 below, which apply to both paths. For path B, allow
 
 **And if neither works?** On managed hosting – no Node runtime, no containers,
 `proc_open` disabled – the app converts in the user's browser
-([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)). There is
+([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall), German). There is
 nothing to set up for this: the fallback kicks in on its own as soon as the
 server cannot convert, and it shows up in the status diagnostics. All you
-need to know is what it costs – every device downloads a good 7 MB once (14 MB
+need to know is what it costs – every device downloads just over 7 MB once (14 MB
 unpacked), and nothing is cached on the server. Where the server can convert,
 it is not active.
 
@@ -41,8 +41,8 @@ it is not active.
   Nextcloud or a different one, reachable over HTTP. **Neither** is also
   possible: then the browser converts (see above); this requires a browser that
   supports WebAssembly and Web Workers – that is, any current one.
-- On path A, outgoing HTTPS from the server, once: from there it fetches the
-  SoundFont on first playback. Where that is not possible, an address of your
+- On path A, the server needs outgoing HTTPS once: it fetches the SoundFont
+  on first playback. Where that is not possible, an address of your
   own takes the place of the preset one – see [SoundFont](#soundfont).
 
 The `occ` commands below are written as they run on a native installation. On a
@@ -67,8 +67,8 @@ docker exec <container> sh -c 'apt-get update && apt-get install -y nodejs'
 ```
 
 On a native installation, use the distribution's package manager. For this to
-survive an image update, the line belongs in a Dockerfile of your own
-`FROM nextcloud:…` rather than in the running container.
+survive an image update, the line belongs in your own Dockerfile based
+on `FROM nextcloud:…` rather than in the running container.
 
 The converter itself is pure JavaScript and WebAssembly, and therefore
 independent of operating system and processor architecture – there is nothing
@@ -113,7 +113,7 @@ further environment variables are in
 
 If you want to run the sidecar on a different machine or without Docker, the
 options are described under
-[Bereitstellung](../sidecar/README.md#bereitstellung).
+[Deployment](../sidecar/README.md#bereitstellung) (German).
 
 ## 2. Install the app
 
@@ -132,7 +132,7 @@ occ upgrade
 ## 3. Configure the conversion path
 
 Under **Settings → Administration → ScoreView** the choice is at the very top;
-it unlocks below it whatever has to be entered for the respective path. The
+below it, it shows whatever has to be entered for the selected path. The
 local path is the default.
 
 ### Path A: Local
@@ -212,7 +212,7 @@ If you have `occ` and want both, copy the contents of
 `scoreview/appinfo/mimetypealiases.json` into the server's
 `config/mimetypemapping.json` and `config/mimetypealiases.json` respectively –
 keep any other existing entries, don't overwrite them; Nextcloud only overlays
-its own file on the bundled one via `array_replace`, so the default mappings
+the file in `config/` on the bundled one via `array_replace`, so the default mappings
 are preserved. Then:
 
 ```sh
@@ -220,7 +220,7 @@ occ maintenance:mimetype:update-db
 occ maintenance:mimetype:update-js
 ```
 
-`update-db` **brings existing files along**: for every mimetype not yet in the
+`update-db` **also updates existing files**: for every mimetype not yet in the
 database, it also updates all filecache rows with the matching extension –
 across all storages, group folders and shares included. An `occ files:scan` is
 not needed for this. Only if the mimetype was already registered do existing
@@ -264,7 +264,7 @@ be reachable from the server and needs no CORS. It is fetched once per URL – i
 you later put a different file at the same address, enter a new address (for
 example with `?v=2` appended) or discard the cached state with
 `occ config:app:delete scoreview soundfont_cache_version`; saving the same
-address again does not download anything anew.
+address again does not trigger a new download.
 
 **Path B: from the container.** If a sidecar is running, the app fetches the
 SoundFont from there, because its MuseScore installation already ships one –
@@ -284,7 +284,7 @@ automatically. An empty field means: the app delivers it itself.
 
 ## Rehearsal and concert
 
-Leaders, "Follow me", personal recordings, intonation feedback, practice tracks
+Leaders, "Follow me", own recordings, intonation feedback, practice tracks
 and the offline page are switched on after installation and need nothing
 further. Under **Settings → Administration → ScoreView**, sections
 **Rehearsal and concert** and **Practising on the go**, they can be switched
@@ -308,9 +308,9 @@ occ notify_push:setup   # guides you through the service and the reverse proxy
 ```
 
 The status diagnostics show under **"Follow me"** whether push is in
-effect, and recommend installing it from about 20 following devices. Where
+effect, and recommend installing it once there are about 20 following devices. Where
 `notify_push` is not an option, a larger **Polling interval**
-(`follow_poll_ms`, 500–3000 ms) lowers the load – at the price of later jumps.
+(`follow_poll_ms`, 500–3000 ms) lowers the load – at the cost of jumps arriving later.
 The mobile apps always poll, even with `notify_push`.
 
 "Follow me" does not need a cron run: everything happens within the requests
@@ -324,7 +324,7 @@ for nginx, `client_max_body_size` at least `20M` (Nextcloud's recommended nginx
 configuration sets more anyway). The PHP limits
 `upload_max_filesize`/`post_max_size` do not matter; the app reads the request
 body itself and enforces its own limit. If you raise `max_recording_seconds`,
-reckon with about 32 KB per second.
+allow for about 32 KB per second.
 
 Recordings are stored in the app data (IAppData) and count against **no** user
 quota. That is why the app has its own limits, configurable in the
@@ -346,11 +346,11 @@ allows it on the pages under `/apps/files` and on the page for the mobile apps,
 and only while recording or intonation is switched on – the Dashboard, Talk and
 everything else remain unaffected. A permission granted by the browser then
 applies within Files to all scripts there, as with Talk. If you don't want
-that, switch off recording and intonation; the permission is then dropped.
+that, switch off recording and intonation; ScoreView then stops allowing the microphone.
 
 The microphone requires a secure context, i.e. HTTPS (or `localhost`).
 
-### Companion tokens of the mobile apps
+### Companion tokens for the mobile apps
 
 For setlists, the app issues short-lived companion tokens from the page for the
 mobile apps (at most 12 h,
@@ -386,24 +386,25 @@ therefore no separate storage limit as for recordings, only one per file:
 occ config:app:set scoreview practice_track_max_mb --value 60   # 5-500, in MB
 ```
 
-A track weighs about 1 MB per minute of music. As with recordings, the web
+A track takes up about 1 MB per minute of music. As with recordings, the web
 server must accept requests of this size – for nginx, `client_max_body_size` at
 least as large as the longest tracks expected; the PHP limits do not matter.
 The name of the subfolder is in the instance's default language
 (`default_language` in `config.php`), so that it has the same name for
 everyone.
 
-**Offline page** (`feature_offline`). People mark pieces or setlists in the
-viewer and open them without a network via `/apps/scoreview/offline`
-([E14](architecture.md#e14-eine-offline-seite-mit-eigenem-service-worker)).
+**Offline page** (`feature_offline`). People use **Save for offline use** on scores
+or setlists in the viewer and open them without a network via `/apps/scoreview/offline`
+([E14](architecture.md#e14-eine-offline-seite-mit-eigenem-service-worker), German).
 Data is stored only in the person's browser; the server needs nothing for this.
 When switched off, the page, service worker and manifest respond with 404, and
-the viewer no longer offers marking; whatever has already been marked stays in
+the viewer no longer offers "Save for offline use"; whatever has already been
+saved stays in
 the respective browser until the person removes it. Two things are worth
 knowing:
 
 - A service worker requires a secure context, i.e. HTTPS (or `localhost`).
-- Marked content is bound to the device and, in Chrome, survives logging out
+- Content saved for offline use is bound to the device and, in Chrome, survives logging out
   until the offline page is opened again with a network
   ([Limits](limits.md#offline)). On devices shared by several people, nobody
   should mark anything.
@@ -419,7 +420,7 @@ allows its origin in its own CSP.
 | `node_path` | Administration¹ | Path to `node`; empty = search the usual places (path A). Absolute, program name `node` or `nodejs` (also `node20`, `.exe`) |
 | `soundfont_fetch_url` | Administration¹ | Address from which the server fetches the SoundFont once; empty = preset address (path A) |
 | `sidecar_url` | Administration¹ | Address of the conversion service (path B) |
-| `sidecar_secret` | Administration¹ | Shared secret, kept as sensitive and hidden in `occ config:list` (path B) |
+| `sidecar_secret` | Administration¹ | Shared secret, stored as sensitive and hidden in `occ config:list` (path B) |
 | `soundfont_url` | Administration | Override: the browser loads directly from this address |
 | `eager_conversion` | Administration | Convert immediately on upload instead of on first opening |
 | `local_timeout` | `occ` only | Time limit of a local conversion run in seconds (default 120) |
@@ -427,7 +428,7 @@ allows its origin in its own CSP.
 | `max_score_bytes` | `occ` only | Upper limit of the file size (default 100 MB) |
 | `client_max_score_bytes` | `occ` only | Upper limit for conversion **in the browser**, much smaller (default 10 MB). Checked before the browser loads the engine |
 | `feature_follow_session` | Administration | Leaders and "Follow me" (default on) |
-| `feature_recording` | Administration | Personal recordings (default on) |
+| `feature_recording` | Administration | Own recordings (default on) |
 | `feature_intonation` | Administration | Intonation feedback (default on) |
 | `feature_score_follower` | `occ` only | Intended for score following via microphone, not functional yet (default off) |
 | `feature_practice_export` | Administration | Practice tracks as MP3 in Files (default on) |
@@ -438,7 +439,7 @@ allows its origin in its own CSP.
 | `max_recording_seconds` | Administration | Maximum length of a recording in seconds (default 600, 10–3600) |
 | `max_recording_bytes_per_user` | Administration (MB), `occ` (bytes) | Storage for recordings per person (default 200 MB, 10 MB–100 GB) |
 | `max_recording_bytes_total` | Administration (MB), `occ` (bytes) | Storage for recordings across the whole instance (default 5 GB, 100 MB–10 TB) |
-| `companion_secret` | `occ` only | Secret of the companion tokens, kept as sensitive; deleting it revokes all of them ([above](#companion-tokens-of-the-mobile-apps)) |
+| `companion_secret` | `occ` only | Secret of the companion tokens, stored as sensitive; deleting it revokes all of them ([above](#companion-tokens-for-the-mobile-apps)) |
 
 ¹ On the administration page, only members of the `admin` group can change
 these, not groups to which the ScoreView settings are delegated – the server

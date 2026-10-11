@@ -110,7 +110,7 @@ export function useViewerPreferences() {
 			// laut - und stuende ausgerechnet dann da, wenn jemand gerade
 			// singt.
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Anzeigeeinstellung konnte nicht gespeichert werden.', err)
+			console.error('ScoreView: could not save the display setting.', err)
 		}
 	}
 

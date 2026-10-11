@@ -155,7 +155,7 @@ export default {
 				this.crops = systemCrops(pages)
 			} catch (err) {
 				// eslint-disable-next-line no-console
-				console.error('ScoreView: Systemband konnte nicht aufgebaut werden.', err)
+				console.error('ScoreView: could not build the system band.', err)
 				this.crops = []
 			} finally {
 				this.loading = false

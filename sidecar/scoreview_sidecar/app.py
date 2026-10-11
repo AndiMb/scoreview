@@ -82,7 +82,7 @@ def create_app(start_reaper: bool = True) -> Flask:
     @app.get("/selftest")
     def selftest():
         if not config.SELFTEST_SCORE.exists():
-            return jsonify({"ok": False, "error": f"Selbsttest-Partitur fehlt: {config.SELFTEST_SCORE}"})
+            return jsonify({"ok": False, "error": f"self-test score missing: {config.SELFTEST_SCORE}"})
 
         workdir = Path(tempfile.mkdtemp(prefix="scoreview-selftest-"))
         try:

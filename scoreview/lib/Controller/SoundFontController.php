@@ -70,7 +70,7 @@ class SoundFontController extends Controller {
 			// der gemeinten 503-Meldung wurde ein 500 ohne Hinweis. Die Jobs
 			// fangen aus demselben Grund die Basisklasse
 			// (BackgroundJob\ConvertScoreJob).
-			$this->logger->warning('ScoreView: SoundFont konnte nicht bereitgestellt werden: {message}', [
+			$this->logger->warning('ScoreView: SoundFont could not be provided: {message}', [
 				'message' => $e->getMessage(),
 				'exception' => $e,
 			]);

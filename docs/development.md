@@ -183,7 +183,12 @@ Die Quellstrings sind Englisch
 Die Übersetzungen liegen als PO unter `translationfiles/`: `templates/scoreview.pot`
 enthält alle Quellstrings, `de/scoreview.po` ist die gepflegte deutsche Fassung,
 und jede weitere Sprache steht in ihrem eigenen Ordner. `l10n/*.js` und
-`l10n/*.json` erzeugt `npm run build`; sie sind gitignored.
+`l10n/*.json` erzeugt `npm run build`; sie sind gitignored. `l10n/de_DE.*` ist
+dabei eine Kopie von `de`
+([E4](architecture.md#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung)).
+Eine mit Poedit oder gettext gespeicherte `.po` (umbrochene Zeilen, eigene
+Kopfzeilen, `#|`, `#~`) liest das Werkzeug unverändert; `l10n:extract` schreibt
+sie danach wieder einzeilig, Übersetzerkommentare (`# …`) bleiben erhalten.
 
 Nach jedem neuen oder geänderten `t()`/`$l->t()`-Aufruf:
 

@@ -34,6 +34,14 @@ const TEMPLATE_PATH = `translationfiles/templates/${APP_ID}.pot`
 // The language the maintainer keeps complete. Everything else is a community
 // translation and may have gaps (N2: a release never waits for one).
 const REQUIRED_LANGUAGE = 'de'
+// Languages generated as a copy of another one instead of having a .po of
+// their own. Nextcloud offers "Deutsch (Sie)" as de_DE next to the informal
+// de and does not fall back from one to the other: without a de_DE file,
+// anyone who picked the formal variant would see English. A second German
+// translation in the formal register would have to be kept complete by
+// hand for every new string - the informal one is the better answer for
+// them than English.
+const GENERATED_LANGUAGES = { de_DE: 'de' }
 
 const SOURCE_GLOBS = [
 	{ pattern: 'src/**/*.js', kind: 'js' },
@@ -123,11 +131,12 @@ function escapePo(str) {
 
 /**
  * @param text
- * @return {{header: Record<string, string>, entries: Array<{msgid: string, msgstr: string, references: string[], comments: string[], flags: string[]}>}}
+ * @return {{header: Record<string, string>, headerComments: string[], entries: Array<{msgid: string, msgstr: string, references: string[], comments: string[], translatorComments: string[], flags: string[]}>}}
  */
 export function parsePo(text) {
 	const entries = []
 	let header = null
+	let headerComments = []
 	let current = null
 	let field = null
 	const errors = []
@@ -143,13 +152,14 @@ export function parsePo(text) {
 				errors.push('more than one header entry')
 			}
 			header = parseHeader(current.msgstr)
+			headerComments = current.translatorComments
 		} else {
 			entries.push(current)
 		}
 		current = null
 		field = null
 	}
-	const fresh = () => ({ references: [], comments: [], flags: [] })
+	const fresh = () => ({ references: [], comments: [], translatorComments: [], flags: [] })
 
 	const lines = text.replace(/\r\n?/g, '\n').split('\n')
 	lines.forEach((raw, index) => {
@@ -174,6 +184,10 @@ export function parsePo(text) {
 				current.comments.push(line.slice(2).trim())
 			} else if (line.startsWith('#,')) {
 				current.flags.push(...line.slice(2).split(',').map((f) => f.trim()).filter(Boolean))
+			} else if (line === '#' || line.startsWith('# ')) {
+				// A translator's own note (Poedit: "Comment"). Kept through
+				// extract, unlike #| (previous msgid), which msgmerge rewrites.
+				current.translatorComments.push(line.slice(2))
 			}
 			return
 		}
@@ -209,7 +223,7 @@ export function parsePo(text) {
 		error.poErrors = errors
 		throw error
 	}
-	return { header: header ?? {}, entries }
+	return { header: header ?? {}, headerComments, entries }
 }
 
 function parseHeader(msgstr) {
@@ -225,13 +239,16 @@ function parseHeader(msgstr) {
 
 // Single-line strings, no wrapping: a translator in the web editor sees one
 // string per line, and a changed word changes exactly one line of the diff.
-export function serializePo({ header, entries }) {
-	const out = ['msgid ""', 'msgstr ""']
+export function serializePo({ header, headerComments = [], entries }) {
+	const out = [...headerComments.map((comment) => `# ${comment}`.trimEnd()), 'msgid ""', 'msgstr ""']
 	for (const [name, value] of Object.entries(header)) {
 		out.push(`"${escapePo(`${name}: ${value}`)}\\n"`)
 	}
 	for (const entry of entries) {
 		out.push('')
+		for (const comment of entry.translatorComments ?? []) {
+			out.push(`# ${comment}`.trimEnd())
+		}
 		for (const comment of entry.comments ?? []) {
 			out.push(`#. ${comment}`)
 		}
@@ -282,6 +299,7 @@ export function mergePo(template, po) {
 	const existing = new Map(po.entries.map((entry) => [entry.msgid, entry]))
 	return {
 		header: po.header,
+		headerComments: po.headerComments ?? [],
 		entries: template.entries.map((entry) => {
 			const old = existing.get(entry.msgid)
 			return {
@@ -289,6 +307,7 @@ export function mergePo(template, po) {
 				msgstr: old?.msgstr ?? '',
 				references: entry.references,
 				comments: entry.comments,
+				translatorComments: old?.translatorComments ?? [],
 				flags: old?.flags ?? [],
 			}
 		}),
@@ -463,6 +482,11 @@ export async function checkTranslations(root = ROOT) {
 	if (!languages.some(({ lang }) => lang === REQUIRED_LANGUAGE)) {
 		languages.push({ lang: REQUIRED_LANGUAGE, result: null, problems: [`${poPath('', REQUIRED_LANGUAGE)} is missing`] })
 	}
+	for (const entry of languages) {
+		if (Object.hasOwn(GENERATED_LANGUAGES, entry.lang)) {
+			entry.problems.unshift(`${entry.lang} is generated from ${GENERATED_LANGUAGES[entry.lang]} at build time - translate ${poPath('', GENERATED_LANGUAGES[entry.lang])} instead`)
+		}
+	}
 	return { templateCurrent: committed === expected, languages }
 }
 
@@ -476,7 +500,7 @@ async function extract(root = ROOT) {
 	}
 }
 
-async function build(root = ROOT) {
+export async function build(root = ROOT) {
 	const template = await readPo(path.join(root, TEMPLATE_PATH))
 	const outDir = path.join(root, 'l10n')
 	// l10n/ holds nothing but generated files - a language removed from
@@ -484,12 +508,23 @@ async function build(root = ROOT) {
 	await fs.rm(outDir, { recursive: true, force: true })
 	await fs.mkdir(outDir)
 	const languages = await listLanguages(root)
-	for (const lang of languages) {
-		const runtime = buildRuntime(await readPo(poPath(root, lang)), template)
+	const built = []
+	const write = async (lang, runtime) => {
 		await fs.writeFile(path.join(outDir, `${lang}.js`), runtime.js)
 		await fs.writeFile(path.join(outDir, `${lang}.json`), runtime.json)
+		built.push(lang)
 	}
-	console.log(`l10n: built ${languages.join(', ')}.`)
+	for (const lang of languages) {
+		const runtime = buildRuntime(await readPo(poPath(root, lang)), template)
+		await write(lang, runtime)
+		for (const [copy, from] of Object.entries(GENERATED_LANGUAGES)) {
+			// The file register()s no language code, so a copy is a copy.
+			if (from === lang && !languages.includes(copy)) {
+				await write(copy, runtime)
+			}
+		}
+	}
+	console.log(`l10n: built ${built.join(', ')}.`)
 }
 
 async function check(root = ROOT) {

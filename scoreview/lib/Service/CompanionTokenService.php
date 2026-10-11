@@ -121,7 +121,7 @@ class CompanionTokenService {
 	 */
 	public function issue(string $uid, int $fileId, string $purpose, string $directDigest): string {
 		if (!in_array($purpose, [self::PURPOSE_SCORE, self::PURPOSE_SETLIST], true)) {
-			throw new \InvalidArgumentException('Unbekannter Zweck');
+			throw new \InvalidArgumentException('Unknown purpose');
 		}
 		$payload = self::base64UrlEncode(json_encode([
 			'uid' => $uid,

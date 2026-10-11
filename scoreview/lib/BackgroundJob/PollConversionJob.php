@@ -55,7 +55,7 @@ class PollConversionJob extends QueuedJob {
 		try {
 			$result = $this->sidecarClient->pollStatus($jobId);
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: Sidecar-Statusabfrage fehlgeschlagen für fileId={fileId}: {message}', [
+			$this->logger->error('ScoreView: sidecar status request failed for fileId={fileId}: {message}', [
 				'fileId' => $fileId,
 				'message' => $e->getMessage(),
 				'exception' => $e,
@@ -69,7 +69,7 @@ class PollConversionJob extends QueuedJob {
 			return;
 		}
 		if ($result['status'] === 'error') {
-			$message = (string)($result['error'] ?? 'Unbekannter Sidecar-Fehler');
+			$message = (string)($result['error'] ?? 'Unknown sidecar error');
 			// Einzige textbasierte Codeerkennung hier (statt eines eigenen
 			// Sidecar-Fehlerformats): sidecar/server.py wirft fuer eine
 			// Partitur ohne Seiten exakt diese RuntimeException-Message (siehe
@@ -84,7 +84,7 @@ class PollConversionJob extends QueuedJob {
 
 		// Noch pending/processing.
 		if ($this->time->getTime() >= $deadline) {
-			$this->conversionService->markError($conversion, 'Sidecar-Timeout: Konvertierung nicht rechtzeitig abgeschlossen.', ScoreConversion::ERROR_TIMEOUT);
+			$this->conversionService->markError($conversion, 'Sidecar timeout: conversion did not finish in time.', ScoreConversion::ERROR_TIMEOUT);
 			return;
 		}
 		$this->jobList->scheduleAfter(self::class, $this->time->getTime() + self::POLL_INTERVAL_SECONDS, $argument);
@@ -105,7 +105,7 @@ class PollConversionJob extends QueuedJob {
 			// die Herkunft steht hier also fest und wird nicht nachgeschlagen.
 			$this->conversionService->markReady($conversion, $pageSvgs, $midi, $timingJson, $measuresJson, $metaJson, ConversionBackend::SIDECAR);
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: Konvertierung fehlgeschlagen für fileId={fileId}: {message}', [
+			$this->logger->error('ScoreView: conversion failed for fileId={fileId}: {message}', [
 				'fileId' => $conversion->getFileId(),
 				'message' => $e->getMessage(),
 				'exception' => $e,

@@ -58,10 +58,10 @@ class UserDeletedListener implements IEventListener {
 			return;
 		}
 		$userId = $event->getUser()->getUID();
-		$this->deleteSafely($userId, 'Notizen', fn () => $this->mapper->deleteByUserId($userId));
-		$this->deleteSafely($userId, 'Leitungen', fn () => $this->leaderMapper->deleteByUserId($userId));
-		$this->deleteSafely($userId, 'Folge-Sitzungen', fn () => $this->followMapper->deleteByLeader($userId));
-		$this->deleteSafely($userId, 'Aufnahmen', fn () => $this->recordingStorage->deleteAllForUser($userId));
+		$this->deleteSafely($userId, 'annotations', fn () => $this->mapper->deleteByUserId($userId));
+		$this->deleteSafely($userId, 'leader roles', fn () => $this->leaderMapper->deleteByUserId($userId));
+		$this->deleteSafely($userId, 'follow sessions', fn () => $this->followMapper->deleteByLeader($userId));
+		$this->deleteSafely($userId, 'recordings', fn () => $this->recordingStorage->deleteAllForUser($userId));
 	}
 
 	/**
@@ -71,7 +71,7 @@ class UserDeletedListener implements IEventListener {
 		try {
 			$deleted = $delete();
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: {what} von userId={userId} konnten nicht geloescht werden: {message}', [
+			$this->logger->error('ScoreView: {what} of userId={userId} could not be deleted: {message}', [
 				'what' => $what,
 				'userId' => $userId,
 				'message' => $e->getMessage(),
@@ -80,7 +80,7 @@ class UserDeletedListener implements IEventListener {
 			return;
 		}
 		if ($deleted > 0) {
-			$this->logger->info('ScoreView: {count} {what} des geloeschten Kontos {userId} entfernt.', [
+			$this->logger->info('ScoreView: removed {count} {what} of the deleted account {userId}.', [
 				'count' => $deleted,
 				'what' => $what,
 				'userId' => $userId,

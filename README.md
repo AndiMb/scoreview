@@ -19,7 +19,7 @@ every part can be heard on its own, and every measure is one click away.
 **Reading music.** MuseScore's own page rendering as vector graphics – zoom
 without loss of quality, zoom presets, full screen, and an autoscroll that keeps
 the current measure in the visible band. Each user decides how the sounding
-position is marked: colored noteheads or a band, in a color of their choice.
+position is marked: coloured noteheads or a band, in a colour of their choice.
 
 **Hearing what you want to practice.** Playback is synthesized in the browser,
 not played from a finished MP3. That is why you can adjust the volume of each
@@ -30,8 +30,8 @@ to the front and keeps the others quietly audible.
 ![Mixer with volume, mute and solo per part](docs/img/mixer.png)
 
 **Targeted rehearsal.** Measure navigation with an always-visible measure
-number, a loop over any range of measures marked in the score, and a click on a
-note jumps exactly there.
+number, a loop over any range of measures, highlighted in the score, and a click
+on a note jumps exactly there.
 
 **Taking notes.** Private, or shared with everyone who can see the file. Notes
 are attached to a musical position rather than to pixels, so they survive a
@@ -46,20 +46,20 @@ triggers nothing – and `PgDn`/`PgUp` or a Bluetooth pedal turn pages so that n
 line is lost. Optionally light notes on a dark background; embedded images stay
 unchanged.
 
-**Practicing.** The **Starting note** plays, for as long as you hold the button,
-the note of your own part at the current position or the tonic of the key. The
+**Practising.** While you hold the button, **Starting note** plays the note
+of your own part at the current position or the key note of the current key. The
 app remembers "My voice" per score and, if you like, places it on the right of
 the stereo image and the others on the left. The **Speed trainer** raises the
 tempo with every pass through the loop until it reaches the target tempo.
-**Coach** plays your own part as a loud piano on the right and the others quietly
-on the left, and **Transpose** shifts the sound up or down by semitones without
+**Coach** plays your own part loudly on the piano, on the right, and the others
+quietly on the left, and **Transpose** shifts the sound up or down by semitones without
 changing the notation.
 
-**Practicing on the go, reading on a phone.** A **practice track** saves exactly
+**Practising on the go, reading on a phone.** A **practice track** saves exactly
 what you are hearing right now – part, coach, tempo, transposition, optionally
 only the loop or with metronome – as an MP3 next to the score in Files; the
-Nextcloud app plays it offline and with controls on the lock screen. Anyone
-allowed to write next to the score can create **Tracks for all parts** with one
+Nextcloud app plays it offline and with controls on the lock screen. Anyone with
+write access to the score's folder can create **Tracks for all parts** with one
 click. For reading on a phone, the **system band** lays the systems out side by
 side, each as tall as the screen, and the **lyrics view** shows only the text of
 your own part with all verses, the sung syllable highlighted. **Note names** can
@@ -68,12 +68,12 @@ note plays its pitch. With **"Save for offline use"**, a piece or an entire
 setlist, sound included, is kept ready in the browser and opens without a
 network through the app's offline page.
 
-**In choir rehearsal.** Whoever owns a score appoints **Leaders**, and every
+**In choir rehearsal.** Whoever owns a score appoints **leaders**, and every
 leader can appoint more. Leaders write **notes for voices** that only the
 addressed parts see – anyone who has not chosen a part yet sees them dimmed,
-with the name of the part. On top of that come **Stamps** (breath mark, caesura,
+with the name of the part. On top of that come **stamps** (breath mark, caesura,
 dynamics, fermata …) that sit at the musical position in the score. Measure
-navigation understands **Rehearsal marks**: "C" and "C+3" jump there. With
+navigation understands **rehearsal marks**: "C" and "C+3" jump there. With
 **"Follow me"** the leader sends the position, loop, starting note and a
 transposition to all devices in the room, has them turn pages silently along
 with the leader's own playback, and takes them along to the next piece in the
@@ -84,7 +84,8 @@ tap.
 
 **In concert.** A **setlist** is a `*.setlist.md` file in Files, a list of links
 to scores, editable in the text editor or in ScoreView. In the viewer you go
-from piece to piece without Performance mode, zoom or SoundFont being reloaded.
+from piece to piece without having to switch on Performance mode, set the
+zoom or load the SoundFont again.
 
 **Hearing yourself.** **Own recordings**, playable in sync with the cursor and
 accompaniment, can only be heard by the person who made them. **Intonation
@@ -99,15 +100,15 @@ rather than through the file itself. The offline page exists only in the
 browser, not in the apps. The lyrics view and note names require the local
 conversion path (see below). Administrators can switch off "Follow me",
 recording, intonation, practice tracks and the offline page individually; what
-the features cost and where they end is described in
-[docs/limits.md](docs/limits.md#rehearsal-and-concert-features)
-and [docs/limits.md](docs/limits.md#practising-and-reading-on-a-phone).
+the features cost and where they end is described in docs/limits.md under
+[Rehearsal and concert features](docs/limits.md#rehearsal-and-concert-features)
+and [Practising and reading on a phone](docs/limits.md#practising-and-reading-on-a-phone).
 
 Keyboard in the viewer: `Space` play/stop · `←` `→` previous/next measure · `L` loop
 · `+` `−` zoom · `0` page width · `PgDn` `PgUp` turn pages.
 
-Interface in English and German. Other languages can be contributed, see
-[docs/translating.md](docs/translating.md).
+Interface in English and German; more languages are welcome (see
+[Contributing](#contributing)).
 
 ## How it works
 
@@ -127,7 +128,7 @@ result and differ only in what the server needs for them:
 | Requires | Node.js ≥ 18 on the Nextcloud server | a Docker host |
 | MuseScore | MuseScore 4.7.5 as WebAssembly, in the app package | real MuseScore 4 in the container |
 | Setup | nothing | start the container, enter address and secret |
-| Lyrics view, note names, colored noteheads | yes | no |
+| Lyrics view, note names, coloured noteheads | yes | no |
 | Recommended if | you run no containers | you run some anyway |
 
 The local path is the default because it is the only one that is ready right
@@ -137,8 +138,8 @@ after `app:enable`. Details in
 If the server can run **neither of them** – managed hosting without a Node
 runtime and without containers – the user's browser does the conversion:
 the same engine, the same result, but without a cache and with a one-time
-download of a good 7 MB per device
-([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall)). This
+download of just over 7 MB per device
+([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall), German). This
 fallback cannot be selected anywhere and only applies where nothing else would
 work at all.
 
@@ -150,7 +151,7 @@ work at all.
   steps in
   ([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall) (German)).
   Why server-side rendering is not possible there is explained under
-  [E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
+  [E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api) (German).
 
 ## Installation
 
@@ -179,7 +180,7 @@ docker run -d --name scoreview-sidecar --network scoreview-net \
 
 ![Administration settings with path selection and status diagnostics](docs/img/admin.png)
 
-Either way, one one-time step remains: background jobs in `cron` mode. The
+Either way, one step remains, and it is needed only once: background jobs in `cron` mode. The
 conversion depends on them, and so does registering the mimetype for `.mscz`,
 which the app takes care of itself:
 **[full guide](docs/installation.md)**.
@@ -198,8 +199,8 @@ CPU cores with 40 devices
 | [Architecture](docs/architecture.md) (German) | Structure, design decisions, data flow, format fundamentals |
 | [Limits and restrictions](docs/limits.md) | Measured values, known gaps, what the app deliberately does not do |
 | [Troubleshooting](docs/troubleshooting.md) | Symptoms and what helps |
-| [Development](docs/development.md) | Building, testing, conventions, release |
-| [Sidecar](sidecar/README.md) | Operation and HTTP API of the conversion service |
+| [Development](docs/development.md) (German) | Building, testing, conventions, release |
+| [Sidecar](sidecar/README.md) (German) | Operation and HTTP API of the conversion service |
 
 What changed from version to version is listed in the
 [changelog](CHANGELOG.md).

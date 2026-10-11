@@ -131,7 +131,7 @@ export function useMicrophone({ audioContext }) {
 				handler()
 			} catch (err) {
 				// eslint-disable-next-line no-console
-				console.error('ScoreView: Abschalten eines Mikrofon-Nutzers gescheitert.', err)
+				console.error('ScoreView: turning off a microphone user failed.', err)
 			}
 		}
 		stopHandlers.clear()
@@ -150,7 +150,7 @@ export function useMicrophone({ audioContext }) {
 		if (!navigator.mediaDevices?.getUserMedia) {
 			// Unsicherer Kontext oder eine WebView ohne Medien-API: dieselbe
 			// Aussage wie eine Ablehnung.
-			const err = new Error('getUserMedia fehlt')
+			const err = new Error('getUserMedia is missing')
 			err.name = 'NotSupportedError'
 			throw err
 		}
@@ -186,7 +186,7 @@ export function useMicrophone({ audioContext }) {
 		// Waehrend addModule() abgebaut (letzter Nutzer weg, roter Punkt):
 		// Ein Knoten an einer Strecke, die es nicht mehr gibt, liefe ins Leere.
 		if (context !== ctx || !source) {
-			const err = new Error('Mikrofonstrecke waehrend des Aufbaus beendet')
+			const err = new Error('Microphone chain torn down while it was being built')
 			err.name = TORN_DOWN
 			throw err
 		}

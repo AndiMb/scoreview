@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:1fd2ab1d8a32 -->
+<!-- translation-of: troubleshooting.md sha256:3f0543b5eeda -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -22,8 +22,8 @@ falsch, sind drei Dinge zu prüfen, in dieser Reihenfolge:
    Background-Job, kein Upload-Pfad. Ohne Cron bleibt er liegen (siehe
    [Installation, Schritt 5](installation.de.md#5-background-jobs-sicherstellen)).
 3. **Meldet der Server einen Fehler?** `apply()` schluckt jeden Fehlschlag
-   bewusst und schreibt ihn ins Log – dort steht dann „Mimetype konnte nicht
-   registriert werden".
+   bewusst und schreibt ihn ins Log – dort steht dann „mimetype could not be
+   registered".
 
 Ohne Shell prüfen lässt sich der Mimetype über WebDAV:
 
@@ -440,7 +440,7 @@ Browser entstehen:
 Die Notenansicht funktioniert weiter, nur die Wiedergabe nicht. Steht hinter
 dem Doppelpunkt „Der Server konnte das SoundFont nicht bereitstellen“, liegt die
 Ursache auf dem Server: Die Zeile **SoundFont** der Betriebsdiagnose nennt sie,
-im Nextcloud-Log steht sie als „SoundFont konnte nicht bereitgestellt werden“,
+im Nextcloud-Log steht sie als „SoundFont could not be provided“,
 und die Browserkonsole zeigt sie ebenfalls. Die üblichen Ursachen:
 
 - **Der Sidecar liefert kein SoundFont aus** – das Image enthält keines

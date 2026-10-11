@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:5fae1ad548c8 -->
+<!-- translation-of: installation.md sha256:12fd5bec25ec -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.

@@ -46,6 +46,6 @@ class Version000100Date20260903120000 extends SimpleMigrationStep {
 			return;
 		}
 		$this->appConfig->setValueString(Application::APP_ID, ConversionBackend::CONFIG_KEY, ConversionBackend::SIDECAR);
-		$output->info('ScoreView: Der Sidecar bleibt der Konvertierungsweg dieser Instanz (neue Voreinstellung waere sonst der lokale Weg).');
+		$output->info('ScoreView: the sidecar remains the conversion path of this instance (the new default would otherwise be the local path).');
 	}
 }

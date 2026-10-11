@@ -55,7 +55,7 @@ export function useMyPart({ fileId }) {
 			// Ohne gemerkte Stimme geht es ohne diese Vorbelegung weiter - kein Banner
 			// ueber der Partitur fuer etwas, das man mit einem Klick neu waehlt.
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: „Meine Stimme" konnte nicht geladen werden.', err)
+			console.error('ScoreView: could not load "My part".', err)
 		}
 	}
 
@@ -71,7 +71,7 @@ export function useMyPart({ fileId }) {
 			// Die Wahl wirkt im geoeffneten Viewer trotzdem - sie ist nur nicht
 			// ueber das Schliessen hinaus gemerkt (wie bei useViewerPreferences).
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: „Meine Stimme" konnte nicht gespeichert werden.', err)
+			console.error('ScoreView: could not save "My part".', err)
 		}
 	}
 
@@ -88,7 +88,7 @@ export function useMyPart({ fileId }) {
 		} catch (err) {
 			// Wie bei der Stimme: Es wirkt im offenen Viewer, nur ungemerkt.
 			// eslint-disable-next-line no-console
-			console.error('ScoreView: Uebe-Einstellungen konnten nicht gespeichert werden.', err)
+			console.error('ScoreView: could not save the practice settings.', err)
 		}
 	}
 

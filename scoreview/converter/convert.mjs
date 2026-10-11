@@ -94,7 +94,7 @@ async function loadFonts(fontVerzeichnis) {
 			// Ein ausdruecklich eingetragenes Verzeichnis, das nicht lesbar
 			// ist, ist ein Konfigurationsfehler und kein Grund, still ohne
 			// Fonts weiterzumachen.
-			throw new Error(`Font-Verzeichnis ${fontVerzeichnis} nicht lesbar: ${error.message}`, { cause: error })
+			throw new Error(`Font directory ${fontVerzeichnis} not readable: ${error.message}`, { cause: error })
 		}
 	}
 	try {
@@ -105,7 +105,7 @@ async function loadFonts(fontVerzeichnis) {
 		// - eine kaputte Datei, ein Rechteproblem - waere sonst unsichtbar:
 		// Die Konvertierung gelingt ja, nur die Liedtexte sind Kaestchen.
 		if (error?.code !== 'ERR_MODULE_NOT_FOUND') {
-			process.stderr.write(`Zusatzfonts nicht ladbar: ${error?.message ?? error}\n`)
+			process.stderr.write(`Additional fonts could not be loaded: ${error?.message ?? error}\n`)
 		}
 		return []
 	}
@@ -141,7 +141,7 @@ async function convert(msczPath, fontVerzeichnis) {
 
 	const pageCount = await score.npages()
 	if (pageCount < 1) {
-		throw new Error('Die Engine lieferte keine SVG-Seite.')
+		throw new Error('The engine returned no SVG page.')
 	}
 
 	const pages = []
@@ -192,7 +192,7 @@ async function main() {
 		fontVerzeichnis = args[fontsAn + 1] ?? null
 		args.splice(fontsAn, fontVerzeichnis === null ? 1 : 2)
 		if (!fontVerzeichnis) {
-			throw new Error('--fonts erwartet ein Verzeichnis.')
+			throw new Error('--fonts expects a directory.')
 		}
 	}
 
@@ -236,7 +236,7 @@ async function main() {
 	}
 
 	if (args.length !== 2) {
-		throw new Error('Aufruf: convert.mjs [--fonts <verzeichnis>] <eingabe.mscz> <ausgabeverzeichnis> | --selftest')
+		throw new Error('Usage: convert.mjs [--fonts <directory>] <input.mscz> <output-directory> | --selftest')
 	}
 	const [input, outDir] = args
 	const converted = await convert(resolve(input), fontVerzeichnis)

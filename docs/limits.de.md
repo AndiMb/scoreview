@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:0ab676385008 -->
+<!-- translation-of: limits.md sha256:1ff1cf4318a1 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.

@@ -44,7 +44,7 @@ class RequestBodyReader {
 	public static function copyBounded($input, int $maxBytes) {
 		$spool = fopen('php://temp/maxmemory:' . self::IN_MEMORY_BYTES, 'w+b');
 		if ($spool === false) {
-			throw new \RuntimeException('Keine Zwischendatei fuer den Upload');
+			throw new \RuntimeException('No temporary file for the upload');
 		}
 		if ($input === false) {
 			return $spool;
