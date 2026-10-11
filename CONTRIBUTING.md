@@ -1,10 +1,13 @@
 # Mitarbeiten
 
+> Translating ScoreView into your language? See [docs/translating.md](docs/translating.md) –
+> no German needed. Bug reports in English are welcome too.
+
 Fehler, Wünsche und Fragen gehören in die
 [Issues](https://github.com/AndiMb/scoreview/issues). Bei einem Fehlerbericht
 hilft, was auf der Verwaltungsseite unter **Einstellungen → Verwaltung →
 ScoreView** steht (Betriebsdiagnose) und ob der Fall in
-[docs/troubleshooting.md](docs/troubleshooting.md) schon beschrieben ist.
+[docs/troubleshooting.de.md](docs/troubleshooting.de.md) schon beschrieben ist.
 
 ## Bevor du Code schickst
 

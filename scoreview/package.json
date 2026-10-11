@@ -5,15 +5,18 @@
 	"license": "AGPL-3.0-or-later",
 	"scripts": {
 		"audit": "node tools/audit.mjs",
-		"build": "webpack --node-env production --progress",
-		"dev": "webpack --node-env development --progress",
-		"l10n:extract": "node tools/l10n.mjs",
+		"build": "node tools/l10n.mjs build && webpack --node-env production --progress",
+		"dev": "node tools/l10n.mjs build && webpack --node-env development --progress",
+		"docs:l10n": "node tools/docs-l10n.mjs",
+		"l10n:build": "node tools/l10n.mjs build",
+		"l10n:check": "node tools/l10n.mjs check",
+		"l10n:extract": "node tools/l10n.mjs extract",
 		"lint": "eslint .",
 		"lint:fix": "eslint . --fix",
 		"stylelint": "stylelint \"src/**/*.{css,scss,vue}\"",
 		"stylelint:fix": "stylelint \"src/**/*.{css,scss,vue}\" --fix",
 		"test": "vitest run",
-		"watch": "webpack --node-env development --progress --watch"
+		"watch": "node tools/l10n.mjs build && webpack --node-env development --progress --watch"
 	},
 	"browserslist": [
 		"extends @nextcloud/browserslist-config"

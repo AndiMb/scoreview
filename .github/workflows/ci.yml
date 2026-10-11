@@ -56,12 +56,20 @@ jobs:
       - name: Unit-Tests (vitest)
         run: npm test
 
-      # Muss NACH den Tests laufen und ist trotzdem eine eigene Stufe: der
-      # l10n-Vollstaendigkeitstest ist Teil von `npm test`, aber die
-      # Skriptausgabe nennt die fehlenden Strings einzeln (siehe
-      # tools/l10n.mjs) - das spart beim Roten das Nachschlagen.
-      - name: Uebersetzungen vollstaendig
-        run: npm run l10n:extract
+      # Runs AFTER the tests and is still a step of its own: the l10n check
+      # is part of `npm test`, but the script output names every finding and
+      # the coverage per language (see tools/l10n.mjs) - that saves looking
+      # it up when this is red. `check`, not `extract`: CI must not write.
+      - name: Translations (l10n:check)
+        run: npm run l10n:check
+
+      # The user documentation is English with a maintained German copy
+      # (*.de.md). Fails if a German file is older than its English original,
+      # a language line or screenshot is missing, or any link or anchor in
+      # the documentation is broken - translating a heading changes its
+      # anchor. Plain Node, no dependencies, but scoped to the whole repo.
+      - name: Documentation (docs:l10n)
+        run: npm run docs:l10n
 
       # Der Build ist Pflicht, weil scoreview/js/ gitignored ist: was hier
       # nicht baut, existiert in einem Release-Tarball gar nicht.

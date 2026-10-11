@@ -1,153 +1,155 @@
 # ScoreView
 
+**English** · [Deutsch](README.de.md)
+
 [![CI](https://github.com/AndiMb/scoreview/actions/workflows/ci.yml/badge.svg)](https://github.com/AndiMb/scoreview/actions/workflows/ci.yml)
-[![Lizenz: AGPL-3.0-or-later](https://img.shields.io/badge/Lizenz-AGPL--3.0--or--later-blue.svg)](LICENSE)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/License-AGPL--3.0--or--later-blue.svg)](LICENSE)
 
-Nextcloud-App, die MuseScore-Partituren direkt aus Files anzeigt und im Browser
-abspielt – als originalgetreue MuseScore-Notation mit einem Wiedergabe-Cursor,
-der synchron mitläuft, statt als starrer PDF-Export.
+A Nextcloud app that shows MuseScore scores straight from Files and plays them
+back in the browser – as faithful MuseScore notation with a playback cursor
+that follows along in sync, instead of as a static PDF export.
 
-Gedacht für Chor- und Ensemblearbeit: Die Noten sehen aus wie die eigenen Noten,
-jede Stimme ist einzeln hörbar, und jeder Takt ist in einem Klick erreichbar.
+Made for choir and ensemble work: the music looks like your own sheet music,
+every part can be heard on its own, and every measure is one click away.
 
-![Der Viewer mit laufendem Wiedergabe-Cursor](docs/img/viewer.png)
+![The viewer with the playback cursor running](docs/img/viewer.png)
 
-## Was die App kann
+## What the app does
 
-**Noten lesen.** MuseScores eigenes Seitenbild als Vektorgrafik – Zoom ohne
-Qualitätsverlust, Zoom-Presets, Vollbild, und ein Autoscroll, das den laufenden
-Takt im Sichtband hält. Wie die klingende Stelle markiert wird, entscheidet
-jede Nutzerin selbst: eingefärbte Notenköpfe oder ein Band, in einer frei
-wählbaren Farbe.
+**Reading music.** MuseScore's own page rendering as vector graphics – zoom
+without loss of quality, zoom presets, full screen, and an autoscroll that keeps
+the current measure in the visible band. Each user decides how the sounding
+position is marked: colored noteheads or a band, in a color of their choice.
 
-**Hören, was man üben will.** Die Wiedergabe wird im Browser synthetisiert, nicht
-als fertiges MP3 abgespielt. Deshalb lässt sich pro Stimme die Lautstärke regeln,
-stummschalten und solo hören, das Tempo in BPM ändern und ein Metronom
-zuschalten – auf jedem Schlag oder nur auf dem Taktanfang. „Meine Stimme" hebt
-eine Stimme hervor und lässt die übrigen leise mithörbar.
+**Hearing what you want to practice.** Playback is synthesized in the browser,
+not played from a finished MP3. That is why you can adjust the volume of each
+part, mute it or hear it solo, change the tempo in BPM and switch on a
+metronome – on every beat or only on the downbeat. "My voice" brings one part
+to the front and keeps the others quietly audible.
 
-![Mixer mit Lautstärke, Mute und Solo je Stimme](docs/img/mixer.png)
+![Mixer with volume, mute and solo per part](docs/img/mixer.png)
 
-**Gezielt proben.** Taktnavigation mit dauerhaft sichtbarer Taktangabe, ein Loop
-über einen frei gewählten Taktbereich mit Markierung im Notenbild, und ein Klick
-auf eine Note springt genau dorthin.
+**Targeted rehearsal.** Measure navigation with an always-visible measure
+number, a loop over any range of measures marked in the score, and a click on a
+note jumps exactly there.
 
-**Notizen machen.** Privat oder mit allen geteilt, die die Datei sehen. Sie
-hängen an einer musikalischen Position statt an Pixeln und überstehen deshalb
-ein Neurendern und einen Re-Upload derselben Partitur.
+**Taking notes.** Private, or shared with everyone who can see the file. Notes
+are attached to a musical position rather than to pixels, so they survive a
+re-render and a re-upload of the same score.
 
-![Notiz an Takt 5, verankert an der musikalischen Position](docs/img/annotations.png)
+![Note at measure 5, anchored to the musical position](docs/img/annotations.png)
 
-**Auf dem Tablet am Notenständer.** Touch-Bedienung, Pinch-Zoom und ein
-Bildschirm, der während der Wiedergabe nicht schlafen geht. Im
-**Aufführungsmodus** wirken nur noch Blättern, Zoom und der Wechsel zum nächsten
-Stück – ein versehentlicher
-Tipp löst nichts aus –, und `Bild↓`/`Bild↑` oder ein Bluetooth-Pedal blättern so
-weiter, dass keine Zeile verloren geht. Auf Wunsch helle Noten auf dunklem
-Grund, eingebettete Bilder bleiben dabei unverändert.
+**On a tablet at the music stand.** Touch controls, pinch zoom and a screen
+that does not go to sleep during playback. In **Performance mode** only page
+turning, zoom and moving to the next piece still work – an accidental tap
+triggers nothing – and `PgDn`/`PgUp` or a Bluetooth pedal turn pages so that no
+line is lost. Optionally light notes on a dark background; embedded images stay
+unchanged.
 
-**Üben.** Der **Anfangston** spielt, solange man den Knopf hält, den Ton der
-eigenen Stimme an der aktuellen Stelle oder den Grundton der Tonart. „Meine
-Stimme“ merkt sich die App je Partitur und legt sie auf Wunsch rechts ins
-Stereobild, die übrigen links. Der **Speed-Trainer** steigert das Tempo mit
-jedem Loop-Durchlauf bis zum Zieltempo. **Coach** spielt die eigene Stimme als
-Klavier laut und rechts, die übrigen leise links, und **Transponieren** setzt
-den Klang um Halbtöne höher oder tiefer, ohne das Notenbild zu ändern.
+**Practicing.** The **Starting note** plays, for as long as you hold the button,
+the note of your own part at the current position or the tonic of the key. The
+app remembers "My voice" per score and, if you like, places it on the right of
+the stereo image and the others on the left. The **Speed trainer** raises the
+tempo with every pass through the loop until it reaches the target tempo.
+**Coach** plays your own part as a loud piano on the right and the others quietly
+on the left, and **Transpose** shifts the sound up or down by semitones without
+changing the notation.
 
-**Unterwegs üben, am Handy lesen.** Ein **Übe-Track** speichert genau das, was
-man gerade hört – Stimme, Coach, Tempo, Transposition, auf Wunsch nur den
-Loop oder mit Metronom – als MP3 neben der Partitur in Files; die
-Nextcloud-App spielt ihn offline und mit Steuerung auf dem Sperrbildschirm.
-Wer neben der Partitur schreiben darf, erzeugt mit einem Klick **Tracks für
-alle Stimmen**. Zum Lesen auf dem Telefon stellt das **Systemband** die Systeme
-nebeneinander, jedes so hoch wie der Bildschirm, und die **Liedtext-Ansicht**
-zeigt nur den Text der eigenen Stimme mit allen Strophen, die gesungene Silbe
-hervorgehoben. **Tonnamen** stehen auf Wunsch neben den Notenköpfen – deutsch,
-englisch oder als Solmisation –, und ein Tipp auf eine Note spielt ihren Ton.
-Mit **„Offline vormerken“** liegen ein Stück oder eine ganze Setliste samt
-Klang im Browser bereit und öffnen sich ohne Netz über die Offline-Seite der
-App.
+**Practicing on the go, reading on a phone.** A **practice track** saves exactly
+what you are hearing right now – part, coach, tempo, transposition, optionally
+only the loop or with metronome – as an MP3 next to the score in Files; the
+Nextcloud app plays it offline and with controls on the lock screen. Anyone
+allowed to write next to the score can create **Tracks for all parts** with one
+click. For reading on a phone, the **system band** lays the systems out side by
+side, each as tall as the screen, and the **lyrics view** shows only the text of
+your own part with all verses, the sung syllable highlighted. **Note names** can
+be shown next to the noteheads – German, English or as solfège – and tapping a
+note plays its pitch. With **"Save for offline use"**, a piece or an entire
+setlist, sound included, is kept ready in the browser and opens without a
+network through the app's offline page.
 
-**In der Chorprobe.** Wer eine Partitur besitzt, ernennt **Leitungen**, und jede
-Leitung kann weitere ernennen. Leitungen schreiben **Stimmnotizen**, die nur die
-angesprochenen Stimmen sehen – wer noch keine Stimme gewählt hat, sieht sie
-zurückgenommen mit dem Namen der Stimme. Dazu kommen **Stempel** (Atemzeichen,
-Zäsur, Dynamik, Fermate …), die an der musikalischen Stelle im Notenbild stehen. Die
-Taktnavigation versteht **Studierbuchstaben**: „C“ und „C+3“ springen dorthin.
-Mit **„Folgt mir“** schickt die Leitung Stelle, Loop, Anfangston und eine
-Transposition an alle Geräte im Raum, lässt sie beim eigenen Abspielen stumm
-mitblättern und nimmt sie in der Setliste zum nächsten Stück mit – wer selbst
-navigiert, löst sich und kommt mit einem Tipp
-zurück.
+**In choir rehearsal.** Whoever owns a score appoints **Leaders**, and every
+leader can appoint more. Leaders write **notes for voices** that only the
+addressed parts see – anyone who has not chosen a part yet sees them dimmed,
+with the name of the part. On top of that come **Stamps** (breath mark, caesura,
+dynamics, fermata …) that sit at the musical position in the score. Measure
+navigation understands **Rehearsal marks**: "C" and "C+3" jump there. With
+**"Follow me"** the leader sends the position, loop, starting note and a
+transposition to all devices in the room, has them turn pages silently along
+with the leader's own playback, and takes them along to the next piece in the
+setlist – anyone who navigates on their own detaches and comes back with one
+tap.
 
-![Die Leitung führt mit „Folgt mir“; eine Notiz erreicht gezielt eine Stimme](docs/img/rehearsal.png)
+![The leader leads with "Follow me"; a note reaches one specific part](docs/img/rehearsal.png)
 
-**Im Konzert.** Eine **Setliste** ist eine Datei `*.setlist.md` in Files, eine
-Liste von Links auf Partituren, im Texteditor oder in ScoreView bearbeitbar.
-Im Viewer geht es von Stück zu Stück, ohne dass Aufführungsmodus, Zoom oder
-SoundFont neu geladen werden.
+**In concert.** A **setlist** is a `*.setlist.md` file in Files, a list of links
+to scores, editable in the text editor or in ScoreView. In the viewer you go
+from piece to piece without Performance mode, zoom or SoundFont being reloaded.
 
-**Sich selbst hören.** **Eigene Aufnahmen**, synchron zu Cursor und Begleitung
-abspielbar, hört nur, wer sie gemacht hat. Die **Rückmeldung zur Intonation**
-zeigt beim Singen eine Nadel am Cursor und danach die Stellen, die zu hoch oder
-zu tief waren. Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt
-zeigt wofür.
+**Hearing yourself.** **Own recordings**, playable in sync with the cursor and
+accompaniment, can only be heard by the person who made them. **Intonation
+feedback** shows a needle at the cursor while you sing and afterwards the spots
+that were too sharp or too flat. The microphone only runs when explicitly
+requested, and a red dot shows what for.
 
-Das geht auch in den mobilen Nextcloud-Apps, mit wenigen Einschränkungen: Das
-Mikrofon gibt die Android-App nicht frei, dort führt „Im Browser öffnen“ weiter.
-Und eine Setliste öffnet sich mobil über eine ihrer Partituren statt über die
-Datei selbst. Die Offline-Seite gibt es nur im Browser, nicht in den Apps.
-Liedtext-Ansicht und Tonnamen brauchen den lokalen Konvertierungsweg (siehe
-unten). Die Verwaltung kann „Folgt mir“, Aufnahme, Intonation, Übe-Tracks und
-die Offline-Seite einzeln abschalten; was die Funktionen kosten und wo sie
-enden, steht in [docs/limits.md](docs/limits.md#probe--und-konzertfunktionen)
-und [docs/limits.md](docs/limits.md#üben-und-lesen-auf-dem-handy).
+This also works in the Nextcloud mobile apps, with a few limitations: the
+Android app does not grant access to the microphone; there, "Open in browser"
+gets you further. And on mobile a setlist opens through one of its scores
+rather than through the file itself. The offline page exists only in the
+browser, not in the apps. The lyrics view and note names require the local
+conversion path (see below). Administrators can switch off "Follow me",
+recording, intonation, practice tracks and the offline page individually; what
+the features cost and where they end is described in
+[docs/limits.md](docs/limits.md#rehearsal-and-concert-features)
+and [docs/limits.md](docs/limits.md#practising-and-reading-on-a-phone).
 
-Tastatur im Viewer: `Leertaste` Start/Stopp · `←` `→` Takt zurück/vor · `L` Loop
-· `+` `−` Zoom · `0` Seitenbreite · `Bild↓` `Bild↑` blättern.
+Keyboard in the viewer: `Space` play/stop · `←` `→` previous/next measure · `L` loop
+· `+` `−` zoom · `0` page width · `PgDn` `PgUp` turn pages.
 
-Oberfläche auf Deutsch und Englisch.
+Interface in English and German. Other languages can be contributed, see
+[docs/translating.md](docs/translating.md).
 
-## Wie es funktioniert
+## How it works
 
-Eine hochgeladene `.mscz`-Datei wird **einmalig** serverseitig zu Notenseiten
-(SVG), MIDI und Timing-Daten konvertiert und das Ergebnis gecacht. Erneutes
-Öffnen rendert nicht neu; eine neue Konvertierung stößt eine Änderung an der
-Datei an – oder der Knopf „Neu konvertieren" im Viewer, wenn eine neuere Fassung
-der App dieselbe Partitur besser setzt. Daneben steht, über welchen der beiden
-Wege unten die angezeigten Seiten gesetzt wurden. Die Audiowiedergabe passiert
-clientseitig im Browser, mit einem SoundFont, das die App selbst ausliefert.
+An uploaded `.mscz` file is converted **once** on the server into score pages
+(SVG), MIDI and timing data, and the result is cached. Opening it again does not
+re-render; a new conversion is triggered by a change to the file – or by the
+"Convert again" button in the viewer, when a newer version of the app lays out
+the same score better. Next to it, the viewer shows which of the two paths below
+produced the pages on display. Audio playback happens client-side in the
+browser, with a SoundFont that the app serves itself.
 
-Für die Konvertierung gibt es **zwei gleichwertige Wege**, die dasselbe
-Ergebnis liefern und sich nur darin unterscheiden, was der Server dafür braucht:
+There are **two equivalent paths** for the conversion. They produce the same
+result and differ only in what the server needs for them:
 
-| | **Lokal** (Voreinstellung) | **Sidecar** |
+| | **Local** (default) | **Sidecar** |
 |---|---|---|
-| Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
-| MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
-| Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
-| Liedtext-Ansicht, Tonnamen, eingefärbte Notenköpfe | ja | nein |
-| Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
+| Requires | Node.js ≥ 18 on the Nextcloud server | a Docker host |
+| MuseScore | MuseScore 4.7.5 as WebAssembly, in the app package | real MuseScore 4 in the container |
+| Setup | nothing | start the container, enter address and secret |
+| Lyrics view, note names, colored noteheads | yes | no |
+| Recommended if | you run no containers | you run some anyway |
 
-Der lokale Weg ist voreingestellt, weil er der einzige ist, der nach
-`app:enable` schon fertig ist. Ausführlich in
-[docs/architecture.md](docs/architecture.md).
+The local path is the default because it is the only one that is ready right
+after `app:enable`. Details in
+[docs/architecture.md](docs/architecture.md) (German).
 
-Kann der Server **keinen von beiden** ausführen – verwaltetes Hosting ohne
-Node-Laufzeit und ohne Container –, konvertiert der Browser der Nutzerin:
-dieselbe Engine, dasselbe Ergebnis, aber ohne Cache und mit gut 7 MB
-einmaligem Download je Gerät
-([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall)). Dieser
-Rückfall ist nirgends wählbar und greift nur, wo sonst gar nichts liefe.
+If the server can run **neither of them** – managed hosting without a Node
+runtime and without containers – the user's browser does the conversion:
+the same engine, the same result, but without a cache and with a one-time
+download of a good 7 MB per device
+([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall)). This
+fallback cannot be selected anywhere and only applies where nothing else would
+work at all.
 
-## Voraussetzungen
+## Requirements
 
 - Nextcloud 31–35, PHP 8.1–8.5
-- Einer der beiden Konvertierungswege oben – oder keiner: Wo verwaltetes
-  Hosting weder Container noch eine Node-Laufzeit erlaubt, springt der Rückfall
-  im Browser ein
-  ([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall)). Warum
-  serverseitiges Rendern dort nicht geht, steht unter
+- One of the two conversion paths above – or neither: where managed hosting
+  allows neither containers nor a Node runtime, the fallback in the browser
+  steps in
+  ([E7](docs/architecture.md#e7-konvertierung-im-browser-als-rückfall) (German)).
+  Why server-side rendering is not possible there is explained under
   [E3](docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
 
 ## Installation
@@ -156,15 +158,15 @@ Rückfall ist nirgends wählbar und greift nur, wo sonst gar nichts liefe.
 occ app:enable scoreview
 ```
 
-Mehr ist für die Konvertierung nicht nötig: Voreingestellt ist der lokale Weg,
-und was er außer einer Node.js-Laufzeit braucht, liegt im App-Paket. Das SoundFont holt der Server beim
-ersten Abspielen selbst (~23 MB, FluidR3Mono_GM) – auch dafür ist nichts
-einzutragen.
+Nothing more is needed for the conversion: the local path is the default, and
+everything it needs apart from a Node.js runtime ships in the app package. The
+server fetches the SoundFont itself on first playback (~23 MB, FluidR3Mono_GM) –
+there is nothing to configure for that either.
 
-Wer stattdessen den Sidecar fahren will, startet ihn zusätzlich, wählt ihn
-unter **Einstellungen → Verwaltung → ScoreView** aus und erlaubt Nextcloud den
-Zugriff auf lokale Adressen (`allow_local_remote_servers`, siehe
-[Anleitung](docs/installation.md#weg-b-sidecar)):
+If you want to run the sidecar instead, start it in addition, select it under
+**Settings → Administration → ScoreView** and allow Nextcloud to access local
+addresses (`allow_local_remote_servers`, see the
+[guide](docs/installation.md#path-b-sidecar)):
 
 ```sh
 docker build -t scoreview-musescore-cli sidecar/
@@ -175,52 +177,52 @@ docker run -d --name scoreview-sidecar --network scoreview-net \
   --memory=2g --pids-limit=512 scoreview-musescore-cli
 ```
 
-![Verwaltungseinstellungen mit Wegwahl und Betriebsdiagnose](docs/img/admin.png)
+![Administration settings with path selection and status diagnostics](docs/img/admin.png)
 
-So oder so fehlt noch ein einmaliger Schritt: Background-Jobs im Modus `cron`.
-Daran hängen die Konvertierung und das Eintragen des Mimetypes für `.mscz`, das
-die App selbst übernimmt:
-**[vollständige Anleitung](docs/installation.md)**.
+Either way, one one-time step remains: background jobs in `cron` mode. The
+conversion depends on them, and so does registering the mimetype for `.mscz`,
+which the app takes care of itself:
+**[full guide](docs/installation.md)**.
 
-Für „Folgt mir“ mit vielen Geräten lohnt sich
-[notify_push](https://github.com/nextcloud/notify_push): Ohne fragt jedes
-Gerät während einer Sitzung selbst nach, was bei 40 Geräten zwei bis drei
-Prozessorkerne bindet
-([Einrichtung](docs/installation.md#probe-und-konzert)).
+For "Follow me" with many devices,
+[notify_push](https://github.com/nextcloud/notify_push) is worthwhile: without
+it, every device polls on its own during a session, which ties up two to three
+CPU cores with 40 devices
+([setup](docs/installation.md#rehearsal-and-concert)).
 
-## Dokumentation
+## Documentation
 
-| Dokument | Inhalt |
+| Document | Contents |
 |---|---|
-| [Installation und Konfiguration](docs/installation.md) | Einrichtung Schritt für Schritt, Einstellungen, Aktualisieren |
-| [Architektur](docs/architecture.md) | Aufbau, Entwurfsentscheidungen, Datenfluss, Formatgrundlagen |
-| [Grenzwerte und Einschränkungen](docs/limits.md) | Gemessene Werte, bekannte Lücken, was die App bewusst nicht tut |
-| [Troubleshooting](docs/troubleshooting.md) | Fehlerbilder und was hilft |
-| [Entwicklung](docs/development.md) | Bauen, testen, Konventionen, Release |
-| [Sidecar](sidecar/README.md) | Betrieb und HTTP-API des Konvertierungsdienstes |
+| [Installation and configuration](docs/installation.md) | Step-by-step setup, settings, updating |
+| [Architecture](docs/architecture.md) (German) | Structure, design decisions, data flow, format fundamentals |
+| [Limits and restrictions](docs/limits.md) | Measured values, known gaps, what the app deliberately does not do |
+| [Troubleshooting](docs/troubleshooting.md) | Symptoms and what helps |
+| [Development](docs/development.md) | Building, testing, conventions, release |
+| [Sidecar](sidecar/README.md) | Operation and HTTP API of the conversion service |
 
-Was sich von Fassung zu Fassung geändert hat, steht im
-[Changelog](CHANGELOG.md).
+What changed from version to version is listed in the
+[changelog](CHANGELOG.md).
 
-## Mitarbeiten
+## Contributing
 
-Siehe [CONTRIBUTING.md](CONTRIBUTING.md). Fehler und Wünsche gehören in die
-[Issues](https://github.com/AndiMb/scoreview/issues).
+See [CONTRIBUTING.md](CONTRIBUTING.md) (German). Bugs and feature requests go in
+the [issues](https://github.com/AndiMb/scoreview/issues). How to contribute a
+translation is described in [docs/translating.md](docs/translating.md).
 
-## Lizenz und Herkunft
+## License and credits
 
-ScoreView steht unter AGPL-3.0-or-later, siehe [LICENSE](LICENSE).
+ScoreView is licensed under AGPL-3.0-or-later, see [LICENSE](LICENSE).
 
-- Die Notensatz- und Konvertierungsarbeit macht **MuseScore Studio** (GPL-3.0) –
-  im Sidecar als gepinntes AppImage, auf dem lokalen Weg über die
-  [scoreview-engine](https://github.com/AndiMb/scoreview-engine), MuseScores
-  Notensatz Qt-frei nach WebAssembly übersetzt.
-- Das **SoundFont** für die Wiedergabe ist voreingestellt `FluidR3Mono_GM`
-  (MIT), dasselbe, das MuseScore mitbringt. Mit Sidecar stammt es aus dessen
-  MuseScore-Installation (MuseScore General von S. Christian Collins, MIT),
-  sonst holt der Server es von einer voreingestellten, überschreibbaren
-  Adresse.
-- Übe-Tracks kodiert im Browser
+- The engraving and conversion work is done by **MuseScore Studio** (GPL-3.0) –
+  in the sidecar as a pinned AppImage, on the local path through the
+  [scoreview-engine](https://github.com/AndiMb/scoreview-engine), MuseScore's
+  engraving compiled Qt-free to WebAssembly.
+- The **SoundFont** for playback is `FluidR3Mono_GM` (MIT) by default, the same
+  one that ships with MuseScore. With the sidecar it comes from its MuseScore
+  installation (MuseScore General by S. Christian Collins, MIT); otherwise the
+  server fetches it from a preset address that can be overridden.
+- Practice tracks are encoded in the browser by
   [`@breezystack/lamejs`](https://www.npmjs.com/package/@breezystack/lamejs) (LGPL-3.0).
-- Die Partitur auf den Bildern ist Anton Bruckners *Aequale Nr. 1* in der
-  [OpenScore-Ausgabe](https://musescore.com/openscore/scores/4074271) (CC0).
+- The score in the images is Anton Bruckner's *Aequale Nr. 1* in the
+  [OpenScore edition](https://musescore.com/openscore/scores/4074271) (CC0).

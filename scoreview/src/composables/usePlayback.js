@@ -190,10 +190,16 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	async function fetchSoundFont(url, signal, report) {
 		const res = await fetch(url, { signal })
 		if (!res.ok) {
-			// Die app-eigene Route antwortet im Fehlerfall mit {"error": "…"}
-			// (SoundFontController) - die Meldung ist brauchbarer als "HTTP 503".
-			const detail = await res.json().then((b) => b?.error).catch(() => null)
-			throw new Error(detail || `SoundFont-Abruf fehlgeschlagen: HTTP ${res.status}`)
+			// The app's own route answers with a translated {"error": "…"} and
+			// the technical cause as `detail` (SoundFontController) - more
+			// useful than "HTTP 503". The detail goes to the console only: it
+			// is meant for the admin and not in the reader's language.
+			const body = await res.json().catch(() => null)
+			if (body?.detail) {
+				// eslint-disable-next-line no-console
+				console.warn('ScoreView: SoundFont not available:', body.detail)
+			}
+			throw new Error(body?.error || t('Loading the SoundFont failed (HTTP {status}).', { status: res.status }))
 		}
 		const total = Number(res.headers.get('Content-Length')) || 0
 		if (!total || !res.body?.getReader) {

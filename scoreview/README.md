@@ -41,10 +41,11 @@ schon zur Ursache; sonst hilft
 | `converter/` | Lokaler Konvertierungsweg: MuseScore als WebAssembly unter Node |
 | `src/` | Vue 3: Viewer, Composables und die reine Logik unter `src/lib/` |
 | `js/` | Build-Artefakte (`npm run build`), nicht im Repository |
-| `l10n/` | Übersetzungen; Quellstrings sind Englisch |
+| `translationfiles/` | Übersetzungen als PO; Quellstrings sind Englisch |
+| `l10n/` | Daraus erzeugte Laufzeitdateien (`npm run build`), nicht im Repository |
 | `templates/`, `img/`, `appinfo/` | Nextcloud-Standardlayout |
 | `tests/` | PHPUnit gegen OCP-Mocks |
-| `tools/` | Prüfung und Extraktion der Übersetzungen (`npm run l10n:extract`) |
+| `tools/` | Extraktion, Prüfung und Build der Übersetzungen (`npm run l10n:extract`), Prüfung der zweisprachigen Doku (`npm run docs:l10n`) |
 
 Die Dateien `appinfo/mimetypemapping.json` und `appinfo/mimetypealiases.json`
 sind **Vorlage, keine wirksame Konfiguration**: Nextcloud lädt sie nicht aus

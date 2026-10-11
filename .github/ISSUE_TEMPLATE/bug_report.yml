@@ -1,0 +1,47 @@
+name: Bug report
+description: Something does not work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The most common cases are already covered in
+        [docs/troubleshooting.md](https://github.com/AndiMb/scoreview/blob/master/docs/troubleshooting.md),
+        above all "a `.mscz` file only offers Download", "the viewer keeps
+        spinning" and "conversion service not reachable". A quick look there
+        often saves a round trip.
+
+        Reports in German are welcome too. Berichte auf Deutsch sind ebenso willkommen.
+
+  - type: textarea
+    id: what-happens
+    attributes:
+      label: What happens?
+      description: What did you do, what did you see, and what did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnosis
+    attributes:
+      label: Status / diagnosis
+      description: >
+        The content of Settings → Administration → ScoreView. It answers most
+        follow-up questions in advance: whether the conversion is reachable,
+        whether a SoundFont is present, the age of the last cron run, and the
+        number of conversions per status.
+      render: text
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Nextcloud, PHP, ScoreView (in appinfo/info.xml or in the app list)
+      placeholder: "Nextcloud 31.0.5, PHP 8.3, ScoreView 1.0.0"
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: Matching lines from `data/nextcloud.log` or `docker logs scoreview-sidecar`, if available.
+      render: text

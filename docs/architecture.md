@@ -313,7 +313,7 @@ Aufbau:
   Textknotens, statt ihn wie Vue über `textContent` zu ersetzen. Ersetzte
   Kindknoten lösen in Files über Nextclouds `:has()`-Regeln eine
   Stil-Neuberechnung über den ganzen Baum aus (gemessen ~70 ms je Änderung,
-  siehe [Grenzwerte](limits.md#darstellungen)).
+  siehe [Grenzwerte](limits.de.md#darstellungen)).
 - `src/composables/` – der Zustand des Viewers, nach Themen getrennt: die
   offene Partitur mit Laden, Zurücksetzen und Zeitschleife (`useScoreSession`),
   Taktnavigation, Gestalt der Leiste, Konvertierungsstatus, Notizen, Zoom,
@@ -352,7 +352,7 @@ aus dem DOM genommen.
 Ausgabegerät *übergeben* wurde, nicht die des Audios, das gerade an einem Ohr
 ankommt. Dazwischen liegt die Ausgabelatenz – gemessen 51 ms an einer
 Arbeitsmaschine und 232 ms an einem Android-Telefon mit Bluetooth-Kopfhörern
-([Grenzwerte](limits.md#bekannte-lücken)), bei ♩ = 120 also fast eine
+([Grenzwerte](limits.de.md#bekannte-lücken)), bei ♩ = 120 also fast eine
 Achtelnote. Ein
 Videoplayer löst dasselbe Problem seit jeher andersherum, als man zuerst denkt –
 nicht der Ton kommt früher, das *Bild* wird später gezeigt. Genauso hier
@@ -620,7 +620,7 @@ abgelesen –, der die Gerade des Sequencers nachbildet. `score_start_ms` wird
 um beide Anteile korrigiert gespeichert. Abgehört wird die WAV im **selben**
 AudioContext, auf die Kontextzeit des Sequencers gestartet; Cursor,
 Begleitung und Aufnahme laufen damit auf derselben Uhr. Der Restfehler steht in
-[Grenzwerte](limits.md#mikrofon-aufnahme-und-intonation).
+[Grenzwerte](limits.de.md#mikrofon-aufnahme-und-intonation).
 
 **Intonation** rechnet YIN (`pitchDetect.js`) in einem Web Worker, live und
 danach aus der gespeicherten WAV – gespeichert wird nichts zusätzlich, eine
@@ -742,7 +742,7 @@ mindestens eine Mikrofonfunktion an, Pfad unter `/apps/files`) und auf der
 eigenständigen Seite; überall sonst bleibt Nextclouds `'none'`. Eine Erlaubnis
 des Browsers gilt je Herkunft – ohne diese Enge dürfte nach „Immer erlauben“
 jedes Skript auf jeder Seite der Instanz aufnehmen. Innerhalb von Files bleibt
-das Restrisiko, siehe [Grenzwerte](limits.md). Einzelheiten:
+das Restrisiko, siehe [Grenzwerte](limits.de.md). Einzelheiten:
 [Mikrofon](#mikrofon).
 
 ### S4: Teure Arbeit ist gedeckelt
@@ -773,7 +773,7 @@ Nutzerin. Die App zieht ihre eigenen Grenzen: Anzahl je Person und Partitur,
 Länge, Bytes je Person und Bytes auf der ganzen Instanz; beim Erreichen
 antwortet der Server 409 (Anzahl), 413 (Länge) bzw. 507 (Bytes) mit klarer
 Meldung. Die Werte stehen in
-[Installation](installation.md).
+[Installation](installation.de.md).
 
 ### S6: Pfade einer Setliste bleiben im Nutzerordner
 
@@ -835,7 +835,7 @@ Origin, nicht am Konto. Deshalb:
   um und räumt nichts – sonst ginge das Vorgemerkte genau dann verloren, wenn
   das Netz fehlt. Bis zu einem solchen Aufruf ist das Vorgemerkte auf dem Gerät
   ohne Netz über die Offline-Seite lesbar – die Grenze steht in
-  [Grenzwerte](limits.md#offline).
+  [Grenzwerte](limits.de.md#offline).
 - **Nur Vorgemerktes kommt in den Datencache.** Was die Offline-Seite online
   abruft, geht ans Netz und wird nicht nebenbei gespeichert; nur „Offline
   vormerken“ schreibt Antworten der API in den Cache. Der Cache der Hülle nimmt
@@ -865,7 +865,7 @@ statt zu Pipelinestufen.
 
 Der Preis: Ein SoundFont (~24–40 MB SF3, je nach Quelle) muss ausgeliefert werden, und die
 Klangqualität liegt unter MuseScores eigenem Render – gemessen rund 7 dB
-leiser, siehe [Grenzwerte](limits.md). Dafür ist das Audioartefakt pro Partitur
+leiser, siehe [Grenzwerte](limits.de.md). Dafür ist das Audioartefakt pro Partitur
 um etwa den Faktor 400 kleiner (8 KB MIDI statt 3109 KB MP3), und der langsamste
 Schritt der Konvertierung entfällt.
 
@@ -937,7 +937,7 @@ festgeschrieben.
 #### Was der lokale Weg leistet
 
 Gemessen an denselben drei Partituren wie in
-[Grenzwerte](limits.md#gemessene-werte), auf derselben Maschine:
+[Grenzwerte](limits.de.md#gemessene-werte), auf derselben Maschine:
 
 | Partitur | Sidecar | Lokal |
 |---|---|---|
@@ -999,7 +999,7 @@ fehlen dann, und der Viewer sagt warum
 lokale reicht die Originalbytes als Daten-URI durch, statt sie zu rastern –
 die Qt-freie Engine dekodiert kein einziges Pixel. Damit hängt an ihr, was
 ein Browser selbst anzeigt; die beiden Formate, die dabei ausfallen, stehen
-in [Grenzwerte](limits.md#bekannte-lücken).
+in [Grenzwerte](limits.de.md#bekannte-lücken).
 
 Dass die Ergebnisse im Übrigen zusammenpassen, liegt am gemeinsamen Kern: Es
 ist derselbe MuseScore 4.7.5, einmal als AppImage und einmal Qt-frei nach
@@ -1031,7 +1031,7 @@ veröffentlicht.
   Ressourcen: Notenschrift, Textschriften, SMuFL-Metadaten als woff2). Das Paket
   muss sie fertig installiert enthalten – eine Instanz ohne Container hat kein
   npm, mit dem sie das nachholen könnte (siehe `release.yml`). Die CJK-Fonts
-  bleiben deshalb draußen, siehe [Grenzwerte](limits.md#bekannte-lücken).
+  bleiben deshalb draußen, siehe [Grenzwerte](limits.de.md#bekannte-lücken).
 - **`proc_open`.** Auf geteiltem Hosting oft per `disable_functions` gesperrt.
   Die Betriebsdiagnose beantwortet das getrennt, weil es von außen wie ein
   Konvertierungsfehler aussieht.
@@ -1088,13 +1088,28 @@ weil die Artefakte dieselben sind.
 
 Wege, den Sidecar bereitzustellen, stehen in
 [`../sidecar/README.md`](../sidecar/README.md#bereitstellung); die Einrichtung
-des lokalen Wegs in [Installation](installation.md).
+des lokalen Wegs in [Installation](installation.de.md).
 
 ### E4: Englische Quellstrings, Deutsch als gepflegte Übersetzung
 
-Die UI-Strings im Quelltext sind **Englisch**; Deutsch ist eine im Repo
-gepflegte Übersetzung (`l10n/de.json` für PHP, `l10n/de.js` für den Browser).
-Kommentare, Dokumentation und Commit-Messages bleiben Deutsch.
+Die UI-Strings im Quelltext sind **Englisch**. Übersetzungen liegen als
+gettext-PO unter `translationfiles/<sprache>/scoreview.po`, die Vorlage mit allen
+Quellstrings unter `translationfiles/templates/scoreview.pot`. Deutsch pflegt
+der Maintainer selbst und hält es vollständig. Jede weitere Sprache kommt aus
+der Community per Pull Request und darf Lücken haben: Was fehlt, erscheint
+englisch.
+
+Was Nextcloud liest – `l10n/<sprache>.js` für den Browser, `l10n/<sprache>.json`
+für PHP –, ist **Build-Artefakt** (`npm run build`, gitignored wie `js/`). Der
+Grund ist der Beitragsweg: Eine Übersetzung kommt als Pull Request aus dem
+GitHub-Webeditor, und ein solcher PR kann nichts erzeugen. Wären die
+Laufzeitdateien committet, fiele jeder Übersetzungs-PR in CI als „veraltet“
+durch, und einen Bot, der nachcommittet, gibt es bewusst nicht. Eine PO-Datei je
+Sprache heißt außerdem, dass Übersetzende nie wissen müssen, welcher String zu
+PHP und welcher zum Browser gehört. Die Aufteilung folgt den Fundstellen in der
+Vorlage (`src/` → `.js`, `lib/`/`templates/` → `.json`). Das Layout entspricht
+dem von Nextclouds `translationtool`; ein späterer Wechsel zu Transifex bliebe
+damit offen.
 
 Grund: Nextclouds l10n-Format benutzt den Quellstring selbst als
 Übersetzungsschlüssel. Deutsche Schlüssel hätten drei Folgen – jede weitere
@@ -1104,8 +1119,17 @@ deutschsprachigen Nutzer in einer Sprache, die er nicht gewählt hat.
 
 **Fehlende Übersetzungen fallen still aus** – Nextclouds `JSResourceLocator`
 ignoriert fehlende l10n-Dateien bewusst. Deshalb prüft `npm test` die
-Vollständigkeit; Disziplin allein trägt das nicht. Siehe
+Vollständigkeit von Deutsch; Disziplin allein trägt das nicht. In jeder
+Sprache, auch einer lückenhaften, sind dagegen verwaiste Einträge und
+abweichende Platzhalter ein Fehler. Ein vertipptes `{nmae}` stünde sonst
+wörtlich in der Oberfläche. Gemessen in der Testinstanz: Ein in `fr` fehlender
+String erscheint englisch, nicht deutsch. Siehe
 [Entwicklung](development.md#übersetzungen).
+
+Dokumentation: Die Nutzerseite (README, Installation, Fehlerbilder, Grenzen) ist
+englisch geführt, mit einer gepflegten deutschen Fassung `*.de.md` daneben. Die
+Entwicklerdoku, darunter diese Datei, bleibt deutsch. Neue Kommentare und
+Commit-Messages sind englisch.
 
 Nicht übersetzt wird Inhalt aus der Partitur selbst: Stimmennamen, Titel,
 Komponist, GM-Instrumentennamen. Das ist Material, keine Oberfläche.
@@ -1154,7 +1178,7 @@ Upload-Pfad.
 Ohne Wirkung bleibt das beim **Dateisymbol**: Das hängt an
 `mimetypealiases.json` und `occ maintenance:mimetype:update-js`, beides
 außerhalb der Reichweite einer App. Wer es haben will, registriert zusätzlich
-von Hand ([installation.md](installation.md)).
+von Hand ([installation.de.md](installation.de.md)).
 
 Trotzdem bleibt es nicht beim Viewer allein: `src/viewer.js` registriert
 zusätzlich eine **Dateiaktion auf der Endung**, die dieselbe Komponente in
@@ -1589,7 +1613,7 @@ er im vollen Takt. Auf der mobilen Seite gibt es keinen Push
 belegte einen PHP-Worker für die Dauer des Wartens; 40 Sängerinnen legten
 einen gewöhnlichen Server damit lahm. Eine kurze Abfrage kostet dagegen
 gemessen rund 50 ms CPU, fast alles für den Start von Nextcloud selbst
-([Grenzwerte](limits.md#folgt-mir)).
+([Grenzwerte](limits.de.md#folgt-mir)).
 
 **Lesen ohne Datenbank.** Der Stand liegt im Cache, geschrieben bei jeder
 Änderung der Leitung, gelesen bei jeder Abfrage; die Datenbank sieht nur die
@@ -2070,7 +2094,7 @@ MuseScore übernimmt ein von Hand gesetztes `<sound dacapo="yes"/>` beim Import
 nicht als Wiedergabe-Sprung. Ob eine in der MuseScore-GUI angelegte
 Jump/Marker-Struktur ausgerollt wird, ist ungeprüft. Der Cursor-Code darf sich
 deshalb **nicht auf lückenlose `elid`-Abdeckung verlassen**; siehe
-[Grenzwerte](limits.md#bekannte-lücken).
+[Grenzwerte](limits.de.md#bekannte-lücken).
 
 ### M8: `metadata` trägt Tempo und Titel, `tracks` ist aber nicht garantiert
 
@@ -2321,7 +2345,7 @@ Welche Fassung dieses Schemas ein Cache-Eintrag hat, hält `format_version` fest
 
 ## Weiter
 
-- [Grenzwerte und bekannte Einschränkungen](limits.md)
-- [Installation und Konfiguration](installation.md)
+- [Grenzwerte und bekannte Einschränkungen](limits.de.md)
+- [Installation und Konfiguration](installation.de.md)
 - [Entwicklung](development.md)
 - [Sidecar: Betrieb und HTTP-API](../sidecar/README.md)

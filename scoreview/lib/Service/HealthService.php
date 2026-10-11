@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Service;
 use OCA\ScoreView\AppInfo\Application;
 use OCP\IAppConfig;
 use OCP\IDBConnection;
+use OCP\IL10N;
 
 /**
  * Betriebsdiagnose für die Admin-Seite. Beantwortet die Fragen, deren
@@ -31,6 +32,7 @@ class HealthService {
 		private SoundFontService $soundFontService,
 		private IAppConfig $appConfig,
 		private IDBConnection $db,
+		private IL10N $l,
 	) {
 	}
 
@@ -41,7 +43,7 @@ class HealthService {
 		return [
 			'backend' => $this->backend->current(),
 			'sidecar' => $this->sidecarStatus(),
-			'local' => $this->localConverter->describe(),
+			'local' => $this->localStatus(),
 			// Ob der Rueckfall im Browser gerade greift - und warum. Die Zeile
 			// darueber bleibt rot: Der Grund, aus dem der Server nicht
 			// konvertiert, soll nicht dadurch verschwinden, dass die App
@@ -55,6 +57,23 @@ class HealthService {
 			'cron' => $this->cronStatus(),
 			'conversions' => $this->conversionStats(),
 		];
+	}
+
+	/**
+	 * The admin page shows `error` as is, so it is translated here, per
+	 * request - LocalConverter itself has no reader and no language.
+	 */
+	private function localStatus(): array {
+		$local = $this->localConverter->describe();
+		$messages = [
+			'process' => $this->l->t('PHP is not allowed to start processes (proc_open is blocked by disable_functions).'),
+			'node' => $this->l->t('No Node.js runtime found. Enter its path in the settings.'),
+			'engine' => $this->l->t('The engine package (scoreview-engine) is missing next to the converter (converter/node_modules).'),
+		];
+		if (isset($local['reason'], $messages[$local['reason']])) {
+			$local['error'] = $messages[$local['reason']];
+		}
+		return $local;
 	}
 
 	/**

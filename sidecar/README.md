@@ -40,7 +40,7 @@ rot, mit einer cURL-Meldung zur Namensauflösung; Partituren konvertiert dann
 der Browser. Beide Container müssen in dasselbe benutzerdefinierte Netz; der
 Netzname hängt von der Installation ab, deshalb steht hier ein Beispiel und kein
 fertiger Befehl. Einrichtung siehe
-[Installation](../docs/installation.md#1b-weg-b-sidecar-starten).
+[Installation](../docs/installation.de.md#1b-weg-b-sidecar-starten).
 
 Der Port muss nur dann nach außen veröffentlicht werden (`-p 8765:8765`), wenn
 etwas anderes als Nextcloud selbst zugreift – etwa ein Nextcloud auf einer
@@ -69,7 +69,7 @@ die App: Sie wartet ab dem Einreichen höchstens 300 s (`ConvertScoreJob`),
 rechnerisch rund 50 Seiten. Die 600 s hier greifen deshalb nur, wenn sie
 kleiner gesetzt werden. Die Zahl hängt spürbar von der CPU ab und ist als
 Größenordnung zu lesen, nicht als Garantie. Siehe
-[Grenzwerte](../docs/limits.md).
+[Grenzwerte](../docs/limits.de.md).
 
 **Zum SoundFont:** Ohne Angabe wird der erste vorhandene Kandidat genommen, in
 dieser Reihenfolge: `/usr/share/sounds/sf3/MuseScore_General_Lite.sf3`,
@@ -100,7 +100,7 @@ beliebige, nicht vertrauenswürdige `.mscz`-Uploads los. Deshalb:
 über die die Konvertierung überhaupt erst eingereicht wird. Eine echte
 Netzwerk-Isolation nur für den `mscore4portable`-Subprozess bräuchte eine eigene
 Sandbox-Schicht innerhalb des Containers – ein offenes Architekturthema, kein
-`docker run`-Flag. Siehe [Grenzwerte](../docs/limits.md#was-die-app-bewusst-nicht-tut).
+`docker run`-Flag. Siehe [Grenzwerte](../docs/limits.de.md#was-die-app-bewusst-nicht-tut).
 
 ## HTTP-API
 
@@ -273,7 +273,7 @@ echten Kosten:
    `GET /soundfont` überträgt rund 40 MB. Liegt der Host unter einer privaten
    IP oder einem internen Namen, braucht Nextcloud zusätzlich
    `allow_local_remote_servers` (siehe
-   [Installation](../docs/installation.md#weg-b-sidecar)). Das kommt dem
+   [Installation](../docs/installation.de.md#weg-b-sidecar)). Das kommt dem
    High-Performance-Backend-Muster anderer Nextcloud-Apps am nächsten.
 3. **Nativ auf dem Nextcloud-Host** (systemd-Service plus venv). Kein Docker
    nötig, aber MuseScore muss samt Qt- und X-Abhängigkeiten auf den Host –

@@ -1,37 +1,39 @@
 # Troubleshooting
 
-Nach Symptom sortiert. Erste Anlaufstelle bei jedem Problem ist
-**Einstellungen → Verwaltung → ScoreView**: Die Betriebsdiagnose dort zeigt
-Sidecar-Erreichbarkeit, den Zustand des lokalen Wegs (Prozessstart, Node.js,
-Engine-Paket), einen aktiven Rückfall im Browser, SoundFont-Zustand, Alter des
-letzten Cron-Laufs und die Zahl der Konvertierungen je Status.
+**English** · [Deutsch](troubleshooting.de.md)
 
-## Eine `.mscz`-Datei bietet nur „Herunterladen" an
+Sorted by symptom. The first place to look for any problem is
+**Settings → Administration → ScoreView**: the status diagnostics there show
+whether the sidecar is reachable, the state of the local path (process start,
+Node.js, engine package), an active fallback in the browser, the SoundFont
+state, the age of the last cron run and the number of conversions per status.
 
-Fast immer ein Mimetype-Problem. Den Mimetype trägt die App selbst
-ein – bei Installation, Update und nach jedem Upload
-([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)). Bleibt er
-falsch, sind drei Dinge zu prüfen, in dieser Reihenfolge:
+## A `.mscz` file only offers “Download”
 
-1. **Lief das Update der App?** Der Repair-Step hängt an `occ upgrade`; ohne
-   Versionswechsel läuft er nicht.
-2. **Läuft Cron?** Frisch hochgeladene Partituren berichtigt ein
-   Background-Job, kein Upload-Pfad. Ohne Cron bleibt er liegen (siehe
-   [Installation, Schritt 5](installation.md#5-background-jobs-sicherstellen)).
-3. **Meldet der Server einen Fehler?** `apply()` schluckt jeden Fehlschlag
-   bewusst und schreibt ihn ins Log – dort steht dann „Mimetype konnte nicht
-   registriert werden".
+Almost always a mimetype problem. The app registers the mimetype itself – on
+installation, on update and after every upload
+([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste) (German)). If it
+stays wrong, check three things, in this order:
 
-Ohne Shell prüfen lässt sich der Mimetype über WebDAV:
+1. **Did the app update run?** The repair step is tied to `occ upgrade`; without
+   a version change it does not run.
+2. **Is cron running?** Freshly uploaded scores are corrected by a
+   background job, not by an upload path. Without cron the job is never picked up (see
+   [Installation, step 5](installation.md#5-make-sure-background-jobs-run)).
+3. **Does the server report an error?** `apply()` deliberately swallows every
+   failure and writes it to the log – where it then reads “Mimetype konnte nicht
+   registriert werden”.
+
+Without a shell, you can check the mimetype over WebDAV:
 
 ```sh
-curl -u <Nutzerin> -X PROPFIND -H 'Depth: 0' \
+curl -u <user> -X PROPFIND -H 'Depth: 0' \
   --data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getcontenttype/></d:prop></d:propfind>' \
-  'https://<instanz>/remote.php/dav/files/<Nutzerin>/Pfad/Partitur.mscz'
+  'https://<instance>/remote.php/dav/files/<user>/path/Score.mscz'
 ```
 
-Erwartet wird `application/x-musescore`. Mit Shell geht es auch direkt in der
-Datenbank:
+The expected value is `application/x-musescore`. With a shell you can also
+look directly in the database:
 
 ```sh
 php -r '
@@ -44,523 +46,526 @@ foreach ($qb->executeQuery()->fetchAll() as $row) { print_r($row); }
 '
 ```
 
-`mimetype` muss die ID von `application/x-musescore` sein – herauszufinden über
-`SELECT * FROM oc_mimetypes WHERE mimetype LIKE '%musescore%'` –, nicht die von
+`mimetype` must be the ID of `application/x-musescore` – which you can find with
+`SELECT * FROM oc_mimetypes WHERE mimetype LIKE '%musescore%'` –, not that of
 `application/octet-stream`.
 
-## In der Nextcloud-App am Telefon fehlt „Bearbeiten“
+## “Edit” is missing in the Nextcloud app on the phone
 
-Der Einstieg der mobilen Apps läuft über Nextclouds Direct Editing
-([E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps)), und
-dessen Auswahl hängt **allein am Mimetype**. Die Ersatz-Dateiaktion auf der
-Endung, die im Browser einspringt, hat dort keine Entsprechung.
+The mobile apps get in through Nextcloud's Direct Editing
+([E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps) (German)), and
+its choice of editor depends **on the mimetype alone**. The substitute file action on the
+file extension, which steps in in the browser, has no counterpart there.
 
-Erste Probe: Meldet der Server den Editor überhaupt?
+First check: does the server report the editor at all?
 
 ```sh
-curl -u <Nutzerin> -H 'OCS-APIRequest: true' -H 'Accept: application/json'   https://<instanz>/ocs/v2.php/apps/files/api/v1/directEditing
+curl -u <user> -H 'OCS-APIRequest: true' -H 'Accept: application/json'   https://<instance>/ocs/v2.php/apps/files/api/v1/directEditing
 ```
 
-In der Antwort muss unter `editors` ein Eintrag `scoreview` stehen – mit
-`"mimetypes":["application/x-musescore"]`. Fehlt der Eintrag ganz, ist die App
-nicht aktiviert. Steht er da und der Menüpunkt fehlt
-trotzdem, ist der **Mimetype der Datei** nicht `application/x-musescore` –
-siehe den Abschnitt ganz oben.
+Under `editors`, the response must contain an entry `scoreview` – with
+`"mimetypes":["application/x-musescore"]`. If the entry is missing entirely, the app
+is not enabled. If it is there and the menu item is still
+missing, the **file's mimetype** is not `application/x-musescore` –
+see the section at the very top.
 
-Zwei Eigenheiten der Android-App, die schon Zeit gekostet haben (beide in
-nextcloud/android nachgesehen):
+Two quirks of the Android app that have already cost time (both looked up in
+nextcloud/android):
 
-- **Die Editorliste ist zwischengespeichert.** Die App liest sie aus ihrer
-  eigenen Datenbank (`EditorUtils.getEditors()`) und holt sie nur beim Sync des
-  **Wurzelverzeichnisses** neu, und auch dann nur, wenn sich der ETag der
-  Server-Capabilities geändert hat (`RefreshFolderOperation`). Auf der obersten
-  Ebene einmal nach unten ziehen.
-- **Auch den Mimetype je Datei hält die App lokal.** Wurde er serverseitig
-  berichtigt, muss zusätzlich der **Ordner mit der Partitur** neu geladen
-  werden – sonst vergleicht `FileMenuFilter.filterEdit()` weiter den alten
-  Wert.
+- **The editor list is cached.** The app reads it from its
+  own database (`EditorUtils.getEditors()`) and only fetches it again when syncing the
+  **root folder**, and even then only if the ETag of the
+  server capabilities has changed (`RefreshFolderOperation`). Pull down once on the
+  top level.
+- **The app also keeps each file's mimetype locally.** If it was
+  corrected on the server, the **folder containing the score** must also be reloaded
+  – otherwise `FileMenuFilter.filterEdit()` keeps comparing against the old
+  value.
 
-## In der App öffnet das Antippen einer `.mscz` eine fremde Anwendung
+## In the app, tapping a `.mscz` opens a different application
 
-Kein Fehler, sondern die Vorrangregel der Android-App:
-`FileOperationsHelper.openFile()` reicht die Datei an **jede installierte App**
-weiter, die den Mimetype öffnen kann – Direct Editing ist dort ausdrücklich nur
-der Rückfall („first always try to use available apps"). Wer etwa eine
-MuseScore-App auf dem Telefon hat, landet beim Antippen dort, und deren
-Fehlermeldung sieht dann aus, als käme sie von ScoreView.
+Not a bug, but the Android app's precedence rule:
+`FileOperationsHelper.openFile()` hands the file to **any installed app**
+that can open the mimetype – Direct Editing is explicitly only
+the fallback there (“first always try to use available apps”). Anyone who has, say, a
+MuseScore app on the phone ends up there when tapping, and that app's
+error message then looks as if it came from ScoreView.
 
-ScoreView erreicht man in diesem Fall über **⋮ → „Bearbeiten"**. Vom Server aus
-ist daran nichts zu ändern; die Entscheidung fällt auf dem Gerät.
+In that case you reach ScoreView via **⋮ → “Edit”**. Nothing can be changed about
+this from the server; the decision is made on the device.
 
-## Die Seite in der App bleibt leer oder zeigt nur einen Fehler
+## The page in the app stays blank or only shows an error
 
-Zwei Ursachen, am Verhalten zu unterscheiden.
+Two causes, distinguishable by their behaviour.
 
-**Der Ladebildschirm der App bleibt liegen und meldet nach zehn Sekunden einen
-Timeout.** Dann hat die Seite ihr `loaded()` nicht abgesetzt – entweder ist das
-Skript gar nicht angelaufen, oder die Brücke zur App fehlt. Im Zweifel `js/`
-neu bauen (`npm run build`).
+**The app's loading screen stays up and reports a timeout after ten
+seconds.** Then the page has not sent its `loaded()` – either the
+script never started, or the bridge to the app is missing. If in doubt, rebuild `js/`
+(`npm run build`).
 
-**Die Seite steht da, zeigt aber nichts von der Partitur.** Dann kommen ihre
-Folgeanfragen nicht durch. Sie weisen sich mit einem Token im Header
-`X-ScoreView-Token` aus; abgewiesen wird mit einem Code im Antwortkörper:
+**The page is there, but shows nothing of the score.** Then its
+follow-up requests are not getting through. They identify themselves with a token in the
+`X-ScoreView-Token` header; rejections come with a code in the response body:
 
-| Antwort | Bedeutung |
+| Response | Meaning |
 |---|---|
-| `401 no_session` | Weder Sitzung noch Token – der Header fehlt |
-| `401 token_expired` | Token abgelaufen oder verbraucht; die App holt daraufhin einen frischen. Direct-Editing-Token gelten 12 h und sind für `edit()` Einmal-Token – ein Neuladen der WebView von Hand läuft deshalb in die Fehlerseite der App |
-| `403 token_file_mismatch` | Der Token gehört zu einer anderen Partitur |
-| `403 token_folder_mismatch` | Eine neue Setliste soll außerhalb des Ordners der geöffneten Partitur entstehen – mit Token geht das nur dort |
-| `403 direct_token_required` | Begleit-Token gibt es nur gegen das Direct-Editing-Token der Seite, nicht aus einer Sitzung und nicht aus einem anderen Begleit-Token |
-| `401 companion_expired`, `companion_revoked`, `companion_invalid` | Das Begleit-Token eines Setlisten-Stücks ist abgelaufen (12 h), widerrufen (Passwortwechsel, Deaktivieren, neues `companion_secret`) oder passt nicht mehr zum Direct-Editing-Token. Die Seite holt sich selbst ein neues; bleibt es dabei, die Partitur in der App neu öffnen |
-| `403 companion_purpose`, `companion_not_allowed` | Ein Begleit-Token an einer Route, für die es nicht gedacht ist – ein Fehler der Seite, kein Bedienfehler |
-| `401 user_disabled` | Das Konto ist deaktiviert |
+| `401 no_session` | Neither a session nor a token – the header is missing |
+| `401 token_expired` | Token expired or used up; the app then fetches a fresh one. Direct Editing tokens are valid for 12 h and are single-use tokens for `edit()` – reloading the WebView by hand therefore runs into the app's error page |
+| `403 token_file_mismatch` | The token belongs to a different score |
+| `403 token_folder_mismatch` | A new setlist is to be created outside the folder of the open score – with a token that is only possible there |
+| `403 direct_token_required` | Companion tokens are only issued in exchange for the page's Direct Editing token, not from a session and not from another companion token |
+| `401 companion_expired`, `companion_revoked`, `companion_invalid` | The companion token of a setlist piece has expired (12 h), been revoked (password change, deactivation, new `companion_secret`) or no longer matches the Direct Editing token. The page fetches a new one itself; if it persists, reopen the score in the app |
+| `403 companion_purpose`, `companion_not_allowed` | A companion token on a route it is not meant for – a bug in the page, not a user error |
+| `401 user_disabled` | The account is disabled |
 
-## „Das Mikrofon ist hier nicht verfügbar“
+## “The microphone is not available here”
 
-Aufnahme und Intonation brauchen das Mikrofon; die Meldung erscheint, wenn der
-Browser es verweigert. Mit ihr kommt der Knopf **„Im Browser öffnen“**, der
-dieselbe Partitur in einem neuen Browserfenster öffnet. Die Ursachen, in dieser
-Reihenfolge:
+Recording and intonation need the microphone; the message appears when the
+browser refuses it. It comes with the **“Open in browser”** button, which
+opens the same score in a new browser window. The causes, in this
+order:
 
-1. **In der Nextcloud-App für Android** geht das Mikrofon grundsätzlich nicht –
-   ihre WebView gibt es nicht frei, und von ScoreView aus ist daran nichts zu
-   ändern ([Grenzwerte](limits.md#mobil)). „Im Browser öffnen“ ist dort der
-   vorgesehene Weg.
-2. **Die Erlaubnis wurde verweigert.** Im Browser über das Schloss- bzw.
-   Einstellungssymbol neben der Adresse für diese Seite wieder erlauben.
-3. **Die Seite erlaubt kein Mikrofon.** Nextcloud sperrt es per
-   `Feature-Policy`, die App gibt es nur unter `/apps/files` frei und nur,
-   solange Aufnahme oder Intonation eingeschaltet sind. Prüfen:
+1. **In the Nextcloud app for Android** the microphone never works –
+   its WebView does not grant it, and nothing can be done about that from ScoreView
+   ([Limits](limits.md#mobile)). “Open in browser” is the
+   intended route there.
+2. **Permission was denied.** In the browser, allow it again for this site via the lock or
+   settings icon next to the address.
+3. **The page does not allow a microphone.** Nextcloud blocks it via
+   `Feature-Policy`; the app only allows it under `/apps/files`, and only
+   while recording or intonation is turned on. To check:
 
    ```sh
-   curl -sI -u <Nutzerin> https://<instanz>/apps/files/ | grep -i feature-policy
+   curl -sI -u <user> https://<instance>/apps/files/ | grep -i feature-policy
    ```
 
-   Dort muss `microphone 'self'` stehen, nicht `microphone 'none'`. Steht
-   `'none'` da, sind beide Funktionen in der Verwaltung ausgeschaltet – oder
-   ein Reverse-Proxy setzt eine eigene Richtlinie.
-4. **Kein sicherer Kontext.** Über schlichtes `http://` (außer `localhost`) gibt
-   es kein Mikrofon.
+   It must say `microphone 'self'` there, not `microphone 'none'`. If it says
+   `'none'`, both features are turned off in the administration settings – or
+   a reverse proxy sets its own policy.
+4. **No secure context.** Over plain `http://` (except `localhost`) there is
+   no microphone.
 
-Die anderen Meldungen – „Es wurde kein Mikrofon gefunden“, „… wird von einer
-anderen Anwendung benutzt“ – meinen das Gerät, nicht die Seite.
+The other messages – “No microphone was found”, “… is being used by another
+application” – refer to the device, not to the page.
 
-## Ein Klick auf eine Setliste öffnet den Texteditor
+## Clicking a setlist opens the text editor
 
-Eine `*.setlist.md` ist Markdown, und Markdown öffnet in Files sonst im
-Texteditor. ScoreView nimmt den Klick über die Reihenfolge der Dateiaktionen
-an sich ([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)).
-Öffnet trotzdem Text:
+A `*.setlist.md` is Markdown, and Markdown otherwise opens in the text editor in Files.
+ScoreView claims the click through the order of the file actions
+([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste) (German)).
+If text opens anyway:
 
-- **Heißt die Datei wirklich auf `.setlist.md`?** `Konzert.md` ist keine
-  Setliste, `Konzert.setlist.md` schon.
-- **Sind Frontend und App aktuell?** Nach einem Update einmal hart neu laden
-  (`Strg`+`Umschalt`+`R`).
-- **Eine neue Nextcloud-Version kann die Reihenfolge der Aktionen anders
-  auswerten.** Der Eintrag **„Als Setliste öffnen“** im Menü (⋯) der Datei
-  bleibt der Ausweg.
+- **Does the file name really end in `.setlist.md`?** `Concert.md` is not a
+  setlist, `Concert.setlist.md` is.
+- **Are the frontend and the app up to date?** After an update, do a hard reload once
+  (`Ctrl`+`Shift`+`R`).
+- **A new Nextcloud version may evaluate the order of the actions
+  differently.** The **“Open as setlist”** entry in the file's (⋯) menu
+  remains the way out.
 
-In den mobilen Apps ist das kein Fehler: Sie bieten für Markdown Text an.
-Dort öffnet man eine Partitur aus der Liste, und ScoreView bietet die
-Setlisten aus demselben Ordner an ([Grenzwerte](limits.md#setliste)).
+In the mobile apps this is not a bug: they offer text for Markdown.
+There you open a score from the list, and ScoreView offers the
+setlists from the same folder ([Limits](limits.md#setlist)).
 
-## „Folgt mir“ kommt auf einem Gerät nicht an
+## “Follow me” does not reach a device
 
-Cron spielt hier **keine** Rolle – alles läuft in den Anfragen selbst.
+Cron plays **no** part here – everything runs within the requests themselves.
 
-- **Folgt das Gerät überhaupt?** Eigenes Navigieren (Takteingabe, Klick auf
-  eine Note, Suchlauf, Sprung zu Studierbuchstabe oder Notiz, Loop) und eine
-  eigene Transposition lösen es von der Leitung; das Abzeichen zeigt
-  dann „Folgt … nicht“ und den Knopf „Zurück zur Leitung“. Blättern und Zoom lösen es nicht.
-- **Hat es die Sitzung schon bemerkt?** Ohne laufende Sitzung fragt ein Gerät
-  nur alle 15 s nach. Wer vor dem Start geöffnet hat, wartet also bis zu 15 s.
-- **Steht die Verbindung?** Das Abzeichen zeigt „getrennt“, wenn eine Abfrage
-  nicht innerhalb von 5 s beantwortet wird. Nach einem Funkloch holt das Gerät von selbst den
-  letzten Stand; ein Anfangston, der dabei älter als 2 s geworden ist, wird
-  bewusst nicht mehr gespielt.
-- **Ist die Seite im Hintergrund?** Im Takt fragt nur eine sichtbare Seite ab.
-- **Sieht das Gerät die Datei?** Folgen setzt Dateizugriff voraus; ohne ihn
-  antwortet der Server 404.
-- **Kommen die Sprünge spät?** Ohne `notify_push` bestimmt `follow_poll_ms` die
-  Verzögerung; mit `notify_push` zeigt die Betriebsdiagnose, ob Push wirklich
-  greift – ist der Dienst hinter dem Reverse-Proxy nicht erreichbar, fallen die
-  Geräte stillschweigend aufs Abfragen zurück. Die mobilen Apps fragen immer ab.
-- **Mehrere Webserver?** Ohne verteilten Cache (Redis) sieht jedes Gerät
-  Änderungen bis zu einer Sekunde später
-  ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+- **Is the device following at all?** Navigating on its own (bar input, clicking
+  a note, seeking, jumping to a rehearsal mark or note, loop) and its
+  own transposition detach it from the leader; the badge then shows
+  “Not following …” and the “Back to the leader” button. Page turning and zoom do not detach it.
+- **Has it noticed the session yet?** Without a running session, a device only
+  checks every 15 s. Anyone who opened the score before the start therefore waits up to 15 s.
+- **Is the connection up?** The badge shows “disconnected” if a poll
+  is not answered within 5 s. After a dead spot the device fetches the
+  latest state by itself; a starting note that has become older than 2 s by then is
+  deliberately no longer played.
+- **Is the page in the background?** Only a visible page polls at the regular interval.
+- **Can the device see the file?** Following requires file access; without it
+  the server responds with 404.
+- **Do the jumps arrive late?** Without `notify_push`, `follow_poll_ms` determines the
+  delay; with `notify_push`, the status diagnostics show whether push actually
+  works – if the service is not reachable behind the reverse proxy, the
+  devices silently fall back to polling. The mobile apps always poll.
+- **Several web servers?** Without a distributed cache (Redis), each device sees
+  changes up to one second later
+  ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht) (German)).
 
-**Beim nächsten Stück der Setliste kommt niemand mit:**
+**Nobody comes along to the next piece of the setlist:**
 
-- **Meldet die Leitung „Die Sitzung ließ sich nicht zum nächsten Stück
-  mitnehmen“?** Dann führt dort schon eine andere Leitung eine Sitzung, oder
-  die eigene ist inzwischen abgelaufen. Die Leitung ist trotzdem gewechselt;
-  dort bei Bedarf „Folgt mir“ neu starten – eine laufende Sitzung einer
-  anderen Leitung wird damit übernommen.
-- **Folgte das Gerät?** Wer sich gelöst hatte, wird nicht mitgenommen, sondern
-  bekommt den Hinweis „Die Leitung ist zu einem anderen Stück weitergegangen“
-  mit „Dorthin wechseln“.
-- **Darf das Gerät das neue Stück lesen?** Sonst antwortet es 404, und der
-  Viewer zeigt den Fehler. Mitgenommen wird nur, wer die Datei sieht.
-- **In der App:** Das Folgegerät braucht für das neue Stück ein Begleit-Token,
-  das es selbst holt – nur, solange dort die Sitzung läuft und das Token der
-  geöffneten Seite gilt. Hilft das nicht, die Partitur in der App neu
-  öffnen.
+- **Does the leader see “Could not take the session to the next
+  piece”?** Then another leader is already running a session there, or
+  the leader's own session has expired in the meantime. The leader has switched anyway;
+  restart “Follow me” there if needed – this takes over a running session of
+  another leader.
+- **Was the device following?** A device that had detached is not taken along, but
+  gets the notice “The leader has moved on to another piece”
+  with “Go there”.
+- **Is the device allowed to read the new piece?** Otherwise it gets a 404, and the
+  viewer shows the error. Only devices that can see the file are taken along.
+- **In the app:** the following device needs a companion token for the new piece,
+  which it fetches itself – only while the session is running there and the token of the
+  open page is valid. If that does not help, reopen the score in the
+  app.
 
-**Alles klingt höher oder tiefer als notiert:** Eine Transposition ist
-gesetzt – von der Person selbst (je Partitur gespeichert) oder von einer
-Leitung für alle. Die Gruppe „Üben“ trägt dann einen Punkt; unter
-„Transponieren“ steht der Wert und lässt sich zurücksetzen. Wer einer Leitung
-folgt und selbst transponiert, folgt danach nicht mehr.
+**Everything sounds higher or lower than written:** a transposition is
+set – by the person themselves (stored per score) or by a
+leader for everyone. The “Practice” group then shows a dot; under
+“Transpose” the value is shown and can be reset. Anyone following a leader
+who transposes on their own no longer follows afterwards.
 
-## Eine Aufnahme lässt sich nicht speichern
+## A recording cannot be saved
 
-Die Aufnahme bleibt dann im Speicher des Browsers, lässt sich abhören und über
-„Erneut speichern“ noch einmal hochladen – bis die Seite neu geladen wird. Die
-Meldung nennt den Grund:
+The recording then stays in the browser's memory, can be listened to and uploaded again via
+“Save again” – until the page is reloaded. The
+message names the reason:
 
-| Antwort | Bedeutung | Was hilft |
+| Response | Meaning | What helps |
 |---|---|---|
-| `400` | Die Datei ist keine mit ScoreView gemachte Aufnahme | in ScoreView neu aufnehmen |
-| `409` | Die Höchstzahl an Aufnahmen für diese Partitur ist erreicht | die älteste ersetzen (die App fragt) oder eine löschen |
-| `413` mit Meldung der App | Die Aufnahme ist länger als `max_recording_seconds` | kürzer aufnehmen oder die Grenze anheben |
-| `413` ohne Meldung der App (Seite des Webservers) | Der Webserver nimmt so große Anfragen nicht an | `client_max_body_size` (nginx) auf mindestens `20M`, siehe [Installation](installation.md#uploadgröße-für-aufnahmen) |
-| `507` „… den ganzen Speicher, der je Person erlaubt ist“ | Der Speicher je Person ist voll | ältere Aufnahmen löschen, oder `max_recording_bytes_per_user` anheben |
-| `507` „Der Speicher für Aufnahmen auf diesem Server ist voll …“ | Der Speicher der Instanz für Aufnahmen ist voll | `max_recording_bytes_total` anheben |
-| `404` | Die Partitur ist nicht (mehr) erreichbar, oder die Aufnahme gehört jemand anderem | – |
+| `400` | The file is not a recording made with ScoreView | record again in ScoreView |
+| `409` | The maximum number of recordings for this score has been reached | replace the oldest one (the app asks) or delete one |
+| `413` with a message from the app | The recording is longer than `max_recording_seconds` | record a shorter take or raise the limit |
+| `413` without a message from the app (web server page) | The web server does not accept requests this large | `client_max_body_size` (nginx) to at least `20M`, see [Installation](installation.md#upload-size-for-recordings) |
+| `507` “… all the storage allowed per person” | The per-person storage is full | delete older recordings, or raise `max_recording_bytes_per_user` |
+| `507` “The storage for recordings on this server is full …” | The instance's storage for recordings is full | raise `max_recording_bytes_total` |
+| `404` | The score is not (or no longer) reachable, or the recording belongs to someone else | – |
 
-## Ein Übe-Track lässt sich nicht speichern
+## A practice track cannot be saved
 
-Die Meldung nennt den Grund:
+The message names the reason:
 
-| Antwort | Bedeutung | Was hilft |
+| Response | Meaning | What helps |
 |---|---|---|
-| `409` „… gibt es schon“ | Eine Datei dieses Namens liegt schon dort | den vorgeschlagenen Namen nehmen oder „Ersetzen“ |
-| `413` „Der Übe-Track ist größer als erlaubt …“ | Der Track ist größer als `practice_track_max_mb` | einen Ausschnitt (Loop) speichern oder die Grenze anheben ([Installation](installation.md#übe-tracks-und-offline-seite)) |
-| `413` ohne Meldung der App (Seite des Webservers) | Der Webserver nimmt so große Anfragen nicht an | `client_max_body_size` (nginx) anheben |
-| `507` „Nicht genug Speicherplatz.“ | Das Kontingent der Besitzerin des Zielordners ist voll | Platz schaffen oder einen eigenen Ordner wählen |
-| `403` „Von der Mobil-App aus lässt sich hier nicht speichern.“ | In der App gibt es keinen frei gewählten Ordner, und aus einem Stück einer Setliste heraus gar keinen Export | in der App die Partitur selbst öffnen und neben ihr speichern, oder im Browser |
-| `403` „In diesem Ordner darfst du keine Dateien speichern.“ | Kein Schreibrecht im Zielordner, oder die vorhandene Datei ist nicht änderbar | einen eigenen Ordner wählen |
-| `400` „Das ist keine MP3-Datei.“ | Der Rumpf war kein MP3 – im Viewer nur bei einem abgebrochenen Rendern denkbar | erneut speichern |
-| `404` | Die Partitur ist nicht (mehr) erreichbar, oder Übe-Tracks sind auf diesem Server abgeschaltet | – |
+| `409` “… already exists” | A file with this name is already there | take the suggested name or “Replace” |
+| `413` “The practice track is larger than allowed …” | The track is larger than `practice_track_max_mb` | save an excerpt (loop) or raise the limit ([Installation](installation.md#practice-tracks-and-offline-page)) |
+| `413` without a message from the app (web server page) | The web server does not accept requests this large | raise `client_max_body_size` (nginx) |
+| `507` “Not enough storage space.” | The quota of the owner of the target folder is full | free up space or choose a folder of your own |
+| `403` “Saving here is not possible from the mobile app.” | In the app there is no freely chosen folder, and no export at all from a piece of a setlist | in the app, open the score itself and save next to it, or use the browser |
+| `403` “You cannot save files in this folder.” | No write permission in the target folder, or the existing file cannot be modified | choose a folder of your own |
+| `400` “This is not an MP3 file.” | The body was not an MP3 – in the viewer only conceivable after an aborted render | save again |
+| `404` | The score is not (or no longer) reachable, or practice tracks are turned off on this server | – |
 
-**„Tracks für alle Stimmen“ fehlt:** Den Knopf sieht nur, wer neben der
-Partitur Dateien anlegen darf. Der Export als Ganzes fehlt, wenn die
-Verwaltung ihn abgeschaltet hat und auf der Offline-Seite; solange der Klang
-nicht geladen ist, sagt er „Der Klang ist noch nicht geladen.“
+**“Tracks for all parts” is missing:** only people who may create files next to the
+score see the button. The export as a whole is missing if the
+administration has turned it off, and on the offline page; as long as the sound
+is not loaded, it says “The sound is not loaded yet.”
 
-## Die Offline-Seite bleibt ohne Netz leer oder lädt nicht
+## The offline page stays empty or does not load without a network
 
-- **Wurde sie je mit Netz geöffnet?** Die Seite richtet sich beim ersten
-  Besuch mit Netz ein. Vorher kennt der Browser sie nicht und zeigt ohne Netz
-  seine eigene Fehlerseite. Abhilfe: einmal mit Netz
-  `/apps/scoreview/offline` öffnen, bis die Liste erscheint – am besten gleich
-  nach dem Vormerken, der Viewer weist darauf hin. Am Handy lässt sie sich
-  dann zum Startbildschirm hinzufügen.
-- **Unter welcher Adresse?** Die Seite gilt nur unter einer Form – mit oder
-  ohne `index.php`, je nachdem, wie die Instanz ihre Adressen bildet. Unter
-  der anderen leitet sie mit Netz um; ein Lesezeichen auf die andere Form
-  scheitert ohne Netz. Das Lesezeichen deshalb **nach** der Umleitung setzen.
-- **HTTPS?** Service Worker gibt es nur in einem sicheren Kontext. Über
-  schlichtes `http://` (außer `localhost`) bleibt die Seite ohne Netz
-  unbenutzbar.
-- **Zeigt sie „Noch nichts offline gespeichert“?** Dann ist in diesem Browser
-  für das angemeldete Konto nichts vorgemerkt – Vormerken gilt je Browser, und
-  Einträge eines anderen Kontos zeigt die Seite nicht
-  ([S10](architecture.md#s10-vorgemerktes-gehört-einem-konto-und-verschwindet-mit-der-anmeldung)).
-- **War die Person abgemeldet?** Öffnet man die Seite mit Netz ohne Anmeldung,
-  leitet Nextcloud zum Login um, und das Vorgemerkte dieses Browsers wird
-  gelöscht. Nach dem Anmelden neu vormerken.
-- **„Die Offline-Seite ist auf diesem Server ausgeschaltet“** bzw. 404: Die
-  Verwaltung hat sie abgeschaltet (`feature_offline`).
+- **Was it ever opened with a network?** The page sets itself up on the first
+  visit with a network. Before that the browser does not know it and, without a network, shows
+  its own error page. Remedy: open `/apps/scoreview/offline` once with a network
+  until the list appears – ideally right
+  after saving for offline use; the viewer points this out. On a phone it can
+  then be added to the home screen.
+- **Under which address?** The page only works under one form – with or
+  without `index.php`, depending on how the instance builds its addresses. Under
+  the other form it redirects when there is a network; a bookmark to the other form
+  fails without a network. So set the bookmark **after** the redirect.
+- **HTTPS?** Service workers only exist in a secure context. Over
+  plain `http://` (except `localhost`) the page stays
+  unusable without a network.
+- **Does it show “Nothing saved for offline use yet”?** Then nothing has been saved for offline use
+  in this browser for the signed-in account – saving applies per browser, and
+  the page does not show entries of another account
+  ([S10](architecture.md#s10-vorgemerktes-gehört-einem-konto-und-verschwindet-mit-der-anmeldung) (German)).
+- **Was the person logged out?** If you open the page with a network without being logged in,
+  Nextcloud redirects to the login, and this browser's saved content is
+  deleted. Save it again after logging in.
+- **“The offline page is turned off on this server”** or a 404: the
+  administration has turned it off (`feature_offline`).
 
-## „Vom Browser entfernt – bitte erneut vormerken“
+## “Removed by the browser – save it again”
 
-Der Browser hat Teile des Vorgemerkten gelöscht. Er darf das bei Platzmangel,
-weil er die dauerhafte Speicherung (`navigator.storage.persist()`) gemessen
-nicht gewährt ([Grenzwerte](limits.md#offline)). Abhilfe: Stück oder Setliste
-mit Netz im Viewer erneut vormerken, Platz auf dem Gerät schaffen, und vor
-einem Konzert die Offline-Seite noch einmal mit Netz öffnen – sie prüft dann
-jeden Eintrag.
+The browser has deleted parts of the saved content. It is allowed to do so when space runs low,
+because, as measured, it does not grant persistent storage (`navigator.storage.persist()`)
+([Limits](limits.md#offline)). Remedy: save the piece or setlist
+for offline use again in the viewer with a network, free up space on the device, and before
+a concert open the offline page once more with a network – it then checks
+every entry.
 
-**„Eventuell veraltet“** heißt dagegen nur, dass die Seite den Server beim
-Öffnen nicht erreicht hat; der Eintrag ist vollständig, nur ungeprüft.
+**“May be outdated”**, on the other hand, only means that the page could not reach the server when
+it was opened; the entry is complete, just unchecked.
 
-## „Offline vormerken“ fehlt im Viewer
+## “Save for offline use” is missing in the viewer
 
-- **In den mobilen Apps gibt es das nicht** – die Offline-Seite braucht einen
-  Browser. Über „Im Browser öffnen“ geht es dort.
-- **Auf der Offline-Seite selbst** wird nicht vorgemerkt, das geht nur mit
-  Netz aus Files.
-- **Abgeschaltet** von der Verwaltung (`feature_offline`).
-- **„Öffne jedes Stück einmal, bis es angezeigt wird“:** Ein Stück der
-  Setliste ist noch nicht konvertiert. Vorgemerkt werden nur fertige
-  Konvertierungen; jedes Stück einmal öffnen, dann erneut vormerken.
+- **The mobile apps do not have it** – the offline page needs a
+  browser. Via “Open in browser” it works there.
+- **On the offline page itself** nothing is saved; that only works with a
+  network from Files.
+- **Turned off** by the administration (`feature_offline`).
+- **“Open every piece once until it is shown”:** a piece of the
+  setlist has not been converted yet. Only finished conversions are saved for offline use;
+  open each piece once, then save again.
 
-## Liedtext-Ansicht oder Tonnamen sind nicht wählbar
+## Lyrics view or note names cannot be selected
 
-Die Auswahl nennt den Grund:
+The selection names the reason:
 
-- **„Diese Partitur hat keinen Liedtext.“** – so ist es.
-- **„Diese Seiten wurden ohne die Daten gesetzt, die diese Ansicht braucht.“**
-  Die Partitur wurde über den Sidecar konvertiert; Stock-MuseScore liefert
-  Liedtextsilben und Schreibweisen nicht
-  ([E15](architecture.md#e15-fähigkeiten-statt-weg)). Eine Neukonvertierung auf
-  derselben Instanz ändert daran nichts, nur der lokale Konvertierungsweg.
-- **„Diese Partitur hat zu viel Text für die Liedtext-Ansicht.“** Mehr als
-  20 000 Silben.
-- **Zeigt die Liedtext-Ansicht „Diese Stimme hat keinen Liedtext.“**, ist die
-  eigene Stimme textlos; „Meine Stimme“ wechseln oder abwählen (dann gilt die
-  oberste Stimme mit Text).
+- **“This score has no lyrics.”** – that is how it is.
+- **“These pages were set without the data this view needs.”**
+  The score was converted via the sidecar; stock MuseScore does not deliver
+  lyric syllables and spellings
+  ([E15](architecture.md#e15-fähigkeiten-statt-weg) (German)). A reconversion on
+  the same instance does not change that, only the local conversion path does.
+- **“This score has too much text for the lyrics view.”** More than
+  20 000 syllables.
+- **If the lyrics view shows “This part has no lyrics.”**, your
+  own part has no text; change or deselect “My voice” (then the
+  top part with text is used).
 
-Ist die gewählte Darstellung bei einer Partitur nicht verfügbar, zeigt der
-Viewer die Seiten mit einem Hinweis und behält die Wahl für die nächste
-Partitur.
+If the chosen display is not available for a score, the
+viewer shows the pages with a notice and keeps the choice for the next
+score.
 
-## Die Konvertierung kommt nicht voran
+## The conversion does not make progress
 
-Background-Jobs laufen nicht. Nextclouds Default-Modus `ajax` reicht nicht
-zuverlässig; es braucht `cron` **und** einen echten Cron-Aufruf von `cron.php`:
+Background jobs are not running. Nextcloud's default mode `ajax` is not
+reliable enough; it takes `cron` **and** a real cron invocation of `cron.php`:
 
 ```sh
 occ background:cron
 ```
 
-Die Betriebsdiagnose meldet diesen Fall ausdrücklich („kein Lauf in den letzten
-15 Minuten"). Siehe
-[Installation, Schritt 5](installation.md#5-background-jobs-sicherstellen).
+The status diagnostics report this case explicitly (“no run in the last
+15 minutes”). See
+[Installation, step 5](installation.md#5-make-sure-background-jobs-run).
 
-**Woran es im Viewer zu erkennen ist.** Nach zwei Minuten erscheint unter dem
-Ladekreisel ein Hinweis auf genau diese Ursache, nach einer halben Stunde bricht
-der Viewer mit „Die Konvertierung wurde nie abgeschlossen" ab. Beides ist eine
-Aussage über die *Instanz*, nicht über die Partitur – eine andere Datei zu
-öffnen hilft nicht.
+**How to recognise it in the viewer.** After two minutes a notice pointing to exactly
+this cause appears below the loading spinner; after half an hour
+the viewer gives up with “The conversion was never finished”. Both are a
+statement about the *instance*, not about the score – opening a different file
+does not help.
 
-Dasselbe gilt für einen Lauf, der unterwegs gestorben ist (abgewürgter
-Cron-Durchgang, Speichermangel, Neustart des Containers). Der Datensatz bleibt
-dann auf `processing` stehen; er gilt nach einer halben Stunde als tot, wird
-beim nächsten Öffnen als Fehler gemeldet und erneut eingereiht. „Neu
-konvertieren" greift an ihm ebenfalls wieder – anders als an einem Lauf, der
-tatsächlich noch arbeitet.
+The same applies to a run that died along the way (a killed
+cron pass, out of memory, container restart). The record then
+stays at `processing`; after half an hour it is considered dead, is
+reported as an error the next time the score is opened, and is queued again. “Convert
+again” works on it again as well – unlike on a run that
+is actually still working.
 
-## „Der Konvertierungsdienst konnte nicht erreicht werden"
+## “The conversion service could not be reached”
 
-Gilt für den Sidecar-Weg. Drei Ursachen, in dieser Reihenfolge zu prüfen:
+Applies to the sidecar path. Three causes, to be checked in this order:
 
-1. **Kein gemeinsames Docker-Netz.** Auf Dockers Standard-Bridge lösen sich
-   Containernamen nicht auf. Der Sidecar läuft, `curl` vom Host funktioniert,
-   Nextcloud erreicht ihn trotzdem nicht. Beide Container müssen in dasselbe
-   benutzerdefinierte Netz (`--network`).
-2. **SSRF-Schutz.** Nextcloud blockiert ausgehende Anfragen an interne
-   Hostnamen. Ohne
+1. **No shared Docker network.** On Docker's default bridge,
+   container names do not resolve. The sidecar is running, `curl` from the host works,
+   and Nextcloud still cannot reach it. Both containers must be in the same
+   user-defined network (`--network`).
+2. **SSRF protection.** Nextcloud blocks outgoing requests to internal
+   host names. Without
    `occ config:system:set allow_local_remote_servers --value=true --type=boolean`
-   scheitert jeder Aufruf mit „violates local access rules".
-3. **Falsches Secret.** Der Sidecar antwortet dann 401. Der Knopf „Konvertierung selbst
-   testen“ auf der Verwaltungsseite unterscheidet die Fälle.
+   every call fails with “violates local access rules”.
+3. **Wrong secret.** The sidecar then responds with 401. The “Run conversion
+   self-test” button on the administration page distinguishes the cases.
 
-## Der lokale Konvertierungsweg läuft nicht
+## The local conversion path does not work
 
-Die Betriebsdiagnose auf der Verwaltungsseite beantwortet die drei Fragen
-getrennt, weil sie von außen alle gleich aussehen:
+The status diagnostics on the administration page answer the three questions
+separately, because from the outside they all look the same:
 
-- **„PHP darf keine Prozesse starten"** – `proc_open` ist per
-  `disable_functions` gesperrt. Das lässt sich nur in der PHP-Konfiguration
-  ändern; wo das nicht geht, bleibt nur der Sidecar-Weg.
-- **„Keine Node.js-Laufzeit gefunden"** – gesucht wird `node` über `PATH` und
-  an den üblichen Stellen. PHP-FPM läuft oft mit einem ausgedünnten `PATH`;
-  dann den absoluten Pfad eintragen. Gegenprobe mit demselben Konto, unter dem
-  Nextcloud läuft:
+- **“PHP is not allowed to start processes”** – `proc_open` is blocked via
+  `disable_functions`. This can only be changed in the PHP configuration;
+  where that is not possible, only the sidecar path remains.
+- **“No Node.js runtime found”** – `node` is searched for via `PATH` and
+  in the usual locations. PHP-FPM often runs with a stripped-down `PATH`;
+  in that case enter the absolute path. Cross-check with the same account that
+  Nextcloud runs under:
   ```sh
   sudo -u www-data /usr/bin/node --version
   ```
-- **„Das Engine-Paket (scoreview-engine) fehlt"** – im App-Paket fehlt
-  `converter/node_modules`. Das passiert, wenn die App aus einem Git-Checkout
-  statt aus einem Release-Tarball installiert wurde; dort ist das Verzeichnis
-  gitignored. Nachholen mit `npm ci` in `scoreview/converter/`.
+- **“The engine package (scoreview-engine) is missing”** – the app package lacks
+  `converter/node_modules`. This happens when the app was installed from a Git checkout
+  instead of a release tarball; there the directory is
+  gitignored. Fix it with `npm ci` in `scoreview/converter/`.
 
-Der Knopf „Konvertierung selbst testen“ konvertiert eine mitgelieferte
-Minipartitur über den
-gewählten Weg und nennt die Ursache im Klartext. Dasselbe von Hand:
+The “Run conversion self-test” button converts a bundled
+mini score via the
+selected path and names the cause in plain language. The same by hand:
 
 ```sh
 cd /var/www/html/custom_apps/scoreview/converter && node convert.mjs --selftest
 ```
 
-## Die Betriebsdiagnose zeigt eine Zeile „Rückfall"
+## The status diagnostics show a “Fallback” row
 
-Dann konvertiert gerade der **Browser**, weil der Server es nicht kann
-([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)). Das ist kein
-Fehler, sondern die Notlösung – die Partituren sind sichtbar und spielbar.
+Then the **browser** is currently converting, because the server cannot
+([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall) (German)). That is not
+an error, but the emergency solution – the scores are visible and playable.
 
-**Die rote Zeile darüber bleibt trotzdem wichtig**: Sie nennt den Grund, aus
-dem der Server nicht konvertiert (siehe die beiden Abschnitte davor). Solange
-er besteht, gilt für jede Nutzerin:
+**The red row above it still matters**: it names the reason
+why the server is not converting (see the two sections before this one). As long as
+that reason persists, the following applies to every user:
 
-- Jedes Gerät lädt beim ersten Öffnen einmal gut 7 MB Konverter (14 MB
-  entpackt).
-- Nichts wird auf Dauer zwischengespeichert: Jede Partitur wird nach jedem
-  Neuladen der Seite neu gesetzt, auf jedem Gerät.
-- Der Schalter „sofort konvertieren" ist wirkungslos, der Selbsttest prüft
-  weiterhin nur den Serverweg.
+- Every device downloads a good 7 MB of converter once on first open (14 MB
+  unpacked).
+- Nothing is cached permanently: every score is set again after every
+  reload of the page, on every device.
+- The “convert immediately” switch has no effect, and the self-test still
+  only checks the server path.
 
-Behoben wird das nicht am Rückfall, sondern an seiner Ursache: Node bereitstellen
-(Weg A) oder den Sidecar erreichbar machen (Weg B). Nach der Reparatur greift
-der Rückfall beim nächsten Öffnen nicht mehr – das gespeicherte Urteil gilt
-höchstens fünf Minuten und wird vom Speichern der Einstellungen und vom
-Selbsttest sofort verworfen. Bereits im Browser gesetzte Partituren tauchen
-danach ganz normal im Servercache auf, sobald sie einmal geöffnet werden.
+This is not fixed at the fallback but at its cause: provide Node
+(path A) or make the sidecar reachable (path B). After the repair, the
+fallback no longer applies the next time a score is opened – the stored verdict is valid for
+at most five minutes and is discarded immediately by saving the settings and by the
+self-test. Scores already set in the browser then show up
+in the server cache as normal, as soon as they are opened once.
 
-## Der Viewer meldet „Diese Partitur konnte in diesem Browser nicht gesetzt werden"
+## The viewer reports “This score could not be set in this browser”
 
-Zwei Meldungen gehören zum Rückfall und stehen in keinem Serverlog, weil sie im
-Browser entstehen:
+Two messages belong to the fallback and appear in no server log, because they
+originate in the browser:
 
-- **„… ist zu groß, um in diesem Browser gesetzt zu werden"** – die Partitur
-  liegt über `client_max_score_bytes` (Vorgabe 10 MB). Geprüft wird das
-  absichtlich **vor** dem Laden des Konverters, damit nicht erst gut 7 MB umsonst
-  über die Leitung gehen. Die Grenze ist eine reine `occ`-Einstellung:
+- **“… is too large to be set in this browser”** – the score
+  is above `client_max_score_bytes` (default 10 MB). This is deliberately checked
+  **before** the converter is loaded, so that a good 7 MB do not first travel
+  over the line for nothing. The limit is an `occ`-only setting:
   ```sh
   occ config:app:set scoreview client_max_score_bytes --value 20971520
   ```
-  Sie höher zu setzen ist ein Versprechen an das schwächste Gerät im Chor –
-  wie viel ein Tablet trägt, ist ungemessen (siehe [Grenzwerte](limits.md)).
-- **„… konnte in diesem Browser nicht gesetzt werden"** – der Konverter ließ
-  sich nicht laden oder nicht starten. Das technische Detail unter der Meldung
-  nennt die genaue URL. Häufigste Ursachen: der Download brach ab, oder die
-  Seite wurde geladen, **bevor** der Rückfall aktiv wurde – dann trägt genau
-  dieses Dokument noch die engere CSP, und ein Neuladen genügt. Bleibt es
-  dabei, in der Browser-Konsole nach `securitypolicyviolation` sehen: Ein
-  blockierter Web Worker meldet sich **nur** dort und sonst nirgends.
+  Raising it is a promise to the weakest device in the choir –
+  how much a tablet can handle has not been measured (see [Limits](limits.md)).
+- **“… could not be set in this browser”** – the converter could not
+  be loaded or could not be started. The technical detail below the message
+  names the exact URL. Most common causes: the download was interrupted, or the
+  page was loaded **before** the fallback became active – then exactly
+  this document still carries the stricter CSP, and a reload is enough. If it
+  persists, look for `securitypolicyviolation` in the browser console: a
+  blocked web worker reports **only** there and nowhere else.
 
-## „Kein Ton: …" über der Notenansicht
+## “No sound: …” above the score view
 
-Die Notenansicht funktioniert weiter, nur die Wiedergabe nicht; der Text hinter
-dem Doppelpunkt nennt die Ursache.
+The score view keeps working, only playback does not. If the text after the
+colon reads “The server could not provide the SoundFont”, the cause is on the
+server: the **SoundFont** row of the status diagnostics names it, the
+Nextcloud log has it as “SoundFont konnte nicht bereitgestellt werden”, and
+the browser console shows it as well. The usual causes:
 
-- **„Der Sidecar liefert kein SoundFont aus"** – das Image enthält keines
-  (mehr). Prüfen und gegebenenfalls `SCOREVIEW_SOUNDFONT_PATH` setzen, siehe
-  [`../sidecar/README.md`](../sidecar/README.md#konfiguration):
+- **The sidecar does not serve a SoundFont** – the image does not contain one
+  (any more). Check and, if necessary, set `SCOREVIEW_SOUNDFONT_PATH`, see
+  [`../sidecar/README.md`](../sidecar/README.md#konfiguration) (German):
   ```sh
   curl -s -H "X-ScoreView-Secret: <secret>" http://scoreview-sidecar:8765/soundfont/info
   ```
-- **Stumm auf dem lokalen Konvertierungsweg** – dort gibt es kein Image, das ein
-  SoundFont mitbrächte; der Server holt es beim ersten Abspielen aus dem Netz.
-  Kommt er dort nicht hin (kein ausgehendes HTTPS, Proxy, Firewall), bleibt die
-  Wiedergabe stumm. Abhilfe: die Datei selbst irgendwo ablegen und die Adresse
-  unter **SoundFont-Download-URL** eintragen; siehe
+- **Silent on the local conversion path** – there is no image there that would bring a
+  SoundFont along; the server fetches it from the network the first time something is played.
+  If it cannot get there (no outgoing HTTPS, proxy, firewall), playback
+  stays silent. Remedy: put the file somewhere yourself and enter the address
+  under **SoundFont download URL**; see
   [Installation](installation.md#soundfont).
-- **HTTP-Fehler bei einer selbst eingetragenen SoundFont-URL** – bei der
-  **Eigenen SoundFont-URL** muss die Adresse vom **Browser** aus erreichbar sein, nicht
-  nur vom Server, und CORS erlauben. Bei der **SoundFont-Download-URL** genügt
-  Erreichbarkeit vom Server; ein leeres Feld bedeutet dort die voreingestellte
-  Adresse, nicht „kein SoundFont".
+- **HTTP error with a SoundFont URL you entered yourself** – for the
+  **Custom SoundFont URL**, the address must be reachable from the **browser**, not
+  just from the server, and must allow CORS. For the **SoundFont download URL**,
+  reachability from the server is enough; an empty field there means the default
+  address, not “no SoundFont”.
 
-## Der Ton hinkt dem Notencursor hinterher (oder umgekehrt)
+## The sound lags behind the score cursor (or vice versa)
 
-Fast immer die **Ausgabelatenz** – am stärksten über Bluetooth-Kopfhörer, wo
-Codec-Puffer und Funkstrecke den Ausschlag geben (gemessen: 232 ms an einem
-Android-Telefon gegen 51 ms an einer Arbeitsmaschine); bei ♩ = 120 ist das fast
-eine Achtelnote. Die App gleicht sie **von selbst** aus, soweit der Browser sie
-meldet – auf Android mit Bluetooth-Kopfhörern tut er das (die 232 ms oben kamen
-aus der Automatik, bei unangetastetem Regler).
+Almost always the **output latency** – strongest over Bluetooth headphones, where
+codec buffers and the radio link make the difference (measured: 232 ms on an
+Android phone versus 51 ms on a workstation); at ♩ = 120 that is almost
+an eighth note. The app compensates for it **by itself**, as far as the browser
+reports it – on Android with Bluetooth headphones it does (the 232 ms above came
+from the automatic compensation, with the slider untouched).
 
-Bleibt trotzdem ein Versatz, nennt der Kopfhörer seine Verzögerung nicht
-selbst, und genau dieser Anteil fehlt der Automatik. Abhilfe:
-**Üben → Tempo und Metronom → „Bild und Ton abgleichen"**. Den Regler bei laufender
-Wiedergabe verschieben, bis die hervorgehobene Note zum Gehörten passt. Der
-Wert wird pro Gerät gemerkt – am Telefon mit Kopfhörern also ein anderer als am
-Rechner.
+If an offset remains anyway, the headphones do not report their delay
+themselves, and exactly that share is missing from the automatic compensation. Remedy:
+**Practice → Tempo and metronome → “Sync picture and sound”**. Move the slider during
+playback until the highlighted note matches what you hear. The
+value is remembered per device – so on the phone with headphones it is a different one than on the
+computer.
 
-Ob der Browser die Latenz von sich aus kennt, lässt sich auch ohne die App in
-30 Sekunden prüfen: ein YouTube-Video mit sprechendem Gesicht auf demselben
-Gerät, mit denselben Kopfhörern. Ist es lippensynchron, kennt der Audio-Stack
-die Latenz und die Automatik trägt sie; ist es das nicht, weiß der Browser es
-selbst nicht und der Regler trägt die Hauptlast.
+Whether the browser knows the latency on its own can also be checked without the app in
+30 seconds: a YouTube video with a talking face on the same
+device, with the same headphones. If it is lip-synchronous, the audio stack knows
+the latency and the automatic compensation carries it; if it is not, the browser itself does not
+know it and the slider carries the main load.
 
-**Ansicht → Darstellung → Diagnose der Wiedergabe** zeigt die Zahlen dazu: „gemessen"
-stammt aus `getOutputTimestamp()`, „gemeldet" aus `baseLatency + outputLatency`,
-„von Hand" ist der Regler. Ein Strich statt einer Zahl heißt, dass der Browser
-dazu nichts sagt.
+**View → Appearance → Playback diagnostics** shows the numbers for this: “measured”
+comes from `getOutputTimestamp()`, “reported” from `baseLatency + outputLatency`,
+“by hand” is the slider. A dash instead of a number means that the browser
+says nothing about it.
 
-## Der Ton knackt oder setzt aus, die Stimmen klingen unsauber zusammen
+## The sound crackles or drops out, the parts sound ragged together
 
-Etwas anderes als der Fall darüber, auch wenn es sich ähnlich anfühlt: Hier
-stimmt die Zeitrechnung, aber die Synthese kommt auf dem Gerät nicht mit. Zu
-sehen unter **Ansicht → Darstellung → Diagnose der Wiedergabe** an der Zeile
-**„Aussetzer"** – steht dort eine wachsende Zahl, ist es die Rechenlast; bleibt
-sie bei 0, liegt es an der Latenz und der Abschnitt darüber gilt.
+Something different from the case above, even if it feels similar: here
+the timing is right, but the synthesis cannot keep up on the device. You can
+see it under **View → Appearance → Playback diagnostics** in the
+**“Dropouts”** row – if a growing number appears there, it is the processing load; if it stays
+at 0, it is the latency, and the section above applies.
 
-Bei Aussetzern hilft, die Last zu senken: andere Tabs schließen, das Notenbild
-kleiner zoomen (weniger DOM je Seite), oder die Partitur ohne Ton lesen
-(„Ohne Ton fortfahren" beim Laden). Eine kleinere SoundFont-Datei senkt die Last
-ebenfalls, siehe [Installation](installation.md#soundfont).
+For dropouts, reducing the load helps: close other tabs, zoom the score
+out (less DOM per page), or read the score without sound
+(“Continue without sound” while loading). A smaller SoundFont file also reduces the load,
+see [Installation](installation.md#soundfont).
 
-## Die Konvertierung schlägt fehl
+## The conversion fails
 
-Der Viewer zeigt eine verständliche Meldung, das technische Detail steht
-daneben. Die Fehlercodes:
+The viewer shows an understandable message, with the technical detail
+next to it. The error codes:
 
-| Code | Bedeutung | Was hilft |
+| Code | Meaning | What helps |
 |---|---|---|
-| `sidecar_unreachable` | Dienst nicht erreichbar | siehe oben |
-| `sidecar_busy` | Der Sidecar war über viele Versuche ausgelastet (volle Warteschlange) | beim nächsten Öffnen wird neu eingereicht; bei Dauerlast `SCOREVIEW_MAX_CONCURRENT`/`SCOREVIEW_MAX_QUEUED` anheben, siehe [Sidecar](../sidecar/README.md) |
-| `sidecar_rejected` | Datei abgelehnt (z. B. Secret, Größe) | Secret und `SCOREVIEW_MAX_UPLOAD_BYTES` prüfen |
-| `too_large` | Partitur überschreitet das Limit | `max_score_bytes` (Vorgabe 100 MB) anheben oder Partitur teilen |
-| `timeout` | Konvertierung nicht rechtzeitig fertig | Sidecar: Die App wartet ab dem Einreichen fest höchstens 300 s – bei rund 6 s pro Seite etwa 50 Seiten, siehe [Grenzwerte](limits.md). `MSCORE_TIMEOUT_SECONDS` (Vorgabe 600 s) anzuheben hilft deshalb nicht; bricht der Sidecar selbst ab, heißt das `conversion_failed`. Lokal: `local_timeout` (Vorgabe 120 s) |
-| `conversion_failed` | MuseScore selbst ist gescheitert | Datei in MuseScore öffnen; oft eine defekte `.mscz`. Auf dem lokalen Weg steht die Ausgabe des Konverters im `nextcloud.log` |
-| `no_pages` | Konvertierung lief, lieferte aber keine Seite | Selbsttest auslösen; deutet auf ein Problem im Image hin |
-| `local_unavailable` | Lokaler Weg gewählt, aber nicht lauffähig | siehe [oben](#der-lokale-konvertierungsweg-läuft-nicht) |
-| `stale` | Ein Lauf wurde nie abgeschlossen | siehe [oben](#die-konvertierung-kommt-nicht-voran) |
-| `client_too_large`, `client_engine_unavailable` | Nur beim Rückfall im Browser | siehe [oben](#der-viewer-meldet-diese-partitur-konnte-in-diesem-browser-nicht-gesetzt-werden) |
-| `unknown` | Alles andere | `nextcloud.log` auf die Exception prüfen |
+| `sidecar_unreachable` | Service not reachable | see above |
+| `sidecar_busy` | The sidecar was busy over many attempts (full queue) | it is resubmitted the next time the score is opened; under sustained load raise `SCOREVIEW_MAX_CONCURRENT`/`SCOREVIEW_MAX_QUEUED`, see [Sidecar](../sidecar/README.md) (German) |
+| `sidecar_rejected` | File rejected (e.g. secret, size) | check the secret and `SCOREVIEW_MAX_UPLOAD_BYTES` |
+| `too_large` | Score exceeds the limit | raise `max_score_bytes` (default 100 MB) or split the score |
+| `timeout` | Conversion not finished in time | Sidecar: from submission, the app waits a fixed maximum of 300 s – at about 6 s per page, roughly 50 pages, see [Limits](limits.md). Raising `MSCORE_TIMEOUT_SECONDS` (default 600 s) therefore does not help; if the sidecar itself aborts, that is `conversion_failed`. Local: `local_timeout` (default 120 s) |
+| `conversion_failed` | MuseScore itself failed | open the file in MuseScore; often a broken `.mscz`. On the local path, the converter's output is in `nextcloud.log` |
+| `no_pages` | Conversion ran, but delivered no page | trigger the self-test; points to a problem in the image |
+| `local_unavailable` | Local path selected, but not runnable | see [above](#the-local-conversion-path-does-not-work) |
+| `stale` | A run was never finished | see [above](#the-conversion-does-not-make-progress) |
+| `client_too_large`, `client_engine_unavailable` | Only with the fallback in the browser | see [above](#the-viewer-reports-this-score-could-not-be-set-in-this-browser) |
+| `unknown` | Everything else | check `nextcloud.log` for the exception |
 
-## Der Viewer zeigt eine veraltete Fassung der Partitur
+## The viewer shows an outdated version of the score
 
-Zwei Ursachen, die sich ähnlich anfühlen und getrennt zu behandeln sind.
+Two causes that feel similar and have to be handled separately.
 
-**Serverseitig** bleibt eine fertige Konvertierung liegen, solange niemand die
-Datei anfasst – auch wenn eine neuere Fassung der App sie besser setzen würde
-oder die Herkunft noch „unbekannt" meldet. Der Knopf **„Neu konvertieren"** unter
-**Ansicht → Darstellung** verwirft sie und lässt sie neu erzeugen; er
-erscheint nur mit Schreibrecht auf die Datei. Für alle Partituren einer Instanz
-auf einmal ist `CURRENT_FORMAT_VERSION` der Hebel (siehe
-[Architektur](architecture.md#konvertierung-und-cache)).
+**On the server**, a finished conversion stays in place as long as nobody touches the
+file – even if a newer version of the app would set it better
+or the origin still reports “Unknown”. The **“Convert again”** button under
+**View → Appearance** discards it and has it generated again; it
+only appears with write permission on the file. For all scores of an instance
+at once, `CURRENT_FORMAT_VERSION` is the lever (see
+[Architecture](architecture.md#konvertierung-und-cache) (German)).
 
-**Im Browser** kann ein Eintrag im Browsercache nachwirken, den normales
-Neuladen nicht wegräumt – Chrome revalidiert Unterressourcen dabei nicht.
-Einmal hart neu laden (`Strg`+`Umschalt`+`R`) genügt; die Artefakt-Links
-tragen den Zeitstempel der Konvertierung und lösen sich danach von selbst ab.
+**In the browser**, an entry in the browser cache can linger that a normal
+reload does not clear – Chrome does not revalidate subresources in that case.
+A single hard reload (`Ctrl`+`Shift`+`R`) is enough; the artifact links
+carry the conversion's timestamp and are replaced by themselves afterwards.
 
-## Der Viewer meldet HTTP 500
+## The viewer reports HTTP 500
 
-Ein Cache-Formatwechsel ist **kein** möglicher Grund: Die Spalte
-`format_version` markiert jeden Eintrag, und ein Eintrag mit älterer Version –
-oder mit fehlender Cache-Datei – stößt automatisch eine Neukonvertierung an
-(siehe [Architektur](architecture.md#konvertierung-und-cache)). Tritt ein 500er
-auf, ist es ein anderer Fall: `nextcloud.log` auf die konkrete Exception prüfen.
+A cache format change is **not** a possible reason: the
+`format_version` column marks every entry, and an entry with an older version –
+or with a missing cache file – automatically triggers a reconversion
+(see [Architecture](architecture.md#konvertierung-und-cache) (German)). If a 500
+occurs, it is a different case: check `nextcloud.log` for the specific exception.
 
-## „database is locked" (SQLite)
+## “database is locked” (SQLite)
 
-Cron läuft zu häufig und kollidiert mit parallelen Anfragen. Auf das übliche
-Intervall zurückgehen (Nextcloud-Standard: alle 5 Minuten) oder auf
-MySQL/PostgreSQL wechseln.
+Cron runs too often and collides with parallel requests. Go back to the usual
+interval (Nextcloud default: every 5 minutes) or switch to
+MySQL/PostgreSQL.
 
-## Eine neu hinzugefügte Route liefert 404
+## A newly added route returns 404
 
-Betrifft die Entwicklung, nicht den Betrieb. Nextclouds `CachingRouter` legt die
-komplette kompilierte Routentabelle für 3600 s im lokalen Cache ab, mit dem
-**Host-Header als Teil des Schlüssels**. Eine neue Route existiert für Anfragen
-mit demselben Host also bis zu einer Stunde lang nicht – und zwar host-genau:
-Derselbe Request mit `Host: localhost` statt `Host: localhost:8080` trifft einen
-anderen Cache-Schlüssel und funktioniert sofort. Das macht das Fehlerbild sehr
-irreführend.
+Concerns development, not operation. Nextcloud's `CachingRouter` stores the
+complete compiled route table in the local cache for 3600 s, with the
+**Host header as part of the key**. A new route therefore does not exist for requests
+with the same host for up to an hour – and that per host:
+the same request with `Host: localhost` instead of `Host: localhost:8080` hits a
+different cache key and works immediately. That makes the symptom very
+misleading.
 
-Abhilfe: App-Version in `appinfo/info.xml` erhöhen und `occ upgrade` laufen
-lassen (der übliche Weg), oder den lokalen Cache leeren – im Container-Setup am
-einfachsten per Neustart des Nextcloud-Containers.
+Remedy: increase the app version in `appinfo/info.xml` and run `occ upgrade`
+(the usual way), or clear the local cache – in the container setup most
+easily by restarting the Nextcloud container.
 
-Im Betrieb kann dasselbe Bild nach einem App-Update auftreten, wenn die Dateien
-ausgetauscht wurden, `occ upgrade` aber nicht lief: Dann antworten die Routen,
-die die neue Fassung mitbringt, mit 404 – etwa die von „Folgt mir“, Setlisten
-oder Aufnahmen, während die Partitur selbst sich öffnen lässt. `occ upgrade`
-behebt das und legt zugleich die neuen Tabellen an.
+In operation, the same symptom can occur after an app update if the files
+were replaced but `occ upgrade` did not run: then the routes
+that the new version brings with it respond with 404 – for example those of “Follow me”, setlists
+or recordings, while the score itself can be opened. `occ upgrade`
+fixes that and at the same time creates the new tables.

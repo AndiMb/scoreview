@@ -1,678 +1,683 @@
-# Grenzwerte und bekannte Einschränkungen
+# Limits and known gaps
 
-Was ScoreView leistet, wo die gemessenen Grenzen liegen und was bewusst nicht
-abgedeckt ist. Alle Zahlen sind an der laufenden Installation gemessen, nicht
-geschätzt; wo etwas Hochrechnung ist, steht es dabei.
+**English** · [Deutsch](limits.de.md)
 
-## Gemessene Werte
+What ScoreView does, where its measured limits lie and what it deliberately
+does not cover. All numbers were measured on the running installation, not
+estimated; where something is an extrapolation, it says so.
 
-Drei Partituren, gemessen auf einer gewöhnlichen Arbeitsmaschine – beide
-Konvertierungswege in derselben Sitzung, damit die Spalten vergleichbar sind:
+## Measured values
 
-| Partitur | Seiten | Takte | `.mscz` | Sidecar | lokal | SVG gesamt (Sidecar / lokal) | größte Seite | MIDI | Cache (Sidecar / lokal) |
+Three scores, measured on an ordinary workstation – both conversion paths in
+the same session, so the columns are comparable:
+
+| Score | Pages | Measures | `.mscz` | Sidecar | local | SVG total (sidecar / local) | largest page | MIDI | Cache (sidecar / local) |
 |---|---|---|---|---|---|---|---|---|---|
-| Minipartitur | 1 | 5 | 30 KB | **8,1 s** | **0,8 s** | 107 / 52 KB | 107 / 52 KB | 0,4 KB | 111 / 55 KB |
-| Chorsatz | 4 | 58 | 114 KB | **25,6 s** | **1,2 s** | 3235 / 1148 KB | 1040 / 354 KB | 12,4 KB | 3291 / 1196 KB |
-| Chorsatz | 5 | 63 | 98 KB | **31,9 s** | **1,2 s** | 1173 / 813 KB | 302 / 210 KB | 8,3 KB | 1227 / 858 KB |
+| Mini score | 1 | 5 | 30 KB | **8.1 s** | **0.8 s** | 107 / 52 KB | 107 / 52 KB | 0.4 KB | 111 / 55 KB |
+| Choral piece | 4 | 58 | 114 KB | **25.6 s** | **1.2 s** | 3235 / 1148 KB | 1040 / 354 KB | 12.4 KB | 3291 / 1196 KB |
+| Choral piece | 5 | 63 | 98 KB | **31.9 s** | **1.2 s** | 1173 / 813 KB | 302 / 210 KB | 8.3 KB | 1227 / 858 KB |
 
-Die MIDI ist auf beiden Wegen byteweise identisch
-([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)). Die
-SVG-Seiten zeigen dasselbe Bild, kodieren es aber anders: Die Engine legt jede
-Glyphe einmal in `<defs>` und setzt sie mit `<use>`, MuseScore zeichnet jeden
-Umriss erneut – je nach Notendichte 35–70 % der Dateigröße.
+The MIDI is byte-for-byte identical on both paths
+([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api) (German)). The
+SVG pages show the same picture but encode it differently: the engine places
+each glyph once in `<defs>` and sets it with `<use>`, while MuseScore draws
+every outline again – 35–70 % of the file size, depending on note density.
 
-Daraus abgeleitet:
+Derived from this:
 
-- **Konvertierungsdauer über den Sidecar ≈ 6 s pro Seite + 2 s Grundlast**
-  (lineare Regression über die drei Messpunkte). Die App wartet auf dem
-  Sidecar-Weg fest höchstens 300 s ab dem Einreichen (`ConvertScoreJob`),
-  rechnerisch rund 50 Seiten; `MSCORE_TIMEOUT_SECONDS` des Sidecars (Vorgabe
-  600 s) liegt darüber und greift nur, wenn er kleiner gesetzt ist. Wer sehr
-  große Partituren erwartet, rechnet mit `Seitenzahl × 6 s + Puffer` hoch. Die
-  Zahl hängt spürbar von der CPU ab – Größenordnung, keine Garantie.
-- **Lokal sind rund 0,45 s davon Grundlast** – Prozessstart plus Instanziierung
-  des Wasm-Moduls. Die eigentliche Konvertierung dauert 0,4–0,8 s, also
-  etwa 0,1 s pro Seite. Der lokale Weg gewinnt vor allem, weil er keine
-  PNG/PDF/MusicXML mitrendert, die anschließend verworfen werden
+- **Conversion time via the sidecar ≈ 6 s per page + 2 s base load**
+  (linear regression over the three data points). On the sidecar path the app
+  waits a fixed maximum of 300 s from submission (`ConvertScoreJob`), which
+  works out to about 50 pages; the sidecar's `MSCORE_TIMEOUT_SECONDS` (default
+  600 s) lies above that and only takes effect if it is set lower. Anyone
+  expecting very large scores should extrapolate with
+  `page count × 6 s + buffer`. The figure depends noticeably on the CPU – an
+  order of magnitude, not a guarantee.
+- **Locally, about 0.45 s of that is base load** – process start plus
+  instantiation of the Wasm module. The actual conversion takes 0.4–0.8 s,
+  i.e. about 0.1 s per page. The local path wins mainly because it does not
+  also render PNG/PDF/MusicXML that would be discarded afterwards
   ([M2](architecture.md#m2-schlüssel-im---score-media-json)).
-- **Die SVG-Größe schwankt stark pro Seite** (302 KB gegen 1040 KB je nach
-  Notendichte, Faktor ~3,4). Eine Hochrechnung „Seitenzahl × Durchschnitt" ist
-  deshalb grob. Für 30 Seiten dichten Satzes sind ~30 MB SVG im Cache plausibel.
-- **Eingebettete Bilder wiegen schwer.** Sie stecken als Daten-URI in der
-  Seite, die sie trägt, und Base64 kostet ein Drittel Aufschlag: Die Titelseite
-  der Aequale-Partitur (zwei PNG, zusammen 562 KB) wiegt damit 773 KB statt
-  23 KB. Betroffen ist nur diese eine Seite – die übrigen bleiben, was sie
-  waren. Der Sidecar ist an dieser Stelle nicht gegengemessen.
-- **MIDI bleibt vernachlässigbar** (< 15 KB), wie in
-  [E1](architecture.md#e1-midi-statt-mp3-als-audioartefakt) erwartet.
-- **DOM-Last im Browser:** ~640–1370 Knoten pro gerenderter Seite. Es werden nur
-  sichtbare Seiten gerendert, und weggescrollte Seiten werden wieder freigegeben
-  – bei einer fünfseitigen Partitur liegen im Betrieb 1–2 Seiten im DOM statt
-  aller fünf. Die DOM-Last wächst damit nicht mit der Länge der Partitur.
-- **Bedienung:** 30 Zoom-Änderungen in 485–493 ms (~16 ms pro Änderung) bei
-  ~5500–6400 Knoten. Auf Desktop-Hardware flüssig.
-- **Warteschlange des Sidecars:** Höchstens `SCOREVIEW_MAX_QUEUED` (Vorgabe
-  30) Aufträge warten; darüber antwortet er 503 mit `Retry-After`, und die App
-  versucht es später erneut, statt die Partitur als gescheitert zu markieren.
-  Hergeleitet aus der 300-s-Frist bei rund 10 s je Auftrag. Ein wartender
-  Auftrag verfällt nach `SCOREVIEW_PENDING_MAX_AGE_SECONDS` (Vorgabe 3600 s).
-- **Upload-Limit** (`SCOREVIEW_MAX_UPLOAD_BYTES`, Default 200 MB) liegt weit
-  jenseits echter Partituren (größte Testdatei: 566 KB) und schützt nur gegen
-  pathologische Uploads. Die App lehnt schon vorher ab: `max_score_bytes`,
-  Vorgabe 100 MB, auf beiden Wegen.
+- **SVG size varies strongly per page** (302 KB versus 1040 KB depending on
+  note density, a factor of ~3.4). An extrapolation of "page count × average"
+  is therefore rough. For 30 pages of dense writing, ~30 MB of SVG in the
+  cache is plausible.
+- **Embedded images weigh heavily.** They sit as a data URI in the page that
+  carries them, and Base64 adds a third on top: the title page of the Aequale
+  score (two PNGs, 562 KB together) thus weighs 773 KB instead of 23 KB. Only
+  that one page is affected – the others stay as they were. The sidecar has
+  not been cross-checked on this point.
+- **MIDI remains negligible** (< 15 KB), as expected in
+  [E1](architecture.md#e1-midi-statt-mp3-als-audioartefakt).
+- **DOM load in the browser:** ~640–1370 nodes per rendered page. Only visible
+  pages are rendered, and pages scrolled out of view are released again –
+  with a five-page score, 1–2 pages are in the DOM during operation instead of
+  all five. The DOM load therefore does not grow with the length of the score.
+- **Interaction:** 30 zoom changes in 485–493 ms (~16 ms per change) at
+  ~5500–6400 nodes. Smooth on desktop hardware.
+- **Sidecar queue:** at most `SCOREVIEW_MAX_QUEUED` (default 30) jobs wait;
+  beyond that it answers 503 with `Retry-After`, and the app tries again later
+  instead of marking the score as failed. Derived from the 300 s deadline at
+  about 10 s per job. A waiting job expires after
+  `SCOREVIEW_PENDING_MAX_AGE_SECONDS` (default 3600 s).
+- **Upload limit** (`SCOREVIEW_MAX_UPLOAD_BYTES`, default 200 MB) lies far
+  beyond real scores (largest test file: 566 KB) and only protects against
+  pathological uploads. The app rejects earlier: `max_score_bytes`, default
+  100 MB, on both paths.
 
-**Die Server-Messreihe stammt von 1–5-seitigen Partituren.** Alles darüber
-ist Hochrechnung.
+**The server measurement series comes from 1–5-page scores.** Everything
+beyond that is extrapolation.
 
-### Konvertierung im Browser
+### Conversion in the browser
 
-Dieselbe Engine im Browser statt in Node
-([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)), gemessen auf
-derselben Maschine in einem Chromium ohne Fenster:
+The same engine in the browser instead of in Node
+([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall) (German)), measured
+on the same machine in a headless Chromium:
 
-| Partitur | Seiten | `.mscz` | im Browser | davon Start der Engine |
+| Score | Pages | `.mscz` | in the browser | of which engine start |
 |---|---|---|---|---|
-| Minipartitur | 1 | 30 KB | **0,4 s** | 0,36 s |
-| Chorsatz | 5 | 98 KB | **0,7 s** | 0,57 s |
-| Chorsatz | 28 | 185 KB | **1,0 s** | 0,74 s |
-| Chorsatz | 4 | 566 KB | **0,4 s** | 0,34 s |
+| Mini score | 1 | 30 KB | **0.4 s** | 0.36 s |
+| Choral piece | 5 | 98 KB | **0.7 s** | 0.57 s |
+| Choral piece | 28 | 185 KB | **1.0 s** | 0.74 s |
+| Choral piece | 4 | 566 KB | **0.4 s** | 0.34 s |
 
-Auf einem Rechner ist der Browser damit nicht langsamer als der Node-Weg. Dazu
-kommt einmalig der Download der Engine: 14 MB roh, rund **7,3 MB über die
-Leitung** – das Wasm wird komprimiert übertragen (9,0 → 2,6 MB), das
-Ressourcenpaket nicht (4,7 MB). Der Glue geht komprimiert mit 48 KB über die
-Leitung.
+On a single computer the browser is therefore no slower than the Node path. On
+top of that comes a one-time download of the engine: 14 MB raw, about
+**7.3 MB over the wire** – the Wasm is transferred compressed (9.0 → 2.6 MB),
+the resource package is not (4.7 MB). The glue goes over the wire compressed
+at 48 KB.
 
-Die Artefakte sind dieselben: `timing.json`, `measures.json` und `meta.json`
-sind Byte für Byte identisch zu `node convert.mjs` derselben Partitur, die
-SVG-Seite ist gleich lang (gemessen an der Minipartitur).
+The artifacts are the same: `timing.json`, `measures.json` and `meta.json` are
+byte-for-byte identical to `node convert.mjs` for the same score, and the SVG
+page has the same length (measured on the mini score).
 
-## Bekannte Lücken
+## Known gaps
 
-**D.C./D.S./Coda-Sprünge.** MuseScores `--score-media` rollt sie nicht in
-zusätzliche Timing-Events aus – geprüft mit handgeschriebenem MusicXML als
-Eingabe, siehe [M7](architecture.md#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht).
-Ob eine in der MuseScore-GUI angelegte Jump/Marker-Struktur ausgerollt wird, ist
-ungeprüft. Wirkung im Fehlerfall: Der Cursor bleibt an einem Sprung stehen,
-statt mitzuspringen; die restliche Partitur bleibt normal navigierbar. Reguläre
-Wiederholungen und Volten funktionieren gemessen korrekt.
+**D.C./D.S./coda jumps.** MuseScore's `--score-media` does not unroll them into
+additional timing events – checked with hand-written MusicXML as input, see
+[M7](architecture.md#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht) (German).
+Whether a jump/marker structure created in the MuseScore GUI is unrolled has
+not been checked. Effect when it fails: the cursor stops at a jump instead of
+jumping along; the rest of the score remains navigable as normal. Regular
+repeats and voltas were measured to work correctly.
 
-**Große Partituren.** Orchesterpartituren sind nicht gemessen. Die
-Server-Messreihe oben stammt von Chorsätzen bis fünf Seiten; im Browser ist
-zusätzlich ein 28-seitiger Chorsatz gemessen.
+**Large scores.** Orchestral scores have not been measured. The server
+measurement series above comes from choral pieces of up to five pages; in the
+browser, a 28-page choral piece was measured as well.
 
-**Die Bedienung auf Telefonbreite.** Dass der Viewer in den mobilen Apps
-überhaupt läuft, ist gemessen (siehe unten). Die Bedienleiste ist auf
-Telefonbreite einzeilig – Play, Taktfeld, Anfangston, Schloss und „Werkzeuge“,
-alles Weitere steckt im Überlaufmenü –, geprüft in einem Chromium bei 360 × 780 px,
-nicht am Gerät. Mixer, Notizen und der Setlisten-Editor sind dort benutzbar,
-nicht bequem. Zum Lesen auf dem Telefon gibt es das Systemband und die
-Liedtext-Ansicht; ihre Grenzen stehen unter
-[Üben und Lesen auf dem Handy](#üben-und-lesen-auf-dem-handy).
+**Operation at phone width.** That the viewer runs in the mobile apps at all
+has been measured (see below). At phone width the control bar is a single row –
+play, measure field, starting note, lock and “Tools”, with everything else in
+the overflow menu – checked in a Chromium at 360 × 780 px, not on a device. The
+mixer, notes and the setlist editor are usable there, not comfortable. For
+reading on a phone there are the system band and the lyrics view; their limits
+are listed under
+[Practising and reading on a phone](#practising-and-reading-on-a-phone).
 
-**Die WebView der mobilen Apps.** Gemessen auf einem Samsung Galaxy S23 mit der
-Nextcloud-Android-App, Instanz über `adb reverse` als `http://localhost:8134`:
-AudioWorklet und WebAssembly laufen, der Ton ist hörbar, `navigator.wakeLock`
-wird erteilt. Abgeschaltet ist dort die **Vollbild-API**
-(`document.fullscreenEnabled === false`) – der Vollbildknopf erscheint deshalb
-nur, wo Vollbild möglich ist. Andere Geräte, andere Android-Versionen und die
-iOS-App sind ungeprüft; die Brücke ist für beide Plattformen geschrieben, aber
-nur auf Android nachgemessen.
+**The WebView of the mobile apps.** Measured on a Samsung Galaxy S23 with the
+Nextcloud Android app, instance via `adb reverse` as `http://localhost:8134`:
+AudioWorklet and WebAssembly run, the sound is audible, `navigator.wakeLock` is
+granted. What is switched off there is the **Fullscreen API**
+(`document.fullscreenEnabled === false`) – the fullscreen button therefore only
+appears where fullscreen is possible. Other devices, other Android versions and
+the iOS app have not been checked; the bridge is written for both platforms but
+only verified on Android.
 
-Wichtig für jede Wiederholung dieser Messung: Sie braucht einen **sicheren
-Kontext**. Über ein schlichtes `http://<LAN-IP>:8134` fehlen `navigator.wakeLock`
-und `audioWorklet` ersatzlos – die Messung fällt dann negativ aus, ohne über
-die WebView etwas auszusagen (in Chromium gegengeprüft).
+Important for any repetition of this measurement: it needs a **secure
+context**. Over a plain `http://<LAN-IP>:8134`, `navigator.wakeLock` and
+`audioWorklet` are simply missing – the measurement then comes out negative
+without saying anything about the WebView (cross-checked in Chromium).
 
-**Der Rückfall im Browser über die mobilen Apps.** Er funktioniert dort
-(gemessen) und kostet wie am Desktop einmal je Engine-Version rund 7,3 MB
-Download (14 MB entpackt) – auf einer Mobilfunkverbindung ist das viel. Wo der Server konvertieren kann,
-tritt der Fall nicht ein.
+**The browser fallback via the mobile apps.** It works there (measured) and, as
+on the desktop, costs about 7.3 MB of download once per engine version (14 MB
+unpacked) – that is a lot on a mobile connection. Where the server can convert,
+this case does not occur.
 
-**Konvertierung im Browser auf echten Geräten.** Alle Zahlen dazu stammen von
-einem Desktop-Chromium. Wie lange ein Tablet oder Telefon braucht und ab
-welcher Partiturgröße der Tab am Speicher stirbt, ist **ungeprüft** – der
-Wasm-Heap liegt im Web Worker und ist von der Seite aus nicht messbar. Davon
-hängt der Vorgabewert von `client_max_score_bytes` ab (10 MB), der bis dahin
-geschätzt ist. In Node sind über fünf Durchläufe rund 105 MB Heap gemessen;
-mobile Browser beenden Tabs erfahrungsgemäß früher als ein Desktop.
+**Conversion in the browser on real devices.** All figures for it come from a
+desktop Chromium. How long a tablet or phone takes, and at which score size the
+tab dies of memory exhaustion, is **unchecked** – the Wasm heap lives in the
+Web Worker and cannot be measured from the page. The default value of
+`client_max_score_bytes` (10 MB) depends on this and is an estimate until then.
+In Node, about 105 MB of heap was measured over five runs; in practice, mobile
+browsers kill tabs earlier than a desktop does.
 
-**Klangqualität.** Der Browser-Mixdown liegt rund 7 dB unter MuseScores eigenem
-Render; die Stimmentrennung stimmt. Ein pauschaler Verstärkungsfaktor ist
-bewusst nicht eingebaut (Clipping-Risiko in lauten Passagen). Ein Übe-Track
-dagegen wird nach dem Rendern auf −1 dBFS Spitze normalisiert (höchstens
-+12 dB) – dort ist das ganze Stück vorher bekannt. Der Unterschied
-stammt vor allem aus der SoundFont-Wahl und fehlenden Master-Effekten. Wer
-besseren Klang braucht, hinterlegt ein eigenes SoundFont – siehe
+**Sound quality.** The browser mixdown is about 7 dB below MuseScore's own
+render; the part separation is correct. A blanket gain factor is deliberately
+not built in (risk of clipping in loud passages). A practice track, by
+contrast, is normalised to −1 dBFS peak after rendering (at most +12 dB) –
+there the whole piece is known in advance. The difference stems mainly from
+the choice of SoundFont and missing master effects. Anyone who needs better
+sound can provide their own SoundFont – see
 [Installation](installation.md#soundfont).
 
-**Der lokale Konvertierungsweg unter Last.** Gemessen ist er an einer einzelnen
-Maschine mit einer Partitur nach der anderen. Wie sich mehrere gleichzeitige
-Konvertierungen verhalten, ist ungeprüft: Jeder Lauf ist ein eigener Prozess mit
-rund 130–250 MB Speicherbedarf, und anders als beim Sidecar begrenzt nichts ihre
-Zahl (dort tut das eine Semaphore). Auf einem kleinen Server kann eine
-Sammel-Vorabkonvertierung (`eager_conversion`) deshalb spürbar werden.
+**The local conversion path under load.** It was measured on a single machine
+with one score after another. How several simultaneous conversions behave has
+not been checked: each run is a separate process needing about 130–250 MB of
+memory, and unlike with the sidecar, nothing limits their number (there, a
+semaphore does). On a small server a bulk pre-conversion (`eager_conversion`)
+can therefore become noticeable.
 
-**Die MuseScore-Version des lokalen Wegs hängt an einem eigenen Build.**
-[AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) trägt
-4.7.5 (MuseScore als gepinnter, ungepatchter Submodul-Stand, Qt-frei); sie
-zieht nicht von selbst nach, wenn MuseScore weitergeht – ein neuer Kern heißt,
-die Engine zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
-Betriebsdiagnose prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine
-neuere MuseScore-Version verfügbar wäre, meldet er nicht.
+**The MuseScore version of the local path depends on a dedicated build.**
+[AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) carries
+4.7.5 (MuseScore as a pinned, unpatched submodule revision, Qt-free); it does
+not follow along by itself when MuseScore moves on – a new core means building
+the engine and bumping the tarball URL. The self-test of the operational
+diagnostics checks whether the guarantees from M2/M4/M7 still hold – it does
+not report that a newer MuseScore version would be available.
 
-**Alte Partituren bekommen lokal eine Ersatz-Notenschrift.** Für Dateien aus
-MuseScore 1 bis 3 gelten die Stilvorgaben ihrer Zeit, und die nennen als
-Notenschrift Emmentaler bzw. MScore Text. Die bringt der lokale Weg nicht mit –
-er trägt Bravura und Leland, und jede weitere Schrift würde das
-Auslieferungspaket vergrößern. Gezeichnet wird deshalb mit Bravura. Betroffen
-sind nur die Glyphenformen: Der Stilwert bleibt „Emmentaler“, also greifen die
-Satzregeln, die daran hängen, genauso wie in MuseScore – Seitenaufteilung und
-Abstände stimmen. Der Sidecar hat die Originalschrift.
+**Old scores get a substitute music font locally.** Files from MuseScore 1 to
+3 are governed by the style defaults of their time, and those name Emmentaler
+or MScore Text as the music font. The local path does not ship these – it
+carries Bravura and Leland, and every additional font would enlarge the
+distribution package. Drawing is therefore done with Bravura. Only the glyph
+shapes are affected: the style value remains “Emmentaler”, so the engraving
+rules tied to it apply just as in MuseScore – page breaks and spacing are
+correct. The sidecar has the original font.
 
-**Zwei Bildformate zeigt nur der Sidecar.** In die Partitur eingebettete
-Bilder setzen beide Wege ins Notenbild. Der lokale Weg reicht sie unverändert
-ins SVG durch und kennt dafür PNG, JPEG, GIF und BMP – die vier Formate, die
-ein Browser selbst anzeigt. Die beiden übrigen, die MuseScore annimmt, bleiben
-dort leer: ein SVG als Bild (dafür bräuchte die Qt-freie Engine einen eigenen
-SVG-Renderer) und TIFF (das kein Browser dekodiert). Der Sidecar rastert ein
-SVG-Bild mit; was er mit TIFF macht, hängt an den Bild-Plugins seines
-AppImage und ist ungeprüft. Wirkung: an dieser Stelle bleibt im lokalen Weg
-eine Lücke, der Rest der Seite ist unberührt.
+**Two image formats are shown only by the sidecar.** Both paths place images
+embedded in the score into the notation. The local path passes them through
+unchanged into the SVG and supports PNG, JPEG, GIF and BMP for this – the four
+formats a browser displays by itself. The other two that MuseScore accepts
+stay blank there: an SVG as an image (the Qt-free engine would need its own
+SVG renderer for that) and TIFF (which no browser decodes). The sidecar
+rasterises an SVG image along with the page; what it does with TIFF depends on
+the image plugins of its AppImage and has not been checked. Effect: on the
+local path a gap remains at that spot; the rest of the page is unaffected.
 
-**Keine Hervorhebung der Notenköpfe auf dem Sidecar-Weg.** Der klingende
-Notenkopf wird nur eingefärbt, wo das SVG die Kennungen aus
+**No note-head highlighting on the sidecar path.** The sounding note head is
+only coloured where the SVG carries the identifiers from
 [M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)
-trägt – das tut der lokale Konvertierungsweg, nicht der Sidecar mit seinem
-Stock-AppImage. Dort bleibt es beim Band, ohne Fehlermeldung: Die Einstellung
-„klingende Noten einfärben" ist dann zwar wählbar, fällt aber still auf das Band
-zurück. Wirkung: dieselbe Bedienung, weniger Führung im Notenbild. Dasselbe
-gilt für die farbigen Notenköpfe der Intonation (siehe
-[Mikrofon, Aufnahme und Intonation](#mikrofon-aufnahme-und-intonation)).
+– the local conversion path does that, the sidecar with its stock AppImage
+does not. There it stays with the band, without an error message: the setting
+“Colour the sounding notes” can still be selected but silently falls back to
+the band. Effect: the same controls, less guidance in the notation. The same
+applies to the coloured note heads of intonation (see
+[Microphone, recording and intonation](#microphone-recording-and-intonation)).
 
-**Die Version des Konvertierers wird nicht aufgezeichnet.** Der Viewer nennt den
-Konvertierungs*weg* jeder Darstellung, aber nicht, welche MuseScore- bzw.
-Engine-Version dabei lief: Der Sidecar meldet seine Version nur im
-Job-unabhängigen `/health`, und die einzige Versionsangabe in `meta.json`
-(`mscoreVersion`) ist die der Partitur, nicht die des Konvertierers. Wirkung:
-Ein Satzunterschied ist auf den Weg zurückführbar, nicht auf eine
-Versionsnummer.
+**The converter version is not recorded.** The viewer names the conversion
+*path* of every rendering, but not which MuseScore or engine version ran: the
+sidecar reports its version only in the job-independent `/health`, and the
+only version field in `meta.json` (`mscoreVersion`) is that of the score, not
+of the converter. Effect: a difference in engraving can be traced to the path,
+not to a version number.
 
-**Tablet- und Telefon-Hardware.** Touch-Bedienung, Pinch-Zoom und Wachhalten des
-Bildschirms sind umgesetzt und im Browser verifiziert. Erprobt auf einem
-Android-Telefon (Chrome und Opera, Ton über Bluetooth-Kopfhörer) sind drei
-Dinge, die auf dem Desktop unsichtbar bleiben:
+**Tablet and phone hardware.** Touch controls, pinch zoom and keeping the
+screen awake are implemented and verified in the browser. Tried on an Android
+phone (Chrome and Opera, sound via Bluetooth headphones) are three things that
+stay invisible on the desktop:
 
-- Die Ausgabelatenz (Bluetooth) wird ausgeglichen; der Cursor läuft dem Ton
-  nicht voraus.
-- Das Nachführen erkennt manuelles Scrollen an der Geste; die ein- und
-  ausfahrende Browserleiste gilt nicht als Eingriff.
-- Die Transportleiste bleibt auf Telefonbreite einzeilig.
+- The output latency (Bluetooth) is compensated; the cursor does not run ahead
+  of the sound.
+- Auto-follow recognises manual scrolling by the gesture; the browser bar
+  sliding in and out does not count as an intervention.
+- The transport bar stays a single row at phone width.
 
-**Gemessene Ausgabelatenz**, abgelesen an der Diagnose im Aufklapper
-„Darstellung":
+**Measured output latency**, read from the diagnostics in the “Appearance”
+section:
 
-| Gerät | Ausgabe | Ausgeglichen |
+| Device | Output | Compensated |
 |---|---|---|
-| Android-Telefon | Bluetooth-Kopfhörer | **232 ms** |
-| Arbeitsmaschine | eingebaut | **51 ms** |
+| Android phone | Bluetooth headphones | **232 ms** |
+| Workstation | built-in | **51 ms** |
 
-Beide Werte stammen aus der **Automatik**, bei unangetastetem Regler. Damit ist
-belegt: **Chrome auf Android meldet den Bluetooth-Anteil der
-Ausgabelatenz**, die App trägt ihn ohne
-Zutun. Bild und Ton passen auf beiden Geräten zusammen.
+Both values come from the **automatic setting**, with the slider untouched.
+This establishes that **Chrome on Android reports the Bluetooth share of the
+output latency**, and the app accounts for it without any intervention.
+Picture and sound match on both devices.
 
-Der Regler „Bild und Ton abgleichen" bleibt für den Fall, dass ein Kopfhörer
-seine Verzögerung nicht selbst nennt – dann fehlt der Automatik genau dieser
-Anteil, und er ist nirgends ablesbar außer am eigenen Ohr. **Wie viele
-Kopfhörer das betrifft, ist ungeprüft**; gemessen ist ein einziges Paar an
-einem einzigen Telefon.
+The slider “Sync picture and sound” remains for the case where a pair of
+headphones does not report its own delay – then the automatic setting lacks
+exactly that share, and it cannot be read off anywhere except by one's own
+ear. **How many headphones this affects has not been checked**; a single pair
+was measured on a single phone.
 
-Nicht erprobt ist weiterhin **eine ganze Probe am Notenständer**, und
-gegengeprüft ist die Wirkung nur in Chrome – **ob das Nachführen in Opera
-ebenso glatt läuft, ist nicht geprüft.**
+Still untested is **a whole rehearsal at the music stand**, and the effect has
+only been cross-checked in Chrome – **whether auto-follow runs just as
+smoothly in Opera has not been checked.**
 
-**Offlinebetrieb nur über die Offline-Seite.** Der Viewer in Files lädt ohne
-Netz nicht; ohne Netz geht nur, was vorher vorgemerkt wurde, und nur über die
-Offline-Seite ([Offline](#offline)).
+**Offline use only via the offline page.** The viewer in Files does not load
+without a network; without a network, only what was saved beforehand works,
+and only via the offline page ([Offline](#offline)).
 
-## Probe- und Konzertfunktionen
+## Rehearsal and concert features
 
-### „Folgt mir“
+### “Follow me”
 
-Gemessen an der Testinstanz (Docker Desktop, 12 vCPU, SQLite im WAL-Modus,
-Apache prefork), ohne `notify_push`, Abfrageabstand 800 ms:
+Measured on the test instance (Docker Desktop, 12 vCPU, SQLite in WAL mode,
+Apache prefork), without `notify_push`, polling interval 800 ms:
 
-| Messung | Ergebnis |
+| Measurement | Result |
 |---|---|
-| Tipp der Leitung → Sprung auf dem Folgegerät (Browser, drei Folgegeräte) | p50 **595 ms**, p95 **945 ms** |
-| Zwei Tipps der Leitung auf verschiedene Studierbuchstaben, Abstand 11–65 ms bzw. 74–263 ms (je 20×, drei Folgegeräte) | Leitung, Server und alle Folgegeräte **20/20** am zweiten; der erste ist nie zuletzt angekommen |
-| Last: 40 Geräte gegen den echten Endpunkt, Leitung schreibt alle 3 s | p95 Ende-zu-Ende **771 ms**, 0 Fehler, 0 „database is locked“, **2,0–2,8 Kerne** |
-| CPU je Abfrage | rund **50 ms**, fast alles für den Start von Nextcloud; Datei- und Cache-Zugriff sind ein kleiner Teil |
+| Leader's tap → jump on the following device (browser, three following devices) | p50 **595 ms**, p95 **945 ms** |
+| Two taps by the leader on different rehearsal marks, 11–65 ms or 74–263 ms apart (20× each, three following devices) | Leader, server and all following devices **20/20** on the second; the first never arrived last |
+| Load: 40 devices against the real endpoint, leader writes every 3 s | p95 end-to-end **771 ms**, 0 errors, 0 “database is locked”, **2.0–2.8 cores** |
+| CPU per poll | about **50 ms**, almost all of it for starting Nextcloud; file and cache access are a small part |
 
-Daraus folgt für den Betrieb:
+For operation this means:
 
-- **Ohne Push kostet eine Folgesitzung etwa 50 ms CPU je Gerät und Abfrage**,
-  bei 40 Geräten also 2–3 Kerne für die Dauer der Probe. Auf einem kleinen
-  Server (2–4 Kerne) ist das zu viel; die Betriebsdiagnose rät ab 20 Geräten
-  zu `notify_push`. Ein größeres `follow_poll_ms` senkt die Last linear und
-  verzögert die Sprünge entsprechend.
-- **Über echtes WLAN kommt die Rundlaufzeit dazu.** Die Zahlen oben stammen aus
-  einem Netz ohne Funkstrecke; realistisch ist ein p95 knapp über einer
-  Sekunde. Einzelne Ausreißer von 2–4 s traten in der Lastmessung etwa alle
-  2–3 Minuten auf (Ursache ungeklärt, vermutlich Docker/WSL oder Apache
-  prefork).
-- **Mit `notify_push`** holt jedes Gerät den Zustand nur bei einer Änderung.
-  Dieser Weg ist **nur per Unit-Test geprüft** – die Testinstanz hat kein
-  `notify_push`. Eine Latenzmessung damit steht aus.
-- **Die mobilen Apps fragen immer ab.** `notify_push` meldet sich über eine
-  Sitzung an, die die Direct-Editing-Seite nicht hat.
-- **Ohne laufende Sitzung** fragt ein Gerät nur alle 15 s, ob eine begonnen hat.
-  Wer den Viewer vor der Leitung öffnet, folgt also erst nach bis zu 15 s. In
-  einem Tab im Hintergrund fragt es dann gar nicht und holt die Frage beim
-  Zurückkehren sofort nach.
-- **Mitblättern** folgt der Wiedergabe der Leitung mit dem Abfrageabstand als
-  Verzögerung für Start, Halt und Sprünge; dazwischen rechnet jedes Gerät
-  selbst. Gemessen am Desktop mit einem Folgegerät: nach 8 s Wiedergabe
-  dieselbe Sekunde und derselbe Takt wie die Leitung; in der Nextcloud-App
-  am Galaxy S23 läuft es ebenso mit, ohne Ton. Ein Fehler bleibt um
-  die halbe Antwortzeit stehen (die Serverzeit wird an der Antwort geschätzt).
-- **Starten, Beenden und Beitreten sind auf je 30 Aufrufe je Minute
-  begrenzt**, das Senden der Stelle auf 120. Mobile Apps zählen dabei je
-  IP-Adresse (siehe unten bei der Leitung).
-- **Mehrere Webserver ohne verteilten Cache:** Der lokale Cache gilt dann
-  höchstens eine Sekunde, danach liest der nächste Aufruf die Datenbank –
-  ein Lesezugriff je Sekunde und Datei (siehe
-  [E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
-- **Der Wechsel zum nächsten Stück dauert gemessen rund 3 s** bis zum
-  Folgegerät, einschließlich Laden der neuen Partitur (zwei Browser an der
-  Testinstanz, Desktop). Mit einem Folgegerät in der Nextcloud-App ist der
-  Wechsel abgenommen (Galaxy S23), die Dauer dort nicht gemessen.
-- **Nur die Leitung, die die Sitzung führt, nimmt sie mit.** Führt auf dem
-  nächsten Stück schon jemand anderes, bleibt diese Sitzung; die Leitung
-  wechselt allein, ihre Folgenden bleiben stehen.
-- **Auf einem mitgenommenen Stück fehlt der Leitung die Rolle**, wenn sie dort
-  keine Leitung ist: Stelle, Loop, Anfangston und Transposition gehen,
-  Stimmnotizen und Stempel nicht
+- **Without push, a follow session costs about 50 ms of CPU per device and
+  poll**, so with 40 devices 2–3 cores for the duration of the rehearsal. On a
+  small server (2–4 cores) that is too much; the status diagnostics
+  recommend `notify_push` from 20 devices. A larger `follow_poll_ms` lowers the
+  load linearly and delays the jumps correspondingly.
+- **Over real Wi-Fi, the round-trip time comes on top.** The figures above
+  come from a network without a radio link; a realistic p95 is just over one
+  second. Individual outliers of 2–4 s occurred in the load measurement about
+  every 2–3 minutes (cause unclear, probably Docker/WSL or Apache prefork).
+- **With `notify_push`**, each device fetches the state only when it changes.
+  This path is **only checked by unit tests** – the test instance has no
+  `notify_push`. A latency measurement with it is still pending.
+- **The mobile apps always poll.** `notify_push` registers via a session,
+  which the Direct Editing page does not have.
+- **Without a running session**, a device only asks every 15 s whether one has
+  started. Anyone who opens the viewer before the leader thus only follows
+  after up to 15 s. In a background tab it does not ask at all and catches up
+  immediately on returning.
+- **Following playback** tracks the leader's playback with the polling
+  interval as the delay for start, stop and jumps; in between, each device
+  calculates by itself. Measured on the desktop with one following device:
+  after 8 s of playback, the same second and the same measure as the leader;
+  in the Nextcloud app on the Galaxy S23 it follows along just the same,
+  without sound. An error of around half the response time remains (the
+  server time is estimated from the response).
+- **Starting, ending and joining are each limited to 30 calls per minute**,
+  sending the position to 120. Mobile apps are counted per IP address (see
+  below under leaders).
+- **Several web servers without a distributed cache:** the local cache is then
+  valid for at most one second, after which the next call reads the
+  database – one read per second and file (see
+  [E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht) (German)).
+- **Switching to the next piece takes about 3 s, measured**, until it reaches
+  the following device, including loading the new score (two browsers on the
+  test instance, desktop). With a following device in the Nextcloud app the
+  switch has been accepted (Galaxy S23), the duration there not measured.
+- **Only the leader who is leading the session takes it along.** If someone
+  else is already leading on the next piece, that session stays; the leader
+  switches alone, and their followers stay where they are.
+- **On a piece the session was taken along to, the leader lacks the role** if
+  they are not a leader there: position, loop, starting note and
+  transposition work, notes for parts and stamps do not
   ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
-- **Wer das nächste Stück nicht lesen darf, sieht dort eine Fehlermeldung.**
-  Vorab prüfen lässt sich das von der Leitung aus nicht – sie sieht die Rechte
-  der anderen nicht.
-- **Eine Transposition der Leitung gilt für alle Folgenden** und wird bei
-  ihnen nicht gespeichert; wer selbst transponiert, folgt nicht mehr.
+- **Anyone not allowed to read the next piece sees an error message there.**
+  This cannot be checked in advance from the leader's side – the leader cannot
+  see the others' permissions.
+- **A transposition by the leader applies to all followers** and is not saved
+  for them; anyone who transposes themselves stops following.
 
-### Leitung
+### Leaders
 
-- **Eine Leitung kraft Schreibrecht erscheint nicht in der Liste der
-  Leitungen** (Dateien ohne Eigentümerin, etwa in Gruppenordnern). Sie hat die
-  Rolle trotzdem; die Liste zeigt die Eigentümerin und die Ernannten.
-- **Die Suche nach Personen zum Ernennen ist auf 30 Aufrufe je Minute
-  begrenzt.** Anfragen aus den mobilen Apps sind für Nextclouds Begrenzung
-  anonym und zählen je IP-Adresse – ein ganzer Chor hinter einem NAT teilt sich
-  dieses Kontingent. Gesucht wird ohnehin nur von Leitungen.
+- **A leader by virtue of write permission does not appear in the list of
+  leaders** (files without an owner, e.g. in group folders). They still have
+  the role; the list shows the owner and the appointed leaders.
+- **The search for people to appoint is limited to 30 calls per minute.**
+  For Nextcloud's rate limiting, requests from the mobile apps are anonymous
+  and are counted per IP address – a whole choir behind a NAT shares this
+  quota. Only leaders search anyway.
 
-### Notizen
+### Notes
 
-- **Höchstens 500 Notizen je Person und Partitur**, alle Sichtbarkeiten und
-  Stempel zusammen; darüber antwortet der Server 409. Zwei gleichzeitige
-  Anfragen können die Grenze um eine Notiz überschreiten.
-- **Anlegen und Ändern sind auf je 60 Aufrufe je Minute begrenzt** – wer
-  Stempel sehr schnell hintereinander setzt, bekommt kurz „Zu viele Änderungen“.
+- **At most 500 notes per person and score**, all visibilities and stamps
+  together; beyond that the server answers 409. Two simultaneous requests can
+  exceed the limit by one note.
+- **Creating and changing are each limited to 60 calls per minute** – anyone
+  setting stamps very quickly in a row briefly gets “Too many changes in a
+  short time”.
 
-### Setliste
+### Setlist
 
-- **Grenzen:** höchstens 256 KB und 200 Einträge je Setliste. Aus einer
-  Partitur heraus sucht der Viewer nur im Ordner dieser Partitur und
-  nimmt höchstens 20 Setlisten. Die Auswahl um die Partitur für den Editor
-  reicht bis Tiefe 2, mit höchstens 200 Treffern und 100 besuchten Ordnern.
-- **Rohe Pfade werden nicht %-dekodiert** – nur Linkziele. Wer in einen rohen
-  Pfad `%20` schreibt, meint damit wörtlich `%20`.
-- **Eine nicht eingerückte Zeile direkt nach einem Eintrag beendet die Liste.**
-  Bewusst abweichend von CommonMark
-  ([E11](architecture.md#e11-die-setliste-als-markdown-datei)); wer darunter
-  weiterschreiben will, lässt eine Leerzeile oder rückt ein.
-- **Absolute Pfade gelten im Baum der jeweiligen Leserin.** In einer geteilten
-  Liste zeigt `/Chor/Kyrie.mscz` bei jeder, die sie liest, auf ihre eigene
-  Datei dieses Namens – oder auf keine. Relative Pfade sind für geteilte
-  Listen deshalb die bessere Wahl.
-- **Nextclouds Viewer zeigt nach einem Stückwechsel weiter den ursprünglichen
-  Dateinamen** in seiner Kopfzeile, wenn die Setliste aus einer Partitur
-  heraus geöffnet wurde. Die Setlisten-Leiste nennt das richtige Stück.
-- **Ein Pedal oder eine Taste für „nächstes Stück“ gibt es nicht.** Pedale
-  blättern innerhalb eines Stücks; der Wechsel geht über die Setlisten-Leiste.
-- **Mobil nur über eine Partitur.** Die Apps bieten für `*.setlist.md` Text an,
-  nicht ScoreView; eine Setliste öffnet sich dort über eine ihrer Partituren.
-  Im Editor lassen sich mobil nur Stücke aus dem Ordner der offenen Partitur
-  hinzufügen, und über ein Stück aus der Liste heraus (Begleit-Token) nur
-  umordnen und entfernen – Nextclouds Dateiauswahl braucht eine Sitzung.
+- **Limits:** at most 256 KB and 200 entries per setlist. From within a score,
+  the viewer only searches the folder of that score and takes at most 20
+  setlists. The selection around the score for the editor reaches down to
+  depth 2, with at most 200 hits and 100 visited folders.
+- **Raw paths are not %-decoded** – only link targets. Anyone writing `%20` in
+  a raw path literally means `%20`.
+- **A non-indented line directly after an entry ends the list.** A deliberate
+  deviation from CommonMark
+  ([E11](architecture.md#e11-die-setliste-als-markdown-datei) (German)); anyone who
+  wants to keep writing below it leaves a blank line or indents.
+- **Absolute paths apply in the tree of the respective reader.** In a shared
+  list, `/Chor/Kyrie.mscz` points, for everyone who reads it, to their own
+  file of that name – or to none. Relative paths are therefore the better
+  choice for shared lists.
+- **Nextcloud's viewer keeps showing the original file name** in its header
+  after a piece switch, if the setlist was opened from within a score. The
+  setlist bar names the correct piece.
+- **There is no pedal or key for “Next piece”.** Pedals turn pages within a
+  piece; switching goes via the setlist bar.
+- **On mobile only via a score.** For `*.setlist.md` the apps offer Text, not
+  ScoreView; a setlist opens there via one of its scores. On mobile, the editor
+  can only add pieces from the folder of the open score, and via a piece from
+  the list (companion token) only reorder and remove – Nextcloud's file picker
+  needs a session.
 
-### Mikrofon, Aufnahme und Intonation
+### Microphone, recording and intonation
 
-**Gemessener Versatz einer Aufnahme**, in Chromium mit einer Datei als
-Mikrofon, nach dem Ausgleich beider Latenzen:
+**Measured offset of a recording**, in Chromium with a file as the
+microphone, after compensating both latencies:
 
-| gegen | Versatz |
+| against | Offset |
 |---|---|
-| den Cursor | **+42 … +52 ms** (die Aufnahme liegt später) |
-| die Begleitung | **−22 … 0 ms** |
+| the cursor | **+42 … +52 ms** (the recording is later) |
+| the accompaniment | **−22 … 0 ms** |
 
-spessasynth gleicht eine Abweichung seiner eigenen Zeit erst ab 50 ms nach;
-darunter bleibt sie stehen, und das betrifft den Cursor ebenso. An echten
-Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
+spessasynth only corrects a deviation of its own time from 50 ms upwards;
+below that it remains, and this affects the cursor as well. This has not been
+re-measured on real devices and with real input latency.
 
-- **Das Einschwingen ist nicht gemessen.** Die Intonation verwirft die
-  ersten **100 ms** jeder Note (`skipAttackMs`); ob das für Laienstimmen
-  reicht, steht aus.
-- **Die Referenzstimmung ist fest: a' = 440 Hz.** Ein Chor, der als Ganzes
-  absinkt, wird gegen 440 bewertet, nicht gegen sich selbst.
-- **Oktaven werden gefaltet.** Ein Tenor, der die Altstimme eine Oktave tiefer
-  singt, singt sie richtig; eine Oktave daneben fällt also nicht auf.
-- **Farbige Notenköpfe nur auf dem lokalen Konvertierungsweg**, und nur, wo
-  jede Stimme eine eigene Notenzeile hat. Sonst bleibt es ohne Fehlermeldung
-  bei der Nadel und der Liste der Problemstellen
-  ([M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)).
-- **Bei Wiederholungen zeigt die Färbung den zuletzt bewerteten Durchgang.**
-  Derselbe Notenkopf steht für beide Durchgänge
+- **The attack has not been measured.** Intonation discards the first
+  **100 ms** of each note (`skipAttackMs`); whether that is enough for amateur
+  voices is still open.
+- **The reference pitch is fixed: a' = 440 Hz.** A choir that sinks as a whole
+  is judged against 440, not against itself.
+- **Octaves are folded.** A tenor singing the alto part an octave lower sings
+  it correctly; an octave off therefore goes unnoticed.
+- **Coloured note heads only on the local conversion path**, and only where
+  each part has its own staff. Otherwise it stays, without an error message,
+  with the needle and the list of problem spots
+  ([M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg) (German)).
+- **With repeats, the colouring shows the most recently evaluated pass.** The
+  same note head stands for both passes
   ([M7](architecture.md#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)).
-- **Das Tempo der Aufnahme übernimmt die Begleitung beim Start des
-  Abhörens** – eine Aufnahme lässt sich nicht strecken. Eine spätere Änderung
-  des Tempos während des Abhörens wird nicht nachgeführt.
-- **Uploads brauchen eine Webserver-Grenze von mindestens ~20 MB** (bei nginx
-  `client_max_body_size`). Eine Aufnahme von 10 min wiegt rund 19 MB; darunter
-  scheitert das Speichern mit 413 vom Webserver, bevor die App die Anfrage
-  sieht ([Installation](installation.md#uploadgröße-für-aufnahmen)).
-- **Ein Upload belegt Platz im temporären Verzeichnis, nicht im
-  `memory_limit`.** Der Rumpf geht ab 2 MB in eine Zwischendatei
-  (`php://temp`), geprüft wird nur der Kopf, und IAppData schreibt aus dem
-  Strom. Bei der größten erlaubten Aufnahme (`max_recording_seconds` = 3600,
-  rund 115 MB) braucht das temporäre Verzeichnis also je gleichzeitigem
-  Upload so viel Platz; was darüber liegt, lehnt die App mit 413 ab, bevor
-  sie es annimmt.
-- **Die Obergrenze je Partitur hält auch bei gleichzeitigen Uploads, die
-  Speichergrenzen nur ungefähr.** Nach dem Einfügen zählt die App nach: Mit
-  bestätigtem Ersetzen geht die nächstälteste, ohne nimmt der später
-  eingetroffene Upload seine Aufnahme zurück (bei exakt gleichzeitigen können
-  es beide sein). Die Grenzen für den Speicher je Person und der Instanz kann
-  ein gleichzeitiger Upload um höchstens seine eigene Größe überschreiten.
-- **Eine Mikrofon-Erlaubnis gilt innerhalb von Files für alle Skripte dort**,
-  wie bei Talk. Die App gibt das Mikrofon nur auf Seiten unter `/apps/files`
-  frei; feiner als je Dokument lässt sich eine Richtlinie nicht setzen.
-- **Nicht gespeicherte Aufnahmen überleben kein Neuladen der Seite.** Scheitert
-  das Speichern, bleibt die Aufnahme im Speicher und lässt sich erneut
-  speichern – bis die Seite neu geladen wird. Das steht in der Oberfläche.
+- **The accompaniment takes the recording's tempo at the start of
+  playback** – a recording cannot be stretched. A later change of tempo during
+  playback is not tracked.
+- **Uploads need a web server limit of at least ~20 MB** (with nginx,
+  `client_max_body_size`). A 10 min recording weighs about 19 MB; below that,
+  saving fails with 413 from the web server before the app sees the request
+  ([Installation](installation.md#upload-size-for-recordings)).
+- **An upload takes up space in the temporary directory, not in
+  `memory_limit`.** From 2 MB, the body goes into a temporary file
+  (`php://temp`), only the header is checked, and IAppData writes from the
+  stream. For the largest permitted recording (`max_recording_seconds` = 3600,
+  about 115 MB), the temporary directory thus needs that much space per
+  simultaneous upload; anything above that is rejected by the app with 413
+  before it accepts it.
+- **The per-score maximum holds even with simultaneous uploads, the storage
+  limits only approximately.** After inserting, the app counts again: with a
+  confirmed replacement, the next-oldest goes; without one, the upload that
+  arrived later withdraws its recording (with exactly simultaneous ones it can
+  be both). A simultaneous upload can exceed the per-person and instance
+  storage limits by at most its own size.
+- **A microphone permission within Files applies to all scripts there**, as
+  with Talk. The app only enables the microphone on pages under
+  `/apps/files`; a policy cannot be set more finely than per document.
+- **Unsaved recordings do not survive a page reload.** If saving fails, the
+  recording stays in memory and can be saved again – until the page is
+  reloaded. The interface says so.
 
-### Partiturfakten und Stempel
+### Score facts and stamps
 
-- **Auf dem Sidecar-Weg kein Dur/Moll beim Grundton.** Stock-MuseScore schreibt
-  keine Tonarten in `meta.json`, und im MIDI ist das Moll-Byte immer 0
-  ([M11](architecture.md#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen)).
-  Der Anfangston „Grundton“ spielt dort die Dur-Tonika der Vorzeichnung –
-  in c-Moll also es statt c. Studierbuchstaben kommen auf beiden Wegen.
-- **Mehrtaktpausen:** Die Taktzählung der Engine weicht dann von der des
-  Viewers ab. Der Viewer nimmt Buchstaben und Tonarten in diesem Fall aus dem
-  MIDI und übernimmt den Modus aus der Engine nur, wo er eindeutig ist
+- **On the sidecar path, no major/minor for the key note.** Stock MuseScore
+  writes no key signatures into `meta.json`, and in the MIDI the minor byte is
+  always 0
+  ([M11](architecture.md#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen) (German)).
+  The starting note “Key note” there plays the major tonic of the key
+  signature – in C minor, E♭ instead of C. Rehearsal marks come through on both
+  paths.
+- **Multimeasure rests:** the engine's measure count then differs from the
+  viewer's. In that case the viewer takes rehearsal marks and key signatures
+  from the MIDI and adopts the mode from the engine only where it is
+  unambiguous
   ([E12](architecture.md#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)).
-- **Stimmstempel stehen über dem System, wenn sich Zeilen und Stimmen nicht
-  zuordnen lassen** – etwa sechs Stimmen auf fünf Notenzeilen. Der Stempel ist
-  dann da, aber nicht an der Zeile seiner Stimme.
-- **Auf dem Sidecar-Weg keine Liedtext-Ansicht und keine Tonnamen.** Beides
-  braucht Listen, die nur die Engine schreibt; siehe
-  [Darstellungen](#darstellungen).
+- **Part stamps sit above the system when staves and parts cannot be
+  matched** – for instance six parts on five staves. The stamp is then there,
+  but not at the staff of its part.
+- **On the sidecar path, no lyrics view and no note names.** Both need lists
+  that only the engine writes; see [Views](#views).
 
-### Mobil
+### Mobile
 
-- **Kein Mikrofon in der Android-App.** Ihre WebView gibt es nicht frei
-  (Quellcode: kein `RECORD_AUDIO`, kein `onPermissionRequest`), und ScoreView
-  kann das nicht ändern. Aufnahme und Intonation gehen dort über „Im Browser
-  öffnen“. Für die iOS-App spricht der Quellcode dafür, dass es mit einer
-  Systemrückfrage bei jedem Öffnen geht; gemessen ist es nicht.
-- **„Im Browser öffnen“ ist am Android- und am iOS-Gerät ungeprüft**, ebenso,
-  ob ein Pedal in der WebView den Fokus bekommt.
-- **Ein Wechsel des Begleit-Geheimnisses wirkt nach bis zu 3 s**, solange der
-  Server den alten Wert noch aus APCu liest.
+- **No microphone in the Android app.** Its WebView does not grant it (source
+  code: no `RECORD_AUDIO`, no `onPermissionRequest`), and ScoreView cannot
+  change that. Recording and intonation work there via “Open in browser”. For
+  the iOS app, the source code suggests that it works with a system prompt
+  every time it is opened; this has not been measured.
+- **“Open in browser” has not been checked on Android or iOS devices**, nor
+  whether a pedal gets focus in the WebView.
+- **A change of the companion secret takes effect after up to 3 s**, as long
+  as the server still reads the old value from APCu.
 
-### Offene Prüfungen
+### Open checks
 
-Umgesetzt und im Browser geprüft, aber **nicht am Gerät**:
+Implemented and checked in the browser, but **not on a device**:
 
-- alle Gerätetests der mobilen Apps zu Setliste, Leiten, Folgen und Mikrofon
-  (Android über `adb reverse`, siehe oben; ein iOS-Gerät fehlt ganz);
-- das Wachhalten des Bildschirms im Aufführungsmodus und beim Folgen – ohne
-  Fenster nur gegen eine nachgebaute `navigator.wakeLock` geprüft;
-- eine ganze Probe mit echten Stimmen, echtem WLAN und `notify_push`;
-- die Geräteabnahme der Übe- und Lesefunktionen am Galaxy S23, siehe
-  [Am Gerät offen](#am-gerät-offen).
+- all device tests of the mobile apps for setlists, leading, following and the
+  microphone (Android via `adb reverse`, see above; an iOS device is missing
+  entirely);
+- keeping the screen awake in performance mode and while following – without a
+  window, only checked against a mocked `navigator.wakeLock`;
+- a whole rehearsal with real voices, real Wi-Fi and `notify_push`;
+- the device acceptance of the practising and reading features on the
+  Galaxy S23, see [Open on the device](#open-on-the-device).
 
-## Üben und Lesen auf dem Handy
+## Practising and reading on a phone
 
-### Übe-Tracks
+### Practice tracks
 
-| Messung | Ergebnis |
+| Measurement | Result |
 |---|---|
-| Export in der App, Desktop-Chromium: Chorsatz mit 5 Stimmen | 76 s Musik in **7 s**, 1,24 MB |
-| Messaufbau mit demselben Kern (spessasynth im Worker, lamejs, 128 kbit/s), Desktop | 76 s in 6,7 s · 191 s in 14,2 s (3,08 MB) |
-| derselbe Messaufbau, Galaxy S23, Chrome | 76 s in 8,3 s · 191 s in **15,9 s**, davon 11,8 s Kodieren |
+| Export in the app, desktop Chromium: choral piece with 5 parts | 76 s of music in **7 s**, 1.24 MB |
+| Test setup with the same core (spessasynth in the worker, lamejs, 128 kbit/s), desktop | 76 s in 6.7 s · 191 s in 14.2 s (3.08 MB) |
+| the same test setup, Galaxy S23, Chrome | 76 s in 8.3 s · 191 s in **15.9 s**, of which 11.8 s encoding |
 
-- **Das Kodieren kostet rund dreimal so viel wie das Rendern.** Am S23 dauert
-  der Export 10–25 % länger als am Desktop. Ein Mittelklassegerät ist nicht
-  gemessen; das Ziel „4 min Musik in höchstens 60 s“ ist am S23 mit großem
-  Abstand erfüllt.
-- **Rund 1 MB je Minute Musik** (128 kbit/s stereo). Die Grenze
-  `practice_track_max_mb` (Vorgabe 60 MB) reicht damit für eine Stunde. Der
-  Webserver vor Nextcloud muss Anfragen dieser Größe annehmen
-  ([Installation](installation.md#übe-tracks-und-offline-seite)).
-- **Ein Track zählt gegen das Kontingent der Ordnerbesitzerin** – bei einem
-  geteilten Ordner also gegen das der Person, der er gehört. Die App hat dafür
-  keine eigene Grenze und räumt keine Tracks auf.
-- **Tracks für alle Stimmen ersetzen ohne Rückfrage**, was im Unterordner
-  „Übe-Tracks“ unter demselben Namen liegt; ein einzelner Track fragt vorher.
-- **Der Name des Unterordners folgt der Voreinstellungssprache der Instanz.**
-  Wechselt sie, entsteht beim nächsten Mal ein zweiter Ordner.
-- **Mobil nur neben die Partitur.** Mit dem Token der App gibt es keinen frei
-  gewählten Ordner (keine Dateiauswahl ohne Sitzung), aus einem Stück einer
-  Setliste heraus (Begleit-Token) gar keinen Export.
+- **Encoding costs about three times as much as rendering.** On the S23 the
+  export takes 10–25 % longer than on the desktop. A mid-range device has not
+  been measured; the target "4 min of music in at most 60 s" is met on the S23
+  by a wide margin.
+- **About 1 MB per minute of music** (128 kbit/s stereo). The limit
+  `practice_track_max_mb` (default 60 MB) is therefore enough for an hour. The
+  web server in front of Nextcloud must accept requests of that size
+  ([Installation](installation.md#practice-tracks-and-offline-page)).
+- **A track counts against the quota of the folder owner** – for a shared
+  folder, that of the person it belongs to. The app has no limit of its own for
+  this and does not clean up tracks.
+- **Tracks for all parts replace without asking** whatever lies under the same
+  name in the “Practice tracks” subfolder; a single track asks first.
+- **The name of the subfolder follows the instance's default language.** If it
+  changes, a second folder is created the next time.
+- **On mobile only next to the score.** With the app's token there is no
+  freely chosen folder (no file picker without a session), and from a piece of
+  a setlist (companion token) no export at all.
 
-### Sperrbildschirm
+### Lock screen
 
-Gemessen am Galaxy S23: Die Wiedergabe **läuft bei gesperrtem Bildschirm
-weiter**, in Chrome (rund 10 s gesperrt, lückenlos) und in der Nextcloud-App
-(von Hand). Eine **Steuerung auf dem Sperrbildschirm erscheint für Web Audio
-nicht**, auch nicht über ein `<audio>` mit `MediaStream`, und die
-Kopfhörertaste wirkt nicht. Daran kann die App nichts ändern; der Ausweg ist
-der Übe-Track, den jeder Player mit Steuerung abspielt. Eine Sperre über
-mehrere Minuten ist nicht gemessen.
+Measured on the Galaxy S23: playback **continues while the screen is locked**,
+in Chrome (locked for about 10 s, without gaps) and in the Nextcloud app (by
+hand). **Lock-screen controls do not appear for Web Audio**, not even via an
+`<audio>` with a `MediaStream`, and the headphone button has no effect. The
+app cannot change this; the way out is the practice track, which any player
+plays with controls. A lock lasting several minutes has not been measured.
 
-### Darstellungen
+### Views
 
-- **Liedtext-Ansicht und Tonnamen nur mit den Daten der Engine.** Sie brauchen
-  `lyricSyllables` bzw. `noteSpellings`, und die schreibt nur die Engine – auf
-  dem lokalen Konvertierungsweg und beim Rückfall im Browser. Auf dem
-  Sidecar-Weg sind beide nicht wählbar und sagen warum; eine Neukonvertierung
-  dort ändert daran nichts
-  ([E15](architecture.md#e15-fähigkeiten-statt-weg)). Das Systemband geht auf
-  beiden Wegen.
-- **Ein Cache-Eintrag unter `CURRENT_FORMAT_VERSION` 4** wird beim nächsten
-  Öffnen neu konvertiert und bekommt dabei die Listen.
-- **Über 20 000 Silben gibt es keine Liedtext-Ansicht** – die Engine lässt die
-  Liste dann ganz weg, statt sie abzuschneiden.
-- **Die gesungene Strophe folgt den ausgerollten Wiederholungen:** Das n-te
-  Auftreten einer Stelle singt Strophe n. Wo eine Partitur Strophen über
-  Sprünge verteilt, die nicht ausgerollt werden (D.C./D.S., siehe
-  [Bekannte Lücken](#bekannte-lücken)), leuchtet die falsche Strophe.
-- **Systemband:** gemessen an einem Chorsatz mit 10 Systemen, Scrollen mit
-  rund 60 fps am Desktop. Am Galaxy S23 (Chrome, ohne Energiesparmodus)
-  während der Wiedergabe: Seiten 49 fps (10 % der Bilder über 33 ms),
-  Systemband 33 fps (p95 67 ms). In Files kostet **jede Änderung eines
-  `style`-Attributs und jedes Ersetzen von Kindknoten** eine
-  Stil-Neuberechnung über rund 7000 Elemente (Nextclouds `:has()`-Regeln,
-  u. a. mit `[style*=…]`, an `body` und am Viewer; gemessen ~70 ms je
-  Änderung am Desktop). Was sich während der Wiedergabe bewegt, vermeidet
-  beides: Cursor und Fortschrittslinie sind SVG-Rechtecke, die Zeitanzeige
-  ändert nur ihren Textknoten (`directives/nodeText.js`), der
-  Positionsregler läuft in 250-ms-Schritten. Am Desktop bleiben damit 19 ms
-  Stilzeit je 4 s Wiedergabe. Das Band bleibt teurer als die Seitenansicht:
-  Es färbt die klingenden Noten in drei geladenen Seiten-SVGs (am S23 rund
-  1,5 s Stilzeit je 15 s). Im Energiesparmodus drosselt das Telefon schon
-  eine leere Seite auf 24 fps.
-  Die Grenzen der Systeme kommen aus den Notenlinien, mit begrenztem Rand
-  darüber und darunter – was weit darüber hinausragt, kann angeschnitten
-  werden.
-- **Tonnamen stehen links neben dem Kopf**, wo Platz ist; sonst darunter,
-  darüber oder rechts davon (`lib/noteLabelLayout.js`). Hindernisse sind
-  Vorzeichen, Wiederholungspunkte, Hälse, Punkte, Pausen, Liedtext und
-  Nachbarköpfe; Bögen, Balken und Hilfslinien nicht. Die Breite eines Namens
-  ist geschätzt, nicht gemessen. Bei Seitenbreite am Telefon (Köpfe rund
-  4 px) bleiben sie bei 9 px und drängen sich – lesbar werden sie erst mit
-  Zoom, bei Systemhöhe etwa 16 px.
-- **„Nur meine Stimme“ bei Tonnamen** wirkt nur, wo sich Notenzeilen den
-  Stimmen zuordnen lassen; sonst stehen Namen an allen Zeilen.
-- **Passt die Zahl der Köpfe eines Segments nicht zur Liste**, bleibt dieses
-  Segment ohne Namen und ohne Ton beim Antippen, statt falsche zu zeigen.
+- **Lyrics view and note names only with the engine's data.** They need
+  `lyricSyllables` or `noteSpellings`, and only the engine writes those – on
+  the local conversion path and in the browser fallback. On the sidecar path
+  both cannot be selected and say why; a reconversion there does not change
+  that ([E15](architecture.md#e15-fähigkeiten-statt-weg) (German)). The system band
+  works on both paths.
+- **A cache entry below `CURRENT_FORMAT_VERSION` 4** is reconverted the next
+  time it is opened and gets the lists in the process.
+- **Above 20,000 syllables there is no lyrics view** – the engine then omits
+  the list entirely instead of truncating it.
+- **The verse sung follows the unrolled repeats:** the n-th occurrence of a
+  passage sings verse n. Where a score distributes verses across jumps that are
+  not unrolled (D.C./D.S., see [Known gaps](#known-gaps)), the wrong verse
+  lights up.
+- **System band:** measured on a choral piece with 10 systems, scrolling at
+  about 60 fps on the desktop. On the Galaxy S23 (Chrome, without power saving
+  mode) during playback: pages 49 fps (10 % of frames over 33 ms), system band
+  33 fps (p95 67 ms). In Files, **every change of a `style` attribute and
+  every replacement of child nodes** costs a style recalculation over about
+  7000 elements (Nextcloud's `:has()` rules, including some with
+  `[style*=…]`, on `body` and on the viewer; measured ~70 ms per change on the
+  desktop). What moves during playback avoids both: the cursor and progress
+  line are SVG rectangles, the time display only changes its text node
+  (`directives/nodeText.js`), and the position slider moves in 250 ms steps.
+  On the desktop this leaves 19 ms of style time per 4 s of playback. The band
+  remains more expensive than the page view: it colours the sounding notes in
+  three loaded page SVGs (on the S23 about 1.5 s of style time per 15 s). In
+  power saving mode the phone throttles even an empty page to 24 fps.
+  The boundaries of the systems come from the staff lines, with a limited
+  margin above and below – anything reaching far beyond that may be cut off.
+- **Note names sit to the left of the note head** where there is room;
+  otherwise below, above or to the right of it (`lib/noteLabelLayout.js`).
+  Obstacles are accidentals, repeat dots, stems, dots, rests, lyrics and
+  neighbouring note heads; slurs, beams and ledger lines are not. The width of
+  a name is estimated, not measured. At page width on a phone (note heads
+  about 4 px) they stay at 9 px and crowd together – they only become legible
+  with zoom, at a system height of about 16 px.
+- **“Only my part” for note names** only takes effect where staves can be
+  matched to parts; otherwise names appear on all staves.
+- **If the number of note heads in a segment does not match the list**, that
+  segment stays without names and without sound on tapping, rather than
+  showing wrong ones.
 
 ### Offline
 
-Gemessen ist das Muster am Desktop und im Handybrowser (Galaxy S23, Chrome):
-Der Worker registriert sich, steuert die Offline-Seite, und nach dem Trennen
-vom Netz kommt die Seite aus dem Cache.
+The pattern has been measured on the desktop and in the phone browser
+(Galaxy S23, Chrome): the worker registers, controls the offline page, and
+after disconnecting from the network the page comes from the cache.
 
-| Messung | Ergebnis |
+| Measurement | Result |
 |---|---|
-| Speicher, den der Browser zuteilt | Desktop 7,8 GB · S23 **10,7 GB**; 300 MB in 1,3 s geschrieben |
-| `navigator.storage.persist()` | **verweigert** (Desktop und S23) |
-| Platz | das SoundFont einmal für alle Einträge (~23 MB, aus dem Sidecar ~40 MB), dazu je Partitur ihr Cache, siehe [Gemessene Werte](#gemessene-werte) |
+| Storage the browser allocates | desktop 7.8 GB · S23 **10.7 GB**; 300 MB written in 1.3 s |
+| `navigator.storage.persist()` | **denied** (desktop and S23) |
+| Space | the SoundFont once for all entries (~23 MB, from the sidecar ~40 MB), plus each score's cache, see [Measured values](#measured-values) |
 
-- **Der Browser darf Vorgemerktes räumen.** Weil `persist()` verweigert wird,
-  kann er den Cache bei Platzmangel löschen. Die Offline-Seite erkennt das
-  („Vom Browser entfernt“) und sagt es; vor einem Konzert die Seite noch einmal
-  mit Netz öffnen.
-- **Abmelden räumt in Chrome nicht sofort.** Nextcloud schickt
-  `Clear-Site-Data` beim Abmelden nur über HTTPS und nie an Chrome, auch nicht
-  an Chrome auf Android; gemessen bleiben Cache und Worker dort nach dem
-  Abmelden liegen. Die App räumt erst, wenn die Offline-Seite das nächste Mal
-  **mit Netz** aufgerufen und zum Login umgeleitet wird
-  ([S10](architecture.md#s10-vorgemerktes-gehört-einem-konto-und-verschwindet-mit-der-anmeldung)).
-  Bis dahin bleibt die zwischengespeicherte Offline-Seite samt Vorgemerktem
-  auf diesem Gerät **ohne Netz lesbar**, auch nach dem Abmelden – einschließlich
-  der Kennung (`uid`) der zuletzt angemeldeten Person. Eine Umleitung auf ein
-  Captive Portal oder eine SSO-Zwischenseite räumt bewusst nicht. Folge: ein
-  Konto je Browser bzw. Gerät, und auf geteilten Geräten nichts vormerken.
-- **Ein Konto je Offline-Cache.** Merkt im selben Browser ein anderes Konto
-  vor oder öffnet es die Offline-Seite, löscht die App die Einträge des
-  vorigen samt aller ihrer URLs; auch eigene Einträge, die davon etwas
-  mitbenutzten (etwa das SoundFont), gelten danach als beschädigt.
-- **Nur im Browser, nicht in den mobilen Apps.** Die Direct-Editing-Seite hat
-  keinen eigenen Pfad für einen Worker; dort gibt es kein Vormerken. Ob die
-  WebView der Android-App überhaupt Service Worker zulässt, ist nicht geprüft.
-- **Einmal mit Netz öffnen.** Die Offline-Seite richtet sich beim ersten
-  Besuch mit Netz ein. Wer vormerkt, die Seite aber nie online geöffnet hat,
-  bekommt ohne Netz die Fehlerseite des Browsers.
-- **Aktualisiert wird nur beim Öffnen der Offline-Seite mit Netz**, nicht im
-  Hintergrund. Ändert sich eine Partitur danach, zeigt das Gerät ohne Netz den
-  vorgemerkten Stand.
-- **Offline fehlt, was einen Server braucht:** Notizen und Stempel setzen
-  (vorgemerkte erscheinen im Stand des Vormerkens), Leitung und „Folgt mir“,
-  Aufnahme und Intonation, Übe-Tracks, Vormerken und Setlisten bearbeiten.
-  Wiedergabe, Mixer, Loop, Tempo, Metronom, Anfangston, Transposition, Coach
-  und die Darstellungen gehen.
+- **The browser may clear saved items.** Because `persist()` is denied, it can
+  delete the cache when space runs short. The offline page detects this
+  (“Removed by the browser – save it again”) and says so; before a concert,
+  open the page once more with a network connection.
+- **Logging out does not clear immediately in Chrome.** Nextcloud only sends
+  `Clear-Site-Data` on logout over HTTPS and never to Chrome, not even to
+  Chrome on Android; as measured, the cache and worker remain there after
+  logging out. The app only clears when the offline page is next called
+  **with a network connection** and redirected to the login
+  ([S10](architecture.md#s10-vorgemerktes-gehört-einem-konto-und-verschwindet-mit-der-anmeldung) (German)).
+  Until then the cached offline page, including saved items, remains
+  **readable without a network** on that device, even after logging out –
+  including the identifier (`uid`) of the person last logged in. A redirect to
+  a captive portal or an SSO interstitial page deliberately does not clear.
+  Consequence: one account per browser or device, and save nothing on shared
+  devices.
+- **One account per offline cache.** If another account saves something in the
+  same browser or opens the offline page, the app deletes the previous
+  account's entries along with all their URLs; the new account's own entries
+  that shared any of them (such as the SoundFont) then count as damaged as
+  well.
+- **Only in the browser, not in the mobile apps.** The Direct Editing page has
+  no path of its own for a worker; there is no saving for offline use there.
+  Whether the Android app's WebView allows service workers at all has not been
+  checked.
+- **Open once with a network connection.** The offline page sets itself up on
+  the first visit with a network connection. Anyone who saves items but has
+  never opened the page online gets the browser's error page without a
+  network.
+- **Updates happen only when the offline page is opened with a network
+  connection**, not in the background. If a score changes afterwards, the
+  device shows the saved state without a network.
+- **Offline, whatever needs a server is missing:** setting notes and stamps
+  (saved ones appear as they were when saved), leading and “Follow me”,
+  recording and intonation, practice tracks, saving for offline use and
+  editing setlists. Playback, mixer, loop, tempo, metronome, starting note,
+  transposition, coach and the views work.
 
-### Am Gerät offen
+### Open on the device
 
-Am Galaxy S23 im Browser (Chrome) abgenommen: Übe-Track in 8,8 s
-(Duckwerk, ganzer Mix), Vormerken in 1,1 s, die Offline-Seite und die
-Wiedergabe ohne erreichbaren Server, Systemband, Liedtext-Ansicht und
-Tonnamen im Bild. In der Nextcloud-App (Android) folgt das S23 einer
-Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
-(Begleit-Token für das neue Stück). **Noch offen:**
+Accepted on the Galaxy S23 in the browser (Chrome): practice track in 8.8 s
+(Duckwerk, full mix), saving for offline use in 1.1 s, the offline page and
+playback without a reachable server, system band, lyrics view and note names
+in the picture. In the Nextcloud app (Android), the S23 follows a leader in the
+browser across the switch to the next piece of the setlist (companion token
+for the new piece). **Still open:**
 
-- eine Sperre über mehrere Minuten bei laufender Wiedergabe;
-- ein Übe-Track aus der Nextcloud-App heraus und an einem Mittelklassegerät;
-- der Stückwechsel mit drei Folgegeräten zugleich;
-- ein Pedal im Systemband – Tasten erreichen den Viewer nur, wenn er den
-  Fokus hat, wie beim Blättern der Seiten.
+- a lock lasting several minutes during playback;
+- a practice track from within the Nextcloud app and on a mid-range device;
+- the piece switch with three following devices at once;
+- a pedal in the system band – keys only reach the viewer when it has focus,
+  as with turning pages.
 
-## Was die App bewusst nicht tut
+## What the app deliberately does not do
 
-- **Kein serverseitiges Rendern auf verwaltetem Hosting.** Der lokale
-  Konvertierungsweg braucht eine Node.js-Laufzeit und die Erlaubnis, Prozesse
-  zu starten; in PHP allein lässt sich das Wasm-Modul nicht ausführen – die
-  Gründe stehen in
-  [E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
-  **Betreibbar ist die App dort trotzdem**, aber anders: Der Browser
-  konvertiert ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
-  Was dabei entfällt, steht dort und ist kein Kleingedrucktes – es gibt keinen
-  Cache, jedes Gerät lädt einmal gut 7 MB (14 MB entpackt) und rechnet jede Partitur bei jedem
-  Öffnen neu.
-- **Kein Servercache für das, was der Browser gesetzt hat.** Die Artefakte
-  aus dem Rückfall gehen nicht zum Server zurück. Ein Upload wäre eine neue
-  Vertrauensgrenze – der Server lieferte an alle Leser einer Datei aus, was ein
-  einzelner Browser erzeugt hat ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
-- **Kein Reflow.** Das Seitenbild ist MuseScores A4-Satz
+- **No server-side rendering on managed hosting.** The local conversion path
+  needs a Node.js runtime and permission to start processes; the Wasm module
+  cannot be run in PHP alone – the reasons are in
+  [E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api) (German).
+  **The app can still be operated there**, but differently: the browser
+  converts ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
+  What is lost in the process is stated there and is not small print – there
+  is no cache, each device downloads a good 7 MB once (14 MB unpacked) and
+  recomputes every score each time it is opened.
+- **No server cache for what the browser has engraved.** The artifacts from
+  the fallback do not go back to the server. An upload would be a new trust
+  boundary – the server would deliver to all readers of a file what a single
+  browser produced ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
+- **No reflow.** The page image is MuseScore's A4 engraving
   ([E2](architecture.md#e2-musescore-svg-statt-neusatz-im-browser)).
-  „Seitenbreite einpassen“ und „Ganze Seite einpassen“ skalieren, sie brechen
-  nicht um. Echter Umbruch bräuchte
-  ein zweites serverseitiges Layout. Das Systemband schneidet aus demselben
-  Seitenbild aus; umbrechen darf nur der Text der Liedtext-Ansicht.
-- **Kein Bearbeiten von Partituren.** ScoreView zeigt und spielt; es korrigiert
-  nichts in der `.mscz`.
-- **Keine Aufnahmen für andere.** Eine Aufnahme hört nur, wer sie gemacht hat;
-  sie liegt in den App-Daten, nicht in Files, und lässt sich nicht teilen.
-  Übe-Tracks sind dagegen synthetisiert und bewusst Dateien in Files
+  “Fit page width” and “Fit whole page” scale, they do not rewrap. Real
+  reflowing would need a second server-side layout. The system band cuts from
+  the same page image; only the text of the lyrics view may wrap.
+- **No editing of scores.** ScoreView shows and plays; it does not correct
+  anything in the `.mscz`.
+- **No recordings for others.** A recording can only be heard by the person
+  who made it; it lives in the app data, not in Files, and cannot be shared.
+  Practice tracks, by contrast, are synthesised and deliberately files in Files
   ([E13](architecture.md#e13-übe-tracks-sind-dateien-in-files)).
-- **Kein Long-Polling für „Folgt mir“.** Jedes wartende Gerät belegte einen
-  PHP-Worker; abgefragt wird kurz, beschleunigt durch `notify_push`, wo es
-  eingerichtet ist ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
-- **Kein Direct Editor für Markdown.** ScoreView erschiene sonst in den
-  mobilen Apps bei jeder `.md`-Datei; Setlisten öffnen sich dort über eine
-  Partitur.
-- **Kein eigener Einstieg in Partituren.** Eingestiegen wird ausschließlich
-  aus Files – über Nextclouds Viewer, die Dateiaktion auf der Endung oder die
-  auf `*.setlist.md`
+- **No long polling for “Follow me”.** Each waiting device would occupy a PHP
+  worker; polling is short, accelerated by `notify_push` where it is set up
+  ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).
+- **No Direct Editor for Markdown.** ScoreView would otherwise appear in the
+  mobile apps for every `.md` file; setlists open there via a score.
+- **No entry point of its own for scores.** Entry is exclusively from Files –
+  via Nextcloud's viewer, the file action on the extension or the one on
+  `*.setlist.md`
   ([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste))
-  – und aus den mobilen Apps über Direct Editing; `/apps/scoreview/`
-  antwortet bewusst 404. Die einzige eigene Seite, `/apps/scoreview/offline`,
-  zeigt nur Vorgemerktes
+  – and from the mobile apps via Direct Editing; `/apps/scoreview/`
+  deliberately answers 404. The only page of its own,
+  `/apps/scoreview/offline`, only shows saved items
   ([E14](architecture.md#e14-eine-offline-seite-mit-eigenem-service-worker)).
-  Setlisten sind Dateien in Files, keine eigene Verwaltung der App.
-- **Keine Steuerung auf dem Sperrbildschirm für die Wiedergabe im Viewer.**
-  Web Audio bekommt sie nicht ([Sperrbildschirm](#sperrbildschirm)); dafür gibt
-  es den Übe-Track.
-- **Kein transponiertes Notenbild.** Transponiert wird der Klang; die Noten
-  und die Tonnamen bleiben, wie sie geschrieben sind. Ein transponiertes
-  Notenbild bräuchte ein zweites serverseitiges Layout.
-- **Kein Stift-/Freihand-Layer.** Notizen sind Text an einem musikalischen Anker.
-  Freie Striche wären eine zweite Datenart, deren Anker ein Pfad statt eines
-  Punktes sein müsste – und die anders als Text ein Neurendern der Partitur
-  nicht übersteht, weil ein Strich an Pixeln hängt und nicht an einem Takt.
-- **Kein zweiter Notensatz je Stimme.** „Nur meine Zeile" nimmt die übrigen
-  Stimmen optisch zurück; die Seite behält ihr Layout samt der Leerräume, wo
-  die anderen Zeilen stehen. Ein echter Einzelstimmenauszug wäre ein zweites
-  serverseitiges Layout (MuseScore kann das über Auszüge) und damit ein
-  weiteres Artefakt je Stimme im Cache.
-- **Kein Sandboxing des MuseScore-Prozesses über den Container hinaus.** Der
-  Container läuft non-root mit Speicher- und PID-Limit; eine
-  Netzwerk-Isolation nur für den Konvertierungs-Subprozess bräuchte eine eigene
-  Sandbox-Schicht. Siehe [Sicherheit](../sidecar/README.md#sicherheit).
-- **Nur Deutsch und Englisch.** Eine weitere Sprache ist das Hinzufügen einer
-  Datei, keine Umstellung ([E4](architecture.md#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung)).
-- **Keine Verpackung als AppAPI/ExApp.** Der Sidecar läuft als eigener
-  Container, nicht von Nextcloud verwaltet.
-- **Keine mitgelieferte Node-Laufzeit.** Der lokale Weg benutzt das `node` des
-  Servers; die App bringt keines mit und lädt auch keines nach (wie es etwa
-  Nextclouds `recognize` tut).
-- **Keine CJK-Fonts im App-Store-Paket.** Auf dem lokalen Konvertierungsweg
-  setzt MuseScore chinesische, japanische und koreanische Liedtexte deshalb als
-  Ersatzkästchen; alles andere ist unberührt. Die Fonts wiegen 4,2 MB, und der
-  App Store nimmt Archive nur bis 20 MB an. Wer sie braucht, legt Fontdateien
-  (`.woff2`, `.otf`, `.ttf`, `.ttc`) in ein Verzeichnis **außerhalb der App**
-  und trägt es ein:
+  Setlists are files in Files, not a separate management feature of the app.
+- **No lock-screen controls for playback in the viewer.** Web Audio does not
+  get them ([Lock screen](#lock-screen)); the practice track exists for
+  that.
+- **No transposed notation.** It is the sound that is transposed; the notes and
+  the note names stay as written. Transposed notation would need a second
+  server-side layout.
+- **No pen/freehand layer.** Notes are text at a musical anchor. Free strokes
+  would be a second kind of data whose anchor would have to be a path instead
+  of a point – and which, unlike text, would not survive a re-rendering of the
+  score, because a stroke is tied to pixels and not to a measure.
+- **No second engraving per part.** “Show only my part” visually dims the
+  other parts; the page keeps its layout, including the empty space where the
+  other staves are. A real single-part extraction would be a second server-side
+  layout (MuseScore can do this via parts) and thus a further artifact per part
+  in the cache.
+- **No sandboxing of the MuseScore process beyond the container.** The
+  container runs non-root with memory and PID limits; network isolation just
+  for the conversion subprocess would need a sandbox layer of its own. See
+  [Security](../sidecar/README.md#sicherheit).
+- **Only German and English.** Another language means adding a file, not
+  reworking anything ([E4](architecture.md#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung)).
+- **No packaging as AppAPI/ExApp.** The sidecar runs as a separate container,
+  not managed by Nextcloud.
+- **No bundled Node runtime.** The local path uses the server's `node`; the
+  app does not ship one and does not download one either (as Nextcloud's
+  `recognize` does, for instance).
+- **No CJK fonts in the App Store package.** On the local conversion path,
+  MuseScore therefore sets Chinese, Japanese and Korean lyrics as replacement
+  boxes; everything else is unaffected. The fonts weigh 4.2 MB, and the App
+  Store only accepts archives up to 20 MB. Anyone who needs them places font
+  files (`.woff2`, `.otf`, `.ttf`, `.ttc`) in a directory **outside the app**
+  and registers it:
 
   ```sh
   occ config:app:set scoreview cjk_font_dir --value=/srv/scoreview-fonts
   ```
 
-  Außerhalb der App, weil das ausgelieferte App-Verzeichnis **signiert** ist –
-  jede zusätzliche Datei darin lässt Nextclouds Integritätsprüfung dauerhaft
-  Alarm schlagen. Auf dem Sidecar-Weg gibt es diese Möglichkeit nicht: Sein
-  Image bringt nur DejaVu und FreeFont mit (nachgesehen: 19 Fontdateien, keine
-  CJK-Schrift), und es gibt keine Einstellung, ihm Fonts nachzureichen – dort
-  hilft nur ein eigenes Image.
+  Outside the app, because the delivered app directory is **signed** – any
+  additional file in it makes Nextcloud's integrity check raise an alarm
+  permanently. On the sidecar path this option does not exist: its image only
+  ships DejaVu and FreeFont (checked: 19 font files, no CJK font), and there is
+  no setting to supply it with fonts afterwards – the only remedy there is a
+  custom image.

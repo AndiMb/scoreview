@@ -12,7 +12,7 @@ export default [
 		// Build-Artefakte (gitignored, siehe .gitignore) - darunter das
 		// unveraendert kopierte, minifizierte spessasynth-Worklet, das wir nur
 		// ausliefern und nicht pflegen (siehe webpack.config.js).
-		ignores: ['js/**', 'node_modules/**'],
+		ignores: ['js/**', 'l10n/**', 'node_modules/**'],
 	},
 	...recommendedJavascript,
 	{
@@ -49,10 +49,10 @@ export default [
 		},
 	},
 	{
-		// tools/l10n.mjs ist ein Node-CLI-Werkzeug (`npm run l10n:extract`), kein
-		// Browsercode: `process` ist dort ein regulaeres Global, und die
-		// Konsolenausgabe IST seine Schnittstelle - sie meldet fehlende und
-		// verwaiste Uebersetzungen (siehe E4).
+		// tools/ holds Node CLI tools (`npm run l10n:check`, `npm run docs:l10n`),
+		// not browser code: `process` is a regular global there, and console
+		// output IS their interface - it reports missing and orphaned
+		// translations and stale documentation (see E4).
 		files: ['tools/**/*.mjs', 'tools/**/*.js'],
 		languageOptions: {
 			globals: {

@@ -14,6 +14,13 @@ nicht offensichtlich ist – **die fachliche Wahrheit steht in `docs/`**.
 | Wie wird das installiert? | `docs/installation.md` |
 | Ein Fehlerbild einordnen | `docs/troubleshooting.md` |
 | Sidecar-API und -Betrieb | `sidecar/README.md` |
+| Wie kommt eine neue Sprache hinein? | `docs/translating.md` (englisch, für Übersetzende) |
+
+Die vier Nutzerdokumente (README, `installation`, `troubleshooting`, `limits`)
+sind **englisch geführt**, mit einer gepflegten deutschen Fassung `*.de.md`
+daneben. Maßgeblich ist das englische Original. Die Entwicklerdoku
+(`architecture`, `development`, `CONTRIBUTING`, `sidecar/README.md`, diese
+Datei) bleibt deutsch und einsprachig.
 
 Nichts aus `docs/` in andere Dateien duplizieren – stattdessen dorthin
 verweisen. Die Dokumente beschreiben den **Stand der App**, nicht ihren
@@ -53,7 +60,9 @@ npm run watch       # während der Frontend-Arbeit
 npm test            # vitest: src/lib/, Composables, Konverter-Umformung, l10n-Vollständigkeit
 npm run lint        # ESLint (@nextcloud/eslint-config), --fix über npm run lint:fix
 npm run stylelint   # Stylelint für die <style scoped>-Blöcke
-npm run l10n:extract  # nach jedem neuen/geänderten t()/$l->t() - meldet fehlende/verwaiste Übersetzungen
+npm run l10n:extract  # nach jedem neuen/geänderten t()/$l->t() - schreibt .pot, gleicht alle .po ab, prüft
+npm run l10n:check    # nur prüfen (CI); l10n:build erzeugt l10n/ allein, ohne Webpack
+npm run docs:l10n     # zweisprachige Doku: Paare, Aktualität, Links und Anker
 ```
 
 Die reine Logik liegt bewusst in `src/lib/` (`scoreLayout.js`,
@@ -111,6 +120,9 @@ Testinstanz stehen in `docs/development.md#testumgebung`.
 - **PHP/Templates wirken sofort** – `scoreview/` ist in den Container
   gemountet, es gibt keinen Deploy-Schritt.
 - **Frontend braucht `npm run build`** – ausgeliefert wird `scoreview/js/`.
+  Ebenso die Übersetzungen: `scoreview/l10n/` entsteht erst beim Build aus
+  `translationfiles/`. Nach einer Änderung an einer `.po`, auch nach einem
+  neuen `$l->t()` in PHP, also `npm run build` oder kurz `npm run l10n:build`.
 - **Sidecar braucht Neubau *und* neuen Container**:
   `docker build -t scoreview-musescore-cli sidecar/`, dann
   `docker rm -f scoreview-sidecar` und das `docker run` aus
@@ -137,21 +149,36 @@ misst er nur den Effektbus und meldet fälschlich „kein Ton".
 
 ## Konventionen
 
-- **Deutsch** für Kommentare, Dokumentation und Commit-Messages, letztere in
-  ASCII-Umschrift (`ue`/`ae`/`oe`/`ss`), passend zur bestehenden Historie.
-- **UI-Texte dagegen: englische Quellstrings, Deutsch ist eine im Repo
-  gepflegte Übersetzung** (E4 in `docs/architecture.md`) – `l10n/de.json` für
-  PHP (`$l->t('…')`), `l10n/de.js` für den Browser (`t('scoreview', '…')`).
-  Grund: Nextclouds l10n-Format benutzt den Quellstring selbst als
+- **Englisch für neue Kommentare, Commit-Messages, CHANGELOG-Einträge und
+  Issue-Templates.** Der Bestand an deutschen Kommentaren bleibt, wie er ist;
+  eine Datei wird nicht nur der Sprache wegen umgeschrieben. Dass englische
+  Kommentare auf die deutsche `docs/architecture.md` verweisen, ist gewollt.
+  Ältere Einträge im CHANGELOG bleiben deutsch.
+- **Dokumentation:** Die Entwicklerdoku ist deutsch, die Nutzerdoku englisch
+  mit deutscher Fassung (siehe „Zuerst lesen“). **Wer ein englisches
+  Nutzerdokument ändert, zieht die `*.de.md` im selben Zug nach** und
+  stempelt sie danach: `npm run docs:l10n -- --stamp docs/limits.de.md`
+  (Pfade ab der Repo-Wurzel). Erst stempeln, wenn die deutsche Fassung
+  wirklich geprüft ist; der Stempel ist die Aussage „geprüft“, kein Mittel, um
+  CI grün zu bekommen. Deutsche Texte verlinken die `*.de.md`, englische die
+  Originale; Verweise aus der englischen Doku in die Entwicklerdoku tragen
+  „(German)“.
+- **UI-Texte: englische Quellstrings, Übersetzungen als PO** (E4 in
+  `docs/architecture.md`) unter `scoreview/translationfiles/<sprache>/scoreview.po`.
+  Deutsch pflegt der Maintainer vollständig, alle anderen Sprachen kommen per
+  Pull Request und dürfen Lücken haben. Grund für englische Quellstrings:
+  Nextclouds l10n-Format benutzt den Quellstring selbst als
   Übersetzungsschlüssel – deutsche Schlüssel würden jede weitere Sprache aus
-  dem Deutschen übersetzen und die Rückfallsprache bei fehlender
-  Übersetzungsdatei wäre Deutsch statt Englisch. Nach jedem neuen/geänderten
-  `t()`/`$l->t()`-Aufruf `npm run l10n:extract` laufen lassen – `npm test`
-  schlägt sonst über `tools/l10n.test.js` fehl, weil Nextclouds
-  `JSResourceLocator` eine fehlende Übersetzungsdatei stillschweigend
-  ignoriert und der Fehler nie auffiele. Nicht übersetzt wird Inhalt aus der
-  Partitur selbst (Stimmennamen, Titel, Komponist, GM-Instrumentennamen) – das
-  ist Material, keine Oberfläche.
+  dem Deutschen übersetzen, und die Rückfallsprache wäre Deutsch statt
+  Englisch. Nach jedem neuen oder geänderten `t()`/`$l->t()`-Aufruf
+  `npm run l10n:extract` laufen lassen und die deutsche Übersetzung in
+  `de/scoreview.po` eintragen. `npm test` schlägt sonst über
+  `tools/l10n.test.js` fehl, weil Nextclouds `JSResourceLocator` eine fehlende
+  Übersetzungsdatei stillschweigend ignoriert und der Fehler nie auffiele.
+  Eine Community-`.po` nie mit Maschinenübersetzung „vervollständigen“: Eine
+  Lücke erscheint englisch, eine falsche Übersetzung bleibt unbemerkt stehen.
+  Nicht übersetzt wird Inhalt aus der Partitur selbst (Stimmennamen, Titel,
+  Komponist, GM-Instrumentennamen) – das ist Material, keine Oberfläche.
 - **Kommentare erklären das Warum**, nicht das Was – vor allem bei
   Entscheidungen, die von außen falsch aussehen. Der Bestand ist so
   geschrieben; bitte in dieser Dichte weiterführen statt sie zu verwässern.
@@ -210,7 +237,7 @@ Ausnahmen sind nur die selbst erstellten `repeat-test.*`,
 `keys-marks-test.mscz` (Tonarten mit Modus und Studierbuchstaben für den
 Konverter-Selbsttest) und `lyrics-test.*` (Liedtext mit drei Strophen für
 `lyricSyllables`/`noteSpellings`). Ebenso draußen:
-`scoreview/js/` (Build-Artefakte), `node_modules/` und das lokale
+`scoreview/js/` und `scoreview/l10n/` (Build-Artefakte), `node_modules/` und das lokale
 Wegwerf-Verzeichnis `spike/`.
 
 ## Agent skills

@@ -10,6 +10,7 @@ use OCA\ScoreView\Service\SidecarException;
 use OCA\ScoreView\Service\SoundFontService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\IL10N;
 use OCP\IRequest;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -43,7 +44,14 @@ class SoundFontControllerTest extends TestCase {
 			$this->createMock(IRequest::class),
 			$this->soundFontService,
 			$this->createMock(LoggerInterface::class),
+			$this->l10n(),
 		);
+	}
+
+	private function l10n(): IL10N {
+		$l = $this->createMock(IL10N::class);
+		$l->method('t')->willReturnCallback(fn (string $text) => $text);
+		return $l;
 	}
 
 	/**
@@ -66,6 +74,10 @@ class SoundFontControllerTest extends TestCase {
 
 		$this->assertInstanceOf(JSONResponse::class, $response);
 		$this->assertSame(Http::STATUS_SERVICE_UNAVAILABLE, $response->getStatus());
-		$this->assertSame(['error' => $fehler->getMessage()], $response->getData());
+		// Shown as is in the viewer, so translated - the cause stays as detail.
+		$this->assertSame([
+			'error' => 'The server could not provide the SoundFont. The ScoreView status in the administration settings shows why.',
+			'detail' => $fehler->getMessage(),
+		], $response->getData());
 	}
 }

@@ -1,86 +1,89 @@
-# Installation und Konfiguration
+# Installation and configuration
 
-ScoreView besteht aus der Nextcloud-App und einem Konvertierungsweg. Davon gibt
-es **zwei zur Wahl**, und sie liefern dasselbe Ergebnis
-([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api)):
+**English** · [Deutsch](installation.de.md)
 
-| | **Weg A: Lokal** (Voreinstellung) | **Weg B: Sidecar** |
+ScoreView consists of the Nextcloud app and a conversion path. There are
+**two to choose from**, and they deliver the same result
+([E3](architecture.md#e3-zwei-konvertierungswege-hinter-einer-api) (German)):
+
+| | **Path A: Local** (default) | **Path B: Sidecar** |
 |---|---|---|
-| Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
-| MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
-| SoundFont | holt der Server selbst, Adresse voreingestellt | bringt der Container mit |
-| Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
-| Notenköpfe einfärben, Liedtext-Ansicht, Tonnamen | ja | nein – Stock-MuseScore liefert die Daten nicht ([E15](architecture.md#e15-fähigkeiten-statt-weg)) |
-| Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
+| Requires | Node.js ≥ 18 on the Nextcloud server | a Docker host |
+| MuseScore | MuseScore 4.7.5 as WebAssembly, in the app package | real MuseScore 4 in the container |
+| SoundFont | fetched by the server itself, address preset | shipped with the container |
+| To set up | nothing | start the container, enter address and secret |
+| Coloured noteheads, lyrics view, note names | yes | no – stock MuseScore does not deliver the data ([E15](architecture.md#e15-fähigkeiten-statt-weg)) |
+| Recommended if | no containers are running | containers are running anyway |
 
-**Weg A ist voreingestellt und braucht keine Einstellung.** Wo eine
-Node-Laufzeit vorhanden ist, ist die App nach `occ app:enable scoreview`
-betriebsbereit; es bleiben die Schritte 4 und 5 unten, die beide Wege
-betreffen. Für Weg B rechnen Sie mit 15 Minuten.
+**Path A is the default and needs no configuration.** Where a Node runtime is
+available, the app is ready for use after `occ app:enable scoreview`; what
+remains are steps 4 and 5 below, which apply to both paths. For path B, allow
+15 minutes.
 
-**Und wenn keins von beidem geht?** Auf verwaltetem Hosting – keine
-Node-Laufzeit, keine Container, `proc_open` gesperrt – konvertiert die App im
-Browser der Nutzerin
-([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)). Dafür ist
-nichts einzurichten: Der Rückfall greift von selbst, sobald der Server nicht
-kann, und meldet sich in der Betriebsdiagnose. Zu wissen ist nur, was er
-kostet – jedes Gerät lädt einmal gut 7 MB (14 MB entpackt), und auf dem Server
-wird nichts zwischengespeichert. Wo der Server konvertieren kann, ist er nicht aktiv.
+**And if neither works?** On managed hosting – no Node runtime, no containers,
+`proc_open` disabled – the app converts in the user's browser
+([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)). There is
+nothing to set up for this: the fallback kicks in on its own as soon as the
+server cannot convert, and it shows up in the status diagnostics. All you
+need to know is what it costs – every device downloads a good 7 MB once (14 MB
+unpacked), and nothing is cached on the server. Where the server can convert,
+it is not active.
 
-## Voraussetzungen
+## Requirements
 
-- Nextcloud 31 bis 35
-- PHP 8.1 bis 8.5
-- SQLite, MySQL/MariaDB oder PostgreSQL
-- Background-Jobs im Modus `cron` (Schritt 5)
-- Je nach Weg: **A** eine Node.js-Laufzeit ab Version 18 auf dem
-  Nextcloud-Server, und PHP muss Prozesse starten dürfen (`proc_open` nicht per
-  `disable_functions` gesperrt). **B** ein Docker-Host – dieselbe Maschine wie
-  Nextcloud oder eine andere, erreichbar über HTTP. **Keins von beidem** ist
-  auch möglich: Dann konvertiert der Browser (siehe oben); vorausgesetzt wird
-  dafür ein Browser, der WebAssembly und Web Worker beherrscht – also jeder
-  aktuelle.
-- Auf Weg A einmalig ausgehendes HTTPS vom Server: Von dort holt er beim ersten
-  Abspielen das SoundFont. Wo das nicht geht, tritt eine eigene Adresse an die
-  Stelle der voreingestellten – siehe [SoundFont](#soundfont).
+- Nextcloud 31 to 35
+- PHP 8.1 to 8.5
+- SQLite, MySQL/MariaDB or PostgreSQL
+- Background jobs in `cron` mode (step 5)
+- Depending on the path: **A** a Node.js runtime, version 18 or later, on the
+  Nextcloud server, and PHP must be allowed to start processes (`proc_open` not
+  blocked via `disable_functions`). **B** a Docker host – the same machine as
+  Nextcloud or a different one, reachable over HTTP. **Neither** is also
+  possible: then the browser converts (see above); this requires a browser that
+  supports WebAssembly and Web Workers – that is, any current one.
+- On path A, outgoing HTTPS from the server, once: from there it fetches the
+  SoundFont on first playback. Where that is not possible, an address of your
+  own takes the place of the preset one – see [SoundFont](#soundfont).
 
-Die `occ`-Befehle unten stehen so, wie sie auf einer nativen Installation
-laufen. In einer Container-Installation davor `docker exec -u www-data
-<container> php` setzen.
+The `occ` commands below are written as they run on a native installation. On a
+container installation, prefix them with `docker exec -u www-data
+<container> php`.
 
-## 1a. Weg A: Node.js bereitstellen
+## 1a. Path A: Provide Node.js
 
-Für den lokalen Weg ist nichts zu bauen und nichts zu starten – der Konverter
-liegt fertig im App-Paket (`scoreview/converter/`, rund 15 MB). Nötig ist nur
-eine Node.js-Laufzeit, die der Nextcloud-Prozess starten darf:
+For the local path there is nothing to build and nothing to start – the
+converter comes ready-made in the app package (`scoreview/converter/`, about
+15 MB). All that is needed is a Node.js runtime that the Nextcloud process is
+allowed to start:
 
 ```sh
-node --version   # muss v18 oder neuer melden
+node --version   # must report v18 or newer
 ```
 
-**Das offizielle Nextcloud-Docker-Image bringt keine mit.** Dort nachrüsten:
+**The official Nextcloud Docker image does not include one.** Add it there:
 
 ```sh
 docker exec <container> sh -c 'apt-get update && apt-get install -y nodejs'
 ```
 
-Bei einer nativen Installation über die Paketverwaltung der Distribution. Damit
-das ein Image-Update übersteht, gehört die Zeile in ein eigenes Dockerfile
-`FROM nextcloud:…` statt in den laufenden Container.
+On a native installation, use the distribution's package manager. For this to
+survive an image update, the line belongs in a Dockerfile of your own
+`FROM nextcloud:…` rather than in the running container.
 
-Der Konverter selbst ist reines JavaScript und WebAssembly, also unabhängig von
-Betriebssystem und Prozessorarchitektur – es gibt nichts zu kompilieren.
+The converter itself is pure JavaScript and WebAssembly, and therefore
+independent of operating system and processor architecture – there is nothing
+to compile.
 
-## 1b. Weg B: Sidecar starten
+## 1b. Path B: Start the sidecar
 
-Das Image bauen (enthält eine gepinnte MuseScore-Studio-Version):
+Build the image (it contains a pinned MuseScore Studio version):
 
 ```sh
 docker build -t scoreview-musescore-cli sidecar/
 ```
 
-Ein gemeinsames Netz anlegen, damit Nextcloud den Sidecar unter seinem
-Containernamen erreicht, und den Container starten:
+Create a shared network so that Nextcloud can reach the sidecar by its
+container name, and start the container:
 
 ```sh
 docker network create scoreview-net
@@ -92,60 +95,61 @@ docker run -d --name scoreview-sidecar --network scoreview-net \
   scoreview-musescore-cli
 ```
 
-Merken Sie sich das Secret – Schritt 3 braucht es. Der Container startet ohne
-`SCOREVIEW_SIDECAR_SECRET` absichtlich nicht: Ein unauthentifizierter
-Konvertierungsdienst, der beliebige Dateien entgegennimmt, soll nicht aus
-Versehen entstehen.
+Make a note of the secret – step 3 needs it. Without
+`SCOREVIEW_SIDECAR_SECRET` the container deliberately refuses to start: an
+unauthenticated conversion service that accepts arbitrary files should not come
+into existence by accident.
 
-> **`--network` nicht vergessen.** Auf Dockers Standard-Bridge gibt es keine
-> Namensauflösung zwischen Containern. Der Container startet dann fehlerfrei,
-> `curl` vom Host funktioniert tadellos – aber Nextcloud erreicht ihn nicht, und
-> die Betriebsdiagnose meldet nur „Konvertierungsdienst nicht erreichbar".
+> **Don't forget `--network`.** Docker's default bridge has no name resolution
+> between containers. The container then starts without errors, `curl` from the
+> host works perfectly – but Nextcloud cannot reach it, and the status
+> diagnostics only show the **Conversion** row in red, with a cURL message
+> about name resolution.
 
-`--memory` und `--pids-limit` sind für den Produktivbetrieb empfohlen: Der
-Container lässt eine große C++/Qt-Codebasis auf nicht vertrauenswürdige
-`.mscz`-Uploads los. Details und weitere Env-Variablen stehen in
-[`../sidecar/README.md`](../sidecar/README.md).
+`--memory` and `--pids-limit` are recommended for production: the container
+turns a large C++/Qt code base loose on untrusted `.mscz` uploads. Details and
+further environment variables are in
+[`../sidecar/README.md`](../sidecar/README.md) (German).
 
-Wer den Sidecar auf einer anderen Maschine oder ohne Docker betreiben will,
-findet die Wege unter
+If you want to run the sidecar on a different machine or without Docker, the
+options are described under
 [Bereitstellung](../sidecar/README.md#bereitstellung).
 
-## 2. App installieren
+## 2. Install the app
 
-Über den Nextcloud App Store, oder das Archiv `scoreview.tar.gz` eines
-[GitHub-Releases](https://github.com/AndiMb/scoreview/releases) nach `apps/`
-entpacken, sodass `apps/scoreview` entsteht. Ein Git-Checkout von `scoreview/`
-genügt nicht: Frontend-Bundle (`js/`) und Konverter-Engine
-(`converter/node_modules`) sind nicht eingecheckt, sie entstehen erst beim Bauen
-([Entwicklung](development.md)). Danach:
+Via the Nextcloud App Store, or unpack the `scoreview.tar.gz` archive of a
+[GitHub release](https://github.com/AndiMb/scoreview/releases) into `apps/` so
+that `apps/scoreview` is created. A Git checkout of `scoreview/` is not
+enough: the frontend bundle (`js/`) and the converter engine
+(`converter/node_modules`) are not checked in; they are only created by the
+build ([Development](development.md) (German)). Then:
 
 ```sh
 occ app:enable scoreview
 occ upgrade
 ```
 
-## 3. Konvertierungsweg einstellen
+## 3. Configure the conversion path
 
-Unter **Einstellungen → Verwaltung → ScoreView** steht die Wahl ganz oben; sie
-schaltet darunter frei, was jeweils einzutragen ist. Voreingestellt ist der
-lokale Weg.
+Under **Settings → Administration → ScoreView** the choice is at the very top;
+it unlocks below it whatever has to be entered for the respective path. The
+local path is the default.
 
-### Weg A: Lokal
+### Path A: Local
 
-**Hier ist nichts einzustellen.** Liegt `node` an einer der üblichen Stellen,
-findet die App es selbst; das SoundFont holt der Server beim ersten Abspielen
-von einer voreingestellten Adresse (siehe [SoundFont](#soundfont)). Nur wenn
-`node` woanders liegt, braucht es eine Angabe:
+**There is nothing to configure here.** If `node` is in one of the usual
+places, the app finds it on its own; the server fetches the SoundFont on first
+playback from a preset address (see [SoundFont](#soundfont)). Only if `node`
+lives elsewhere does it need to be specified:
 
 ```sh
-occ config:app:set scoreview node_path --value=/usr/bin/node   # nur falls nötig
+occ config:app:set scoreview node_path --value=/usr/bin/node   # only if needed
 ```
 
-### Weg B: Sidecar
+### Path B: Sidecar
 
-Den Sidecar auswählen, seine URL (z. B. `http://scoreview-sidecar:8765`) und das
-Secret aus Schritt 1b eintragen. Alternativ auf der Kommandozeile:
+Select the sidecar, and enter its URL (e.g. `http://scoreview-sidecar:8765`)
+and the secret from step 1b. Alternatively on the command line:
 
 ```sh
 occ config:app:set scoreview conversion_backend --value=sidecar
@@ -153,177 +157,178 @@ occ config:app:set scoreview sidecar_url --value="http://scoreview-sidecar:8765"
 occ config:app:set scoreview sidecar_secret --value="<secret>" --sensitive
 ```
 
-Nextcloud blockiert ausgehende Anfragen an lokale und interne Hostnamen
-(SSRF-Schutz). Ohne die folgende Einstellung schlägt jeder Sidecar-Aufruf mit
-„violates local access rules" fehl – dieselbe Einstellung brauchen auch
-Collabora- und OnlyOffice-Integrationen. Das gilt ebenso für einen Sidecar auf
-einem anderen Host, solange er unter einer privaten IP oder einem internen
-Namen erreichbar ist:
+Nextcloud blocks outgoing requests to local and internal host names (SSRF
+protection). Without the following setting, every sidecar call fails with
+"violates local access rules" – Collabora and OnlyOffice integrations need the
+same setting. This also applies to a sidecar on a different host, as long as it
+is reachable under a private IP or an internal name:
 
 ```sh
 occ config:system:set allow_local_remote_servers --value=true --type=boolean
 ```
 
-### Prüfen
+### Verify
 
-Auf der Verwaltungsseite prüft ein Knopf den Zustand und ein zweiter, **„Konvertierung selbst
-testen“**, startet den Selbsttest: eine echte Konvertierung der mitgelieferten Minipartitur über
-den gewählten Weg, samt Prüfung aller Zusagen, auf denen die App aufbaut. Nach
-jedem Wechsel der MuseScore-Version einmal auslösen.
+On the administration page, one button checks the status and a second one,
+**"Run conversion self-test"**, starts the self-test: a real conversion of the
+bundled mini score via the selected path, including a check of every guarantee
+the app relies on. Trigger it once after every change of the MuseScore version.
 
-## 4. Mimetype (in der Regel nichts zu tun)
+## 4. Mimetype (usually nothing to do)
 
-Damit eine `.mscz` als `application/x-musescore` gilt, **trägt die App den
-Mimetype selbst ein** – bei der Installation, bei jedem Update und nach jedem
-Upload erneut
-([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)). Dafür
-braucht es weder `occ` noch Schreibzugriff auf `config/`; auf verwaltetem
-Hosting funktioniert es genauso.
+So that a `.mscz` counts as `application/x-musescore`, **the app registers the
+mimetype itself** – on installation, on every update, and again after every
+upload
+([E6](architecture.md#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste) (German)).
+This needs neither `occ` nor write access to `config/`; it works just the same
+on managed hosting.
 
-Prüfen lässt sich das ohne Shell, mit den Zugangsdaten einer Nutzerin:
+You can check this without a shell, using a user's credentials:
 
 ```sh
-curl -u <Nutzerin> -X PROPFIND -H 'Depth: 0' \
+curl -u <user> -X PROPFIND -H 'Depth: 0' \
   --data '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:getcontenttype/></d:prop></d:propfind>' \
-  'https://<instanz>/remote.php/dav/files/<Nutzerin>/Pfad/Partitur.mscz'
+  'https://<instance>/remote.php/dav/files/<user>/path/score.mscz'
 ```
 
-Steht dort `application/x-musescore`, ist alles in Ordnung. Steht dort
-`application/octet-stream`, lief entweder das Update der App noch nicht, oder
-die Partitur wurde gerade erst hochgeladen und der zuständige Background-Job
-ist noch nicht gelaufen (siehe Schritt 5 – ohne Cron bleibt er liegen).
+If it says `application/x-musescore`, everything is fine. If it says
+`application/octet-stream`, either the app update has not run yet, or the score
+was only just uploaded and the responsible background job has not run yet (see
+step 5 – without cron it stays pending).
 
-### Was die Registrierung von Hand zusätzlich bringt
+### What registering by hand adds
 
-Zwei Dinge kann eine App nicht, beide rein kosmetisch bzw. zeitlich:
+There are two things an app cannot do, both purely cosmetic or a matter of
+timing:
 
-- **Das eigene Dateisymbol.** Es hängt an `mimetypealiases.json` und an
+- **The dedicated file icon.** It depends on `mimetypealiases.json` and on
   `occ maintenance:mimetype:update-js`.
-- **Die Erkennung beim Upload.** Nextcloud fragt dafür seine eigene
-  Zuordnungstabelle; eine frisch hochgeladene Partitur trägt deshalb bis zum
-  nächsten Cron-Lauf `application/octet-stream`.
+- **Detection on upload.** For this, Nextcloud consults its own mapping table;
+  a freshly uploaded score therefore carries `application/octet-stream` until
+  the next cron run.
 
-Wer `occ` hat und beides will, übernimmt den Inhalt von
-`scoreview/appinfo/mimetypemapping.json` und
-`scoreview/appinfo/mimetypealiases.json` in `config/mimetypemapping.json` bzw.
-`config/mimetypealiases.json` des Servers – vorhandene andere Einträge dabei
-erhalten, nicht überschreiben; Nextcloud legt die eigene Datei per
-`array_replace` nur über die mitgelieferte, die Standardzuordnungen bleiben
-also erhalten. Danach:
+If you have `occ` and want both, copy the contents of
+`scoreview/appinfo/mimetypemapping.json` and
+`scoreview/appinfo/mimetypealiases.json` into the server's
+`config/mimetypemapping.json` and `config/mimetypealiases.json` respectively –
+keep any other existing entries, don't overwrite them; Nextcloud only overlays
+its own file on the bundled one via `array_replace`, so the default mappings
+are preserved. Then:
 
 ```sh
 occ maintenance:mimetype:update-db
 occ maintenance:mimetype:update-js
 ```
 
-`update-db` zieht den **Bestand mit**: Für jeden Mimetype, der noch nicht in
-der Datenbank steht, aktualisiert es zugleich alle Filecache-Zeilen mit der
-passenden Endung – quer über alle Speicher, Gruppenordner und Freigaben
-eingeschlossen. Ein `occ files:scan` ist dafür nicht nötig. Nur wenn der
-Mimetype bereits eingetragen war, bleibt der Bestand unberührt; dann hilft
-`occ maintenance:mimetype:update-db --repair-filecache`.
+`update-db` **brings existing files along**: for every mimetype not yet in the
+database, it also updates all filecache rows with the matching extension –
+across all storages, group folders and shares included. An `occ files:scan` is
+not needed for this. Only if the mimetype was already registered do existing
+files remain untouched; then
+`occ maintenance:mimetype:update-db --repair-filecache` helps.
 
-## 5. Background-Jobs sicherstellen
+## 5. Make sure background jobs run
 
-Konvertierungen laufen als Background-Job. Nextclouds Default-Modus `ajax`
-reicht dafür nicht zuverlässig: Jobs bleiben sichtbar auf `pending` stehen, wenn
-kein Seitenaufruf sie anstößt. Der Viewer weist nach zwei Minuten auf diese
-Ursache hin und gibt nach einer halben Stunde auf – eine Partitur lässt sich
-ohne laufenden Cron also gar nicht öffnen.
+Conversions run as a background job. Nextcloud's default mode `ajax` is not
+reliable enough for this: jobs visibly stay at `pending` if no page request
+triggers them. The viewer points to this cause after two minutes and gives up
+after half an hour – so without a running cron, a score cannot be opened at
+all.
 
 ```sh
 occ background:cron
 ```
 
-Dazu muss auf dem Server ein echter Cron laufen, der `cron.php` regelmäßig
-aufruft (Nextcloud-Standard: alle 5 Minuten). Die Betriebsdiagnose auf der
-Verwaltungsseite prüft das mit und meldet, wenn der letzte Lauf zu lange her
-ist.
+This requires a real cron on the server that calls `cron.php` regularly
+(Nextcloud default: every 5 minutes). The status diagnostics on the
+administration page check this as well and report when the last run was too
+long ago.
 
 ## SoundFont
 
-Die Wiedergabe synthetisiert im Browser
-([E1](architecture.md#e1-midi-statt-mp3-als-audioartefakt)) und braucht dafür ein
-SoundFont. Woher es kommt, hängt vom gewählten Weg ab.
+Playback is synthesised in the browser
+([E1](architecture.md#e1-midi-statt-mp3-als-audioartefakt) (German)) and needs
+a SoundFont for it. Where it comes from depends on the selected path.
 
-**In beiden Fällen ist nichts zu tun** – die Wege dorthin sind nur verschieden.
+**In both cases there is nothing to do** – only the way it gets there differs.
 
-**Weg A: von einer Adresse, die voreingestellt ist.** Ohne Sidecar gibt es kein
-Image, aus dem sich ein SoundFont nehmen ließe, und mitliefern lässt es sich
-nicht: Der App Store nimmt nur Archive bis 20 MB, die MuseScore-WebAssembly
-belegt davon den Großteil. Der **Server** holt die Datei deshalb einmalig aus
-dem Netz und liefert sie danach selbst aus; voreingestellt ist
-`FluidR3Mono_GM.sf3` (~23 MB, MIT-lizenziert, dasselbe SoundFont, das auch
-MuseScore mitbringt) als Release-Asset dieses Projekts.
+**Path A: from a preset address.** Without a sidecar there is no image to take
+a SoundFont from, and it cannot be bundled: the App Store only accepts archives
+up to 20 MB, most of which the MuseScore WebAssembly takes up. The **server**
+therefore fetches the file from the network once and then delivers it itself;
+the preset is `FluidR3Mono_GM.sf3` (~23 MB, MIT-licensed, the same SoundFont
+that MuseScore ships with) as a release asset of this project.
 
-Das Feld **SoundFont-Download-URL** überschreibt diese Adresse. Sie muss nur vom
-Server aus erreichbar sein und braucht kein CORS. Geholt wird einmal je URL –
-wer unter derselben Adresse später eine andere Datei ablegt, trägt eine neue
-Adresse ein (etwa mit angehängtem `?v=2`) oder verwirft den Stand mit
-`occ config:app:delete scoreview soundfont_cache_version`; erneutes Speichern
-derselben Adresse lädt nichts neu.
+The **SoundFont download URL** field overrides this address. It only needs to
+be reachable from the server and needs no CORS. It is fetched once per URL – if
+you later put a different file at the same address, enter a new address (for
+example with `?v=2` appended) or discard the cached state with
+`occ config:app:delete scoreview soundfont_cache_version`; saving the same
+address again does not download anything anew.
 
-**Weg B: aus dem Container.** Läuft ein Sidecar, holt die App das SoundFont von
-dort, denn dessen MuseScore-Installation bringt bereits eines mit – nichts wird
-aus dem Netz geladen. Der Browser spricht dabei nie mit dem Sidecar; die App legt
-die Datei in ihrem IAppData-Cache ab und liefert sie selbst aus.
+**Path B: from the container.** If a sidecar is running, the app fetches the
+SoundFont from there, because its MuseScore installation already ships one –
+nothing is downloaded from the network. The browser never talks to the sidecar
+in the process; the app stores the file in its IAppData cache and delivers it
+itself.
 
-Der erste Abruf nach einer Neuinstallation überträgt das SoundFont einmal zum
-Browser: ~23 MB bei Weg A (`FluidR3Mono_GM`), ~40 MB bei Weg B
-(`MuseScore_General_Lite` aus dem Sidecar-Image). Danach greifen der serverseitige Cache und `Cache-Control: immutable`.
+The first request after a fresh installation transfers the SoundFont to the
+browser once: ~23 MB on path A (`FluidR3Mono_GM`), ~40 MB on path B
+(`MuseScore_General_Lite` from the sidecar image). After that, the server-side
+cache and `Cache-Control: immutable` take effect.
 
-Das Feld **Eigene SoundFont-URL** ist etwas anderes: eine Übersteuerung, bei der der
-**Browser** direkt von dieser Adresse lädt. Sie muss dann vom Browser aus
-erreichbar sein und CORS erlauben; den Host trägt die App automatisch in die
-`connect-src`-Richtlinie ein. Ein leeres Feld bedeutet: die App liefert selbst
-aus.
+The **Custom SoundFont URL** field is something else: an override where the
+**browser** loads directly from this address. It must then be reachable from
+the browser and allow CORS; the app adds the host to the `connect-src` policy
+automatically. An empty field means: the app delivers it itself.
 
-## Probe und Konzert
+## Rehearsal and concert
 
-Leitung, „Folgt mir“, eigene Aufnahmen, die Rückmeldung zur Intonation,
-Übe-Tracks und die Offline-Seite sind nach der Installation eingeschaltet und
-brauchen nichts weiter. Unter
-**Einstellungen → Verwaltung → ScoreView**, Abschnitte **Probe und Konzert**
-und **Üben unterwegs**, lassen sie sich einzeln abschalten; eine abgeschaltete Funktion verschwindet aus dem
-Viewer, und ihre Endpunkte antworten 404. Einiges ist trotzdem zu wissen.
+Leaders, "Follow me", personal recordings, intonation feedback, practice tracks
+and the offline page are switched on after installation and need nothing
+further. Under **Settings → Administration → ScoreView**, sections
+**Rehearsal and concert** and **Practising on the go**, they can be switched
+off individually; a switched-off feature disappears from the viewer, and its
+endpoints respond with 404. A few things are still worth knowing.
 
-### `notify_push` für „Folgt mir“ (empfohlen)
+### `notify_push` for "Follow me" (recommended)
 
-Ohne Push fragt jedes Folgegerät während einer Sitzung alle 800 ms beim Server
-nach. Das kostet rund 50 ms CPU je Gerät und Abfrage – bei 40 Sängerinnen 2–3
-Kerne für die Dauer der Probe ([Grenzwerte](limits.md#folgt-mir)). Mit der App
-[`notify_push`](https://github.com/nextcloud/notify_push) schickt der Server
-bei jeder Änderung ein Ereignis, und die Geräte fragen nur noch dann.
-ScoreView braucht dafür keine eigene Einstellung: Ist `notify_push`
-installiert und eingerichtet, wird es benutzt, sonst wird abgefragt.
+Without push, every following device polls the server every 800 ms during a
+session. That costs about 50 ms of CPU per device and request – with 40 singers,
+2–3 cores for the duration of the rehearsal
+([Limits](limits.md#follow-me)). With the
+[`notify_push`](https://github.com/nextcloud/notify_push) app, the server sends
+an event on every change, and the devices only query then. ScoreView needs no
+setting of its own for this: if `notify_push` is installed and set up, it is
+used; otherwise the devices poll.
 
 ```sh
 occ app:install notify_push
-occ notify_push:setup   # führt durch Dienst und Reverse-Proxy
+occ notify_push:setup   # guides you through the service and the reverse proxy
 ```
 
-Die Betriebsdiagnose zeigt unter **„Folgt mir“**, ob Push greift, und rät ab
-etwa 20 Folgegeräten zur Installation. Wo `notify_push` nicht in Frage kommt,
-senkt ein größeres **Abfrageintervall** (`follow_poll_ms`, 500–3000 ms) die
-Last – um den Preis späterer Sprünge. Die mobilen Apps fragen immer ab, auch
-mit `notify_push`.
+The status diagnostics show under **"Follow me"** whether push is in
+effect, and recommend installing it from about 20 following devices. Where
+`notify_push` is not an option, a larger **Polling interval**
+(`follow_poll_ms`, 500–3000 ms) lowers the load – at the price of later jumps.
+The mobile apps always poll, even with `notify_push`.
 
-Einen Cron-Lauf braucht „Folgt mir“ nicht: Alles geschieht in den Anfragen
-selbst.
+"Follow me" does not need a cron run: everything happens within the requests
+themselves.
 
-### Uploadgröße für Aufnahmen
+### Upload size for recordings
 
-Eine Aufnahme wird als eine WAV-Datei hochgeladen, bei der Vorgabe von höchstens
-600 s rund 19 MB. Der Webserver vor Nextcloud muss Anfragen dieser Größe
-annehmen – bei nginx `client_max_body_size` mindestens `20M` (Nextclouds
-empfohlene nginx-Konfiguration setzt ohnehin mehr). Die PHP-Grenzen
-`upload_max_filesize`/`post_max_size` spielen keine Rolle, die App liest den
-Rumpf selbst und zieht ihre eigene Grenze. Wer `max_recording_seconds` anhebt,
-rechnet mit etwa 32 KB je Sekunde.
+A recording is uploaded as one WAV file, about 19 MB at the default maximum of
+600 s. The web server in front of Nextcloud must accept requests of this size –
+for nginx, `client_max_body_size` at least `20M` (Nextcloud's recommended nginx
+configuration sets more anyway). The PHP limits
+`upload_max_filesize`/`post_max_size` do not matter; the app reads the request
+body itself and enforces its own limit. If you raise `max_recording_seconds`,
+reckon with about 32 KB per second.
 
-Aufnahmen liegen in den App-Daten (IAppData) und zählen gegen **kein**
-Kontingent der Nutzerinnen. Deshalb hat die App eigene Grenzen, einstellbar in
-der Verwaltung (dort in MB) oder per `occ` (in Bytes):
+Recordings are stored in the app data (IAppData) and count against **no** user
+quota. That is why the app has its own limits, configurable in the
+administration settings (in MB there) or via `occ` (in bytes):
 
 ```sh
 occ config:app:set scoreview max_recordings_per_score --value 5
@@ -332,140 +337,135 @@ occ config:app:set scoreview max_recording_bytes_per_user --value 209715200    #
 occ config:app:set scoreview max_recording_bytes_total --value 5368709120      # 5 GB
 ```
 
-Werte außerhalb der erlaubten Spanne werden beim Lesen begrenzt (siehe
-Tabelle unten).
+Values outside the permitted range are clamped when read (see the table below).
 
-### Mikrofon
+### Microphone
 
-Nextcloud sperrt das Mikrofon auf jeder Seite per `Feature-Policy`. ScoreView
-gibt es auf den Seiten unter `/apps/files` und auf der Seite für die mobilen
-Apps frei, und nur, solange Aufnahme oder Intonation eingeschaltet sind –
-Dashboard, Talk und alles Übrige bleiben unberührt. Eine erteilte Erlaubnis
-des Browsers gilt dann innerhalb von Files für alle Skripte dort, wie bei Talk.
-Wer das nicht will, schaltet Aufnahme und Intonation ab; die Freigabe entfällt
-damit.
+Nextcloud blocks the microphone on every page via `Feature-Policy`. ScoreView
+allows it on the pages under `/apps/files` and on the page for the mobile apps,
+and only while recording or intonation is switched on – the Dashboard, Talk and
+everything else remain unaffected. A permission granted by the browser then
+applies within Files to all scripts there, as with Talk. If you don't want
+that, switch off recording and intonation; the permission is then dropped.
 
-Das Mikrofon braucht einen sicheren Kontext, also HTTPS (oder `localhost`).
+The microphone requires a secure context, i.e. HTTPS (or `localhost`).
 
-### Begleit-Token der mobilen Apps
+### Companion tokens of the mobile apps
 
-Für Setlisten stellt die App aus der Seite der mobilen Apps heraus kurzlebige
-Begleit-Token aus (höchstens 12 h,
-[E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps)). Das
-Geheimnis dafür legt die App bei Installation und Update an. Alle ausgegebenen
-Token auf einmal widerrufen heißt, es zu verwerfen:
+For setlists, the app issues short-lived companion tokens from the page for the
+mobile apps (at most 12 h,
+[E8](architecture.md#e8-eine-eigenständige-seite-für-die-mobilen-apps) (German)).
+The app creates the secret for them on installation and update. Revoking all
+issued tokens at once means discarding it:
 
 ```sh
 occ config:app:delete scoreview companion_secret
 ```
 
-Beim nächsten Gebrauch entsteht ein neues; nach spätestens 3 s greift der
-Wechsel überall. Eine abgewiesene Anfrage lässt die Seite selbst neue Token
-holen, solange ihr Direct-Editing-Token noch gilt. Die Token einer einzelnen Person verfallen außerdem, wenn sie ihr
-Passwort ändert oder ihr Konto deaktiviert wird.
+A new one is created on next use; the change takes effect everywhere within
+3 s at most. A rejected request makes the page fetch new tokens itself, as long
+as its Direct Editing token is still valid. The tokens of an individual person
+also expire when they change their password or their account is disabled.
 
-Dasselbe gilt für die Token, die ein Folgegerät in der App bekommt, wenn eine
-Leitung ihre Sitzung von „Folgt mir“ zum nächsten Stück mitnimmt.
+The same applies to the tokens a following device gets in the app when a leader
+takes their "Follow me" session on to the next piece.
 
-### Übe-Tracks und Offline-Seite
+### Practice tracks and offline page
 
-Im Abschnitt **Üben unterwegs** der Verwaltungsseite stehen zwei Schalter
-und eine Grenze.
+The **Practising on the go** section of the administration page has two
+switches and one limit.
 
-**Übe-Tracks als MP3-Dateien in Files** (`feature_practice_export`). Der
-Browser rendert die aktuelle Mischung als MP3 und legt sie neben die Partitur,
-in einen Unterordner „Übe-Tracks“ oder einen selbst gewählten Ordner
-([E13](architecture.md#e13-übe-tracks-sind-dateien-in-files)). Die Dateien
-zählen gegen das Kontingent der Ordnerbesitzerin wie jede andere Datei; eine
-eigene Speichergrenze wie bei Aufnahmen gibt es deshalb nicht, nur eine je
-Datei:
+**Practice tracks as MP3 files in Files** (`feature_practice_export`). The
+browser renders the current mix as an MP3 and places it next to the score, in a
+"Practice tracks" subfolder or a folder of one's own choosing
+([E13](architecture.md#e13-übe-tracks-sind-dateien-in-files) (German)). The
+files count against the folder owner's quota like any other file; there is
+therefore no separate storage limit as for recordings, only one per file:
 
 ```sh
 occ config:app:set scoreview practice_track_max_mb --value 60   # 5-500, in MB
 ```
 
-Ein Track wiegt rund 1 MB je Minute Musik. Wie bei den Aufnahmen muss der
-Webserver Anfragen dieser Größe annehmen – bei nginx `client_max_body_size`
-mindestens so groß wie die längsten Tracks, die erwartet werden; die
-PHP-Grenzen spielen keine Rolle. Der Name des Unterordners steht in der
-Voreinstellungssprache der Instanz (`default_language` in `config.php`), damit
-er für alle gleich heißt.
+A track weighs about 1 MB per minute of music. As with recordings, the web
+server must accept requests of this size – for nginx, `client_max_body_size` at
+least as large as the longest tracks expected; the PHP limits do not matter.
+The name of the subfolder is in the instance's default language
+(`default_language` in `config.php`), so that it has the same name for
+everyone.
 
-**Offline-Seite** (`feature_offline`). Personen merken im Viewer Stücke oder
-Setlisten vor und öffnen sie ohne Netz über `/apps/scoreview/offline`
+**Offline page** (`feature_offline`). People mark pieces or setlists in the
+viewer and open them without a network via `/apps/scoreview/offline`
 ([E14](architecture.md#e14-eine-offline-seite-mit-eigenem-service-worker)).
-Gespeichert wird nur im Browser der Person, der Server braucht dafür nichts.
-Ausgeschaltet antworten Seite, Service Worker und Manifest mit 404, und der
-Viewer bietet das Vormerken nicht mehr an; was schon vorgemerkt ist, bleibt
-im jeweiligen Browser liegen, bis die Person es entfernt. Zwei Dinge sind zu
-wissen:
+Data is stored only in the person's browser; the server needs nothing for this.
+When switched off, the page, service worker and manifest respond with 404, and
+the viewer no longer offers marking; whatever has already been marked stays in
+the respective browser until the person removes it. Two things are worth
+knowing:
 
-- Ein Service Worker braucht einen sicheren Kontext, also HTTPS (oder
-  `localhost`).
-- Vorgemerktes ist an das Gerät gebunden und überdauert in Chrome das
-  Abmelden, bis die Offline-Seite wieder mit Netz geöffnet wird
-  ([Grenzwerte](limits.md#offline)). Auf Geräten, die sich mehrere Personen
-  teilen, sollte niemand vormerken.
+- A service worker requires a secure context, i.e. HTTPS (or `localhost`).
+- Marked content is bound to the device and, in Chrome, survives logging out
+  until the offline page is opened again with a network
+  ([Limits](limits.md#offline)). On devices shared by several people, nobody
+  should mark anything.
 
-Ein externes SoundFont (`soundfont_url`) braucht nichts weiter: Die
-Offline-Seite gibt dessen Herkunft in ihrer CSP selbst frei.
+An external SoundFont (`soundfont_url`) needs nothing further: the offline page
+allows its origin in its own CSP.
 
-## Einstellungen im Überblick
+## Settings at a glance
 
-| Schlüssel | Wo | Bedeutung |
+| Key | Where | Meaning |
 |---|---|---|
-| `conversion_backend` | Verwaltung | `local` (Voreinstellung) oder `sidecar` |
-| `node_path` | Verwaltung¹ | Pfad zu `node`; leer = übliche Orte durchsuchen (Weg A). Absolut, Programmname `node` oder `nodejs` (auch `node20`, `.exe`) |
-| `soundfont_fetch_url` | Verwaltung¹ | Adresse, von der der Server das SoundFont einmalig holt; leer = voreingestellte Adresse (Weg A) |
-| `sidecar_url` | Verwaltung¹ | Adresse des Konvertierungsdienstes (Weg B) |
-| `sidecar_secret` | Verwaltung¹ | Shared Secret, als sensibel geführt und in `occ config:list` ausgeblendet (Weg B) |
-| `soundfont_url` | Verwaltung | Übersteuerung: Der Browser lädt direkt von dieser Adresse |
-| `eager_conversion` | Verwaltung | Beim Hochladen sofort konvertieren statt beim ersten Öffnen |
-| `local_timeout` | nur `occ` | Zeitgrenze eines lokalen Konvertierungslaufs in Sekunden (Vorgabe 120) |
-| `cjk_font_dir` | nur `occ` | Verzeichnis mit Zusatzfonts für CJK-Liedtexte, außerhalb der App (Weg A) |
-| `max_score_bytes` | nur `occ` | Obergrenze der Dateigröße (Vorgabe 100 MB) |
-| `client_max_score_bytes` | nur `occ` | Obergrenze für die Konvertierung **im Browser**, deutlich kleiner (Vorgabe 10 MB). Geprüft, bevor der Browser die Engine lädt |
-| `feature_follow_session` | Verwaltung | Leitung und „Folgt mir“ (Vorgabe an) |
-| `feature_recording` | Verwaltung | Eigene Aufnahmen (Vorgabe an) |
-| `feature_intonation` | Verwaltung | Rückmeldung zur Intonation (Vorgabe an) |
-| `feature_score_follower` | nur `occ` | Vorgesehen für das Mitverfolgen per Mikrofon, noch ohne Funktion (Vorgabe aus) |
-| `feature_practice_export` | Verwaltung | Übe-Tracks als MP3 in Files (Vorgabe an) |
-| `practice_track_max_mb` | Verwaltung | Höchstgröße eines Übe-Tracks in MB (Vorgabe 60, 5–500) |
-| `feature_offline` | Verwaltung | Offline-Seite und „Offline vormerken“ (Vorgabe an) |
-| `follow_poll_ms` | Verwaltung | Abfrageintervall von „Folgt mir“ ohne Push in ms (Vorgabe 800, erlaubt 500–3000) |
-| `max_recordings_per_score` | Verwaltung | Aufnahmen je Person und Partitur (Vorgabe 5, 1–50) |
-| `max_recording_seconds` | Verwaltung | Höchstlänge einer Aufnahme in Sekunden (Vorgabe 600, 10–3600) |
-| `max_recording_bytes_per_user` | Verwaltung (MB), `occ` (Bytes) | Speicher für Aufnahmen je Person (Vorgabe 200 MB, 10 MB–100 GB) |
-| `max_recording_bytes_total` | Verwaltung (MB), `occ` (Bytes) | Speicher für Aufnahmen auf der ganzen Instanz (Vorgabe 5 GB, 100 MB–10 TB) |
-| `companion_secret` | nur `occ` | Geheimnis der Begleit-Token, sensibel geführt; löschen widerruft alle ([oben](#begleit-token-der-mobilen-apps)) |
+| `conversion_backend` | Administration | `local` (default) or `sidecar` |
+| `node_path` | Administration¹ | Path to `node`; empty = search the usual places (path A). Absolute, program name `node` or `nodejs` (also `node20`, `.exe`) |
+| `soundfont_fetch_url` | Administration¹ | Address from which the server fetches the SoundFont once; empty = preset address (path A) |
+| `sidecar_url` | Administration¹ | Address of the conversion service (path B) |
+| `sidecar_secret` | Administration¹ | Shared secret, kept as sensitive and hidden in `occ config:list` (path B) |
+| `soundfont_url` | Administration | Override: the browser loads directly from this address |
+| `eager_conversion` | Administration | Convert immediately on upload instead of on first opening |
+| `local_timeout` | `occ` only | Time limit of a local conversion run in seconds (default 120) |
+| `cjk_font_dir` | `occ` only | Directory with additional fonts for CJK lyrics, outside the app (path A) |
+| `max_score_bytes` | `occ` only | Upper limit of the file size (default 100 MB) |
+| `client_max_score_bytes` | `occ` only | Upper limit for conversion **in the browser**, much smaller (default 10 MB). Checked before the browser loads the engine |
+| `feature_follow_session` | Administration | Leaders and "Follow me" (default on) |
+| `feature_recording` | Administration | Personal recordings (default on) |
+| `feature_intonation` | Administration | Intonation feedback (default on) |
+| `feature_score_follower` | `occ` only | Intended for score following via microphone, not functional yet (default off) |
+| `feature_practice_export` | Administration | Practice tracks as MP3 in Files (default on) |
+| `practice_track_max_mb` | Administration | Maximum size of a practice track in MB (default 60, 5–500) |
+| `feature_offline` | Administration | Offline page and "Save for offline use" (default on) |
+| `follow_poll_ms` | Administration | Polling interval of "Follow me" without push, in ms (default 800, allowed 500–3000) |
+| `max_recordings_per_score` | Administration | Recordings per person and score (default 5, 1–50) |
+| `max_recording_seconds` | Administration | Maximum length of a recording in seconds (default 600, 10–3600) |
+| `max_recording_bytes_per_user` | Administration (MB), `occ` (bytes) | Storage for recordings per person (default 200 MB, 10 MB–100 GB) |
+| `max_recording_bytes_total` | Administration (MB), `occ` (bytes) | Storage for recordings across the whole instance (default 5 GB, 100 MB–10 TB) |
+| `companion_secret` | `occ` only | Secret of the companion tokens, kept as sensitive; deleting it revokes all of them ([above](#companion-tokens-of-the-mobile-apps)) |
 
-¹ Auf der Verwaltungsseite nur für Mitglieder der Gruppe `admin` änderbar,
-nicht für Gruppen, an die die ScoreView-Einstellungen delegiert sind – der
-Server startet diesen Pfad als Programm bzw. ruft diese Adressen selbst ab
-([S9](architecture.md#s9-was-programme-startet-oder-adressen-abruft-stellt-nur-ein-voller-admin-ein)).
-Per `occ` gesetzt, gilt die Einschränkung nicht.
+¹ On the administration page, only members of the `admin` group can change
+these, not groups to which the ScoreView settings are delegated – the server
+starts this path as a program or fetches these addresses itself
+([S9](architecture.md#s9-was-programme-startet-oder-adressen-abruft-stellt-nur-ein-voller-admin-ein) (German)).
+When set via `occ`, the restriction does not apply.
 
-## Prüfen, ob alles läuft
+## Checking that everything works
 
-1. **Einstellungen → Verwaltung → ScoreView** öffnen. Die Betriebsdiagnose zeigt
-   den Zustand des gewählten Konvertierungswegs, den SoundFont-Zustand, das
-   Cron-Alter und die Zahl der Konvertierungen je Status. Steht dort eine Zeile
-   **Rückfall**, konvertiert gerade der Browser – die Zeile darüber nennt den
-   Grund, aus dem der Server es nicht tut.
-2. Eine `.mscz`-Datei in Files hochladen und anklicken. Beim ersten Mal läuft
-   die Konvertierung sichtbar an; danach öffnet dieselbe Datei aus dem Cache.
+1. Open **Settings → Administration → ScoreView**. The status diagnostics
+   show the status of the selected conversion path, the SoundFont status, the
+   cron age and the number of conversions per status. If there is a
+   **Fallback** row, the browser is currently converting – the row above it
+   states the reason why the server is not.
+2. Upload a `.mscz` file in Files and click it. The first time, the conversion
+   visibly starts; after that, the same file opens from the cache.
 
-Wenn etwas klemmt: [Troubleshooting](troubleshooting.md).
+If something gets stuck: [Troubleshooting](troubleshooting.md).
 
-## Aktualisieren
+## Updating
 
-App-Updates laufen über den üblichen Weg (`occ upgrade`).
+App updates run the usual way (`occ upgrade`).
 
-Der lokale Konverter kommt mit dem App-Paket und braucht keinen eigenen
-Schritt.
+The local converter comes with the app package and needs no separate step.
 
-Der Sidecar dagegen wird getrennt aktualisiert – neu bauen, alten Container
-entfernen, neuen mit denselben Parametern starten:
+The sidecar, by contrast, is updated separately – rebuild it, remove the old
+container, start a new one with the same parameters:
 
 ```sh
 docker build -t scoreview-musescore-cli sidecar/
@@ -476,7 +476,7 @@ docker run -d --name scoreview-sidecar --network scoreview-net \
   scoreview-musescore-cli
 ```
 
-Nach einem Wechsel der MuseScore-Version im Image den **Selbsttest** auslösen,
-bevor das Image produktiv geht. Bereits konvertierte Partituren bleiben gültig;
-ein Wechsel des Cache-Formats invalidiert sie automatisch (siehe
-[Architektur](architecture.md#konvertierung-und-cache)).
+After a change of the MuseScore version in the image, trigger the **self-test**
+before the image goes into production. Scores that have already been converted
+remain valid; a change of the cache format invalidates them automatically (see
+[Architecture](architecture.md#konvertierung-und-cache) (German)).

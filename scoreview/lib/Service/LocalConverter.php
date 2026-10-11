@@ -135,7 +135,11 @@ class LocalConverter {
 	 * sichtbar waeren: darf PHP Prozesse starten, gibt es ein `node`, und
 	 * liegt das Engine-Paket (scoreview-engine) neben dem Konverter.
 	 *
-	 * @return array{available: bool, procOpen: bool, nodePath: ?string, nodeVersion: ?string, converterInstalled: bool, error: ?string}
+	 * `reason` names the first missing piece as a code ('process', 'node',
+	 * 'engine'): the admin page shows it in the reader's language
+	 * (HealthService), while `error` stays the technical text for logs.
+	 *
+	 * @return array{available: bool, procOpen: bool, nodePath: ?string, nodeVersion: ?string, converterInstalled: bool, reason: ?string, error: ?string}
 	 */
 	public function describe(): array {
 		$procOpen = $this->canStartProcesses();
@@ -144,11 +148,15 @@ class LocalConverter {
 		$installed = $this->isConverterInstalled();
 
 		$error = null;
+		$reason = null;
 		if (!$procOpen) {
+			$reason = 'process';
 			$error = 'PHP darf keine Prozesse starten (proc_open ist per disable_functions gesperrt).';
 		} elseif ($nodePath === null) {
+			$reason = 'node';
 			$error = 'Keine Node.js-Laufzeit gefunden. Pfad in den Einstellungen eintragen.';
 		} elseif (!$installed) {
+			$reason = 'engine';
 			$error = 'Das Engine-Paket (scoreview-engine) fehlt neben dem Konverter (converter/node_modules).';
 		}
 
@@ -158,6 +166,7 @@ class LocalConverter {
 			'nodePath' => $nodePath,
 			'nodeVersion' => $nodeVersion,
 			'converterInstalled' => $installed,
+			'reason' => $reason,
 			'error' => $error,
 		];
 	}

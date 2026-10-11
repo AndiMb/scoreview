@@ -1,0 +1,2041 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: ScoreView\n"
+"Report-Msgid-Bugs-To: https://github.com/AndiMb/scoreview/issues\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php
+msgid "File not found or no access."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "You do not have permission to create shared notes for this file."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "Only leaders can address notes to voices."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php src/components/ScoreAnnotations.vue
+msgid "Choose at least one voice."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "You already have the maximum number of notes for this score. Delete some notes first."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "Note must not be empty."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "You do not have permission to change this note."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "Note not found or no access."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "Note is too long."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "Unknown stamp."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "Invalid note anchor."
+msgstr ""
+
+#: lib/Controller/ConversionController.php
+msgid "Not allowed to convert this score again."
+msgstr ""
+
+#: lib/Controller/ConversionController.php lib/Controller/EngineController.php
+msgid "Requested file does not exist."
+msgstr ""
+
+#: lib/Controller/ConversionController.php
+msgid "Conversion not finished yet."
+msgstr ""
+
+#: lib/Controller/FollowController.php lib/Controller/LeaderController.php
+msgid "Only leaders of this score can do that."
+msgstr ""
+
+#: lib/Controller/FollowController.php
+msgid "No “Follow me” session is running for this score."
+msgstr ""
+
+#: lib/Controller/FollowController.php
+msgid "Another leader is leading this session. Take it over first."
+msgstr ""
+
+#: lib/Controller/FollowController.php
+msgid "This position or loop does not exist."
+msgstr ""
+
+#: lib/Controller/FollowController.php
+msgid "Another leader changed the session at the same moment. Please try again."
+msgstr ""
+
+#: lib/Controller/LeaderController.php
+msgid "Only people who can open this score can lead it."
+msgstr ""
+
+#: lib/Controller/LeaderController.php
+msgid "The owner always leads the score and cannot be removed."
+msgstr ""
+
+#: lib/Controller/LeaderController.php
+msgid "This person is not a leader of this score."
+msgstr ""
+
+#: lib/Controller/PageController.php
+msgid "The offline page is turned off on this server."
+msgstr ""
+
+#: lib/Controller/PageController.php
+msgid "ScoreView offline"
+msgstr ""
+
+#: lib/Controller/PracticeTrackController.php
+msgid "Saving here is not possible from the mobile app."
+msgstr ""
+
+#: lib/Controller/PracticeTrackController.php
+msgid "This is not an MP3 file."
+msgstr ""
+
+#: lib/Controller/PracticeTrackController.php
+msgid "A file with this name already exists."
+msgstr ""
+
+#: lib/Controller/PracticeTrackController.php
+msgid "You cannot save files in this folder."
+msgstr ""
+
+#: lib/Controller/PracticeTrackController.php
+msgid "Not enough storage space."
+msgstr ""
+
+#: lib/Controller/PracticeTrackController.php
+msgid "Invalid file name or folder."
+msgstr ""
+
+#: lib/Controller/PracticeTrackController.php
+msgid "The practice track is larger than allowed ({mb} MB)."
+msgstr ""
+
+#: lib/Controller/PreferenceController.php
+msgid "Not logged in."
+msgstr ""
+
+#: lib/Controller/RecordingController.php
+msgid "The recording is longer than the %s minutes allowed on this server."
+msgstr ""
+
+#: lib/Controller/RecordingController.php
+msgid "The recording is longer than the %s seconds allowed on this server."
+msgstr ""
+
+#: lib/Controller/RecordingController.php
+msgid "This is not a recording made with ScoreView."
+msgstr ""
+
+#: lib/Controller/RecordingController.php
+msgid "You already have the maximum number of recordings for this score. Replace the oldest one or delete one first."
+msgstr ""
+
+#: lib/Controller/RecordingController.php
+msgid "Your recordings use all the storage allowed per person. Delete older recordings first."
+msgstr ""
+
+#: lib/Controller/RecordingController.php
+msgid "The storage for recordings on this server is full. Please tell your administrator."
+msgstr ""
+
+#: lib/Controller/RecordingController.php
+msgid "Recording not found."
+msgstr ""
+
+#: lib/Controller/SetlistController.php
+msgid "You are not allowed to change this setlist."
+msgstr ""
+
+#: lib/Controller/SetlistController.php
+msgid "The setlist was changed in the meantime. Please reload it and try again."
+msgstr ""
+
+#: lib/Controller/SetlistController.php
+msgid "A setlist with this name already exists."
+msgstr ""
+
+#: lib/Controller/SetlistController.php
+msgid "The file is too large for a setlist."
+msgstr ""
+
+#: lib/Controller/SetlistController.php src/components/SetlistEditor.vue
+msgid "The setlist could not be saved."
+msgstr ""
+
+#: lib/Controller/SettingsController.php
+msgid "Only administrators can change the Node.js path, the conversion service and the SoundFont source."
+msgstr ""
+
+#: lib/Controller/SettingsController.php
+msgid "The Node.js path must be empty or an absolute path to a program named node or nodejs."
+msgstr ""
+
+#: lib/Controller/SettingsController.php
+msgid "Addresses for the conversion service and the SoundFont source must start with http:// or https://."
+msgstr ""
+
+#: lib/Controller/SoundFontController.php
+msgid "The server could not provide the SoundFont. The ScoreView status in the administration settings shows why."
+msgstr ""
+
+#: lib/Service/HealthService.php
+msgid "PHP is not allowed to start processes (proc_open is blocked by disable_functions)."
+msgstr ""
+
+#: lib/Service/HealthService.php
+msgid "No Node.js runtime found. Enter its path in the settings."
+msgstr ""
+
+#: lib/Service/HealthService.php
+msgid "The engine package (scoreview-engine) is missing next to the converter (converter/node_modules)."
+msgstr ""
+
+#: lib/Service/PracticeTrackService.php
+msgid "Practice tracks"
+msgstr ""
+
+#: lib/Settings/Section.php src/components/AdminSettings.vue
+msgid "ScoreView"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "How scores are converted into pages, MIDI and timing data. Both ways produce the same result; they differ in what the server needs."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "On this server, without a container (MuseScore as WebAssembly, needs Node.js) – default"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Sidecar container (MuseScore 4 in its own container)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Only administrators can change the sidecar connection, the path to node and the SoundFont download URL."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Sidecar URL"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Shared secret"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Leave empty to keep the current secret."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Path to node (optional)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Leave empty to search the usual locations. Node.js 18 or newer is required, and PHP must be allowed to start processes."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Convert new/changed scores immediately (instead of on first open)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Without effect right now: scores are converted in the browser, and nothing is stored on the server that could be prepared in advance."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "SoundFont download URL (SF2/SF3, optional)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Leave empty for the default (FluidR3Mono_GM, about 23 MB). Without a sidecar there is no SoundFont on the server, so the server downloads this file once and then delivers it itself - the address only needs to be reachable from the server, and needs no CORS."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Custom SoundFont URL (SF2/SF3, optional)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Leave empty: the app delivers the SoundFont itself. Only fill in to have the browser load a different SoundFont directly - that address must then be reachable from the browser and allow CORS."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Rehearsal and concert"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Leaders and “Follow me” (the leader sends position, loop and starting note to all devices)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Polling interval for “Follow me” (ms)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Own recordings (only the person recording can hear them)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Allowed: {min}–{max}. Default: {default}."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Intonation feedback while singing"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Practising on the go"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Practice tracks as MP3 files in Files"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Maximum size of one practice track (MB)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Offline page (scores and setlists saved in the browser)"
+msgstr ""
+
+#: src/components/AdminSettings.vue src/components/ScoreAnnotations.vue
+msgid "Save"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Saved"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Error: {message}"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Status"
+msgstr ""
+
+#: src/components/AdminSettings.vue src/components/OfflineApp.vue src/components/ScoreStatus.vue
+msgid "Loading…"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Refresh"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Run conversion self-test"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "The self-test converts a small bundled score with the selected conversion path and checks that MuseScore still returns what the app expects. Run it after a MuseScore version change."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "••••••• (set, leave empty = unchanged)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "not set yet"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Allowed: {min}–{max} ms. Higher means less server load, but jumps arrive later."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Below the default, every device costs about 50 ms of server CPU per request, only while a session is running."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Recordings per person and score"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Maximum length of one recording (seconds)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Storage for recordings per person (MB)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Storage for recordings on this server (MB)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Conversion"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Fallback"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Scores are converted in the browser because this server cannot. Every device downloads the conversion engine once (about 14 MB), and nothing is cached on the server."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "SoundFont"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Background jobs (cron)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "mode {mode}, last run {age}"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "no run in the last 15 minutes ({age}) – conversions will stay pending"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "“Follow me”"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Conversions"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "{ready} ready, {pending} pending, {failed} failed"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Node.js {version}"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "on this server, {version}"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "not configured"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "notify_push is available: devices get jumps pushed instead of asking every {ms} ms."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Without notify_push every following device asks every {ms} ms, costing about 50 ms of CPU per request - with 40 devices about three cores during the session. From about {n} devices, installing notify_push is recommended."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "custom URL configured"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "cached copy in use"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "not fetched yet – the server downloads it on first playback ({url})"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "no SoundFont available"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "never"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "{n} s ago"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "{n} min ago"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "MuseScore {version} works as expected ({pages} page(s), {events} events, {seconds} s)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Self-test failed."
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Playback highlight"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Colour the sounding notes"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Bar at the sounding position"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Highlight colour"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Own colour"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Score colours"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Follow the Nextcloud theme"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Dark notes on white"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Light notes on dark"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Rendered by"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Score written with MuseScore {version}"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Discards the stored conversion and renders the score again with the current version of the app."
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Convert again"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Playback diagnostics"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Output latency"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "measured {measured}, reported {reported}, by hand {manual}"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Audio output"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Dropouts"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "none – the score cursor runs without sound"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Frame rate"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Red"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Orange"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Magenta"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Violet"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Green"
+msgstr ""
+
+#: src/components/AppearanceControls.vue
+msgid "Blue"
+msgstr ""
+
+#: src/components/CoachControls.vue
+msgid "Choose your part first – the coach plays it on the piano."
+msgstr ""
+
+#: src/components/CoachControls.vue
+msgid "My part on the piano, on the right"
+msgstr ""
+
+#: src/components/CoachControls.vue
+msgid "Other parts"
+msgstr ""
+
+#: src/components/FollowBadge.vue
+msgid "Back to the leader"
+msgstr ""
+
+#: src/components/FollowBadge.vue
+msgid "You are leading “Follow me” · disconnected"
+msgstr ""
+
+#: src/components/FollowBadge.vue
+msgid "You are leading “Follow me”"
+msgstr ""
+
+#: src/components/FollowBadge.vue
+msgid "Following: {name} · disconnected"
+msgstr ""
+
+#: src/components/FollowBadge.vue
+msgid "Following: {name} · connected"
+msgstr ""
+
+#: src/components/FollowBadge.vue
+msgid "Not following {name} · disconnected"
+msgstr ""
+
+#: src/components/FollowBadge.vue
+msgid "Not following {name}"
+msgstr ""
+
+#: src/components/LayoutControls.vue src/components/ScoreViewer.vue
+msgid "Layout"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "Pages"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "System band (staves side by side, for phones)"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "Lyrics only"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Leaders"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Remove {name} as leader"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "No leaders yet."
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Appoint a leader"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Search by name"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Appoint {name} as leader"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Appoint"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Nobody found. Only people who can open this score can lead it."
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Leaders can appoint other leaders."
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Follow me"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Sending…"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Everyone who has this score open follows the position, loop and starting note you send."
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Start “Follow me”"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "{name} is leading “Follow me”."
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Take over"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "End session"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Send my position"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Send loop"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Clear loop for everyone"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Starting note for everyone"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Send a rehearsal mark"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Everyone to rehearsal mark {mark} (measure {n})"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "End “Follow me”"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "Leaders can start “Follow me”: everyone then follows their position."
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "owner"
+msgstr ""
+
+#: src/components/LeaderPanel.vue
+msgid "you"
+msgstr ""
+
+#: src/components/LyricsView.vue
+msgid "This part has no lyrics."
+msgstr ""
+
+#: src/components/MicIndicator.vue src/components/RecordingPanel.vue
+msgid "Recording"
+msgstr ""
+
+#: src/components/MicIndicator.vue src/components/RecordingPanel.vue
+msgid "Intonation"
+msgstr ""
+
+#: src/components/MicIndicator.vue
+msgid "Score following"
+msgstr ""
+
+#: src/components/MicIndicator.vue
+msgid "Microphone on for: {purpose}. Tap to turn it off."
+msgstr ""
+
+#: src/components/NoteNameControls.vue src/components/ScoreViewer.vue
+msgid "Note names"
+msgstr ""
+
+#: src/components/NoteNameControls.vue
+msgid "Only my part"
+msgstr ""
+
+#: src/components/NoteNameControls.vue
+msgid "The names show the written notes; the sound is transposed."
+msgstr ""
+
+#: src/components/NoteNameControls.vue
+msgid "Tap a note to hear it while playback is stopped."
+msgstr ""
+
+#: src/components/NoteNameControls.vue
+msgid "Off"
+msgstr ""
+
+#: src/components/NoteNameControls.vue
+msgid "German (C D E F G A H)"
+msgstr ""
+
+#: src/components/NoteNameControls.vue
+msgid "English (C D E F G A B)"
+msgstr ""
+
+#: src/components/NoteNameControls.vue
+msgid "Fixed do (do = C)"
+msgstr ""
+
+#: src/components/NoteNameControls.vue
+msgid "Movable do (do = key note)"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Back to the list"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Saved for offline use"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Offline"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "This browser cannot keep scores for offline use."
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Nothing saved for offline use yet"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Open a score or setlist in Files and choose “Save for offline use” in the View group."
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Setlist with {count} pieces"
+msgstr ""
+
+#: src/components/OfflineApp.vue src/components/ScoreViewer.vue
+msgid "Score"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Open"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Remove"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "{size} used in total."
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "The browser may delete these files when space runs low. Check again before a concert."
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Removed by the browser – save it again"
+msgstr ""
+
+#: src/components/OfflineApp.vue src/components/PinControls.vue
+msgid "Checking…"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Updated"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "Up to date"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "May be outdated"
+msgstr ""
+
+#: src/components/OfflineApp.vue
+msgid "{size} MB"
+msgstr ""
+
+#: src/components/PinControls.vue src/composables/useOffline.js
+msgid "Open every piece once until it is shown, then try again."
+msgstr ""
+
+#: src/components/PinControls.vue
+msgid "Needs about {size} MB of {free} MB free in this browser."
+msgstr ""
+
+#: src/components/PinControls.vue
+msgid "Needs about {size} MB in this browser."
+msgstr ""
+
+#: src/components/PinControls.vue src/components/RecordingPanel.vue
+msgid "Save again"
+msgstr ""
+
+#: src/components/PinControls.vue src/components/ScoreViewer.vue
+msgid "Save for offline use"
+msgstr ""
+
+#: src/components/PinControls.vue
+msgid "The whole setlist"
+msgstr ""
+
+#: src/components/PinControls.vue
+msgid "Without a network, open the offline page. Open it once now so the browser knows it."
+msgstr ""
+
+#: src/components/PinControls.vue
+msgid "Offline page"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "The track uses what you hear now: mixer, coach, tempo and transposition."
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "With metronome"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Only the loop (measures {from}–{to})"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Save to"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Next to the score"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Folder: {name}"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Choose a folder…"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue src/components/ScoreViewer.vue
+msgid "Save as audio file"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Tracks for all parts"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "One coach track per part, saved for everyone in a folder of practice tracks next to the score. Existing tracks are replaced."
+msgstr ""
+
+#: src/components/PracticeExportControls.vue src/components/RecordingPanel.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue src/components/SetlistEditor.vue
+msgid "Cancel"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "“{name}” already exists."
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Replace"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Save as “{name}”"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Saved:"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue src/components/RecordingPanel.vue
+msgid "Saving…"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Rendering…"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Choose a folder"
+msgstr ""
+
+#: src/components/PracticeExportControls.vue
+msgid "Choose"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Open in browser"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Own recordings"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Audio stays on this device – except when you save a recording. Saved recordings can only be heard by you."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "With accompaniment"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Count-in"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "You already have {max} recordings of this score. Replace the oldest one?"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Replace oldest"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Stop recording ({time})"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Record"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Use headphones: from a loudspeaker the accompaniment ends up in the recording."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "The recording has not been saved: {error}"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "It is kept until you reload the page."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Stop"
+msgstr ""
+
+#: src/components/RecordingPanel.vue src/components/ScoreViewer.vue
+msgid "Play"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Discard"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "with accompaniment"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "without accompaniment"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Stop listening"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Listen along with the score"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Check intonation"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Delete recording"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "No recordings of this score yet."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Volume of the recording"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Accompaniment"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Volume of the accompaniment"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Choose your voice first: tap the voice symbol next to your part in the mixer."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Stop live intonation"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Live intonation"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Use headphones. From a loudspeaker the accompaniment reaches the microphone, and the notes cannot be evaluated."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Analysing the recording ({percent}%)…"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "{total} notes checked, {problems} off, {na} not evaluable."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Hide intonation result"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Pitch curve of this note"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "No note was off by more than 25 cents."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "The microphone is not available here. In the Nextcloud app it cannot be used; in a browser it may have been blocked for this site."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "No microphone was found."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "The microphone is being used by another application."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "The microphone could not be started."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Measure {measure}, {cents} cents"
+msgstr ""
+
+#: src/components/RecordingPanel.vue src/components/ScorePage.vue
+msgid "{cents} cents"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "+ At current position"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "New notes and stamps are for"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Private"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Shared with everyone who has access to this file"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Shared"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Voices"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Only singers of the chosen voices see it"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Stamps"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Only mine"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "No notes yet. Click a note or use \"+ At current position\" to add one."
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
+msgid "Measure {n}"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Note…"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "(orphaned)"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "by {name}"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "From the leader"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Leader"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Leader {name}"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Voice no longer in the score ({voices}) – shown to everyone"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "For {voices}"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Edit"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
+msgid "Delete"
+msgstr ""
+
+#: src/components/ScoreBar.vue
+msgid "Show playback controls"
+msgstr ""
+
+#: src/components/ScoreBar.vue
+msgid "Tools"
+msgstr ""
+
+#: src/components/ScoreLockButton.vue
+msgid "Performance mode is on – hold for one second to leave"
+msgstr ""
+
+#: src/components/ScoreLockButton.vue
+msgid "Performance mode: only page turning and zoom stay active"
+msgstr ""
+
+#: src/components/ScoreMixer.vue
+msgid "Volume: {name}"
+msgstr ""
+
+#: src/components/ScoreMixer.vue
+msgid "Mute: {name}"
+msgstr ""
+
+#: src/components/ScoreMixer.vue
+msgid "Solo: {name}"
+msgstr ""
+
+#: src/components/ScoreMixer.vue
+msgid "My voice: {name}"
+msgstr ""
+
+#: src/components/ScoreMixer.vue
+msgid "Boost this voice, keep the others audible but quiet"
+msgstr ""
+
+#: src/components/ScoreModal.vue
+msgid "This setlist has no score you can open yet. Add scores and save."
+msgstr ""
+
+#: src/components/ScorePage.vue
+msgid "This page could not be loaded ({error})."
+msgstr ""
+
+#: src/components/ScorePage.vue
+msgid "Try again"
+msgstr ""
+
+#: src/components/ScorePage.vue
+msgid "Note for {voices}"
+msgstr ""
+
+#: src/components/ScorePage.vue
+msgid "Note"
+msgstr ""
+
+#: src/components/ScorePage.vue
+msgid "Rest"
+msgstr ""
+
+#: src/components/ScorePage.vue
+msgid "Not evaluable"
+msgstr ""
+
+#: src/components/ScorePanel.vue src/components/StandaloneFrame.vue
+msgid "Close"
+msgstr ""
+
+#: src/components/ScoreSpeedTrainer.vue
+msgid "Speed trainer"
+msgstr ""
+
+#: src/components/ScoreSpeedTrainer.vue
+msgid "Start (BPM)"
+msgstr ""
+
+#: src/components/ScoreSpeedTrainer.vue
+msgid "Target (BPM)"
+msgstr ""
+
+#: src/components/ScoreSpeedTrainer.vue
+msgid "Step"
+msgstr ""
+
+#: src/components/ScoreSpeedTrainer.vue
+msgid "Stop speed trainer"
+msgstr ""
+
+#: src/components/ScoreSpeedTrainer.vue
+msgid "Start speed trainer"
+msgstr ""
+
+#: src/components/ScoreSpeedTrainer.vue
+msgid "Pass {n} at {bpm} BPM"
+msgstr ""
+
+#: src/components/ScoreSpeedTrainer.vue
+msgid "Each pass of the loop gets faster by one step until the target is reached. Moving the tempo slider ends the trainer."
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "for {voices}"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Breath mark"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Caesura"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Pianissimo"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Piano"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Mezzo piano"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Mezzo forte"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Forte"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Fortissimo"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Crescendo"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Diminuendo"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Cue"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Attention"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Fermata"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "Ritardando"
+msgstr ""
+
+#: src/components/ScoreStamps.vue
+msgid "A tempo"
+msgstr ""
+
+#: src/components/ScoreStartTone.vue
+msgid "Key note – sounds while held"
+msgstr ""
+
+#: src/components/ScoreStartTone.vue
+msgid "Starting note of my voice – sounds while held"
+msgstr ""
+
+#: src/components/ScoreStatus.vue
+msgid "Converting…"
+msgstr ""
+
+#: src/components/ScoreStatus.vue
+msgid "Error"
+msgstr ""
+
+#: src/components/ScoreStatus.vue
+msgid "Technical detail"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Pause"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Playback position"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Measure"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Measure – enter a number or a rehearsal mark (C, C+3) and press Enter to jump there"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Measure – enter a number and press Enter to jump there"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Rehearsal marks"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Go to rehearsal mark {mark} (measure {n})"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Practice"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Loop"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Tempo and metronome"
+msgstr ""
+
+#: src/components/ScoreViewer.vue src/components/TempoControls.vue
+msgid "Metronome"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Starting note"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Key note of the current key"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Key note"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "The first note of my voice"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "My note"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Mixer"
+msgstr ""
+
+#: src/components/ScoreViewer.vue src/composables/usePracticeExport.js
+msgid "Coach"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "On"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Transpose"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Recording and intonation"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "From measure"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "To measure"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Loop from current measure"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Loop on"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Loop off"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "View"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Appearance"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Show only my part"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Show notes in the score"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Notes"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Rehearsal"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Leaders and “Follow me”"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "New setlist"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Exit fullscreen"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Fullscreen"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "The leader has moved on to another piece."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Go there"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Loading sound ({percent}%)…"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Continue without sound"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "No sound: {reason}"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Playback is not available."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "The score cursor keeps running independently of this."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "On a phone, the system band shows the staves side by side in landscape."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Try the system band"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "No, thanks"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Lyrics view is not available: {reason} Showing the pages instead."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Tap the score where the {stamp} belongs."
+msgstr ""
+
+#: src/components/ScoreViewer.vue src/components/SetlistBar.vue
+msgid "Edit setlist"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Choose your voice first: tap the voice symbol next to your part."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "My voice on the right, the others on the left"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Band"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Text"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "This score has no lyrics."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "This score has too much text for the lyrics view."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "These pages were set without the data this view needs. A reconversion on this server cannot add it."
+msgstr ""
+
+#: src/components/SetlistBar.vue src/components/SetlistEditor.vue
+msgid "Setlist"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Previous piece"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Setlist {title}: show all pieces"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Next piece"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Leave setlist"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "This score is in the setlist “{title}”."
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Open setlist"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "This score is in {n} setlists."
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Choose setlist"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Dismiss"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Piece {n}/{total} · {title}"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Not a MuseScore file: {path}"
+msgstr ""
+
+#: src/components/SetlistBar.vue
+msgid "Not found or no access: {path}"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Name of the setlist"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "e.g. Autumn concert"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Saved as “{file}” next to the open score."
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "No pieces yet. Add scores below."
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Move up"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Move down"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Remove from setlist"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Here you can reorder or remove pieces. To add pieces, open the setlist in the browser."
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Add scores"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Choose from Files…"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Scores in this folder"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Filter"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Add {name}"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Create setlist"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Save setlist"
+msgstr ""
+
+#: src/components/SetlistEditor.vue
+msgid "Add"
+msgstr ""
+
+#: src/components/SystemBand.vue
+msgid "Preparing the system band…"
+msgstr ""
+
+#: src/components/SystemBand.vue
+msgid "No staves found on these pages."
+msgstr ""
+
+#: src/components/TempoControls.vue
+msgid "No tempo marking in the score – 120 BPM assumed."
+msgstr ""
+
+#: src/components/TempoControls.vue
+msgid "Tempo (BPM)"
+msgstr ""
+
+#: src/components/TempoControls.vue
+msgid "Every beat"
+msgstr ""
+
+#: src/components/TempoControls.vue
+msgid "Downbeat only"
+msgstr ""
+
+#: src/components/TempoControls.vue
+msgid "Sync picture and sound"
+msgstr ""
+
+#: src/components/TempoControls.vue
+msgid "Adjust while playing, until the highlighted note matches what you hear. Detected automatically: {ms} ms."
+msgstr ""
+
+#: src/components/ToolGroup.vue
+msgid "Back"
+msgstr ""
+
+#: src/components/TransposeControls.vue
+msgid "Lower by a semitone"
+msgstr ""
+
+#: src/components/TransposeControls.vue
+msgid "Raise by a semitone"
+msgstr ""
+
+#: src/components/TransposeControls.vue
+msgid "Only the sound is transposed. The notation is not."
+msgstr ""
+
+#: src/components/TransposeControls.vue
+msgid "Set by the leader for everyone. Changing it stops following."
+msgstr ""
+
+#: src/components/TransposeControls.vue
+msgid "Original key"
+msgstr ""
+
+#: src/components/TransposeControls.vue
+msgid "{value} semitones"
+msgstr ""
+
+#: src/components/TransposeControls.vue
+msgid "Sounds in {to} instead of {from}"
+msgstr ""
+
+#: src/components/ZoomControls.vue
+msgid "Zoom"
+msgstr ""
+
+#: src/components/ZoomControls.vue
+msgid "Fit page width"
+msgstr ""
+
+#: src/components/ZoomControls.vue
+msgid "Fit whole page"
+msgstr ""
+
+#: src/components/ZoomControls.vue
+msgid "Actual size"
+msgstr ""
+
+#: src/composables/useAnnotations.js
+msgid "Too many changes in a short time. Please wait a moment and try again."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "The conversion service could not be reached."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "The conversion service rejected the file."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "The conversion service is busy. Open the score again in a few minutes."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "This server is set up to convert scores itself, but cannot. The administration settings say what is missing."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "The score could not be converted."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "The conversion did not finish in time."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "The score contains no pages that could be converted."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "The score is too large to be converted."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "The conversion was never finished. On the server this usually means that background job processing (cron) is not running."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "This score is too large to be set in this browser, and this server cannot convert it itself."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "This score could not be set in this browser, and this server cannot convert it itself. Reloading the page may help."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "An unknown error occurred during conversion."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "Unknown error."
+msgstr ""
+
+#: src/composables/useFollowSession.js
+msgid "Could not start the session."
+msgstr ""
+
+#: src/composables/useFollowSession.js
+msgid "Could not end the session."
+msgstr ""
+
+#: src/composables/useFollowSession.js
+msgid "Could not send the position."
+msgstr ""
+
+#: src/composables/useFollowSession.js
+msgid "Could not send the loop."
+msgstr ""
+
+#: src/composables/useFollowSession.js
+msgid "Could not send the starting note."
+msgstr ""
+
+#: src/composables/useFollowSession.js
+msgid "Could not send the transposition."
+msgstr ""
+
+#: src/composables/useFollowSession.js
+msgid "Could not take the session to the next piece."
+msgstr ""
+
+#: src/composables/useIntonation.js
+msgid "The pitch analysis stopped unexpectedly."
+msgstr ""
+
+#: src/composables/useLeaders.js
+msgid "Could not appoint this person."
+msgstr ""
+
+#: src/composables/useLeaders.js
+msgid "Could not remove this leader."
+msgstr ""
+
+#: src/composables/useLeaders.js
+msgid "Search failed."
+msgstr ""
+
+#: src/composables/useMediaSession.js
+msgid "Playback continues while the screen is locked. For controls on the lock screen, save a practice track (Practice → Save as audio file)."
+msgstr ""
+
+#: src/composables/useOffline.js
+msgid "Saved for offline use."
+msgstr ""
+
+#: src/composables/useOffline.js
+msgid "Could not save this for offline use."
+msgstr ""
+
+#: src/composables/usePlayback.js
+msgid "Loading the SoundFont failed (HTTP {status})."
+msgstr ""
+
+#: src/composables/usePlayback.js
+msgid "Sound loading skipped."
+msgstr ""
+
+#: src/composables/usePlayback.js
+msgid "No SoundFont is available (see Settings → ScoreView)."
+msgstr ""
+
+#: src/composables/usePracticeExport.js
+msgid "Full mix"
+msgstr ""
+
+#: src/composables/usePracticeExport.js
+msgid "Excerpt"
+msgstr ""
+
+#: src/composables/usePracticeExport.js
+msgid "The sound is not loaded yet."
+msgstr ""
+
+#: src/composables/useRecorder.js
+msgid "The recordings could not be loaded."
+msgstr ""
+
+#: src/composables/useRecorder.js
+msgid "The recording could not be saved."
+msgstr ""
+
+#: src/composables/useRecorder.js
+msgid "The recording could not be deleted."
+msgstr ""
+
+#: src/composables/useRecorder.js
+msgid "The recording could not be played."
+msgstr ""
+
+#: src/composables/useRecorder.js
+msgid "No connection to the server."
+msgstr ""
+
+#: src/composables/useSetlist.js
+msgid "The setlist could not be loaded."
+msgstr ""
+
+#: src/composables/useStartTone.js
+msgid "The starting note needs sound, and no SoundFont is loaded."
+msgstr ""
+
+#: src/composables/useStartTone.js
+msgid "The score uses every MIDI channel, so there is none left for the starting note."
+msgstr ""
+
+#: src/lib/viewerTexts.js
+msgid "scoreview-engine on this server (MuseScore as WebAssembly)"
+msgstr ""
+
+#: src/lib/viewerTexts.js
+msgid "Sidecar container (MuseScore 4)"
+msgstr ""
+
+#: src/lib/viewerTexts.js
+msgid "this browser (MuseScore as WebAssembly)"
+msgstr ""
+
+#: src/lib/viewerTexts.js
+msgid "Unknown – converted by an earlier version of the app."
+msgstr ""
+
+#: src/lib/viewerTexts.js
+msgid "This is taking longer than usual. If it never finishes, check that background job processing (cron) is running on this server."
+msgstr ""
+
+#: src/lib/viewerTexts.js
+msgid "Loading score…"
+msgstr ""
+
+#: src/lib/viewerTexts.js
+msgid "Loading the conversion engine (about 14 MB, once per browser)…"
+msgstr ""
+
+#: src/lib/viewerTexts.js
+msgid "Laying out the score…"
+msgstr ""
+
+#: src/lib/viewerTexts.js
+msgid "Page {n} of {total}"
+msgstr ""
+
+#: src/viewer.js
+msgid "Open in ScoreView"
+msgstr ""
+
+#: src/viewer.js
+msgid "Open as setlist"
+msgstr ""

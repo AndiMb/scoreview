@@ -178,20 +178,42 @@ Lauf es erneut versucht.
 
 ## Übersetzungen
 
-Die Quellstrings sind Englisch, Deutsch ist eine im Repo gepflegte Übersetzung
-([E4](architecture.md#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung)):
-`l10n/de.json` für PHP (`$l->t('…')`), `l10n/de.js` für den Browser
-(`t('scoreview', '…')`).
+Die Quellstrings sind Englisch
+([E4](architecture.md#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung)).
+Die Übersetzungen liegen als PO unter `translationfiles/`: `templates/scoreview.pot`
+enthält alle Quellstrings, `de/scoreview.po` ist die gepflegte deutsche Fassung,
+und jede weitere Sprache steht in ihrem eigenen Ordner. `l10n/*.js` und
+`l10n/*.json` erzeugt `npm run build`; sie sind gitignored.
 
 Nach jedem neuen oder geänderten `t()`/`$l->t()`-Aufruf:
 
 ```sh
-npm run l10n:extract
+npm run l10n:extract   # .pot neu schreiben, alle .po abgleichen, prüfen
 ```
 
-Das meldet fehlende und verwaiste Übersetzungen. `npm test` schlägt sonst fehl –
-absichtlich: Nextclouds `JSResourceLocator` ignoriert eine fehlende
-Übersetzungsdatei stillschweigend, ein vergessener String fiele also nie auf.
+Neue Strings erscheinen dabei leer in **jeder** `.po`, nicht mehr benutzte
+verschwinden. Die deutsche Übersetzung trägt man danach in
+`translationfiles/de/scoreview.po` ein. `npm test` und CI (`npm run l10n:check`)
+schlagen fehl, wenn
+
+- die `.pot` nicht zum Quelltext passt,
+- in Deutsch ein String fehlt oder als `fuzzy` markiert ist,
+- eine Sprache einen verwaisten oder doppelten Eintrag trägt, abweichende
+  Platzhalter (`{name}`, `%s`) hat oder ihr Kopf (`Language`, `Plural-Forms`)
+  nicht zum Ordner passt.
+
+Lücken in anderen Sprachen sind kein Fehler; `l10n:check` nennt sie nur als
+Abdeckung. Absichtlich so streng: Nextclouds `JSResourceLocator` ignoriert eine
+fehlende Übersetzungsdatei stillschweigend, ein vergessener String fiele also
+nie auf.
+
+**Die Testinstanz braucht nach jeder Änderung an einer `.po` ein
+`npm run build`** – oder nur `npm run l10n:build`, wenn sich am Frontend nichts
+geändert hat. Das gilt auch für eine reine PHP-Änderung mit neuem `$l->t()`:
+Auch `l10n/de.json` entsteht erst beim Build.
+
+Wie Fremde eine Sprache beitragen, steht englisch in
+[docs/translating.md](translating.md).
 
 Nicht übersetzt wird Inhalt aus der Partitur selbst (Stimmennamen, Titel,
 Komponist, GM-Instrumentennamen) – das ist Material, keine Oberfläche.
@@ -199,7 +221,7 @@ Komponist, GM-Instrumentennamen) – das ist Material, keine Oberfläche.
 ## Testumgebung
 
 Zwei Container: eine Nextcloud-Instanz und `scoreview-sidecar`, aufgesetzt wie in
-[Installation](installation.md) beschrieben. Dabei zu wissen:
+[Installation](installation.de.md) beschrieben. Dabei zu wissen:
 
 - **PHP und Templates wirken sofort**, wenn `scoreview/` in den Container
   gemountet ist – kein Deploy-Schritt.
@@ -227,7 +249,7 @@ Chromium ohne Fenster mit einer WAV-Datei als Signalquelle prüfen:
 Ohne die dritte Angabe liefert Chromium einen Piepton. Die Seite muss dabei
 über `localhost` oder HTTPS kommen, und die Berechtigungsrichtlinie muss das
 Mikrofon freigeben
-([Troubleshooting](troubleshooting.md#das-mikrofon-ist-hier-nicht-verfügbar)).
+([Troubleshooting](troubleshooting.de.md#das-mikrofon-ist-hier-nicht-verfügbar)).
 Eine verweigerte Erlaubnis prüft man ohne die erste Angabe, indem das Skript
 die Anfrage ablehnt.
 
@@ -263,7 +285,7 @@ Worker.
 - Nach Änderungen an Routen oder ausgelieferten Assets die Version in
   `appinfo/info.xml` erhöhen (daran hängt das Cache-Busting) und `occ upgrade`
   laufen lassen. Der Grund steht unter
-  [Troubleshooting](troubleshooting.md#eine-neu-hinzugefügte-route-liefert-404).
+  [Troubleshooting](troubleshooting.de.md#eine-neu-hinzugefügte-route-liefert-404).
 
 ## Release
 
@@ -304,7 +326,7 @@ zwei Posten, die zur Laufzeit niemand braucht:
 | Posten | Größe | Warum entbehrlich |
 |---|---|---|
 | `scoreview.js` der Engine | 0,2 MB | Die globale Variante des Browser-Bundles; der Rückfall im Browser lädt `scoreview.mjs` als Modul ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)), und das geht mit |
-| `@librescore/fonts` | 4,2 MB | Nur für chinesische, japanische und koreanische Liedtexte; nachrüstbar über `cjk_font_dir` (siehe [Grenzwerte](limits.md#bekannte-lücken)) |
+| `@librescore/fonts` | 4,2 MB | Nur für chinesische, japanische und koreanische Liedtexte; nachrüstbar über `cjk_font_dir` (siehe [Grenzwerte](limits.de.md#bekannte-lücken)) |
 
 Das Paket bleibt damit unter den 20 MB. Die Action bricht ab, wenn der
 Tarball die 20 MB überschreitet – lieber dort auffallen als nach dem Hochladen.

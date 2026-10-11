@@ -15,6 +15,7 @@ use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\StreamResponse;
+use OCP\IL10N;
 use OCP\IRequest;
 use Psr\Log\LoggerInterface;
 
@@ -47,6 +48,7 @@ class SoundFontController extends Controller {
 		IRequest $request,
 		private SoundFontService $soundFontService,
 		private LoggerInterface $logger,
+		private IL10N $l,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -75,7 +77,15 @@ class SoundFontController extends Controller {
 			// 503, nicht 404: das SoundFont ist nicht "gibt es nicht",
 			// sondern "gerade nicht beschaffbar" - der Viewer zeigt die
 			// Meldung an und bleibt ohne Ton benutzbar (ScoreViewer.vue).
-			return new JSONResponse(['error' => $e->getMessage()], Http::STATUS_SERVICE_UNAVAILABLE);
+			//
+			// `error` is shown to the person playing, in their language; the
+			// cause itself is technical, written in whatever language the
+			// throwing code uses, and meant for the admin - it travels along
+			// as `detail` and is in the log above.
+			return new JSONResponse([
+				'error' => $this->l->t('The server could not provide the SoundFont. The ScoreView status in the administration settings shows why.'),
+				'detail' => $e->getMessage(),
+			], Http::STATUS_SERVICE_UNAVAILABLE);
 		}
 
 		$response = new StreamResponse($file->read());
