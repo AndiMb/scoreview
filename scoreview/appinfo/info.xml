@@ -109,7 +109,7 @@ side, a lyrics view of your own voice, note names on the notes, and scores
 with sound without a network via an offline page in the browser. "Follow me"
 takes everyone along to the next piece of the setlist.
 	]]></description>
-	<version>1.13.0</version>
+	<version>1.14.0</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>
