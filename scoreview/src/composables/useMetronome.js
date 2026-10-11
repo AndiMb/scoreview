@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { computeCountInDelaysMs, estimateBeatsInMeasure, resolveBeatInMeasure } from '../lib/metronome.js'
+import { computeCountInDelaysMs, estimateBeatsInMeasure, planCountIn, resolveBeatInMeasure } from '../lib/metronome.js'
 import { createMetronomeClick } from '../lib/metronomeClick.js'
 import { findStepIndex } from '../lib/timingSync.js'
 
@@ -63,6 +63,9 @@ export function useMetronome({
 	// klickt, auch wenn es derselbe Schlag ist.
 	let lastTimeMs = 0
 	let countInTimers = []
+	// Count-in clicks already handed to the audio clock - a cancelled
+	// count-in has to silence them, clearing the timers is not enough.
+	let countInClicks = []
 	let isCountingIn = false
 	// The count-in clicks BEFORE play(): without a hold the playback context
 	// may rest, and clicks scheduled on a suspended context sound late, all
@@ -81,6 +84,8 @@ export function useMetronome({
 		countInGeneration++
 		countInTimers.forEach((id) => clearTimeout(id))
 		countInTimers = []
+		countInClicks.forEach((c) => c.cancel())
+		countInClicks = []
 		isCountingIn = false
 		releaseCountIn?.()
 		releaseCountIn = null
@@ -165,25 +170,57 @@ export function useMetronome({
 			if (mine !== countInGeneration) {
 				return
 			}
-			scheduleCountIn(clicker, delays, beatIntervalMs)
+			scheduleCountIn(clicker, delays, beatIntervalMs, mine)
 		})
 	}
 
-	function scheduleCountIn(clicker, delays, beatIntervalMs) {
-		countInTimers = delays.map((delay, i) => setTimeout(() => clicker.click(i === 0), delay))
+	function scheduleCountIn(clicker, delays, beatIntervalMs, mine) {
+		const ctx = clicker.context()
+		const plan = planCountIn(ctx.currentTime, delays, beatIntervalMs)
+		countInClicks = plan.clickAt.map((at, i) => clicker.clickAt(i === 0, at))
 		// Die Wiedergabe startet einen Schlag NACH dem letzten Einzähler-Klick:
 		// würde sie auf dem letzten Klick starten, zählte der Einzähler bei
 		// vier Schlägen nur drei, und der vierte fiele mit der Eins zusammen.
 		// Am Dirigat ist das der Unterschied zwischen „und eins" und einem
 		// verschluckten Schlag.
-		countInTimers.push(setTimeout(() => {
+		// The moment comes from the audio clock the clicks run on, not from a
+		// wall-clock timer: if the clock starts late after waking, the clicks
+		// move with it, and so must the start.
+		atAudioTime(ctx, plan.playAt, mine, () => {
 			isCountingIn = false
 			countInTimers = []
+			countInClicks = []
 			play()
 			// play() keeps the context awake from here on.
 			releaseCountIn?.()
 			releaseCountIn = null
-		}, delays[delays.length - 1] + beatIntervalMs))
+		})
+	}
+
+	/**
+	 * Calls `fn` once the context clock reaches `at`. Re-checks instead of
+	 * trusting one timeout, since a just-woken clock may not run yet; a clock
+	 * that never gets there gives up a second after the planned moment.
+	 *
+	 * @param {AudioContext} ctx
+	 * @param {number} at context time in seconds
+	 * @param {number} mine count-in generation; a newer one cancels
+	 * @param {() => void} fn
+	 */
+	function atAudioTime(ctx, at, mine, fn) {
+		const deadline = performance.now() + (at - ctx.currentTime) * 1000 + 1000
+		const check = () => {
+			if (mine !== countInGeneration) {
+				return
+			}
+			const leftMs = (at - ctx.currentTime) * 1000
+			if (leftMs <= 4 || performance.now() > deadline) {
+				fn()
+				return
+			}
+			countInTimers.push(setTimeout(check, leftMs))
+		}
+		check()
 	}
 
 	function destroy() {

@@ -50,6 +50,36 @@ export function computeCountInDelaysMs(beatsInMeasure, beatIntervalMs) {
 }
 
 /**
+ * Lead before the first count-in click, in seconds. Room for the time between
+ * planning and the first render quantum, so even the first click lands on the
+ * grid instead of "as soon as possible".
+ */
+export const COUNT_IN_LEAD_S = 0.1
+
+/**
+ * Places a whole count-in on the AudioContext clock from one base: the clicks
+ * and the moment playback starts, one beat after the last click.
+ *
+ * All clicks share the base on purpose. Planned one by one ("now" when each
+ * beat is due), a context that has just woken from rest shifted only the
+ * first click: on Android over Bluetooth the output stream needs a moment to
+ * start after resume(), and the first click, due at once, sounded late while
+ * the others kept the grid - heard as a short gap between one and two. From
+ * one base a start-up delay moves every click alike.
+ *
+ * @param {number} nowSeconds AudioContext.currentTime at planning
+ * @param {number[]} delaysMs from computeCountInDelaysMs()
+ * @param {number} beatIntervalMs
+ * @param {number} [leadSeconds]
+ * @return {{ clickAt: number[], playAt: number }} context times in seconds
+ */
+export function planCountIn(nowSeconds, delaysMs, beatIntervalMs, leadSeconds = COUNT_IN_LEAD_S) {
+	const base = nowSeconds + leadSeconds
+	const clickAt = delaysMs.map((ms) => base + ms / 1000)
+	return { clickAt, playAt: base + (delaysMs[delaysMs.length - 1] + beatIntervalMs) / 1000 }
+}
+
+/**
  * Welcher Schlag zu einer Wiedergabezeit gerade dran ist - Basis
  * für den laufenden Metronomklick. Rein, damit die eigentliche Terminierung
  * (AudioContext-Vorlauf, Erkennen von Sprüngen) in ScoreViewer.vue bleibt.

@@ -4,6 +4,18 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Count-in from rest.** Since 1.14.0 the audio output rests while the
+  score is paused. On Android over Bluetooth the first count-in click then
+  came late and sounded too close to the second, because the output needs a
+  moment to start after waking. The whole count-in, together with the
+  moment playback starts, is now planned on the audio clock in one go, so a
+  slow start moves every click alike. Checked by ear on a Galaxy S23 with
+  Bluetooth headphones.
+
 ## [1.14.0] – 2026-10-11
 
 ### Added

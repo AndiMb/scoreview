@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeCountInDelaysMs, estimateBeatsInMeasure, resolveBeatInMeasure } from './metronome.js'
+import { computeCountInDelaysMs, COUNT_IN_LEAD_S, estimateBeatsInMeasure, planCountIn, resolveBeatInMeasure } from './metronome.js'
 
 describe('estimateBeatsInMeasure', () => {
 	it('schätzt 4 Schläge für einen Takt bei Viertel = 80 (wwimf-Messwert, 4/4)', () => {
@@ -31,6 +31,21 @@ describe('computeCountInDelaysMs', () => {
 
 	it('liefert mindestens einen Klick', () => {
 		expect(computeCountInDelaysMs(0, 500)).toEqual([0])
+	})
+})
+
+describe('planCountIn', () => {
+	it('puts every click on one grid from a common base, after the lead', () => {
+		const { clickAt } = planCountIn(10, [0, 500, 1000, 1500], 500)
+		expect(clickAt[0]).toBeCloseTo(10 + COUNT_IN_LEAD_S)
+		const gaps = clickAt.slice(1).map((t, i) => t - clickAt[i])
+		gaps.forEach((g) => expect(g).toBeCloseTo(0.5))
+	})
+
+	it('starts playback one beat after the last click', () => {
+		const { clickAt, playAt } = planCountIn(2, [0, 750, 1500], 750, 0.2)
+		expect(playAt - clickAt[clickAt.length - 1]).toBeCloseTo(0.75)
+		expect(playAt).toBeCloseTo(2 + 0.2 + 2.25)
 	})
 })
 

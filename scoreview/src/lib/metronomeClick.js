@@ -60,26 +60,47 @@ export function createMetronomeClick(getSharedContext = null) {
 	 */
 	function click(accent = false, delaySeconds = 0) {
 		const ctx = ensureContext()
+		return clickAt(accent, ctx.currentTime + Math.max(0, delaySeconds))
+	}
+
+	/**
+	 * A click at a fixed time on the context clock - for the count-in, which
+	 * plans all its clicks from one base (planCountIn in metronome.js).
+	 *
+	 * @param {boolean} accent
+	 * @param {number} at AudioContext time in seconds
+	 * @return {{ cancel: () => void }} silences a click that has not sounded
+	 */
+	function clickAt(accent, at) {
+		const ctx = ensureContext()
 		// A safeguard: whoever clicks should hold the context awake
 		// (useMetronome), but a click on a resting context would only sound
 		// once something else woke it - late, together with the next ones.
 		if (ctx.state === 'suspended') {
 			ctx.resume().catch(() => {})
 		}
+		const startAt = Math.max(ctx.currentTime, at)
 		if (ctx === ownContext) {
+			// Counted from when the click sounds, not from when it was planned:
+			// a count-in plans seconds ahead.
 			clearTimeout(ownRestTimer)
-			ownRestTimer = setTimeout(() => ownContext?.suspend().catch(() => {}), OWN_REST_MS)
+			ownRestTimer = setTimeout(() => ownContext?.suspend().catch(() => {}), OWN_REST_MS + (startAt - ctx.currentTime) * 1000)
 		}
-		const at = ctx.currentTime + Math.max(0, delaySeconds)
 		const osc = ctx.createOscillator()
 		const gain = ctx.createGain()
 		osc.frequency.value = accent ? 1500 : 1000
-		gain.gain.setValueAtTime(0.3, at)
-		gain.gain.exponentialRampToValueAtTime(0.001, at + 0.05)
+		gain.gain.setValueAtTime(0.3, startAt)
+		gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.05)
 		osc.connect(gain)
 		gain.connect(ctx.destination)
-		osc.start(at)
-		osc.stop(at + 0.06)
+		osc.start(startAt)
+		osc.stop(startAt + 0.06)
+		return { cancel: () => gain.disconnect() }
+	}
+
+	/** The context the clicks run on - the shared one if there is one. */
+	function context() {
+		return ensureContext()
 	}
 
 	// Nur der eigene wird geschlossen - der geteilte gehört der Wiedergabe
@@ -90,5 +111,5 @@ export function createMetronomeClick(getSharedContext = null) {
 		ownContext = null
 	}
 
-	return { click, destroy }
+	return { click, clickAt, context, destroy }
 }
