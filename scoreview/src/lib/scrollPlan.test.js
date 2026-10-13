@@ -50,6 +50,29 @@ describe('planAutoScroll', () => {
 		}
 	})
 
+	// Zoom auf etwa Systemhöhe: Das System passt nur ohne Rand ganz hinein.
+	// Es muss trotzdem vollständig ins Bild, nicht angeschnitten stehen bleiben.
+	it('holt ein System ganz ins Bild, das nur ohne Rand hineinpasst', () => {
+		const params = { cursorTop: 2200, cursorHeight: 970, scrollTop: 2000, viewportHeight: 1000 }
+		const target = planAutoScroll(params)
+		expect(target).not.toBeNull()
+		// Rand auf (1000 - 970) / 2 = 15px geschrumpft, also mittig
+		expect(target).toBe(2200 - 15)
+		expect(planAutoScroll({ ...params, scrollTop: target })).toBeNull()
+	})
+
+	it('lässt ein System, das genau den Viewport füllt, ohne Rand stehen', () => {
+		expect(planAutoScroll({ cursorTop: 2000, cursorHeight: 1000, scrollTop: 2000, viewportHeight: 1000 })).toBeNull()
+	})
+
+	// Systemwechsel bei einem System höher als der Viewport: Die neue Zeile
+	// beginnt 20 % unter der Oberkante. Stehen bleiben hieße 200px Leerraum
+	// oben und abgeschnittene Unterstimmen.
+	it('legt ein zu hohes System an, auch wenn es im oberen Viertel beginnt', () => {
+		const target = planAutoScroll({ cursorTop: 2200, cursorHeight: 1200, scrollTop: 2000, viewportHeight: 1000 })
+		expect(target).toBe(2200 - 24)
+	})
+
 	it('verschluckt den Rand nicht bei winzigem Viewport', () => {
 		// Rand ist auf 10% der Viewporthöhe gedeckelt (hier 12px statt 24px) -
 		// ohne den Deckel bliebe bei 120px Höhe kein Platz mehr übrig.

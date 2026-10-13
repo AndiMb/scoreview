@@ -52,7 +52,7 @@
 			<rect
 				v-for="(band, i) in cursorRects"
 				:key="`cursor-${i}`"
-				:ref="i === 0 ? 'cursor' : undefined"
+				ref="cursor"
 				class="score-page-cursor"
 				:class="{ 'score-page-cursor--hidden': notesHighlighted }"
 				:x="band.x"
@@ -1126,7 +1126,9 @@ export default {
 			// Seit der Cursor in Baender je Notenzeile zerfaellt, liefert Vue
 			// hier ein Array. Das Autoscroll will das ganze System im Blick
 			// behalten, nicht nur die oberste Zeile - deshalb die Huelle ueber
-			// alle Baender statt des ersten.
+			// alle Baender statt des ersten. Every band carries the ref for
+			// that: with it on the first band only, autoscroll placed the top
+			// staff and let the lower ones run off the bottom edge.
 			const baender = [this.$refs.cursor].flat().filter(Boolean)
 			if (baender.length === 0) {
 				return null

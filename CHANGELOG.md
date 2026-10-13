@@ -4,6 +4,16 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Following playback keeps the whole system in view.** At a zoom where a
+  system is about as tall as the screen, the view could stop on a new
+  system with empty space above it and the lowest staff cut off. A system
+  that fits on screen is now always shown whole; one taller than the screen
+  is aligned at its top edge.
+
 ## [1.14.2] – 2026-10-13
 
 ### Fixed

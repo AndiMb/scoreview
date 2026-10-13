@@ -26,13 +26,17 @@ const DEFAULT_MARGIN_PX = 24
  * Stattdessen richtet sich das Nachführen am tatsächlich verfügbaren Platz
  * entlang:
  *
- * - Passt das System mit Rand in den Viewport, wird es VOLLSTÄNDIG sichtbar
+ * - Passt das System in den Viewport, wird es VOLLSTÄNDIG sichtbar
  *   gehalten. Nachgeführt wird nur, wenn es das nicht ist - und dann so, dass
  *   `lead` des freien Platzes darüber und der Rest darunter liegt
- *   (Vorausschau auf das, was als Nächstes kommt).
- * - Passt es nicht (starker Zoom, Orchesterpartitur), wird die Oberkante
- *   angelegt: von oben lesen ist die einzige sinnvolle Lesart, wenn ohnehin
- *   nicht alles gleichzeitig sichtbar sein kann.
+ *   (Vorausschau auf das, was als Nächstes kommt). Der Rand schrumpft dabei
+ *   auf das, was übrig ist: Ein System, das nur MIT Rand nicht hineinpasst,
+ *   gehört trotzdem ganz ins Bild, nicht nach der Regel darunter
+ *   angeschnitten (Zoom auf etwa Systemhöhe - dort fehlte sonst die
+ *   Basszeile, während oben Platz frei blieb).
+ * - Ist es höher als der Viewport (starker Zoom, Orchesterpartitur), wird die
+ *   Oberkante angelegt: von oben lesen ist die einzige sinnvolle Lesart, wenn
+ *   ohnehin nicht alles gleichzeitig sichtbar sein kann.
  *
  * Beide Zweige sind stabil, und zwar nachrechenbar, nicht nur empirisch:
  * nach einem ausgeführten Nachführen erfüllt die neue Position die jeweilige
@@ -66,21 +70,25 @@ export function planAutoScroll({
 	// den ganzen sichtbaren Bereich auffressen.
 	const safeMargin = Math.min(margin, viewportHeight * 0.1)
 	const cursorBottom = cursorTop + cursorHeight
-	const freeSpace = viewportHeight - cursorHeight - 2 * safeMargin
 
-	if (freeSpace >= 0) {
-		const fullyVisible = cursorTop >= scrollTop + safeMargin
-			&& cursorBottom <= scrollTop + viewportHeight - safeMargin
+	if (cursorHeight <= viewportHeight) {
+		const fitMargin = Math.min(safeMargin, (viewportHeight - cursorHeight) / 2)
+		const freeSpace = viewportHeight - cursorHeight - 2 * fitMargin
+		const fullyVisible = cursorTop >= scrollTop + fitMargin
+			&& cursorBottom <= scrollTop + viewportHeight - fitMargin
 		if (fullyVisible) {
 			return null
 		}
-		return cursorTop - (safeMargin + freeSpace * lead)
+		return cursorTop - (fitMargin + freeSpace * lead)
 	}
 
-	// Höher als der Viewport: als "in Ordnung" gilt, dass die Oberkante im
-	// oberen Viertel steht - sonst würde jede Note in derselben, ohnehin nicht
-	// vollständig sichtbaren Zeile ein Nachführen auslösen.
-	if (cursorTop >= scrollTop - 1 && cursorTop <= scrollTop + viewportHeight * 0.25) {
+	// Höher als der Viewport: "in Ordnung" ist nur die angelegte Oberkante.
+	// Eine großzügigere Toleranz (früher: irgendwo im oberen Viertel) brachte
+	// nichts - die Hülle umfasst das ganze System, ihre Oberkante bleibt
+	// innerhalb einer Zeile also ohnehin stehen - und schadete genau beim
+	// Systemwechsel: Das neue System blieb mit leerem Raum darüber und
+	// abgeschnittenen Unterstimmen stehen.
+	if (cursorTop >= scrollTop - 1 && cursorTop <= scrollTop + safeMargin + 1) {
 		return null
 	}
 	return cursorTop - safeMargin
