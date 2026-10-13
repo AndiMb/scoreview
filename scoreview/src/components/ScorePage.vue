@@ -740,18 +740,22 @@ export default {
 		// Sichtbarwerden, entladen erst deutlich weiter weg. Ein einzelner
 		// Beobachter kann nur EINEN rootMargin haben, und mit nur einem waere
 		// die Seite an der Grenze abwechselnd geladen und entladen worden.
+		// The margins apply on all four sides: the system band (SystemBand.vue)
+		// scrolls sideways, and with no horizontal margin the next system only
+		// started loading once its frame was already on screen - it stayed
+		// white for the whole fetch and sanitize.
 		this.loadObserver = new IntersectionObserver((entries) => {
 			if (entries.some((e) => e.isIntersecting)) {
 				this.load()
 			}
-		}, { root: this.scrollRoot(), rootMargin: `${LOAD_MARGIN_PX}px 0px` })
+		}, { root: this.scrollRoot(), rootMargin: `${LOAD_MARGIN_PX}px` })
 		this.loadObserver.observe(this.$refs.root)
 
 		this.unloadObserver = new IntersectionObserver((entries) => {
 			if (entries.every((e) => !e.isIntersecting)) {
 				this.unload()
 			}
-		}, { root: this.scrollRoot(), rootMargin: `${UNLOAD_MARGIN_PX}px 0px` })
+		}, { root: this.scrollRoot(), rootMargin: `${UNLOAD_MARGIN_PX}px` })
 		this.unloadObserver.observe(this.$refs.root)
 	},
 

@@ -13,6 +13,10 @@ All notable changes to ScoreView. The format follows
   system with empty space above it and the lowest staff cut off. A system
   that fits on screen is now always shown whole; one taller than the screen
   is aligned at its top edge.
+- **No more white gaps in the system band.** The next system only started
+  loading once it was already on screen, and a system narrower than the
+  screen could leave the one after it blank until the band had scrolled
+  on. Systems now load ahead of the scroll position in both cases.
 
 ## [1.14.2] – 2026-10-13
 

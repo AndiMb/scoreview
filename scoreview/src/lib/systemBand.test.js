@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cropIndexAt, cropScale, lyricBaselines, lyricBottomsFor, systemCrops } from './systemBand.js'
+import { bandWindow, cropIndexAt, cropScale, lyricBaselines, lyricBottomsFor, systemCrops } from './systemBand.js'
 
 // Eine Seite 0..10000 x 0..14000 mit zwei Systemen; Linienabstand 25
 const viewBox = { minX: 0, minY: 0, width: 10000, height: 14000 }
@@ -85,5 +85,25 @@ describe('lyricBaselines und lyricBottomsFor', () => {
 		const systems = [{ top: 2000, bottom: 2600 }, { top: 4000, bottom: 4600 }]
 		expect(lyricBottomsFor(systems, lyricBaselines(svg))).toEqual([2931.446, 4931.4])
 		expect(lyricBottomsFor(systems, [])).toEqual([null, null])
+	})
+})
+
+describe('bandWindow', () => {
+	// Frames 500px wide with a 12px gap, screen 800px wide
+	const frames = Array.from({ length: 8 }, (_, i) => ({ left: i * 512, width: 500 }))
+
+	it('renders what is on screen plus one screen width either side', () => {
+		// on screen: 1000..1800, reach: 200..2600
+		expect(bandWindow(frames, 1000, 800)).toEqual({ from: 0, to: 5 })
+	})
+
+	it('includes the one after next when frames are narrower than the screen', () => {
+		expect(bandWindow(frames, 0, 800, 0)).toEqual({ from: 0, to: 1 })
+		expect(bandWindow(frames, 0, 800)).toEqual({ from: 0, to: 3 })
+	})
+
+	it('returns null when nothing is in reach', () => {
+		expect(bandWindow([], 0, 800)).toBeNull()
+		expect(bandWindow(frames, 99999, 800)).toBeNull()
 	})
 })

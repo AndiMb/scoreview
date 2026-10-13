@@ -6,8 +6,8 @@
 		nur den Ausschnitt zeigt. Cursor, Stempel, Notizen und Tonnamen
 		funktionieren dadurch unveraendert - sie liegen in Prozent der Seite.
 
-		Gerendert werden nur das sichtbare System und seine Nachbarn: jede
-		ScorePage traegt das ganze Seiten-SVG.
+		Gerendert werden nur die sichtbaren Systeme und ihre Nachbarn: jede
+		ScorePage traegt das ganze Seiten-SVG (see rendered()).
 	-->
 	<div ref="scroller" class="scoreview-band" @scroll.passive="onScroll">
 		<p v-if="crops.length === 0" class="scoreview-band-empty">
@@ -19,7 +19,7 @@
 			class="scoreview-band-system"
 			:style="frameStyle(crop)">
 			<div
-				v-if="Math.abs(crop.index - current) <= 1"
+				v-if="rendered(crop.index)"
 				class="scoreview-band-shift"
 				:style="shiftStyle(crop)">
 				<ScorePage
@@ -42,7 +42,7 @@ import { translate } from '@nextcloud/l10n'
 import ScorePage from './ScorePage.vue'
 import { BASE_PAGE_WIDTH_PX, parseViewBox } from '../lib/scoreLayout.js'
 import { findStaffBands, groupBandsIntoSystems } from '../lib/staffBands.js'
-import { cropIndexAt, cropScale, lyricBaselines, lyricBottomsFor, systemCrops } from '../lib/systemBand.js'
+import { bandWindow, cropIndexAt, cropScale, lyricBaselines, lyricBottomsFor, systemCrops } from '../lib/systemBand.js'
 
 /**
  * Vorlauf beim Mitscrollen: das System steht nicht ganz am Rand. Er steckt
@@ -99,6 +99,10 @@ export default {
 			viewBoxes: [],
 			heightPx: 300,
 			current: 0,
+			// Frames in reach of the screen (bandWindow), kept apart from
+			// `current` - see rendered().
+			windowFrom: 0,
+			windowTo: 1,
 			loading: false,
 		}
 	},
@@ -130,6 +134,8 @@ export default {
 	mounted() {
 		this.resize = new ResizeObserver(() => {
 			this.heightPx = Math.max(120, this.$refs.scroller?.clientHeight ?? 300)
+			// The frame widths follow the height - measure after they changed.
+			this.$nextTick(() => this.updateWindow())
 		})
 		this.resize.observe(this.$refs.scroller)
 	},
@@ -161,6 +167,7 @@ export default {
 					this.viewBoxes[p.page] = p.viewBox
 				}
 				this.crops = systemCrops(pages)
+				this.$nextTick(() => this.updateWindow())
 			} catch (err) {
 				// eslint-disable-next-line no-console
 				console.error('ScoreView: could not build the system band.', err)
@@ -207,6 +214,32 @@ export default {
 			this.goTo(this.current - 1)
 		},
 
+		/**
+		 * Whether a frame carries its ScorePage. The neighbours of `current`
+		 * stay in so that goTo() finds its target mounted before the glide
+		 * starts; the rest comes from the geometry.
+		 *
+		 * @param {number} index
+		 * @return {boolean}
+		 */
+		rendered(index) {
+			return Math.abs(index - this.current) <= 1
+				|| (index >= this.windowFrom && index <= this.windowTo)
+		},
+
+		updateWindow() {
+			const scroller = this.$refs.scroller
+			if (!scroller || this.crops.length === 0) {
+				return
+			}
+			const frames = [...scroller.children].map((el) => ({ left: el.offsetLeft, width: el.offsetWidth }))
+			const range = bandWindow(frames, scroller.scrollLeft, scroller.clientWidth)
+			if (range) {
+				this.windowFrom = range.from
+				this.windowTo = range.to
+			}
+		},
+
 		onScroll() {
 			const scroller = this.$refs.scroller
 			const left = scroller.scrollLeft + scroller.clientWidth * LEAD
@@ -217,6 +250,7 @@ export default {
 				}
 			}
 			this.current = index
+			this.updateWindow()
 		},
 
 		t(text, vars) {
@@ -228,6 +262,9 @@ export default {
 
 <style scoped>
 .scoreview-band {
+	/* Makes the band the offsetParent of its frames: their offsetLeft is
+	   then in the same coordinates as scrollLeft (onScroll, updateWindow). */
+	position: relative;
 	display: flex;
 	gap: 12px;
 	height: 100%;

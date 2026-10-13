@@ -108,6 +108,35 @@ export function cropIndexAt(crops, page, y) {
 }
 
 /**
+ * Which frames of the band to render: everything on screen plus `ahead`
+ * screen widths on either side. Going by geometry rather than by "current
+ * system +-1" matters twice: a frame narrower than the screen leaves the one
+ * after next visible, and while the band glides to the next system the
+ * current index still names the old one until the glide is nearly over.
+ *
+ * @param {Array<{left:number, width:number}>} frames in band coordinates (px)
+ * @param {number} scrollLeft
+ * @param {number} viewWidth
+ * @param {number} [ahead] lead in screen widths
+ * @return {{from:number, to:number}|null} inclusive index range, null if no frame is in reach
+ */
+export function bandWindow(frames, scrollLeft, viewWidth, ahead = 1) {
+	const start = scrollLeft - viewWidth * ahead
+	const end = scrollLeft + viewWidth * (1 + ahead)
+	let from = -1
+	let to = -1
+	frames.forEach((f, i) => {
+		if (f.left + f.width >= start && f.left <= end) {
+			if (from < 0) {
+				from = i
+			}
+			to = i
+		}
+	})
+	return from < 0 ? null : { from, to }
+}
+
+/**
  * Massstab, mit dem ein Ausschnitt die verfuegbare Hoehe fuellt - als
  * Seitenbreite in Pixeln, die ScorePage erwartet (dort ist alles relativ
  * zur Seitenbreite).
