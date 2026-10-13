@@ -10,6 +10,7 @@ use OCA\ScoreView\Service\SidecarException;
 use OCA\ScoreView\Service\SoundFontService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IL10N;
 use OCP\IRequest;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -39,9 +40,13 @@ class SoundFontControllerTest extends TestCase {
 		$this->soundFontService = $this->createMock(SoundFontService::class);
 	}
 
-	private function controller(): SoundFontController {
+	private function controller(string $requestedVersion = ''): SoundFontController {
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParam')->willReturnCallback(
+			static fn (string $key, mixed $default = null) => $key === 'v' ? $requestedVersion : $default,
+		);
 		return new SoundFontController(
-			$this->createMock(IRequest::class),
+			$request,
 			$this->soundFontService,
 			$this->createMock(LoggerInterface::class),
 			$this->l10n(),
@@ -79,5 +84,52 @@ class SoundFontControllerTest extends TestCase {
 			'error' => 'The server could not provide the SoundFont. The ScoreView status in the administration settings shows why.',
 			'detail' => $fehler->getMessage(),
 		], $response->getData());
+	}
+
+	/** getHeaders() needs the server - the header is in the field. */
+	private function header(Http\Response $response, string $name): ?string {
+		return (new \ReflectionProperty(Http\Response::class, 'headers'))->getValue($response)[$name] ?? null;
+	}
+
+	private function withDeliverableFile(string $version): void {
+		$file = $this->createMock(ISimpleFile::class);
+		$file->method('read')->willReturn(fopen('php://memory', 'rb'));
+		$file->method('getSize')->willReturn(3);
+		$this->soundFontService->method('getOrFetch')->willReturn($file);
+		$this->soundFontService->method('getVersion')->willReturn($version);
+	}
+
+	public function testUnveraenderlichNurUnterDerAktuellenVersion(): void {
+		$this->withDeliverableFile('url:0123456789ab');
+
+		$response = $this->controller('url:0123456789ab')->get();
+
+		$this->assertStringContainsString('immutable', $this->header($response, 'Cache-Control'));
+		$this->assertSame('url:0123456789ab', $response->getETag());
+	}
+
+	/**
+	 * @return array<string, array{string}>
+	 */
+	public static function fremdeVersionen(): array {
+		return [
+			// The status endpoint named the sidecar's previous version.
+			'alte Version' => ['alt'],
+			// Nothing fetched yet when the status was asked (soundFontUrl()).
+			'noch nichts geholt' => ['0'],
+			'ohne Parameter' => [''],
+		];
+	}
+
+	#[\PHPUnit\Framework\Attributes\DataProvider('fremdeVersionen')]
+	public function testUnterEinerAnderenVersionNurBisZurNaechstenNachfrage(string $angefragt): void {
+		// Otherwise the new file would be pinned for a year to the address of
+		// the old one - the very fault the version in the URL removes.
+		$this->withDeliverableFile('neu');
+
+		$response = $this->controller($angefragt)->get();
+
+		$this->assertSame('private, no-cache', $this->header($response, 'Cache-Control'));
+		$this->assertSame('neu', $response->getETag());
 	}
 }

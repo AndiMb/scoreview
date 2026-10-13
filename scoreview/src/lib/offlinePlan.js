@@ -190,6 +190,21 @@ export function isOutdated(entry, statusBody) {
 }
 
 /**
+ * Whether the server now names a different SoundFont than the one stored with
+ * the entry. Its address carries its version (ConversionController::
+ * soundFontUrl()), so a new sidecar image or download URL shows up here, and
+ * refreshing stores the new one and drops the old, once no entry needs it.
+ *
+ * @param {PinEntry} entry
+ * @param {object} statusBody frische Antwort von `status`
+ * @return {boolean}
+ */
+export function soundFontChanged(entry, statusBody) {
+	const url = statusBody?.soundFontUrl
+	return typeof url === 'string' && url !== '' && !entry.urls.includes(url)
+}
+
+/**
  * @param {string[]} urls
  * @param {PinEntry[]} others
  * @return {string[]} die URLs, die keiner der anderen Eintraege braucht

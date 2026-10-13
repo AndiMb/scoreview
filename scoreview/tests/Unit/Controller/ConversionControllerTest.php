@@ -9,6 +9,7 @@ use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
+use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Http;
 use OCP\BackgroundJob\IJobList;
@@ -64,6 +65,7 @@ class ConversionControllerTest extends TestCase {
 			$this->createMock(IURLGenerator::class),
 			$this->createMock(IAppConfig::class),
 			$l,
+			$this->createMock(SoundFontService::class),
 		);
 	}
 

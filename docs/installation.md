@@ -275,7 +275,12 @@ itself.
 The first request after a fresh installation transfers the SoundFont to the
 browser once: ~23 MB on path A (`FluidR3Mono_GM`), ~40 MB on path B
 (`MuseScore_General_Lite` from the sidecar image). After that, the server-side
-cache and `Cache-Control: immutable` take effect.
+cache and `Cache-Control: immutable` take effect. The SoundFont's address
+carries its version, so a different file – a new sidecar image, a changed
+download URL – reaches every browser without clearing any cache; each device
+then downloads it once more. On path B, the new version becomes known as soon
+as anything requests the SoundFont, at the latest the next device without a
+copy.
 
 The **Custom SoundFont URL** field is something else: an override where the
 **browser** loads directly from this address. It must then be reachable from

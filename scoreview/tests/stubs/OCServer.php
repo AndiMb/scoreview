@@ -42,6 +42,11 @@ namespace {
 					public function sort(array $scripts, array $deps): array {
 						return $scripts;
 					}
+
+					/** For Response::cacheFor(), which dates its Expires header. */
+					public function getTime(): int {
+						return time();
+					}
 				};
 			}
 		};

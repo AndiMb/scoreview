@@ -12,6 +12,7 @@ use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\PracticeTrackService;
+use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -72,6 +73,7 @@ class ConversionController extends Controller {
 		private IURLGenerator $urlGenerator,
 		private IAppConfig $appConfig,
 		private IL10N $l,
+		private SoundFontService $soundFontService,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -420,13 +422,21 @@ class ConversionController extends Controller {
 	 * Der leere Auslieferungszustand darf deshalb NICHT "kein Ton" bedeuten:
 	 * sonst waere die App fuer jeden stumm, der nicht selbst ein 40-MB-SF3
 	 * CORS-faehig hostet.
+	 *
+	 * The app's own address carries the SoundFont's version as `?v=`, like
+	 * the artifacts carry theirs (cacheBuster()): it is delivered `immutable`,
+	 * and without a version in the URL a browser kept the first SoundFont it
+	 * ever got, through any later change of sidecar image or download URL.
+	 * '0' stands for "not fetched yet"; SoundFontController does not let the
+	 * browser keep what it delivers under a version that is not current.
 	 */
 	private function soundFontUrl(): string {
 		$configured = trim($this->appConfig->getValueString(Application::APP_ID, 'soundfont_url'));
 		if ($configured !== '') {
 			return $configured;
 		}
-		return $this->urlGenerator->linkToRoute(Application::APP_ID . '.sound_font.get');
+		$version = $this->soundFontService->expectedVersion();
+		return $this->urlGenerator->linkToRoute(Application::APP_ID . '.sound_font.get', ['v' => $version !== '' ? $version : '0']);
 	}
 
 	/**

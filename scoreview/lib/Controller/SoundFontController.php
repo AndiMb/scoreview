@@ -95,7 +95,18 @@ class SoundFontController extends Controller {
 		if ($version !== '') {
 			$response->setETag($version);
 		}
-		$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
+		// `immutable` only under the address of what is delivered. The status
+		// endpoint may still name an older version (the sidecar's is only
+		// learnt while fetching, see SoundFontService::expectedVersion()), and
+		// a year-long promise under that address would pin the new file to an
+		// old name: such an answer is kept only until asked again - the ETag
+		// makes that a 304.
+		$requested = (string)$this->request->getParam('v', '');
+		if ($version !== '' && hash_equals($version, $requested)) {
+			$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
+		} else {
+			$response->addHeader('Cache-Control', 'private, no-cache');
+		}
 		return $response;
 	}
 }

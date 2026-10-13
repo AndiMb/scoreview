@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:12fd5bec25ec -->
+<!-- translation-of: installation.md sha256:f330cdc3aae2 -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -275,6 +275,11 @@ die Datei in ihrem IAppData-Cache ab und liefert sie selbst aus.
 Der erste Abruf nach einer Neuinstallation überträgt das SoundFont einmal zum
 Browser: ~23 MB bei Weg A (`FluidR3Mono_GM`), ~40 MB bei Weg B
 (`MuseScore_General_Lite` aus dem Sidecar-Image). Danach greifen der serverseitige Cache und `Cache-Control: immutable`.
+Die Adresse des SoundFonts trägt seine Version. Eine andere Datei – ein neues
+Sidecar-Image, eine geänderte Download-URL – erreicht deshalb jeden Browser,
+ohne dass ein Cache geleert werden muss; jedes Gerät lädt sie dann einmal neu.
+Auf Weg B wird die neue Version bekannt, sobald irgendetwas das SoundFont
+abruft, spätestens beim nächsten Gerät ohne Kopie.
 
 Das Feld **Eigene SoundFont-URL** ist etwas anderes: eine Übersteuerung, bei der der
 **Browser** direkt von dieser Adresse lädt. Sie muss dann vom Browser aus

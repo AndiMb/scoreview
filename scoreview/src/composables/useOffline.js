@@ -11,6 +11,7 @@ import {
 	planForSetlist,
 	removeEntry,
 	sharedUrls,
+	soundFontChanged,
 	splitByUser,
 	upsertEntry,
 } from '../lib/offlinePlan.js'
@@ -322,7 +323,7 @@ export function useOffline({ uid }) {
 			for (const id of members) {
 				const status = (await axios.get(apiUrlsFor(generateUrl, id).status, { headers: { 'X-ScoreView-Network-Only': '1' } })).data
 				const known = { type: 'score', etag: entry.etags?.[id] ?? entry.etag }
-				if (isOutdated(known, status)) {
+				if (isOutdated(known, status) || soundFontChanged(entry, status)) {
 					outdated = true
 				}
 			}

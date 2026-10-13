@@ -185,6 +185,19 @@ gibt – der `etag` benennt die Fassung der Partitur, der Zeitstempel die
 Konvertierung dieser Fassung. Der Server wertet den Parameter nicht aus; er
 löst den `etag` ohnehin aus der Datei auf.
 
+Dasselbe gilt für das SoundFont, das die App selbst ausliefert: Seine Adresse
+trägt `?v=<Version>` (`ConversionController::soundFontUrl()`). Beim
+Download-Weg ist die Version der Hash der Download-URL und ohne Abruf bekannt;
+beim Sidecar ist es der zuletzt geholte Stand, weil der Statusendpunkt bei jeder
+Abfrage nicht den Sidecar fragen soll – ein neues Image wird also erst bekannt,
+wenn jemand das SoundFont wieder abruft. Anders als bei den Artefakten wertet
+der Server den Parameter aus: `immutable` gibt es nur, wenn er der aktuellen
+Version entspricht. Sonst bekäme die neue Datei für ein Jahr die Adresse der
+alten; eine solche Antwort gilt nur bis zur nächsten Nachfrage, die das `ETag`
+zu einem 304 macht. Die Offline-Seite wertet eine neue SoundFont-Adresse als
+veralteten Eintrag (`soundFontChanged`) und räumt die alte Datei, sobald kein
+Eintrag sie mehr nennt.
+
 Die Spalte `format_version` in `scoreview_conversions` hält fest, mit welchem
 Cache-Format ein Eintrag geschrieben wurde. Ein Eintrag mit älterer Version –
 oder mit fehlender Cache-Datei – gilt automatisch als „nicht fertig" und stößt

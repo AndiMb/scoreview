@@ -4,6 +4,18 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **A changed SoundFont now reaches every browser.** The SoundFont the app
+  delivers itself was cached by browsers for a year under one fixed address,
+  so after a new sidecar image or a changed download URL every device that
+  had played before kept the old one. Its address now carries its version,
+  like the score artifacts do; each device downloads the SoundFont once more
+  after this update. The offline page notices a new SoundFont, stores it and
+  removes the old one.
+
 ## [1.14.1] – 2026-10-11
 
 ### Fixed

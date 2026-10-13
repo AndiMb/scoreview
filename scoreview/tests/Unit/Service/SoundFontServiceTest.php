@@ -241,4 +241,31 @@ class SoundFontServiceTest extends TestCase {
 		$this->withConfig(['soundfont_fetch_url' => 'https://example.invalid/eigenes.sf3']);
 		$this->assertSame('https://example.invalid/eigenes.sf3', $this->lokalerDienst()->getFetchUrl());
 	}
+
+	public function testDieErwarteteVersionFolgtAusDerDownloadUrlOhneZuLaden(): void {
+		// The status endpoint asks on every poll: no download, no sidecar
+		// request - and a changed URL is a new version at once, even while
+		// the old file is still the one in the cache.
+		$url = 'https://example.invalid/neu.sf3';
+		$this->withConfig([
+			'soundfont_fetch_url' => $url,
+			'soundfont_cache_version' => 'url:' . substr(sha1('https://example.invalid/alt.sf3'), 0, 12),
+		]);
+		$this->sidecar->expects($this->never())->method('fetchSoundFontInfo');
+		$this->clientService->expects($this->never())->method('newClient');
+
+		$this->assertSame('url:' . substr(sha1($url), 0, 12), $this->service()->expectedVersion());
+	}
+
+	public function testDieErwarteteVersionDesSidecarsIstDieZuletztGeholte(): void {
+		$this->withConfig(['soundfont_cache_version' => 'abc123']);
+		$this->sidecar->expects($this->never())->method('fetchSoundFontInfo');
+
+		$this->assertSame('abc123', $this->service()->expectedVersion());
+	}
+
+	public function testOhneGeholtenStandIstDieErwarteteVersionLeer(): void {
+		$this->withConfig([]);
+		$this->assertSame('', $this->service()->expectedVersion());
+	}
 }

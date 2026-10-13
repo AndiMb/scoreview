@@ -134,6 +134,29 @@ class SoundFontService {
 		return $this->appConfig->getValueString(Application::APP_ID, self::VERSION_KEY);
 	}
 
+	/**
+	 * The version the browser should ask for - the cache key in the
+	 * SoundFont's URL (ConversionController::soundFontUrl()), which is what
+	 * lets that URL be `immutable`.
+	 *
+	 * Computed without fetching anything, because the status endpoint asks
+	 * for it on every poll: for a download URL it follows from the URL itself
+	 * (the same hash getOrFetchFromUrl() stores), so a changed setting gives
+	 * a new address at once. The sidecar's version is only known from its
+	 * info request; asking the sidecar on every poll would be the wrong
+	 * price, so this is the last version fetched - a new sidecar image shows
+	 * up once anything has requested the SoundFont again, at the latest the
+	 * next device that has no copy yet.
+	 */
+	public function expectedVersion(): string {
+		$fetchUrl = $this->getFetchUrl();
+		return $fetchUrl !== '' ? self::urlVersion($fetchUrl) : $this->getVersion();
+	}
+
+	private static function urlVersion(string $url): string {
+		return 'url:' . substr(sha1($url), 0, 12);
+	}
+
 	private function findCached(): ?ISimpleFile {
 		try {
 			$file = $this->appData->getFolder(self::FOLDER)->getFile(self::FILE);
@@ -180,7 +203,7 @@ class SoundFontService {
 	 * @throws ConverterException wenn nichts zu holen und nichts im Cache ist
 	 */
 	private function getOrFetchFromUrl(string $url, ?ISimpleFile $cached): ISimpleFile {
-		$version = 'url:' . substr(sha1($url), 0, 12);
+		$version = self::urlVersion($url);
 		if ($cached !== null && $version === $this->getVersion()) {
 			return $cached;
 		}

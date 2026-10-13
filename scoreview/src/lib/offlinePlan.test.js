@@ -8,6 +8,7 @@ import {
 	planForSetlist,
 	removeEntry,
 	sharedUrls,
+	soundFontChanged,
 	splitByUser,
 	upsertEntry,
 } from './offlinePlan.js'
@@ -107,6 +108,20 @@ describe('isOutdated', () => {
 
 	it('wertet eine Antwort ohne Etag nicht als veraltet', () => {
 		expect(isOutdated(entry('score', 1, [], 'anna', 'e1'), { status: 'pending' })).toBe(false)
+	})
+})
+
+describe('soundFontChanged', () => {
+	const pinned = entry('score', 1, ['/a', '/sf?v=alt'], 'anna', 'e1')
+
+	it('notices a SoundFont under a new address', () => {
+		expect(soundFontChanged(pinned, { soundFontUrl: '/sf?v=alt' })).toBe(false)
+		expect(soundFontChanged(pinned, { soundFontUrl: '/sf?v=neu' })).toBe(true)
+	})
+
+	it('does not count an answer without a SoundFont as a change', () => {
+		expect(soundFontChanged(pinned, { status: 'pending' })).toBe(false)
+		expect(soundFontChanged(pinned, { soundFontUrl: '' })).toBe(false)
 	})
 })
 
