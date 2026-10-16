@@ -79,10 +79,10 @@ class SoundFontControllerTest extends TestCase {
 
 		$this->assertInstanceOf(JSONResponse::class, $response);
 		$this->assertSame(Http::STATUS_SERVICE_UNAVAILABLE, $response->getStatus());
-		// Shown as is in the viewer, so translated - the cause stays as detail.
+		// Shown as is in the viewer, so translated - the cause only goes to
+		// the log, it may name the fetch URL and internal hosts.
 		$this->assertSame([
 			'error' => 'The server could not provide the SoundFont. The ScoreView status in the administration settings shows why.',
-			'detail' => $fehler->getMessage(),
 		], $response->getData());
 	}
 

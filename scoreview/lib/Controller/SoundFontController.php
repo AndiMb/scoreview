@@ -78,13 +78,12 @@ class SoundFontController extends Controller {
 			// sondern "gerade nicht beschaffbar" - der Viewer zeigt die
 			// Meldung an und bleibt ohne Ton benutzbar (ScoreViewer.vue).
 			//
-			// `error` is shown to the person playing, in their language; the
-			// cause itself is technical, written in whatever language the
-			// throwing code uses, and meant for the admin - it travels along
-			// as `detail` and is in the log above.
+			// `error` is shown to the person playing, in their language. The
+			// cause stays in the log above: it names the configured fetch URL
+			// (possibly with credentials) and internal hosts, and this route
+			// answers every reader, Direct-Editing tokens included.
 			return new JSONResponse([
 				'error' => $this->l->t('The server could not provide the SoundFont. The ScoreView status in the administration settings shows why.'),
-				'detail' => $e->getMessage(),
 			], Http::STATUS_SERVICE_UNAVAILABLE);
 		}
 
