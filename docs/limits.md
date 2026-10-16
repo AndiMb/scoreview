@@ -302,6 +302,11 @@ For operation this means:
 - **Only the leader who is leading the session takes it along.** If someone
   else is already leading on the next piece, that session stays; the leader
   switches alone, and their followers stay where they are.
+- **The session only goes along to a piece of the same owner** if the leader
+  holds no leader role there. A piece from another account, or one in a group
+  folder, needs the leader role on that piece itself; otherwise the leader
+  switches alone and sees an error message. Without this rule, anyone could
+  take over a shared score's followers through a score of their own.
 - **On a piece the session was taken along to, the leader lacks the role** if
   they are not a leader there: position, loop, starting note and
   transposition work, notes for voices and stamps do not

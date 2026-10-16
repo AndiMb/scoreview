@@ -16,6 +16,7 @@ use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IUser;
 use OCP\IUserManager;
 use PHPUnit\Framework\TestCase;
 
@@ -36,12 +37,20 @@ class FollowMoveTest extends TestCase {
 	private int $jetzt = 1790000000;
 	/** Wer wo Leitung ist: fileId => uids */
 	private array $leitungen = [1 => ['anna'], 2 => ['carl'], 3 => ['anna'], 4 => []];
+	/** Wem eine Datei gehoert: fileId => uid; ohne Eintrag dem Chor-Konto. */
+	private array $eigentum = [];
+	/** Laeuft einmal direkt nach dem Anlegen des Ziels - fuer Rennen im Umzug. */
+	private ?\Closure $nachDemAnlegen = null;
 
 	private function service(): FollowService {
 		$mapper = $this->createMock(FollowMapper::class);
 		$mapper->method('findByFileId')->willReturnCallback(fn (int $id) => isset($this->zeilen[$id]) ? clone $this->zeilen[$id] : null);
 		$mapper->method('insert')->willReturnCallback(function (FollowSession $row) {
 			$this->zeilen[$row->getFileId()] = clone $row;
+			if ($this->nachDemAnlegen !== null) {
+				($this->nachDemAnlegen)();
+				$this->nachDemAnlegen = null;
+			}
 			return $row;
 		});
 		$mapper->method('updateIfVersion')->willReturnCallback(function (FollowSession $row, int $expected) {
@@ -112,8 +121,11 @@ class FollowMoveTest extends TestCase {
 	}
 
 	private function node(int $id): Node {
+		$owner = $this->createMock(IUser::class);
+		$owner->method('getUID')->willReturn($this->eigentum[$id] ?? 'chor');
 		$node = $this->createMock(Node::class);
 		$node->method('getId')->willReturn($id);
+		$node->method('getOwner')->willReturn($owner);
 		return $node;
 	}
 
@@ -282,5 +294,65 @@ class FollowMoveTest extends TestCase {
 		$ziel = $s->move($this->node(1), $this->node(4), 'anna', null);
 		$this->assertArrayNotHasKey('carriedFrom', $ziel['state']);
 		$this->assertArrayNotHasKey('movedFrom', $ziel['state']);
+	}
+
+	public function testFremdeLeitungLaesstSichNichtHinuebertragen(): void {
+		// mallory besitzt Datei 9 und ist dort darum Leitung; auf 4 (dem Chor
+		// gehoerend, fuer mallory lesbar) ist sie es nicht.
+		$this->eigentum[9] = 'mallory';
+		$this->leitungen[9] = ['mallory'];
+		$s = $this->service();
+		$s->start($this->node(9), 'mallory');
+		try {
+			$s->move($this->node(9), $this->node(4), 'mallory', null);
+			$this->fail('Leitung uebertragen');
+		} catch (FollowException $e) {
+			$this->assertSame(FollowException::NOT_LEADER, $e->getReason());
+		}
+		$this->assertArrayNotHasKey(4, $this->zeilen);
+	}
+
+	public function testGetrageneLeitungGiltNurBeimSelbenEigentum(): void {
+		$s = $this->service();
+		$s->start($this->node(1), 'anna');
+		$s->move($this->node(1), $this->node(4), 'anna', null);
+		// Die Herkunft wechselt den Besitz - die getragene Leitung erlischt.
+		$this->eigentum[1] = 'mallory';
+		$this->expectExceptionObject(new FollowException(FollowException::NOT_LEADER));
+		$s->change($this->node(4), 'anna', ['tone' => true]);
+	}
+
+	public function testNeustartNachUmzugVergisstDasAlteZiel(): void {
+		$s = $this->service();
+		$s->start($this->node(1), 'anna');
+		$s->move($this->node(1), $this->node(3), 'anna', null);
+		$this->assertSame(1, $this->state(1)['moved']['seq']);
+
+		$s->start($this->node(1), 'anna');
+		$this->assertSame(['seq' => 0, 'fileId' => null, 'setlistId' => null], $this->state(1)['moved']);
+		$this->assertSame(1, $this->state(1)['movedSeq'], 'der naechste Umzug zaehlt weiter');
+		$s->move($this->node(1), $this->node(3), 'anna', null);
+		$this->assertSame(2, $this->state(1)['moved']['seq']);
+	}
+
+	public function testUebernahmeWaehrendDesUmzugsNimmtDasZielZurueck(): void {
+		$this->leitungen[1] = ['anna', 'bert'];
+		$s = $this->service();
+		$s->start($this->node(1), 'anna');
+		// Zwischen Anlegen des Ziels und Verweis uebernimmt bert die Herkunft.
+		$this->nachDemAnlegen = function () {
+			$zeile = $this->zeilen[1];
+			$zeile->setLeaderUid('bert');
+			$zeile->setVersion($zeile->getVersion() + 1);
+		};
+		try {
+			$s->move($this->node(1), $this->node(3), 'anna', null);
+			$this->fail('umgezogen');
+		} catch (FollowException $e) {
+			$this->assertSame(FollowException::CONFLICT, $e->getReason());
+		}
+		$this->assertSame(0, $this->state(1)['moved']['seq'], 'berts Sitzung zeigt nirgends hin');
+		$this->assertArrayNotHasKey(3, $this->zeilen, 'kein verwaistes Ziel');
+		$this->assertFalse($s->isActive(3));
 	}
 }

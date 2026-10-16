@@ -184,10 +184,6 @@ class FollowController extends Controller {
 	}
 
 	/**
-	 * Anmelden fuer Push (E10). Die Antwort sagt, ob sich das Geraet darauf
-	 * verlassen darf - `push: false` heisst: weiter abfragen.
-	 */
-	/**
 	 * Die Leitung schaltet zum naechsten Stueck weiter (V6, H7). `$fileId` ist
 	 * die Datei der laufenden Sitzung, `$targetFileId` das neue Stueck - es
 	 * muss fuer die Leitung lesbar sein, sonst 404 wie jede fremde Datei.
@@ -245,6 +241,10 @@ class FollowController extends Controller {
 		]);
 	}
 
+	/**
+	 * Anmelden fuer Push (E10). Die Antwort sagt, ob sich das Geraet darauf
+	 * verlassen darf - `push: false` heisst: weiter abfragen.
+	 */
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[NoCSRFRequired]

@@ -177,6 +177,14 @@ class FollowService {
 					$state['carriedFrom'] = null;
 					$changed = true;
 				}
+				// A restart here means the session lives here again: a pointer
+				// left over from an earlier move would send every device that
+				// joins now on to the old target, away from the leader.
+				// `movedSeq` stays so that the next move is "new" again.
+				if ($state['moved']['seq'] > 0) {
+					$state['moved'] = ['seq' => 0, 'fileId' => null, 'setlistId' => null];
+					$changed = true;
+				}
 				if ($position !== null) {
 					$state['position'] = ['seq' => $state['position']['seq'] + 1] + $position;
 					$changed = true;
@@ -397,13 +405,20 @@ class FollowService {
 		// neuen Stueck, wer dort Leitung ist - oder wer es auf der Datei ist,
 		// von der die Sitzung ausging.
 		$origin = $this->leaders->isLeader($from, $actor) ? $fromId : ($sourceState['carriedFrom'] ?? $fromId);
+		$leadsTarget = $this->leaders->isLeader($to, $actor);
+		if (!$leadsTarget) {
+			$originNode = $origin === $fromId ? $from : $this->nodeFor($actor, (int)$origin);
+			if ($originNode === null || !$this->mayCarry($originNode, $to)) {
+				throw new FollowException(FollowException::NOT_LEADER);
+			}
+		}
 		// Der Zaehler dieses Umzugs - die neue Sitzung zaehlt von hier weiter,
 		// damit ein spaeterer Umzug fuer Folgende wieder „neu" ist.
 		$seq = $sourceState['movedSeq'] + 1;
 		$state = $sourceState;
 		$state['moved'] = ['seq' => 0, 'fileId' => null, 'setlistId' => null];
 		$state['movedSeq'] = $seq;
-		$state['carriedFrom'] = $this->leaders->isLeader($to, $actor) ? null : (int)$origin;
+		$state['carriedFrom'] = $leadsTarget ? null : (int)$origin;
 		$state['movedFrom'] = $fromId;
 		$now = $this->time->getDateTime();
 		$row = new FollowSession();
@@ -437,9 +452,20 @@ class FollowService {
 				return $snapshot;
 			}
 			$source = $this->mapper->findByFileId($fromId);
-			if ($source === null) {
+			// Re-checked on every retry: if someone else took the source over
+			// or it ended meanwhile, `moved` must not land in THEIR session -
+			// it would carry their followers off to this target.
+			if ($source === null || $this->expired($source) || $source->getLeaderUid() !== $actor) {
 				break;
 			}
+		}
+		// The target already exists and was announced; a session nobody leads
+		// there would otherwise stay live for TIMEOUT_SECONDS while the client
+		// believes the move failed.
+		if ($this->mapper->deleteIfVersion($toId, $row->getVersion()) > 0) {
+			$none = self::none();
+			$this->cache->set($this->key($toId), $this->entry($none), $this->ttl);
+			$this->push->notify($this->members($toId, $actor), $toId, $none['version']);
 		}
 		throw new FollowException(FollowException::CONFLICT);
 	}
@@ -724,11 +750,31 @@ class FollowService {
 		if ($row !== null && !$this->expired($row) && $row->getLeaderUid() === $actor) {
 			$from = $this->decode($row)['carriedFrom'];
 			$origin = $from === null ? null : $this->nodeFor($actor, $from);
-			if ($origin !== null && $this->leaders->isLeader($origin, $actor)) {
+			if ($origin !== null && $this->leaders->isLeader($origin, $actor) && $this->mayCarry($origin, $node)) {
 				return;
 			}
 		}
 		throw new FollowException(FollowException::NOT_LEADER);
+	}
+
+	/**
+	 * Whether leadership on `$origin` may be carried to `$target` (D16) - only
+	 * between files of the same owner. Without this, owning ANY score would
+	 * do: upload a file of one's own, start a session there, move it onto a
+	 * score shared read-only, and lead everyone following that one (E9).
+	 * Owners are compared, not setlists: a setlist naming both files proves
+	 * nothing, anyone can write one. Storages without an owner (group
+	 * folders) carry nothing - there, write access already makes a leader,
+	 * and ACLs may grant it on one file and not the other.
+	 */
+	private function mayCarry(Node $origin, Node $target): bool {
+		try {
+			$a = $origin->getOwner();
+			$b = $target->getOwner();
+		} catch (\Throwable) {
+			return false;
+		}
+		return $a !== null && $b !== null && $a->getUID() === $b->getUID();
 	}
 
 	private function nodeFor(string $uid, int $fileId): ?Node {

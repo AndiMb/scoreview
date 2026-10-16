@@ -1761,14 +1761,27 @@ wechseln“. Wer das neue Stück direkt öffnet, findet die Sitzung dort.
   (`application/x-musescore`) an.
 - **Getragene Leitung.** Die Leitung darf auf dem neuen Stück führen, auch wenn
   sie dort keine Leitungsrolle hat – aber nur, solange sie die Sitzung dort
-  angelegt hat und auf der Herkunft (`carriedFrom`: die letzte Datei der
-  Kette, auf der sie Leitung ist) weiterhin Leitung ist. Stimmnotizen und
+  angelegt hat, auf der Herkunft (`carriedFrom`: die letzte Datei der
+  Kette, auf der sie Leitung ist) weiterhin Leitung ist und **Herkunft und
+  Ziel derselben Eigentümerin gehören**. Ohne diese letzte Bedingung genügte
+  irgendeine eigene Partitur: hochladen, dort starten, auf eine nur lesbar
+  geteilte Partitur umziehen und alle führen, die ihr folgen. Eine Setliste,
+  die beide Dateien nennt, belegt nichts – schreiben kann sie jede. Speicher
+  ohne Eigentümerin (Gruppenordner) tragen keine Leitung; dort macht schon
+  Schreibrecht zur Leitung, und ACLs können es auf der einen Datei gewähren
+  und auf der anderen nicht. Stimmnotizen und
   Stempel auf dem neuen Stück prüft weiter `LeaderService`; dafür muss sie dort
   Leitung sein. Übernimmt dort eine echte Leitung die Sitzung, indem sie selbst
   startet, entfällt `carriedFrom`.
 - **Fremde Sitzungen bleiben unangetastet.** Führt auf dem Ziel schon jemand
   anderes, lehnt der Server ab (409); das Stück wechselt für die Leitung
-  trotzdem, die Folgenden bleiben stehen.
+  trotzdem, die Folgenden bleiben stehen. Übernimmt jemand die Herkunft,
+  während der Umzug läuft, oder endet sie, nimmt der Server das schon
+  angelegte Ziel zurück, statt den Verweis in die fremde Sitzung zu schreiben.
+- **Ein Neustart auf der Herkunft vergisst den Umzug.** Wer auf einer Datei
+  startet, von der die Sitzung weggezogen war, führt dort wieder; der alte
+  Verweis `moved` fällt weg, sonst schickte er jedes neu beitretende Gerät
+  zum früheren Ziel.
 - **Ohne Leserecht auf dem Ziel** antwortet es einer Folgenden mit 404, wie
   jede fremde Datei ([S8](#s8-404-vor-403)), und der Viewer zeigt das. Der
   Umzug selbst verlangt nur, dass die *Leitung* das Ziel lesen darf.

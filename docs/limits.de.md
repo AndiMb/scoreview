@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:45e9505e9d26 -->
+<!-- translation-of: limits.md sha256:65e5e41bcf4b -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -301,6 +301,12 @@ Daraus folgt für den Betrieb:
 - **Nur die Leitung, die die Sitzung führt, nimmt sie mit.** Führt auf dem
   nächsten Stück schon jemand anderes, bleibt diese Sitzung; die Leitung
   wechselt allein, ihre Folgenden bleiben stehen.
+- **Die Sitzung zieht nur zu einem Stück derselben Eigentümerin mit**, wenn
+  die Leitung dort keine Leitungsrolle hat. Ein Stück aus einem anderen Konto
+  oder aus einem Gruppenordner verlangt die Leitungsrolle auf genau diesem
+  Stück; sonst wechselt die Leitung allein und sieht eine Fehlermeldung. Ohne
+  diese Regel könnte jede Person über eine eigene Partitur die Folgenden einer
+  geteilten übernehmen.
 - **Auf einem mitgenommenen Stück fehlt der Leitung die Rolle**, wenn sie dort
   keine Leitung ist: Stelle, Loop, Anfangston und Transposition gehen,
   Stimmnotizen und Stempel nicht
