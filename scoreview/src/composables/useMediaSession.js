@@ -94,9 +94,19 @@ export function useMediaSession({ isPlaying, metadata, exportAvailable = () => f
 		if (typeof document !== 'undefined') {
 			document.removeEventListener('visibilitychange', onVisibility)
 		}
+		handlers = null
 		if (session) {
 			session.metadata = null
 			session.playbackState = 'none'
+			// The session outlives the viewer (Files keeps the page): left in
+			// place, a media key would call into the closed one.
+			for (const action of ['play', 'pause', 'previoustrack', 'nexttrack']) {
+				try {
+					session.setActionHandler(action, null)
+				} catch {
+					// unknown action in this browser - nothing was set
+				}
+			}
 		}
 	}
 

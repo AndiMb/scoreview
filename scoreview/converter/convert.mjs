@@ -127,7 +127,7 @@ async function museScoreVersion() {
 	const formatVersion = await Engine.version()
 	// Ohne fuehrendes "MuseScore": die Oberflaeche setzt es davor
 	// (siehe AdminSettings.vue), sonst stuende dort beides.
-	return `${tag ?? 'unbekannt'} (scoreview-engine, Dateiformat ${formatVersion})`
+	return `${tag ?? 'unknown'} (scoreview-engine, file format ${formatVersion})`
 }
 
 /**

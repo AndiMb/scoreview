@@ -8,7 +8,7 @@ import { nextTick } from 'vue'
 const axiosGet = vi.fn()
 vi.mock('@nextcloud/axios', () => ({ default: { get: axiosGet } }))
 
-// Die Zuordnung Zeit -> Rechteck ist lib/scoreSync.js und dort getestet; hier
+// Die Zuordnung Zeit -> Rechteck ist lib/scoreSync.js (scoreSync.test.js); hier
 // zaehlt nur, womit die Schleife sie fuettert.
 const syncUpdate = vi.fn(() => 7)
 let onCursorChange = null

@@ -55,6 +55,12 @@ export function createSilentClock(durationMs) {
 	}
 
 	function seek(ms) {
+		// Ran out at the end: `playing` is still set, and restarting the wall
+		// clock below would set the cursor running again without anyone
+		// pressing play. Stay paused, as the real player does.
+		if (playing && getCurrentTimeMs() >= durationMs) {
+			playing = false
+		}
 		elapsedAtStart = Math.max(0, Math.min(durationMs, ms))
 		startedAtWallClock = performance.now()
 		seekedListeners.forEach((cb) => cb())

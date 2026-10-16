@@ -1,5 +1,6 @@
 import { translate } from '@nextcloud/l10n'
 import { computed, ref } from 'vue'
+import { transposeKey } from '../lib/noteNames.js'
 import { channelsOfPart } from '../lib/panLayout.js'
 import { keyAt } from '../lib/scoreFacts.js'
 import { resolveMeasurePosition } from '../lib/scoreLayout.js'
@@ -109,11 +110,11 @@ export function useStartTone({ clock, hasRealPlayer, parsedMidi, facts, measures
 		const mine = ++pressId
 		sounding.value = true
 		const shift = transpose() || 0
-		// Vorzeichen der transponierten Tonart: jede Quinte ein Kreuz mehr,
-		// auf -6..6 gefaltet - fuer "Es" statt "Dis" eine Ganzton tiefer.
+		// The transposed key, folded exactly as the transpose display folds
+		// it - otherwise six accidentals read Fis there and Ges here.
 		const key = tone.concertKey === null || tone.concertKey === undefined
 			? null
-			: ((((tone.concertKey + 7 * shift) % 12) + 18) % 12) - 6
+			: transposeKey(tone.concertKey, shift)
 		lastToneName.value = pitchName(tone.pitch + shift, key)
 		await clock()?.startTone?.(tone.pitch)
 		// Losgelassen, waehrend der AudioContext noch aufwachte: Dann kam
