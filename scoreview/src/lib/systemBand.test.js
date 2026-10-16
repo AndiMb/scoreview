@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bandWindow, cropIndexAt, cropScale, lyricBaselines, lyricBottomsFor, systemCrops } from './systemBand.js'
+import { bandWindow, cropIndexAt, cropScale, frameAt, lyricBaselines, lyricBottomsFor, systemCrops } from './systemBand.js'
 
 // Eine Seite 0..10000 x 0..14000 mit zwei Systemen; Linienabstand 25
 const viewBox = { minX: 0, minY: 0, width: 10000, height: 14000 }
@@ -105,5 +105,20 @@ describe('bandWindow', () => {
 	it('returns null when nothing is in reach', () => {
 		expect(bandWindow([], 0, 800)).toBeNull()
 		expect(bandWindow(frames, 99999, 800)).toBeNull()
+	})
+})
+
+describe('frameAt', () => {
+	it('findet den zuletzt ueberschrittenen Rahmen', () => {
+		const lefts = [8, 320, 640, 900]
+		expect(frameAt(lefts, 0)).toBe(0)
+		expect(frameAt(lefts, 319)).toBe(1)
+		expect(frameAt(lefts, 500)).toBe(1)
+		expect(frameAt(lefts, 640)).toBe(2)
+		expect(frameAt(lefts, 5000)).toBe(3)
+	})
+
+	it('liefert ohne Rahmen 0', () => {
+		expect(frameAt([], 100)).toBe(0)
 	})
 })

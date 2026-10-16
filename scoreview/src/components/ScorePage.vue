@@ -183,6 +183,7 @@ import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import ScoreStamps from './ScoreStamps.vue'
 import { formatCents } from '../lib/intonation.js'
+import { createLru } from '../lib/lruCache.js'
 import { placeNoteLabels } from '../lib/noteLabelLayout.js'
 import { nameOf } from '../lib/noteNames.js'
 import { hitNotehead, matchNoteheads } from '../lib/noteSpellingIndex.js'
@@ -190,6 +191,12 @@ import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLa
 import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, stavesOfPart } from '../lib/staffBands.js'
 import { buildNoteIndex, buildSegmentIndex, pickNoteheads, setHighlight } from '../lib/svgIndex.js'
 import { sanitizeSvg } from '../lib/svgSanitizer.js'
+
+// Sanitized pages, shared by all ScorePages. Page URLs carry the conversion
+// version (`?v=`), so an entry never goes stale. A few pages are enough: the
+// system band mounts several frames of the same page and re-mounts them when
+// they scroll back into reach (SystemBand.vue).
+const svgCache = createLru(4)
 
 // Wie weit der Zeiger zwischen pointerdown und click wandern darf, damit es
 // noch als Klick gilt. Grosszuegig genug fuer das Zittern eines
@@ -920,13 +927,24 @@ export default {
 			this.loading = true
 			this.loadError = ''
 			try {
-				const res = await axios.get(this.svgUrl, { responseType: 'text' })
-				this.viewBox = parseViewBox(res.data)
-				this.sizeMm = parseSvgSizeMm(res.data)
-				// Der Praefix macht die Glyph-Kennungen dieser Seite im Dokument
-				// eindeutig - ohne ihn greift die zweite Seite auf die Glyphen der
-				// ersten zu, solange beide geladen sind (siehe namespaceIds()).
-				this.svgMarkup = sanitizeSvg(res.data, `p${this.pageIndex}-`)
+				const key = `${this.svgUrl}|${this.pageIndex}`
+				let page = svgCache.get(key)
+				if (!page) {
+					const res = await axios.get(this.svgUrl, { responseType: 'text' })
+					page = {
+						viewBox: parseViewBox(res.data),
+						sizeMm: parseSvgSizeMm(res.data),
+						// Der Praefix macht die Glyph-Kennungen dieser Seite im
+						// Dokument eindeutig - ohne ihn greift die zweite Seite auf
+						// die Glyphen der ersten zu, solange beide geladen sind
+						// (siehe namespaceIds()).
+						markup: sanitizeSvg(res.data, `p${this.pageIndex}-`),
+					}
+					svgCache.set(key, page)
+				}
+				this.viewBox = page.viewBox
+				this.sizeMm = page.sizeMm
+				this.svgMarkup = page.markup
 				// Für die Zoom-Presets ("Seitenbreite/ganze Seite/100%") -
 				// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
 				// jeweils geladene ScorePage.

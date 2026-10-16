@@ -6,6 +6,7 @@ import {
 	formatMeasureWithMark,
 	fromArtifacts,
 	keyAt,
+	keyByElid,
 	marksNeedMidi,
 	pitchAt,
 	positionWithMark,
@@ -298,5 +299,22 @@ describe('positionWithMark', () => {
 
 	it('kommt ohne Buchstaben aus', () => {
 		expect(positionWithMark(3, [])).toEqual({ measure: 3, mark: null })
+	})
+})
+
+describe('keyByElid', () => {
+	const measures = measuresTimeline
+	const timeline = { events: [{ elid: 7, timeMs: 500 }, { elid: 8, timeMs: 2500 }, { elid: 7, timeMs: 2600 }] }
+	const keys = [{ measure: 1, concertKey: 2 }, { measure: 2, concertKey: -3 }]
+
+	it('liest die Tonart am ersten Erklingen des Segments', () => {
+		const lookup = keyByElid(timeline, keys, measures, 6000)
+		expect(lookup(7)).toBe(2)
+		expect(lookup(8)).toBe(-3)
+	})
+
+	it('nimmt fuer Unbekanntes die erste Tonart und ohne Tonart 0', () => {
+		expect(keyByElid(timeline, keys, measures, 6000)(99)).toBe(2)
+		expect(keyByElid(timeline, [], measures, 6000)(7)).toBe(0)
 	})
 })

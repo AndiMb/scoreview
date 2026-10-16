@@ -137,6 +137,31 @@ export function bandWindow(frames, scrollLeft, viewWidth, ahead = 1) {
 }
 
 /**
+ * The frame whose left edge was passed last - the one the band "stands on"
+ * while scrolling. Binary search over the left edges, which only grow: the
+ * scroll handler runs for every scroll event of a glide.
+ *
+ * @param {number[]} lefts left edge of each frame, ascending
+ * @param {number} position scroll position plus lead
+ * @return {number} index, 0 before the first edge or without frames
+ */
+export function frameAt(lefts, position) {
+	let lo = 0
+	let hi = lefts.length - 1
+	let found = 0
+	while (lo <= hi) {
+		const mid = (lo + hi) >> 1
+		if (lefts[mid] <= position + 1) {
+			found = mid
+			lo = mid + 1
+		} else {
+			hi = mid - 1
+		}
+	}
+	return found
+}
+
+/**
  * Massstab, mit dem ein Ausschnitt die verfuegbare Hoehe fuellt - als
  * Seitenbreite in Pixeln, die ScorePage erwartet (dort ist alles relativ
  * zur Seitenbreite).

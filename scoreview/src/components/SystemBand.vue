@@ -14,20 +14,23 @@
 			{{ loading ? t('Preparing the system band…') : t('No staves found on these pages.') }}
 		</p>
 		<div
-			v-for="crop in crops"
+			v-for="(crop, i) in crops"
 			:key="crop.index"
 			class="scoreview-band-system"
-			:style="frameStyle(crop)">
+			:style="layouts[i].frame">
 			<div
 				v-if="rendered(crop.index)"
 				class="scoreview-band-shift"
-				:style="shiftStyle(crop)">
+				:style="layouts[i].shift">
 				<ScorePage
 					v-bind="pageProps"
 					:svgUrl="pageUrls[crop.page]"
 					:pageIndex="crop.page"
-					:zoom="zoomFor(crop)"
-					:systemRects="systemRectsByPage[crop.page] ?? []"
+					:zoom="layouts[i].zoom"
+					:systemRects="systemRectsByPage[crop.page] ?? NO_RECTS"
+					:cursorRect="crop.index === cursorCrop ? cursorRect : null"
+					:cursorElid="crop.index === cursorCrop ? cursorElid : null"
+					:needle="crop.index === cursorCrop ? needle : null"
 					@noteClick="(e) => $emit('noteClick', e)"
 					@markerClick="(e) => $emit('markerClick', e)"
 					@indexed="(e) => $emit('indexed', e)" />
@@ -42,7 +45,7 @@ import { translate } from '@nextcloud/l10n'
 import ScorePage from './ScorePage.vue'
 import { BASE_PAGE_WIDTH_PX, parseViewBox } from '../lib/scoreLayout.js'
 import { findStaffBands, groupBandsIntoSystems } from '../lib/staffBands.js'
-import { bandWindow, cropIndexAt, cropScale, lyricBaselines, lyricBottomsFor, systemCrops } from '../lib/systemBand.js'
+import { bandWindow, cropIndexAt, cropScale, frameAt, lyricBaselines, lyricBottomsFor, systemCrops } from '../lib/systemBand.js'
 
 /**
  * Vorlauf beim Mitscrollen: das System steht nicht ganz am Rand. Er steckt
@@ -51,6 +54,8 @@ import { bandWindow, cropIndexAt, cropScale, lyricBaselines, lyricBottomsFor, sy
  * 436 px blieb bei 8 px stehen).
  */
 const LEAD = 0.08
+
+const NO_RECTS = Object.freeze([])
 
 export default {
 	name: 'SystemBand',
@@ -89,6 +94,20 @@ export default {
 			type: Object,
 			default: null,
 		},
+
+		// Cursor, note and intonation needle go to the ONE frame showing the
+		// cursor, not through `pageProps`: they change with every note, and
+		// each mounted frame would re-render for it (a page holds several
+		// systems, so several frames show the same page).
+		cursorElid: {
+			type: Number,
+			default: null,
+		},
+
+		needle: {
+			type: Object,
+			default: null,
+		},
 	},
 
 	emits: ['noteClick', 'markerClick', 'indexed'],
@@ -107,41 +126,70 @@ export default {
 		}
 	},
 
-	watch: {
-		pageUrls: {
-			handler() {
-				this.load()
-			},
+	computed: {
+		NO_RECTS: () => NO_RECTS,
 
-			immediate: true,
-		},
-
-		systemRectsByPage() {
-			this.load()
-		},
-
-		cursorRect(rect) {
+		/** The frame showing the cursor, or -1. */
+		cursorCrop() {
+			const rect = this.cursorRect
 			if (!rect || this.crops.length === 0) {
-				return
+				return -1
 			}
-			const index = cropIndexAt(this.crops, rect.page, rect.y + rect.h / 2)
+			return cropIndexAt(this.crops, rect.page, rect.y + rect.h / 2)
+		},
+
+		/** Size, shift and zoom of every frame - once per layout, not per render. */
+		layouts() {
+			return this.crops.map((crop) => {
+				const vb = this.viewBoxes[crop.page]
+				const scale = cropScale(crop, vb, this.heightPx)
+				const px = scale.pageWidthPx / vb.width
+				return {
+					frame: { width: `${scale.cropWidthPx}px`, height: `${this.heightPx}px` },
+					shift: { transform: `translate(${-(crop.x - vb.minX) * px}px, ${-(crop.y - vb.minY) * px}px)` },
+					zoom: scale.pageWidthPx / BASE_PAGE_WIDTH_PX,
+				}
+			})
+		},
+	},
+
+	watch: {
+		// Every note, not only on a new frame: after scrolling away by hand,
+		// the next note brings the band back to the cursor.
+		cursorRect() {
+			const index = this.cursorCrop
 			if (index >= 0 && index !== this.current) {
 				this.goTo(index)
 			}
 		},
 	},
 
+	created() {
+		// Not part of the rendered state: positions of the frames, read once
+		// per layout so that scrolling never forces a layout (onScroll).
+		this.frameLefts = []
+		this.frameWidths = []
+		this.viewWidth = 0
+		this.loadGeneration = 0
+		this.scrollPending = 0
+		// Both change together on a piece change (useScoreSession.load) - one
+		// load for both, not one each.
+		this.$watch(() => [this.pageUrls, this.systemRectsByPage], () => this.load(), { immediate: true })
+	},
+
 	mounted() {
 		this.resize = new ResizeObserver(() => {
 			this.heightPx = Math.max(120, this.$refs.scroller?.clientHeight ?? 300)
 			// The frame widths follow the height - measure after they changed.
-			this.$nextTick(() => this.updateWindow())
+			this.$nextTick(() => this.measureFrames())
 		})
 		this.resize.observe(this.$refs.scroller)
 	},
 
 	beforeUnmount() {
 		this.resize?.disconnect()
+		cancelAnimationFrame(this.scrollPending)
+		this.loadGeneration++
 	},
 
 	methods: {
@@ -151,12 +199,16 @@ export default {
 		 * liefert sie den ScorePages danach aus dem Cache.
 		 */
 		async load() {
+			const generation = ++this.loadGeneration
 			if (this.pageUrls.length === 0) {
 				return
 			}
 			this.loading = true
 			try {
 				const texts = await Promise.all(this.pageUrls.map((url) => axios.get(url, { responseType: 'text' }).then((r) => r.data)))
+				if (generation !== this.loadGeneration) {
+					return
+				}
 				const pages = texts.map((text, page) => {
 					const viewBox = parseViewBox(text)
 					const systems = groupBandsIntoSystems(findStaffBands(text), this.systemRectsByPage[page] ?? [])
@@ -167,32 +219,19 @@ export default {
 					this.viewBoxes[p.page] = p.viewBox
 				}
 				this.crops = systemCrops(pages)
-				this.$nextTick(() => this.updateWindow())
+				this.$nextTick(() => this.measureFrames())
 			} catch (err) {
+				if (generation !== this.loadGeneration) {
+					return
+				}
 				// eslint-disable-next-line no-console
 				console.error('ScoreView: could not build the system band.', err)
 				this.crops = []
 			} finally {
-				this.loading = false
+				if (generation === this.loadGeneration) {
+					this.loading = false
+				}
 			}
-		},
-
-		scale(crop) {
-			return cropScale(crop, this.viewBoxes[crop.page], this.heightPx)
-		},
-
-		zoomFor(crop) {
-			return this.scale(crop).pageWidthPx / BASE_PAGE_WIDTH_PX
-		},
-
-		frameStyle(crop) {
-			return { width: `${this.scale(crop).cropWidthPx}px`, height: `${this.heightPx}px` }
-		},
-
-		shiftStyle(crop) {
-			const vb = this.viewBoxes[crop.page]
-			const px = this.scale(crop).pageWidthPx / vb.width
-			return { transform: `translate(${-(crop.x - vb.minX) * px}px, ${-(crop.y - vb.minY) * px}px)` }
 		},
 
 		/**
@@ -227,30 +266,52 @@ export default {
 				|| (index >= this.windowFrom && index <= this.windowTo)
 		},
 
-		updateWindow() {
+		/** Reads the frames' positions - after a load or a resize only. */
+		measureFrames() {
 			const scroller = this.$refs.scroller
-			if (!scroller || this.crops.length === 0) {
+			if (!scroller) {
 				return
 			}
-			const frames = [...scroller.children].map((el) => ({ left: el.offsetLeft, width: el.offsetWidth }))
-			const range = bandWindow(frames, scroller.scrollLeft, scroller.clientWidth)
-			if (range) {
+			// The empty-state paragraph is a child too, but only without frames.
+			const frames = this.crops.length === 0 ? [] : [...scroller.children]
+			this.frameLefts = frames.map((el) => el.offsetLeft)
+			this.frameWidths = frames.map((el) => el.offsetWidth)
+			this.viewWidth = scroller.clientWidth
+			this.updateWindow()
+		},
+
+		updateWindow() {
+			const scroller = this.$refs.scroller
+			if (!scroller || this.frameLefts.length === 0) {
+				return
+			}
+			const frames = this.frameLefts.map((left, i) => ({ left, width: this.frameWidths[i] }))
+			const range = bandWindow(frames, scroller.scrollLeft, this.viewWidth)
+			if (range && (range.from !== this.windowFrom || range.to !== this.windowTo)) {
 				this.windowFrom = range.from
 				this.windowTo = range.to
 			}
 		},
 
 		onScroll() {
-			const scroller = this.$refs.scroller
-			const left = scroller.scrollLeft + scroller.clientWidth * LEAD
-			let index = 0
-			for (const [i, el] of [...scroller.children].entries()) {
-				if (el.offsetLeft <= left + 1) {
-					index = i
-				}
+			// One evaluation per frame, from cached positions: a smooth glide
+			// fires many scroll events, and reading offsetLeft after Vue patched
+			// the frames would force a layout each time.
+			if (this.scrollPending) {
+				return
 			}
-			this.current = index
-			this.updateWindow()
+			this.scrollPending = requestAnimationFrame(() => {
+				this.scrollPending = 0
+				const scroller = this.$refs.scroller
+				if (!scroller) {
+					return
+				}
+				const index = frameAt(this.frameLefts, scroller.scrollLeft + this.viewWidth * LEAD)
+				if (index !== this.current) {
+					this.current = index
+				}
+				this.updateWindow()
+			})
 		},
 
 		t(text, vars) {

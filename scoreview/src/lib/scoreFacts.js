@@ -114,6 +114,43 @@ export function keyAt(keys, measureNumber) {
 }
 
 /**
+ * The concert key at each segment, for note names relative to the key
+ * (movable do): by the first time the segment sounds and the measure there,
+ * as keyAt() reads it. Built once per score - a page asks for every
+ * notehead it labels, and a search through all events per notehead made
+ * labelling O(notes x events) on every zoom.
+ *
+ * @param {{events: Array<{elid: number, timeMs: number}>}} timeline
+ * @param {KeyFact[]} keys
+ * @param {object} measuresTimeline aus measures.json
+ * @param {number} durationMs
+ * @return {(elid: number) => number} concert key, 0 without any key
+ */
+export function keyByElid(timeline, keys, measuresTimeline, durationMs) {
+	if (!keys || keys.length === 0) {
+		return () => 0
+	}
+	const firstTime = new Map()
+	for (const event of timeline?.events ?? []) {
+		if (!firstTime.has(event.elid)) {
+			firstTime.set(event.elid, event.timeMs)
+		}
+	}
+	const measureAt = (timeMs) => measuresTimeline
+		? resolveMeasurePosition(measuresTimeline, timeMs, durationMs)?.measureNumber ?? null
+		: null
+	const cache = new Map()
+	return (elid) => {
+		if (!cache.has(elid)) {
+			const timeMs = firstTime.get(elid)
+			const measure = timeMs === undefined ? null : measureAt(timeMs)
+			cache.set(elid, (measure === null ? keys[0] : keyAt(keys, measure)).concertKey ?? 0)
+		}
+		return cache.get(elid)
+	}
+}
+
+/**
  * Der Grundton als MIDI-Tonhoehe. Ohne Modus gilt die Dur-Tonika:
  * Auf dem Sidecar-Weg ist Moll nicht erkennbar, und ein falsches Dur ist
  * dort die ehrliche Naeherung - der Ton liegt immerhin in der Tonleiter.

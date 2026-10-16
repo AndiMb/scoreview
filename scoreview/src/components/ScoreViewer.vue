@@ -697,6 +697,8 @@
 						:systemRectsByPage="systemRectsByPage"
 						:pageProps="bandPageProps"
 						:cursorRect="cursorRect"
+						:cursorElid="currentElid"
+						:needle="intonationNeedle"
 						@noteClick="onNoteClick"
 						@markerClick="onMarkerClick"
 						@indexed="onPageIndexed" />
@@ -988,6 +990,7 @@ import { browserFileUrl } from '../lib/micAccess.js'
 import { nameOf } from '../lib/noteNames.js'
 import { spellingMap } from '../lib/noteSpellingIndex.js'
 import { channelsOfPart } from '../lib/panLayout.js'
+import { keyByElid } from '../lib/scoreFacts.js'
 import {
 	findElementAtPoint,
 	findMeasureStartTime,
@@ -1781,6 +1784,7 @@ export default {
 			effectiveTranspose,
 			startKey: computed(() => scoreFacts.facts.value?.keys?.[0] ?? null),
 			scoreFactsKeys: computed(() => scoreFacts.facts.value?.keys ?? []),
+			elidKeys: computed(() => keyByElid(timeline.value, scoreFacts.facts.value?.keys ?? [], measuresTimeline.value, durationMs.value)),
 			pageComponents: autoScroll.pages,
 			exportEnabled: features.practiceExport,
 			offlineEnabled: features.offline,
@@ -2067,11 +2071,13 @@ export default {
 			return !this.bandOffered && this.layout === 'pages' && this.viewerWidth > 0 && this.viewerWidth < 600
 		},
 
-		/** Was jede ScorePage im Systemband bekommt - dieselben Props wie auf Seiten. */
+		/**
+		 * Was jede ScorePage im Systemband bekommt - dieselben Props wie auf
+		 * Seiten, ausser denen, die sich mit jeder Note aendern: Cursor, Note
+		 * und Nadel reicht SystemBand nur an das System mit dem Cursor.
+		 */
 		bandPageProps() {
 			return {
-				cursorRect: this.cursorRect,
-				cursorElid: this.currentElid,
 				markers: this.annotationMarkers,
 				stamps: this.annotationStamps,
 				loopMarkers: this.loopMarkers,
@@ -2083,7 +2089,6 @@ export default {
 				noteTheme: this.resolvedNoteTheme,
 				noteMarks: this.intonationMarks,
 				liveNoteMarks: this.intonationLiveMarks,
-				needle: this.intonationNeedle,
 				spellings: this.spellings,
 				noteNameSystem: this.noteNameSystem,
 				noteNameStaves: this.noteNameStaves,
@@ -2606,26 +2611,14 @@ export default {
 		// eigentliche Element-/Zeit-Auflösung passiert hier mit der vollen
 		// timeline (scoreLayout.js).
 		/**
-		 * Vorzeichen an einem Segment - fuer das bewegliche Do. Ueber die
-		 * erste Zeit des Segments und den Takt dort (wie scoreFacts.keyAt).
+		 * Vorzeichen an einem Segment - fuer das bewegliche Do
+		 * (scoreFacts.keyByElid, einmal je Partitur gebaut).
 		 *
 		 * @param {number} elid
 		 * @return {number}
 		 */
 		keyOfElid(elid) {
-			const keys = this.scoreFactsKeys ?? []
-			if (keys.length === 0) {
-				return 0
-			}
-			const event = this.timeline?.events?.find((e) => e.elid === elid)
-			const measure = event ? resolveMeasurePosition(this.measuresTimeline, event.timeMs, this.durationMs)?.measureNumber ?? null : null
-			let found = keys[0]
-			for (const key of keys) {
-				if (measure !== null && key.measure <= measure) {
-					found = key
-				}
-			}
-			return found.concertKey ?? 0
+			return this.elidKeys(elid)
 		},
 
 		/** Die gehoerte Zeit als Funktion - fuer Ansichten, die je Rahmen lesen. */
