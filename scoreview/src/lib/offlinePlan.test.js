@@ -3,13 +3,16 @@ import {
 	apiUrlsFor,
 	estimateBytes,
 	isOutdated,
+	isStaleStaging,
 	missingUrls,
+	orphanedUrls,
 	planForScore,
 	planForSetlist,
 	removeEntry,
 	sharedUrls,
 	soundFontChanged,
 	splitByUser,
+	stagingName,
 	upsertEntry,
 } from './offlinePlan.js'
 
@@ -138,5 +141,26 @@ describe('planForSetlist und missingUrls', () => {
 		const entry = { urls: ['/a', '/b', '/c'] }
 		expect(missingUrls(entry, new Set(['/a', '/c']))).toEqual(['/b'])
 		expect(missingUrls(entry, new Set(['/a', '/b', '/c']))).toEqual([])
+	})
+})
+
+describe('orphanedUrls', () => {
+	it('nennt, was kein Eintrag mehr braucht, und behaelt das Manifest', () => {
+		const manifest = [{ urls: ['/a', '/b'] }, { urls: ['/b', '/c'] }]
+		expect(orphanedUrls(manifest, ['/a', '/x', '/c', '/pinned.json', '/y'], ['/pinned.json'])).toEqual(['/x', '/y'])
+	})
+
+	it('raeumt ohne Eintraege alles ausser dem Behaltenen', () => {
+		expect(orphanedUrls([], ['/a', '/m'], ['/m'])).toEqual(['/a'])
+	})
+})
+
+describe('Staging-Caches', () => {
+	it('erkennt nur eigene, alte Staging-Caches', () => {
+		const now = 10_000_000
+		expect(isStaleStaging(stagingName(now), now + 1000)).toBe(false)
+		expect(isStaleStaging(stagingName(now), now + 61 * 60 * 1000)).toBe(true)
+		expect(isStaleStaging('scoreview-offline-data', now)).toBe(false)
+		expect(isStaleStaging('scoreview-offline-staging-kaputt', now)).toBe(true)
 	})
 })

@@ -9,6 +9,44 @@
 // Viewer eine URL aendert, muss sie hier mitaendern; die Tests nennen jede.
 
 /**
+ * The cache the offline page's service worker answers from (src/offline-sw.js)
+ * and useOffline.js fills. Kept here, in a module without dependencies, so
+ * both can import the one name.
+ */
+export const DATA_CACHE = 'scoreview-offline-data'
+
+/**
+ * Where a pin or refresh downloads to before anything lands in DATA_CACHE.
+ * Each build gets its own cache under this prefix; the timestamp in the name
+ * lets a later visit clear what a closed tab left behind.
+ */
+export const STAGING_PREFIX = 'scoreview-offline-staging-'
+
+/** Staging caches older than this belong to no running download any more. */
+export const STAGING_MAX_AGE_MS = 60 * 60 * 1000
+
+/**
+ * @param {number} now ms
+ * @return {string} a fresh staging cache name
+ */
+export function stagingName(now) {
+	return `${STAGING_PREFIX}${now}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/**
+ * @param {string} name a cache name
+ * @param {number} now ms
+ * @return {boolean} whether it is a staging cache left behind by a download
+ */
+export function isStaleStaging(name, now) {
+	if (!name.startsWith(STAGING_PREFIX)) {
+		return false
+	}
+	const started = Number.parseInt(name.slice(STAGING_PREFIX.length), 10)
+	return !Number.isFinite(started) || now - started > STAGING_MAX_AGE_MS
+}
+
+/**
  * @typedef {object} PinEntry
  * @property {'score'|'setlist'} type was vorgemerkt ist
  * @property {number} id fileId der Partitur bzw. der Setliste
@@ -209,6 +247,20 @@ export function soundFontChanged(entry, statusBody) {
  * @param {PinEntry[]} others
  * @return {string[]} die URLs, die keiner der anderen Eintraege braucht
  */
+/**
+ * Keys in the data cache that no entry names any more - left by a download
+ * that failed after storing part of it, or by an entry removed in another tab.
+ *
+ * @param {PinEntry[]} manifest
+ * @param {string[]} keys what lies in the cache, as generateUrl builds paths
+ * @param {string[]} keep keys that are not entries (the manifest itself)
+ * @return {string[]}
+ */
+export function orphanedUrls(manifest, keys, keep) {
+	const used = new Set([...keep, ...manifest.flatMap((e) => e.urls)])
+	return keys.filter((k) => !used.has(k))
+}
+
 function unreferenced(urls, others) {
 	const used = new Set(others.flatMap((e) => e.urls))
 	return urls.filter((u) => !used.has(u))

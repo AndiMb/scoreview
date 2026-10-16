@@ -128,8 +128,10 @@ export default {
 			supported: offlineSupported(),
 			loading: true,
 			entries: [],
-			// Schluessel `${type}-${id}` -> 'checking' | 'current' | 'updated' | 'offline'
+			// Schluessel `${type}-${id}` -> 'checking' | 'current' | 'updated' | 'pending' | 'offline'
 			states: {},
+			refreshing: false,
+			refreshAgain: false,
 			opened: null,
 			online: navigator.onLine,
 			persisted: null,
@@ -199,6 +201,35 @@ export default {
 
 		/** Beim Oeffnen online: jeden Eintrag auf den neuesten Stand bringen (D15). */
 		async refreshAll() {
+			// The `online` event can fire while the check from `mounted` still
+			// runs; two of them would read-modify-write the manifest at once.
+			// One more pass afterwards covers what changed meanwhile.
+			if (this.refreshing) {
+				this.refreshAgain = true
+				return
+			}
+			this.refreshing = true
+			try {
+				do {
+					this.refreshAgain = false
+					await this.refreshOnce()
+				} while (this.refreshAgain)
+			} finally {
+				this.refreshing = false
+			}
+		},
+
+		async refreshOnce() {
+			const account = await this.store.confirmAccount()
+			if (account === 'other') {
+				// This page came from the cache and belongs to whoever opened
+				// it last; the server has someone else signed in.
+				window.location.reload()
+				return
+			}
+			if (account === 'ok') {
+				await this.load()
+			}
 			for (const entry of this.entries) {
 				const key = `${entry.type}-${entry.id}`
 				this.states = { ...this.states, [key]: 'checking' }

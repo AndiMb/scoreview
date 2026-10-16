@@ -1,18 +1,22 @@
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
-import { generateUrl } from '@nextcloud/router'
+import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 import { ref } from 'vue'
 import {
 	apiUrlsFor,
+	DATA_CACHE,
 	estimateBytes,
 	isOutdated,
+	isStaleStaging,
 	missingUrls,
+	orphanedUrls,
 	planForScore,
 	planForSetlist,
 	removeEntry,
 	sharedUrls,
 	soundFontChanged,
 	splitByUser,
+	stagingName,
 	upsertEntry,
 } from '../lib/offlinePlan.js'
 import { WORKLET_URL } from '../lib/player.js'
@@ -20,12 +24,7 @@ import { isPlayable } from '../lib/setlistNav.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
-/**
- * Der Cache, aus dem der Service Worker der Offline-Seite (src/offline-sw.js)
- * Antworten liefert. Der Name steht dort ein zweites Mal - ein Worker kann
- * dieses Modul nicht importieren, ohne Vue und axios mitzuziehen.
- */
-export const DATA_CACHE = 'scoreview-offline-data'
+export { DATA_CACHE }
 
 /**
  * Die Liste des Vorgemerkten als synthetischer Eintrag im selben Cache. Unter
@@ -71,6 +70,64 @@ export async function cachedUrls() {
 	const keys = await cache.keys()
 	const origin = window.location.origin
 	return new Set(keys.map((r) => (r.url.startsWith(origin) ? r.url.slice(origin.length) : r.url)))
+}
+
+/**
+ * Copies what a download staged into the data cache. Only called once the
+ * whole download succeeded: until then the data cache keeps the previous,
+ * complete state - a refresh that loses the network halfway must not leave
+ * the new status next to the old pages (the viewer would ask for pages that
+ * were never stored, and offline the score would stay blank).
+ *
+ * @param {Cache} staging
+ * @param {Cache} target
+ * @param {string[]} urls
+ */
+async function promote(staging, target, urls) {
+	for (const url of urls) {
+		const res = await staging.match(url)
+		if (res) {
+			await target.put(url, res)
+		}
+	}
+}
+
+/**
+ * Staging caches of downloads that never finished (tab closed, browser
+ * killed), and data-cache keys that no entry names. Runs when the offline
+ * page loads; a download running in another tab right now is younger than
+ * the age limit and keeps its staging cache.
+ *
+ * @param {object[]} manifest
+ */
+async function sweep(manifest) {
+	const now = Date.now()
+	for (const name of await caches.keys()) {
+		if (isStaleStaging(name, now)) {
+			await caches.delete(name)
+		}
+	}
+	const keys = [...await cachedUrls()]
+	await deleteUrls(orphanedUrls(manifest, keys, [manifestUrl()]))
+}
+
+/**
+ * Who is signed in right now, asked of the server - not of the page. The
+ * offline page may come from the service worker's cache and then carries the
+ * uid of whoever loaded it last.
+ *
+ * @return {Promise<?string>} the uid, or null if the server could not say
+ */
+async function liveUid() {
+	try {
+		const res = await axios.get(generateOcsUrl('cloud/user'), {
+			headers: { 'OCS-APIRequest': 'true', 'X-ScoreView-Network-Only': '1' },
+			params: { format: 'json' },
+		})
+		return res.data?.ocs?.data?.id ?? null
+	} catch {
+		return null
+	}
 }
 
 /**
@@ -211,6 +268,18 @@ export function useOffline({ uid }) {
 
 	async function buildEntry(target, onProgress) {
 		const cache = await caches.open(DATA_CACHE)
+		const stagingKey = stagingName(Date.now())
+		const staging = await caches.open(stagingKey)
+		try {
+			const entry = await download(target, cache, staging, onProgress)
+			await promote(staging, cache, entry.urls)
+			return entry
+		} finally {
+			await caches.delete(stagingKey)
+		}
+	}
+
+	async function download(target, cache, staging, onProgress) {
 		const setlistUrl = target.setlistId ? generateUrl('/apps/scoreview/api/setlists/{id}', { id: target.setlistId }) : null
 		const ids = target.setlistId ? (await setlistMembers(target.setlistId)).map((e) => e.fileId) : [target.fileId]
 		const scorePlans = []
@@ -237,7 +306,7 @@ export function useOffline({ uid }) {
 			// The shared files (SoundFont ~24 MB, worklet) are the same for
 			// every entry: once in the cache, pinning or refreshing another
 			// piece does not copy them again.
-			const size = i >= urls.length ? await storedSize(cache, url) ?? await store(cache, url) : await store(cache, url)
+			const size = i >= urls.length ? await storedSize(cache, url) ?? await store(staging, url) : await store(staging, url)
 			if (i < urls.length) {
 				bytes += size
 			} else {
@@ -284,9 +353,32 @@ export function useOffline({ uid }) {
 	 * @return {Promise<Array<object>>} eigene Eintraege mit `missing`
 	 */
 	async function ownEntries() {
-		const own = await purgeForeign()
+		const manifest = await readManifest()
+		await sweep(manifest).catch(() => {})
+		const own = splitByUser(manifest, uid()).own
 		const cached = await cachedUrls()
 		return own.map((e) => ({ ...e, missing: missingUrls(e, cached).length }))
+	}
+
+	/**
+	 * Deletes other accounts' entries (S10) - but only once the server has
+	 * confirmed who is signed in. The offline page itself may come from the
+	 * cache with an older uid; trusting it would delete the entries of the
+	 * person actually using the browser.
+	 *
+	 * @return {Promise<'ok'|'other'|'unknown'>} `other`: the page belongs to
+	 *   another account than the session and should be reloaded
+	 */
+	async function confirmAccount() {
+		const live = await liveUid()
+		if (live === null) {
+			return 'unknown'
+		}
+		if (live !== uid()) {
+			return 'other'
+		}
+		await purgeForeign()
+		return 'ok'
 	}
 
 	/**
@@ -314,7 +406,7 @@ export function useOffline({ uid }) {
 	 * geladen. Ohne Netz bleibt er, wie er ist.
 	 *
 	 * @param {object} entry
-	 * @return {Promise<'current'|'updated'|'offline'>}
+	 * @return {Promise<'current'|'updated'|'pending'|'offline'>}
 	 */
 	async function refresh(entry) {
 		try {
@@ -335,10 +427,11 @@ export function useOffline({ uid }) {
 				: { fileId: entry.id, title: entry.title }, () => {})
 			await commit(fresh)
 			return 'updated'
-		} catch {
-			return 'offline'
+		} catch (err) {
+			// A piece being reconverted right now is no lost connection.
+			return err?.message === 'not ready' ? 'pending' : 'offline'
 		}
 	}
 
-	return { busy, progress, error, done, estimate, pin, remove, ownEntries, refresh }
+	return { busy, progress, error, done, estimate, pin, remove, ownEntries, confirmAccount, refresh }
 }

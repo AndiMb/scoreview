@@ -9,8 +9,8 @@
 // Vormerken gelegt hat. Deshalb kennt er keine Partituren, keine fileIds und
 // keine eigenen Schluessel - nur drei Regeln nach Art der Anfrage.
 
-// Muss mit composables/useOffline.js uebereinstimmen.
-const DATA_CACHE = 'scoreview-offline-data'
+import { DATA_CACHE } from './lib/offlinePlan.js'
+
 // Die Huelle der Seite (Skripte, Stile, Schriften). Je App-Version neu, damit
 // nach einem Update kein altes Bundle mit neuen Daten zusammentrifft.
 const VERSION = new URL(self.location.href).searchParams.get('v') ?? 'dev'
@@ -175,7 +175,11 @@ async function networkFirst(request, cacheName, networkOnly) {
 
 async function staleWhileRevalidate(request) {
 	const cache = await caches.open(SHELL_CACHE)
-	const cached = await cache.match(request)
+	// The synth worklet is a shell asset by its path, but useOffline stores it
+	// with the pinned data - after an app update, or if nobody played on the
+	// offline page while online, that copy is the only one. Without it there
+	// is no sound offline.
+	const cached = await cache.match(request) ?? await caches.match(request, { cacheName: DATA_CACHE })
 	const update = fetch(request).then(async (res) => {
 		if (res.ok) {
 			await cache.put(request, res.clone())

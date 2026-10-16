@@ -873,11 +873,16 @@ Vorgemerkte Partituren liegen im Cache Storage des Browsers
 Origin, nicht am Konto. Deshalb:
 
 - **Ein Konto je Offline-Cache.** Jeder Eintrag trägt die `uid`. Beim
-  Vormerken und beim Öffnen der Offline-Seite werden Einträge anderer Konten
-  gelöscht, samt **aller** ihrer URLs – auch solcher, die ein eigener Eintrag
+  Vormerken und beim Öffnen der Offline-Seite mit Netz werden Einträge anderer
+  Konten gelöscht, samt **aller** ihrer URLs – auch solcher, die ein eigener Eintrag
   mitbenutzt; der gilt danach als beschädigt und wird neu vorgemerkt. Meldet
   sich im selben Browser jemand anderes an, ohne dass vorher abgemeldet wurde
-  (abgelaufene Sitzung), sieht er nichts davon.
+  (abgelaufene Sitzung), sieht er nichts davon. Auf der Offline-Seite löscht
+  erst ein Abgleich mit dem Server (`/ocs/v2.php/cloud/user`): Die Seite kann
+  aus dem Cache der Hülle kommen und trägt dann die `uid` dessen, der sie
+  zuletzt geladen hat – ihr zu glauben, löschte das Vorgemerkte der Person,
+  die den Browser gerade benutzt. Nennt der Server ein anderes Konto, lädt die
+  Seite neu.
 - **Wer nicht mehr angemeldet ist, verliert das Vorgemerkte.** Nextcloud
   schickt beim Abmelden `Clear-Site-Data` nur über HTTPS und nie an Chrome
   (`core/Controller/LoginController.php`); gemessen: In Chrome bleiben Cache
@@ -2013,7 +2018,7 @@ Aufführungsmodus bleiben.
 |---|---|
 | die Seite selbst | erst das Netz, sonst der Cache der Hülle; eine nachgewiesene Umleitung zum Login räumt alles ([S10](#s10-vorgemerktes-gehört-einem-konto-und-verschwindet-mit-der-anmeldung)) |
 | `GET` an `/apps/scoreview/api/…` | erst das Netz, sonst `scoreview-offline-data`, mit und ohne `index.php`; sonst 503 `{offline: true}` |
-| Skripte, Stile, Schriften, Übersetzungen unter `/apps`, `/custom_apps`, `/apps-extra`, `/core`, `/dist`, `/themes` | aus dem Cache der Hülle, im Hintergrund erneuert; der Cache trägt die App-Version im Namen |
+| Skripte, Stile, Schriften, Übersetzungen unter `/apps`, `/custom_apps`, `/apps-extra`, `/core`, `/dist`, `/themes` | aus dem Cache der Hülle, im Hintergrund erneuert; der Cache trägt die App-Version im Namen. Fehlt dort etwas, hilft der Datencache aus – das Worklet des Synthesizers legt „Offline vormerken“ dort ab, und nach einem App-Update ist das die einzige Kopie |
 | alles andere `GET` (etwa ein externes SoundFont) | erst der Datencache, dann das Netz |
 | nicht `GET` | geht unverändert ans Netz |
 
@@ -2039,6 +2044,13 @@ ein Netz, keinen erreichbaren Server. Der Browser gewährt
 Platzmangel räumen; fehlt beim Öffnen eine URL eines Eintrags, gilt er als
 „Vom Browser entfernt“. Das SoundFont teilen sich alle Einträge und zählt in
 der Platzangabe nur einmal.
+
+Geladen wird erst in einen eigenen Zwischencache und erst nach vollständigem
+Erfolg in den Datencache übernommen. Bricht das Netz beim Aktualisieren ab,
+bleibt der vorige Stand vollständig – sonst nennte der neue Status Seiten, die
+nie ankamen, und die Partitur bliebe offline leer. Zwischencaches eines
+abgebrochenen Ladens und Einträge im Datencache, die kein Vorgemerktes mehr
+nennt, räumt das nächste Öffnen der Offline-Seite.
 
 **Nur im Browser.** In den mobilen Apps gibt es die Offline-Seite nicht – die
 Direct-Editing-Seite hat keinen eigenen Pfad, unter dem ein Worker gelten
