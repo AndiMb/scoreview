@@ -4,6 +4,60 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.14.4] – 2026-10-16
+
+### Security
+
+- **“Follow me” can no longer be taken over through a score of one's own.**
+  Anyone who owned any score could start a session on it and move that
+  session onto a score shared with them read-only, then lead everyone
+  following there. Leadership now only carries over to a piece of the same
+  owner; elsewhere it needs the leader role on that piece.
+- **The SoundFont error no longer reveals the server's configuration.** When
+  the SoundFont could not be provided, the answer to the viewer included the
+  technical cause, which can name the configured download address and
+  internal host names. That cause now only goes to the server log.
+
+### Fixed
+
+- **Restarting “Follow me” on an earlier piece no longer sends followers
+  away.** After moving on and coming back within half an hour, every device
+  that joined was sent on to the piece the session had moved to before.
+- **A move that fails half-way leaves nothing behind.** If someone else took
+  over the session while it was moving, the move could point their followers
+  to the new piece, or leave an unled session there for half an hour.
+- **A pinned score survives a refresh that loses the network.** The offline
+  page now downloads into a separate cache and takes it over only when
+  everything arrived; before, a broken refresh could leave a score that
+  counted as complete but stayed blank offline.
+- **Sound offline after an app update.** The offline page could not find the
+  synthesizer it had stored with the pinned scores and stayed silent until it
+  had been used once online.
+- **The offline page no longer deletes the pinned scores of the person using
+  it** when it was loaded from the cache under another account. It now asks
+  the server who is signed in before removing anything.
+- **Practice tracks land next to the right piece.** Switching pieces while a
+  track was rendering, for example when the leader moved on, saved it next
+  to the new piece. Switching or closing now cancels the export, and
+  cancelling and restarting no longer lets two exports run into each other.
+- **A practice track that cannot be written because the file is locked** (a
+  sync client) or blocked by an access rule now gets a clear message instead
+  of a server error.
+- **Seeking after the end of a piece no longer starts it** when no SoundFont
+  is configured.
+- **The starting note and the transposition name a key the same way** – with
+  six accidentals both say F♯ now, where the starting note said G♭.
+- **Media keys do nothing once the viewer is closed.**
+
+### Changed
+
+- **The system band follows playback with less work per note.** Only the
+  system showing the cursor redraws on each note, scrolling no longer
+  measures every system, a piece change loads the band once instead of twice,
+  and a page shown in several systems is fetched and prepared once.
+- **Note names relative to the key are labelled faster** – the key of each
+  note is looked up once per score instead of once per notehead.
+
 ## [1.14.3] – 2026-10-13
 
 ### Fixed
