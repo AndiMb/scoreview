@@ -2227,6 +2227,7 @@ export default {
 		// Abbau der Wiedergabe, solange deren Kontext noch lebt.
 		this.destroyRecorder()
 		this.destroyIntonation()
+		this.practiceExport.cancel()
 		this.cleanupSession()
 		this.turnMicOff()
 		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
@@ -2506,6 +2507,8 @@ export default {
 			// abgeschlossen und gespeichert, solange ihr Kontext lebt.
 			this.resetRecorder()
 			this.resetIntonation()
+			// A practice-track export belongs to the piece it was started on.
+			this.practiceExport.cancel()
 			// Baut die Wiedergabe ab und vergisst die geladene Konvertierung
 			// (useScoreSession.js) - ein noch laufendes Laden gilt ab hier
 			// als veraltet.

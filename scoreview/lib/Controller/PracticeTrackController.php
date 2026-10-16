@@ -112,6 +112,7 @@ class PracticeTrackController extends Controller {
 			], Http::STATUS_CONFLICT),
 			PracticeTrackException::FORBIDDEN => new JSONResponse(['error' => $this->l->t('You cannot save files in this folder.')], Http::STATUS_FORBIDDEN),
 			PracticeTrackException::STORAGE_FULL => new JSONResponse(['error' => $this->l->t('Not enough storage space.')], Http::STATUS_INSUFFICIENT_STORAGE),
+			PracticeTrackException::BUSY => new JSONResponse(['error' => $this->l->t('The file or folder is in use right now. Try again in a moment.')], Http::STATUS_SERVICE_UNAVAILABLE),
 			default => new JSONResponse(['error' => $this->l->t('Invalid file name or folder.')], Http::STATUS_BAD_REQUEST),
 		};
 	}

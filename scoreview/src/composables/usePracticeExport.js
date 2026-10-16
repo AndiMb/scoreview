@@ -47,15 +47,26 @@ export function usePracticeExport(deps) {
 	// Nach einem Namenskonflikt: {name, suggested, job} - der Dialog fragt dann
 	const conflict = shallowRef(null)
 	const saved = ref([])
-	let worker = null
-	let cancelled = false
+	// The run in progress: {cancelled, worker, reject}. One object per run, so
+	// that a run cancelled during its upload cannot pick up again when a new
+	// one resets a shared flag - and its `finally` cannot end the new one.
+	let current = null
 
 	const labels = () => ({ fullMix: t('Full mix'), coach: t('Coach'), loop: t('Excerpt') })
 
+	/** Also called when the viewer switches pieces or closes. */
 	function cancel() {
-		cancelled = true
-		worker?.terminate()
-		worker = null
+		const run = current
+		current = null
+		conflict.value = null
+		if (run) {
+			run.cancelled = true
+			run.worker?.terminate()
+			run.worker = null
+			// `terminate()` fires no event: without this the render promise
+			// would never settle.
+			run.reject?.(new Error('cancelled'))
+		}
 		running.value = false
 		progress.value = null
 	}
@@ -114,21 +125,25 @@ export function usePracticeExport(deps) {
 	}
 
 	async function run(jobs, { target, ownFolder, replace, retry }) {
+		// Taken now, not at upload time: rendering takes a while, and a leader
+		// may switch the piece meanwhile - the tracks belong next to THIS one.
+		const fileId = deps.fileId()
 		const midi = deps.midi()
 		const soundFont = await deps.soundFont()
 		if (!midi || !soundFont) {
 			error.value = t('The sound is not loaded yet.')
 			return
 		}
-		cancelled = false
+		cancel()
+		const self = { cancelled: false, worker: null, reject: null }
+		current = self
 		running.value = true
 		error.value = ''
-		conflict.value = null
 		saved.value = []
 		try {
-			for (let i = 0; i < jobs.length && !cancelled; i++) {
+			for (let i = 0; i < jobs.length && !self.cancelled; i++) {
 				const job = jobs[i]
-				const mp3 = await renderInWorker({
+				const mp3 = await renderInWorker(self, {
 					midi: midi.slice(0),
 					soundFont: soundFont.slice(0),
 					plan: job.plan,
@@ -136,11 +151,14 @@ export function usePracticeExport(deps) {
 				}, (stage, p) => {
 					progress.value = { stage, p, index: i + 1, count: jobs.length, part: job.part }
 				})
-				if (cancelled) {
+				if (self.cancelled) {
 					break
 				}
 				progress.value = { stage: 'upload', p: 0, index: i + 1, count: jobs.length, part: job.part }
-				const result = await upload(mp3, job.name, target, ownFolder, replace)
+				const result = await upload(fileId, mp3, job.name, target, ownFolder, replace)
+				if (self.cancelled) {
+					break
+				}
 				if (result.conflict) {
 					conflict.value = { name: job.name, suggested: result.suggested, retry }
 					break
@@ -148,18 +166,26 @@ export function usePracticeExport(deps) {
 				saved.value = [...saved.value, result]
 			}
 		} catch (err) {
-			error.value = err?.response?.data?.error ?? err?.message ?? String(err)
+			if (!self.cancelled) {
+				error.value = err?.response?.data?.error ?? err?.message ?? String(err)
+			}
 		} finally {
-			worker?.terminate()
-			worker = null
-			running.value = false
-			progress.value = null
+			self.worker?.terminate()
+			self.worker = null
+			self.reject = null
+			if (current === self) {
+				current = null
+				running.value = false
+				progress.value = null
+			}
 		}
 	}
 
-	function renderInWorker(job, onProgress) {
+	function renderInWorker(self, job, onProgress) {
 		return new Promise((resolve, reject) => {
-			worker = new Worker(WORKER_URL)
+			const worker = new Worker(WORKER_URL)
+			self.worker = worker
+			self.reject = reject
 			worker.onmessage = ({ data }) => {
 				if (data.type === 'progress') {
 					onProgress(data.stage, data.p)
@@ -174,12 +200,12 @@ export function usePracticeExport(deps) {
 		})
 	}
 
-	async function upload(mp3, name, target, ownFolder, replace) {
+	async function upload(fileId, mp3, name, target, ownFolder, replace) {
 		const params = new URLSearchParams({ name, target, replace: replace ? '1' : '0' })
 		if (ownFolder !== null && ownFolder !== undefined) {
 			params.set('ownFolder', String(ownFolder))
 		}
-		const url = generateUrl('/apps/scoreview/api/scores/{fileId}/practice-tracks', { fileId: deps.fileId() }) + '?' + params.toString()
+		const url = generateUrl('/apps/scoreview/api/scores/{fileId}/practice-tracks', { fileId }) + '?' + params.toString()
 		try {
 			const res = await axios.post(url, mp3, { headers: { 'Content-Type': 'audio/mpeg' } })
 			return res.data

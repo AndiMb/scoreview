@@ -13,6 +13,8 @@ class PracticeTrackException extends \RuntimeException {
 	public const INVALID = 'invalid';
 	/** Kein Platz mehr im Kontingent der Ordnerbesitzerin (507). */
 	public const STORAGE_FULL = 'storage_full';
+	/** The file is locked (sync client) or its storage is offline (503). */
+	public const BUSY = 'busy';
 
 	public function __construct(
 		private string $reason,

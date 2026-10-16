@@ -125,6 +125,10 @@ msgid "Not enough storage space."
 msgstr ""
 
 #: lib/Controller/PracticeTrackController.php
+msgid "The file or folder is in use right now. Try again in a moment."
+msgstr ""
+
+#: lib/Controller/PracticeTrackController.php
 msgid "Invalid file name or folder."
 msgstr ""
 

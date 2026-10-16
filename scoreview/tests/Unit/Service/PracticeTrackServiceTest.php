@@ -180,6 +180,24 @@ class PracticeTrackServiceTest extends TestCase {
 		$this->assertSame(9, $this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, true)['fileId']);
 	}
 
+	public function testGesperrteDateiIstKeinServerfehler(): void {
+		$alt = $this->datei('x.mp3');
+		$alt->method('isUpdateable')->willReturn(true);
+		$alt->method('putContent')->willThrowException(new \OCP\Lock\LockedException('x.mp3'));
+		$this->parent->method('nodeExists')->willReturn(true);
+		$this->parent->method('get')->willReturn($alt);
+		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::BUSY));
+		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, true);
+	}
+
+	public function testZugriffsregelVerweigert(): void {
+		$this->parent->method('nodeExists')->willReturn(false);
+		$this->parent->method('isCreatable')->willReturn(true);
+		$this->parent->method('newFile')->willThrowException(new \OCP\Files\ForbiddenException('rule', false));
+		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::FORBIDDEN));
+		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, false);
+	}
+
 	public function testEigenerOrdnerNurImNutzerordner(): void {
 		$this->userFolder->method('getById')->willReturn([]);
 		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::INVALID));

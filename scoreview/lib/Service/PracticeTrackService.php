@@ -7,14 +7,17 @@ namespace OCA\ScoreView\Service;
 use OCA\ScoreView\AppInfo\Application;
 use OCP\Files\File;
 use OCP\Files\Folder;
+use OCP\Files\ForbiddenException;
 use OCP\Files\InvalidPathException;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
+use OCP\Files\StorageNotAvailableException;
 use OCP\IConfig;
 use OCP\L10N\IFactory;
+use OCP\Lock\LockedException;
 
 /**
  * Uebe-Tracks als Dateien in Files (E13, H1/H10).
@@ -91,9 +94,16 @@ class PracticeTrackService {
 		} catch (NotEnoughSpaceException) {
 			$this->removePartial($folder, $fileName, $created);
 			throw new PracticeTrackException(PracticeTrackException::STORAGE_FULL);
-		} catch (NotPermittedException) {
+		} catch (NotPermittedException|ForbiddenException) {
+			// ForbiddenException: an access-control rule (files_accesscontrol)
+			// refused the write - a refusal like a missing permission.
 			$this->removePartial($folder, $fileName, $created);
 			throw new PracticeTrackException(PracticeTrackException::FORBIDDEN);
+		} catch (LockedException|StorageNotAvailableException) {
+			// A sync client holds the file being replaced, or an external
+			// storage is offline: worth another try, not a 500.
+			$this->removePartial($folder, $fileName, $created);
+			throw new PracticeTrackException(PracticeTrackException::BUSY);
 		} catch (InvalidPathException|NotFoundException) {
 			// Ein Name, den diese Instanz nicht zulaesst (verbotene Zeichen
 			// wie `:` bei Windows-kompatiblen Namen, zu lang), oder die Datei
