@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\FeatureConfig;
+use OCA\ScoreView\Service\UserFileResolver;
+use OCA\ScoreView\Service\ViewerPolicy;
 use OCA\ScoreView\Service\ViewerPreferences;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -19,7 +22,7 @@ use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
-use OCP\IAppConfig;
+use OCP\Files\File;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
@@ -27,14 +30,21 @@ use OCP\IUserSession;
 use OCP\Util;
 
 /**
- * Die Offline-Seite (E14, H9) - die einzige eigene Seite der App.
+ * Die eigenen Seiten der App: die Offline-Seite (E14, H9) und die Druckseite
+ * (E16). Beide sind kein zweiter Einstieg in Partituren - `/apps/scoreview/`
+ * selbst antwortet weiter 404 (E6).
  *
- * Warum eine eigene Seite: Den Viewer in Files steuert Nextclouds eigener
- * Service Worker (Files, Scope `/`, gemessen M-E). Ein zweiter mit demselben
- * Scope verdraengte ihn. Einer, der NUR unter dieser Seite gilt, kann sie
- * und die vorgemerkten Partituren ohne Netz ausliefern, ohne Files zu
- * beruehren. `/apps/scoreview/` selbst antwortet weiter 404 (E6); diese
- * Seite zeigt nur Vorgemerktes und ist kein zweiter Einstieg in Partituren.
+ * Warum die Offline-Seite eine eigene Seite ist: Den Viewer in Files steuert
+ * Nextclouds eigener Service Worker (Files, Scope `/`, gemessen M-E). Ein
+ * zweiter mit demselben Scope verdraengte ihn. Einer, der NUR unter dieser
+ * Seite gilt, kann sie und die vorgemerkten Partituren ohne Netz ausliefern,
+ * ohne Files zu beruehren. Die Seite zeigt nur Vorgemerktes.
+ *
+ * Why the print page is one: the viewer in Files loads and unloads pages as
+ * they scroll by (ScorePage.vue), so the browser's print of the Files page
+ * would print the few pages that happen to be loaded, inside Nextcloud's
+ * frame. The print page holds every page of one score at once, nothing else,
+ * and is opened from the viewer - it carries no navigation of its own.
  */
 class PageController extends Controller {
 	public function __construct(
@@ -44,10 +54,41 @@ class PageController extends Controller {
 		private IUserSession $userSession,
 		private IInitialState $initialState,
 		private IURLGenerator $urlGenerator,
-		private IAppConfig $appConfig,
+		private ViewerPolicy $viewerPolicy,
+		private UserFileResolver $fileResolver,
+		private ClientFallback $clientFallback,
 		private IL10N $l,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+	}
+
+	/**
+	 * The print page of one score (E16). 404 for a file the session cannot
+	 * see, before any other answer (S8): the page must not tell whether a
+	 * fileId exists.
+	 */
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	public function print(int $fileId): Response {
+		$node = $this->fileResolver->resolveOwnNode($fileId);
+		if (!$node instanceof File) {
+			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+		}
+		$uid = $this->userSession->getUser()?->getUID();
+		$this->initialState->provideInitialState('print', [
+			'fileId' => $node->getId(),
+			'fileName' => $node->getName(),
+		]);
+		$this->initialState->provideInitialState('features', $this->features->forViewer());
+		$this->initialState->provideInitialState('viewer-preferences', $this->preferences->get($uid));
+		Util::addScript(Application::APP_ID, Application::APP_ID . '-print');
+
+		$response = new TemplateResponse(Application::APP_ID, 'print', [], TemplateResponse::RENDER_AS_BASE);
+		// The same policy as the viewer: the page shows no sound, but the
+		// conversion fallback (E7) runs the engine here as well - as
+		// WebAssembly, from a blob worker - and only where it can apply.
+		$response->setContentSecurityPolicy($this->viewerPolicy->forPage($this->clientFallback->applies()));
+		return $response;
 	}
 
 	#[NoAdminRequired]
@@ -77,15 +118,10 @@ class PageController extends Controller {
 		Util::addScript(Application::APP_ID, Application::APP_ID . '-offline');
 
 		$response = new TemplateResponse(Application::APP_ID, 'offline', [], TemplateResponse::RENDER_AS_BASE);
-		$policy = new ContentSecurityPolicy();
-		// Wie im Viewer (Listener\AddCspListener): Der Klang dekodiert sein
-		// SoundFont mit WebAssembly; Worker fuer den Service Worker selbst.
-		// `manifest-src 'self'` setzt Nextcloud ohnehin in jede Policy.
-		$policy->allowEvalWasm(true);
-		$policy->addAllowedWorkerSrcDomain("'self'");
-		$policy->addAllowedWorkerSrcDomain('blob:');
-		$this->allowSoundFont($policy);
-		$response->setContentSecurityPolicy($policy);
+		// Wie im Viewer (Service\ViewerPolicy), mit Workern immer: der Service
+		// Worker gehoert zur Seite. `manifest-src 'self'` setzt Nextcloud
+		// ohnehin in jede Policy.
+		$response->setContentSecurityPolicy($this->viewerPolicy->forPage(true));
 		return $response;
 	}
 
@@ -113,7 +149,10 @@ class PageController extends Controller {
 		// Holt er ein externes SoundFont nach, braucht er die Freigabe selbst.
 		$policy = new ContentSecurityPolicy();
 		$policy->addAllowedConnectDomain("'self'");
-		$this->allowSoundFont($policy);
+		$origin = $this->viewerPolicy->soundFontOrigin();
+		if ($origin !== null) {
+			$policy->addAllowedConnectDomain($origin);
+		}
 		$response->setContentSecurityPolicy($policy);
 		return $response;
 	}
@@ -141,27 +180,11 @@ class PageController extends Controller {
 		return $response;
 	}
 
-	private function allowSoundFont(ContentSecurityPolicy $policy): void {
-		$origin = self::origin($this->appConfig->getValueString(Application::APP_ID, 'soundfont_url'));
-		if ($origin !== null) {
-			$policy->addAllowedConnectDomain($origin);
-		}
-	}
-
 	private function pageUrl(): string {
 		return $this->urlGenerator->linkToRoute(Application::APP_ID . '.page.offline');
 	}
 
 	private function serviceWorkerUrl(): string {
 		return $this->urlGenerator->linkToRoute(Application::APP_ID . '.page.serviceWorker');
-	}
-
-	/** Schema und Host einer Adresse - fuer connect-src. */
-	public static function origin(string $url): ?string {
-		$parts = parse_url(trim($url));
-		if (!is_array($parts) || !isset($parts['scheme'], $parts['host']) || !in_array($parts['scheme'], ['http', 'https'], true)) {
-			return null;
-		}
-		return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
 	}
 }

@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php
+#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php
 msgid "File not found or no access."
 msgstr "Datei nicht gefunden oder kein Zugriff."
 
@@ -305,8 +305,8 @@ msgid "Allowed: {min}–{max}. Default: {default}."
 msgstr "Erlaubt: {min}–{max}. Vorgabe: {default}."
 
 #: src/components/AdminSettings.vue
-msgid "Intonation feedback while singing"
-msgstr "Rückmeldung zur Intonation beim Singen"
+msgid "Intonation feedback while singing, and the tuner"
+msgstr "Intonationsrückmeldung beim Singen und das Stimmgerät"
 
 #: src/components/AdminSettings.vue
 msgid "Practising on the go"
@@ -340,7 +340,7 @@ msgstr "Fehler: {message}"
 msgid "Status"
 msgstr "Status"
 
-#: src/components/AdminSettings.vue src/components/OfflineApp.vue src/components/ScoreStatus.vue
+#: src/components/AdminSettings.vue src/components/OfflineApp.vue src/components/PrintToolbar.vue src/components/ScoreStatus.vue
 msgid "Loading…"
 msgstr "Wird geladen…"
 
@@ -760,6 +760,10 @@ msgstr "Aufnahme"
 msgid "Intonation"
 msgstr "Intonation"
 
+#: src/components/MicIndicator.vue src/components/ScoreViewer.vue
+msgid "Tuner"
+msgstr "Stimmgerät"
+
 #: src/components/MicIndicator.vue
 msgid "Score following"
 msgstr "Mitverfolgen"
@@ -768,7 +772,7 @@ msgstr "Mitverfolgen"
 msgid "Microphone on for: {purpose}. Tap to turn it off."
 msgstr "Mikrofon an für: {purpose}. Antippen schaltet es aus."
 
-#: src/components/NoteNameControls.vue src/components/ScoreViewer.vue
+#: src/components/NoteNameControls.vue src/components/PrintToolbar.vue src/components/ScoreViewer.vue
 msgid "Note names"
 msgstr "Tonnamen"
 
@@ -784,7 +788,7 @@ msgstr "Die Namen nennen die geschriebenen Noten; transponiert ist nur der Klang
 msgid "Tap a note to hear it while playback is stopped."
 msgstr "Tippe bei angehaltener Wiedergabe auf eine Note, um sie zu hören."
 
-#: src/components/NoteNameControls.vue
+#: src/components/NoteNameControls.vue src/components/TunerPanel.vue
 msgid "Off"
 msgstr "Aus"
 
@@ -984,6 +988,38 @@ msgstr "Ordner wählen"
 msgid "Choose"
 msgstr "Wählen"
 
+#: src/components/PrintToolbar.vue src/components/ScoreViewer.vue
+msgid "Print"
+msgstr "Drucken"
+
+#: src/components/PrintToolbar.vue
+msgid "Notes and stamps"
+msgstr "Notizen und Stempel"
+
+#: src/components/PrintToolbar.vue
+msgid "Converting in this browser: page {page} of {of}…"
+msgstr "Wird in diesem Browser konvertiert: Seite {page} von {of}…"
+
+#: src/components/PrintToolbar.vue
+msgid "Converting in this browser…"
+msgstr "Wird in diesem Browser konvertiert…"
+
+#: src/components/PrintToolbar.vue
+msgid "Still converting… this is taking longer than usual."
+msgstr "Konvertiert noch… das dauert länger als üblich."
+
+#: src/components/PrintToolbar.vue src/components/ScoreStatus.vue
+msgid "Converting…"
+msgstr "Wird konvertiert…"
+
+#: src/components/PrintToolbar.vue
+msgid "{count} pages ready to print."
+msgstr "{count} Seiten bereit zum Drucken."
+
+#: src/components/PrintToolbar.vue
+msgid "Loading page {loaded} of {count}…"
+msgstr "Lade Seite {loaded} von {count}…"
+
 #: src/components/RecordingPanel.vue
 msgid "Open in browser"
 msgstr "Im Browser öffnen"
@@ -1032,7 +1068,7 @@ msgstr "Die Aufnahme wurde nicht gespeichert: {error}"
 msgid "It is kept until you reload the page."
 msgstr "Sie bleibt erhalten, bis du die Seite neu lädst."
 
-#: src/components/RecordingPanel.vue
+#: src/components/RecordingPanel.vue src/components/TunerPanel.vue
 msgid "Stop"
 msgstr "Stopp"
 
@@ -1132,7 +1168,7 @@ msgstr "Es wurde kein Mikrofon gefunden."
 msgid "The microphone is being used by another application."
 msgstr "Das Mikrofon wird von einer anderen Anwendung benutzt."
 
-#: src/components/RecordingPanel.vue
+#: src/components/RecordingPanel.vue src/components/TunerPanel.vue
 msgid "The microphone could not be started."
 msgstr "Das Mikrofon ließ sich nicht einschalten."
 
@@ -1140,7 +1176,7 @@ msgstr "Das Mikrofon ließ sich nicht einschalten."
 msgid "Measure {measure}, {cents} cents"
 msgstr "Takt {measure}, {cents} Cent"
 
-#: src/components/RecordingPanel.vue src/components/ScorePage.vue
+#: src/components/RecordingPanel.vue src/components/ScorePage.vue src/components/TunerNeedle.vue src/components/TunerPanel.vue
 msgid "{cents} cents"
 msgstr "{cents} Cent"
 
@@ -1399,10 +1435,6 @@ msgstr "Grundton – klingt, solange gedrückt"
 #: src/components/ScoreStartTone.vue
 msgid "Starting note of my voice – sounds while held"
 msgstr "Anfangston meiner Stimme – klingt, solange gedrückt"
-
-#: src/components/ScoreStatus.vue
-msgid "Converting…"
-msgstr "Wird konvertiert…"
 
 #: src/components/ScoreStatus.vue
 msgid "Error"
@@ -1785,6 +1817,10 @@ msgid "Downbeat only"
 msgstr "Nur Taktanfang"
 
 #: src/components/TempoControls.vue
+msgid "Eighth notes"
+msgstr "Achtel"
+
+#: src/components/TempoControls.vue
 msgid "Sync picture and sound"
 msgstr "Bild und Ton abgleichen"
 
@@ -1823,6 +1859,42 @@ msgstr "{value} Halbtöne"
 #: src/components/TransposeControls.vue
 msgid "Sounds in {to} instead of {from}"
 msgstr "Klingt in {to} statt in {from}"
+
+#: src/components/TunerNeedle.vue
+msgid "No tone"
+msgstr "Kein Ton"
+
+#: src/components/TunerPanel.vue
+msgid "Octave {octave}"
+msgstr "Oktave {octave}"
+
+#: src/components/TunerPanel.vue
+msgid "Listening…"
+msgstr "Hört zu…"
+
+#: src/components/TunerPanel.vue
+msgid "Start tuner"
+msgstr "Stimmgerät starten"
+
+#: src/components/TunerPanel.vue
+msgid "Reference a′ = {hz} Hz"
+msgstr "Referenz a′ = {hz} Hz"
+
+#: src/components/TunerPanel.vue
+msgid "{hz} Hz"
+msgstr "{hz} Hz"
+
+#: src/components/TunerPanel.vue
+msgid "The microphone is blocked. Allow it in the browser to use the tuner."
+msgstr "Das Mikrofon ist gesperrt. Erlaube es im Browser, um das Stimmgerät zu nutzen."
+
+#: src/components/TunerPanel.vue
+msgid "No microphone found."
+msgstr "Kein Mikrofon gefunden."
+
+#: src/components/TunerPanel.vue
+msgid "The microphone is in use by another application."
+msgstr "Das Mikrofon wird von einer anderen Anwendung benutzt."
 
 #: src/components/ZoomControls.vue
 msgid "Zoom"
@@ -1924,7 +1996,7 @@ msgstr "Die Transposition konnte nicht gesendet werden."
 msgid "Could not take the session to the next piece."
 msgstr "Die Sitzung ließ sich nicht zum nächsten Stück mitnehmen."
 
-#: src/composables/useIntonation.js
+#: src/composables/useIntonation.js src/composables/useTuner.js
 msgid "The pitch analysis stopped unexpectedly."
 msgstr "Die Tonhöhenauswertung wurde unerwartet beendet."
 

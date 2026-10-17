@@ -26,6 +26,7 @@ const IDLE = {
 	trainerActive: false,
 	showMixer: false,
 	showPractice: false,
+	showTuner: false,
 	coachActive: false,
 	transposed: false,
 	focusMyPart: false,
@@ -40,9 +41,17 @@ describe('barGroups', () => {
 	it('ordnet alle Werkzeuge ihrer Gruppe zu', () => {
 		expect(barGroups(ctx())).toEqual([
 			{ id: 'practice', items: ['loop', 'tempo', 'metronome', 'toneMode', 'mixer', 'coach', 'transpose', 'practice', 'export'] },
-			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'pin'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'print', 'pin'] },
 			{ id: 'rehearsal', items: ['rehearsal', 'newSetlist'] },
 		])
+	})
+
+	it('offers printing only online and in the browser', () => {
+		expect(barGroups(ctx())[1].items).toContain('print')
+		expect(barGroups(ctx({ standalone: true }))[1].items).not.toContain('print')
+		expect(barGroups(ctx({ offline: true }))[1].items).not.toContain('print')
+		const performance = barGroups(ctx({ can: (a) => allowed(a, { performance: true }) }))
+		expect(performance.find((g) => g.id === 'view').items).not.toContain('print')
 	})
 
 	it('nimmt offline alles weg, was den Server braucht (E14)', () => {
@@ -88,7 +97,7 @@ describe('barGroups', () => {
 		}))
 		expect(groups).toEqual([
 			{ id: 'practice', items: ['loop', 'tempo', 'metronome'] },
-			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'pin'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'print', 'pin'] },
 			{ id: 'rehearsal', items: ['rehearsal'] },
 		])
 	})
@@ -96,6 +105,14 @@ describe('barGroups', () => {
 	it('zeigt Aufnahme auch, wenn nur die Intonation eingeschaltet ist', () => {
 		const practice = barGroups(ctx({ recordingEnabled: false, intonationEnabled: true }))[0]
 		expect(practice.items).toContain('practice')
+	})
+
+	it('offers the tuner with the intonation switch, even offline', () => {
+		expect(barGroups(ctx())[0].items).not.toContain('tuner')
+		expect(barGroups(ctx({ intonationEnabled: true }))[0].items).toContain('tuner')
+		expect(barGroups(ctx({ intonationEnabled: true, offline: true }))[0].items).toContain('tuner')
+		const performance = barGroups(ctx({ intonationEnabled: true, can: (a) => allowed(a, { performance: true }) }))
+		expect(performance.find((g) => g.id === 'practice')).toBeUndefined()
 	})
 })
 
@@ -116,6 +133,7 @@ describe('groupActive', () => {
 		['trainerActive', 'practice'],
 		['showMixer', 'practice'],
 		['showPractice', 'practice'],
+		['showTuner', 'practice'],
 		['focusMyPart', 'view'],
 		['showNoteText', 'view'],
 		['showAnnotations', 'view'],

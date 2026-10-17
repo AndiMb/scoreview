@@ -45,6 +45,21 @@ describe('keyMap.resolveKey', () => {
 		expect(resolveKey({ code: '', key: ' ' })).toBeNull()
 	})
 
+	it('opens the print page on Ctrl+P and Cmd+P, but not on a plain P', () => {
+		expect(resolveKey({ code: 'KeyP', key: 'p', ctrlKey: true })).toEqual({ command: 'print', action: 'settings', preventDefault: true })
+		expect(resolveKey({ code: 'KeyP', key: 'p', metaKey: true }).command).toBe('print')
+		expect(resolveKey({ code: 'KeyP', key: 'p' })).toBeNull()
+	})
+
+	it('swallows Ctrl+P in performance mode instead of printing the Files page', () => {
+		expect(resolveKey({ code: 'KeyP', key: 'p', ctrlKey: true }, { performance: true })).toEqual({ command: 'blocked', action: null, preventDefault: true })
+	})
+
+	it('leaves Ctrl combinations of other keys to the browser', () => {
+		expect(resolveKey({ code: 'KeyL', key: 'l', ctrlKey: true })).toBeNull()
+		expect(resolveKey({ code: 'ArrowRight', key: 'ArrowRight', metaKey: true })).toBeNull()
+	})
+
 	it('nennt nur Bedienungen, die die Policy kennt', () => {
 		for (const binding of KEY_BINDINGS) {
 			for (const entry of [binding.normal, binding.performance]) {

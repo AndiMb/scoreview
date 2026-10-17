@@ -2,7 +2,7 @@
 	<div
 		ref="root"
 		class="score-page"
-		:class="{ 'score-page--dark': noteTheme === 'dark' }"
+		:class="{ 'score-page--dark': noteTheme === 'dark', 'score-page--static': printSheet }"
 		:style="pageStyle"
 		@pointerdown="onPointerDown"
 		@click="onClick">
@@ -399,6 +399,15 @@ export default {
 			type: Function,
 			default: () => 0,
 		},
+
+		// A sheet for the print page (E16): loaded at once, never unloaded,
+		// no cursor and no pointer handling. Everything placed on the page -
+		// markers, note texts, stamps, note names - stays the same code as
+		// on screen; that is the point of reusing this component.
+		printSheet: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
 	emits: ['noteClick', 'markerClick', 'loaded', 'staffMapping', 'indexed'],
@@ -743,6 +752,12 @@ export default {
 	},
 
 	mounted() {
+		if (this.printSheet) {
+			// A sheet is printed whole or not at all: no observers, the page
+			// loads now and stays.
+			this.load()
+			return
+		}
 		// Zwei Beobachter mit unterschiedlichem Rand: laden knapp vor dem
 		// Sichtbarwerden, entladen erst deutlich weiter weg. Ein einzelner
 		// Beobachter kann nur EINEN rootMargin haben, und mit nur einem waere
@@ -1071,7 +1086,7 @@ export default {
 		 * Ladebeobachter greift beim Zurückscrollen unverändert.
 		 */
 		unload() {
-			if (!this.svgMarkup) {
+			if (!this.svgMarkup || this.printSheet) {
 				return
 			}
 			// Die Seite, auf der der Cursor gerade steht, nie freigeben - sonst
@@ -1101,11 +1116,14 @@ export default {
 		// aufgelöst wird - diese Komponente kennt die Notenkoordinaten selbst
 		// nicht (nur ihre eigene viewBox).
 		onPointerDown(event) {
+			if (this.printSheet) {
+				return
+			}
 			this.pointerDownAt = { x: event.clientX, y: event.clientY }
 		},
 
 		onClick(event) {
-			if (!this.viewBox) {
+			if (!this.viewBox || this.printSheet) {
 				return
 			}
 			// Ein Klick, zwischen dessen Nieder- und Loslassen der Zeiger
@@ -1194,6 +1212,13 @@ export default {
 	background: var(--scoreview-page, #fff);
 	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
 	cursor: pointer;
+}
+
+/* A printed sheet: nothing to click, nothing between the sheets. */
+.score-page--static {
+	margin: 0;
+	box-shadow: none;
+	cursor: default;
 }
 
 /*

@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Tests\Unit\Listener;
 
 use OCA\ScoreView\Listener\AddCspListener;
 use OCA\ScoreView\Service\ClientFallback;
+use OCA\ScoreView\Service\ViewerPolicy;
 use OCP\AppFramework\Http\EmptyContentSecurityPolicy;
 use OCP\IAppConfig;
 use OCP\IRequest;
@@ -60,7 +61,7 @@ class AddCspListenerTest extends TestCase {
 		$clientFallback = $this->createMock(ClientFallback::class);
 		$clientFallback->method('applies')->willReturn($rueckfall);
 
-		(new AddCspListener($appConfig, $clientFallback, $request))->handle($event);
+		(new AddCspListener(new ViewerPolicy($appConfig), $clientFallback, $request))->handle($event);
 
 		return $captured;
 	}
@@ -113,7 +114,7 @@ class AddCspListenerTest extends TestCase {
 		$appConfig = $this->createMock(IAppConfig::class);
 		$appConfig->expects($this->never())->method('getValueString');
 
-		(new AddCspListener($appConfig, $this->createMock(ClientFallback::class), $this->createMock(IRequest::class)))
+		(new AddCspListener(new ViewerPolicy($appConfig), $this->createMock(ClientFallback::class), $this->createMock(IRequest::class)))
 			->handle(new \OCP\EventDispatcher\Event());
 
 		$this->addToAssertionCount(1);

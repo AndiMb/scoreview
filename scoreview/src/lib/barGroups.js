@@ -55,6 +55,9 @@ export function barGroups(ctx) {
 			coach: ctx.hasRealPlayer && ctx.canCoach === true && can('mixer'),
 			transpose: ctx.hasRealPlayer && settings,
 			practice: (ctx.recordingEnabled || ctx.intonationEnabled) && settings && online,
+			// The tuner (B3) hangs on the intonation switch: same analysis,
+			// same microphone question. It needs no server, so it stays offline.
+			tuner: ctx.intonationEnabled === true && settings,
 			export: ctx.exportEnabled === true && ctx.hasRealPlayer && settings && online,
 		}),
 		view: pick({
@@ -70,6 +73,9 @@ export function barGroups(ctx) {
 			noteNames: settings,
 			noteText: settings,
 			annotations: can('annotate'),
+			// The print page (E16) needs a session and a browser: the mobile
+			// apps print through "open in browser", offline there is no page.
+			print: online && ctx.standalone !== true && settings,
 			// Vormerken geht nur von einer Seite aus, die online ist, und nur
 			// im Browser - die Offline-Seite gibt es in den Apps nicht (E14).
 			pin: ctx.offlineEnabled === true && online && ctx.standalone !== true && settings,
@@ -121,7 +127,7 @@ export function groupActive(id, s) {
 			// Eine Transposition gehoert dazu: Wer vergisst, dass alles einen
 			// Ton tiefer klingt, singt in der Probe falsch an.
 			return Boolean(s.metronomeEnabled || s.loopActive || s.trainerActive || s.showMixer || s.showPractice
-				|| s.coachActive || s.transposed)
+				|| s.showTuner || s.coachActive || s.transposed)
 		case 'view':
 			return Boolean(s.focusMyPart || s.showNoteNames || s.showNoteText || s.showAnnotations)
 		case 'rehearsal':

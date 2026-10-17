@@ -40,6 +40,8 @@ webpackConfig.entry = {
 	// keine nachgeladenen Teile nach und muss fuer sich allein stehen.
 	'scoreview-offline': path.join(__dirname, 'src', 'offline.js'),
 	'scoreview-offline-sw': path.join(__dirname, 'src', 'offline-sw.js'),
+	// The print page (E16, Controller\PageController::print).
+	'scoreview-print': path.join(__dirname, 'src', 'print.js'),
 }
 
 // Ausgabedateiname explizit festlegen (kein Content-Hash im Dateinamen),

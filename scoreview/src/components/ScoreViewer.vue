@@ -300,6 +300,18 @@
 										<Microphone :size="20" />
 									</template>
 								</ToolRow>
+								<!-- The tuner hangs on the same administration
+									switch as the intonation: same analysis,
+									same microphone question. -->
+								<ToolRow
+									v-if="has(group, 'tuner')"
+									:pressed="showTuner"
+									:label="t('Tuner')"
+									@click="showTuner = !showTuner; close()">
+									<template #icon>
+										<SineWave :size="20" />
+									</template>
+								</ToolRow>
 								<ToolRow
 									v-if="has(group, 'export')"
 									page
@@ -379,6 +391,7 @@
 									:loopRange="exportLoopRange"
 									:canWriteFolder="canWriteFolder"
 									:standalone="standalonePage"
+									:metronomeMode="metronomeBeats"
 									@export="practiceExport.exportOne"
 									@exportAll="practiceExport.exportAllParts"
 									@cancel="practiceExport.cancel"
@@ -476,6 +489,14 @@
 									@click="showAnnotations = !showAnnotations; close()">
 									<template #icon>
 										<NotebookOutline :size="20" />
+									</template>
+								</ToolRow>
+								<ToolRow
+									v-if="has(group, 'print')"
+									:label="t('Print')"
+									@click="openPrintPage(); close()">
+									<template #icon>
+										<Printer :size="20" />
 									</template>
 								</ToolRow>
 								<ToolRow
@@ -774,7 +795,7 @@
 					nichts, wenn sie zu sind, und bleiben erreichbar, wo immer man
 					gerade liest.
 				-->
-				<div v-if="showMixerPanel || showAnnotations || showRehearsal || showPractice || armedStamp || setlistEditorMode" class="scoreview-panels">
+				<div v-if="showMixerPanel || showAnnotations || showRehearsal || showPractice || showTuner || armedStamp || setlistEditorMode" class="scoreview-panels">
 					<!--
 						Ein Stempel wartet auf den Tipp ins Notenbild. Das
 						Notizen-Panel ist dafuer zu - es laege sonst ueber den Noten,
@@ -881,6 +902,17 @@
 							@clearAnalysis="clearIntonationAnalysis"
 							@jump="onPracticeJump" />
 					</ScorePanel>
+					<!-- The tuner (B3): closing the card stops the microphone. -->
+					<ScorePanel v-if="showTuner" :title="t('Tuner')" @close="closeTuner">
+						<TunerPanel
+							:reading="tunerReading"
+							:active="tunerActive"
+							:error="tunerError"
+							:micError="micError"
+							:nameSystem="tunerNameSystem"
+							:concertKey="tunerKey"
+							@toggle="toggleTuner" />
+					</ScorePanel>
 					<!--
 						Der Aufklapper „Probe": die Leitungen - hier sammelt
 						sich, was eine Probe organisiert, statt jedes Stueck davon
@@ -919,7 +951,7 @@
 <script>
 import { loadState } from '@nextcloud/initial-state'
 import { getLanguage, translate } from '@nextcloud/l10n'
-import { getRootUrl } from '@nextcloud/router'
+import { generateUrl, getRootUrl } from '@nextcloud/router'
 import { computed, getCurrentInstance, inject, nextTick, ref, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
@@ -944,7 +976,9 @@ import Pause from 'vue-material-design-icons/Pause.vue'
 import Piano from 'vue-material-design-icons/Piano.vue'
 import Play from 'vue-material-design-icons/Play.vue'
 import PlaylistPlus from 'vue-material-design-icons/PlaylistPlus.vue'
+import Printer from 'vue-material-design-icons/Printer.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
+import SineWave from 'vue-material-design-icons/SineWave.vue'
 import Speedometer from 'vue-material-design-icons/Speedometer.vue'
 import SwapVertical from 'vue-material-design-icons/SwapVertical.vue'
 import Tune from 'vue-material-design-icons/Tune.vue'
@@ -978,6 +1012,7 @@ import TempoControls from './TempoControls.vue'
 import ToolGroup from './ToolGroup.vue'
 import ToolRow from './ToolRow.vue'
 import TransposeControls from './TransposeControls.vue'
+import TunerPanel from './TunerPanel.vue'
 import ZoomControls from './ZoomControls.vue'
 import { useAnnotations } from '../composables/useAnnotations.js'
 import { useAutoScroll } from '../composables/useAutoScroll.js'
@@ -1004,6 +1039,7 @@ import { NO_RECTS, useScoreSession } from '../composables/useScoreSession.js'
 import { useSetlist } from '../composables/useSetlist.js'
 import { useSpeedTrainer } from '../composables/useSpeedTrainer.js'
 import { useStartTone } from '../composables/useStartTone.js'
+import { useTuner } from '../composables/useTuner.js'
 import { useViewerPreferences } from '../composables/useViewerPreferences.js'
 import { useWakeLock } from '../composables/useWakeLock.js'
 import { useZoom } from '../composables/useZoom.js'
@@ -1016,7 +1052,7 @@ import { browserFileUrl } from '../lib/micAccess.js'
 import { nameOf } from '../lib/noteNames.js'
 import { spellingMap } from '../lib/noteSpellingIndex.js'
 import { channelsOfPart } from '../lib/panLayout.js'
-import { keyByElid } from '../lib/scoreFacts.js'
+import { keyAt, keyByElid } from '../lib/scoreFacts.js'
 import {
 	findElementAtPoint,
 	findMeasureStartTime,
@@ -1092,6 +1128,7 @@ export default {
 		PlaylistPlus,
 		SetlistBar,
 		SetlistEditor,
+		SineWave,
 		Speedometer,
 		EyeOutline,
 		Palette,
@@ -1103,6 +1140,7 @@ export default {
 		SystemBand,
 		ViewColumn,
 		Piano,
+		Printer,
 		SwapVertical,
 		CoachControls,
 		PracticeExportControls,
@@ -1110,6 +1148,7 @@ export default {
 		TransposeControls,
 		ToolGroup,
 		ToolRow,
+		TunerPanel,
 		ZoomControls,
 	},
 
@@ -1516,6 +1555,9 @@ export default {
 		// Die Mikrofonstrecke (docs/architecture.md, Abschnitt Mikrofon) - eine fuer Aufnahme, Intonation und
 		// spaeter das Mitverfolgen, am AudioContext der Wiedergabe.
 		const microphone = useMicrophone({ audioContext: playback.getAudioContext, holdAudio: playback.holdAudio })
+		// The tuner (B3) on the same chain - it needs no score, only the
+		// microphone; the key of the score only spells its note.
+		const tuner = useTuner({ microphone })
 		const myChannels = () => channelsOfPart(playback.mixerChannels.value, myPart.myPartId.value)
 		const clockPlaying = () => clock.value?.isPlaying() ?? false
 
@@ -1870,6 +1912,11 @@ export default {
 			destroyRecorder: recorder.destroy,
 			intonationLive: intonation.live,
 			intonationNeedle: intonation.needle,
+			tunerActive: tuner.active,
+			tunerReading: tuner.reading,
+			tunerError: tuner.error,
+			toggleTuner: tuner.toggle,
+			stopTuner: tuner.stop,
 			intonationMarks: intonation.marks,
 			systemRectsByPage,
 			NO_RECTS,
@@ -1986,6 +2033,7 @@ export default {
 			setlistEditorMode: null,
 			// Der Aufklapper „Aufnahme und Intonation".
 			showPractice: false,
+			showTuner: false,
 			// Welche Stimme "meine" ist (`myPartId`, aus useMyPart in setup())
 			// wird ueber "Meine Stimme" im Mixer gesetzt (ScoreMixer.vue).
 			// Dieselbe Wahl steuert Lautstaerke UND Markierung im Notenbild;
@@ -2073,6 +2121,7 @@ export default {
 				trainerActive: this.trainerActive,
 				showMixer: this.showMixer,
 				showPractice: this.showPractice,
+				showTuner: this.showTuner,
 				coachActive: this.practice.coach,
 				transposed: this.effectiveTranspose !== 0,
 				focusMyPart: this.focusMyPart,
@@ -2174,6 +2223,22 @@ export default {
 				return null
 			}
 			return [this.myPartIndex]
+		},
+
+		/**
+		 * How the tuner names its note: like the note names in the score, or
+		 * - with those switched off - as the interface language would.
+		 */
+		tunerNameSystem() {
+			if (this.noteNames !== 'off') {
+				return this.noteNames
+			}
+			return getLanguage().toLowerCase().startsWith('de') ? 'de' : 'en'
+		},
+
+		/** The key at the current position - it decides between F♯ and G♭. */
+		tunerKey() {
+			return keyAt(this.scoreFactsKeys, this.currentAnchor?.measureNumber ?? 1)?.concertKey ?? 0
 		},
 
 		/** Kurzform des Systems fuer die Gruppenzeile. */
@@ -2678,9 +2743,28 @@ export default {
 				// keine Geste, und ohne diesen Hinweis führte die App der
 				// Wiedergabe sofort wieder nach (siehe useAutoScroll.js).
 				scroll: () => this.noteManualScroll(),
+				print: () => this.openPrintPage(),
 				blocked: () => {},
 			}
 			commands[binding.command]?.()
+		},
+
+		/**
+		 * The print page (E16) in a new tab - the viewer in Files holds only
+		 * the pages in reach, so printing happens on a page that holds all.
+		 * Only where the bar offers it (lib/barGroups.js): with a session,
+		 * in the browser, outside performance mode.
+		 */
+		openPrintPage() {
+			if (!this.can('settings') || this.standalonePage || this.offline) {
+				return
+			}
+			window.open(generateUrl('/apps/scoreview/print/{fileId}', { fileId: this.activeFileId }), '_blank', 'noopener')
+		},
+
+		closeTuner() {
+			this.showTuner = false
+			this.stopTuner()
 		},
 
 		// Umkehrung von M4: Klick auf eine Note springt dorthin -

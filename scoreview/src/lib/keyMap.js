@@ -12,6 +12,9 @@
  * - `match`: `code` (Lage der Taste, fuer Leertaste/Buchstaben unabhaengig
  *   vom Tastaturlayout) oder `key` (erzeugtes Zeichen, fuer `+`/`-`, die je
  *   Layout woanders liegen)
+ * - `ctrl`: only with Ctrl (Cmd on a Mac) held. A row without it matches
+ *   only WITHOUT the modifier: Ctrl+L belongs to the browser's address bar,
+ *   not to the loop.
  * - `normal` / `performance`: `[Befehl, Bedienung]`; `null` = hier nicht belegt
  * - Befehl `scroll`: Die Taste scrollt nativ weiter (kein preventDefault),
  *   gemeldet wird nur, DASS gescrollt wird - der Browser meldet fuer
@@ -31,10 +34,14 @@ export const KEY_BINDINGS = Object.freeze([
 	{ key: '+', normal: ['zoomIn', 'zoom'], performance: ['zoomIn', 'zoom'] },
 	{ key: '-', normal: ['zoomOut', 'zoom'], performance: ['zoomOut', 'zoom'] },
 	{ key: '0', normal: ['zoomWidth', 'zoom'], performance: ['zoomWidth', 'zoom'] },
+	// Ctrl+P opens the print page (E16) instead of printing Nextcloud's
+	// Files page around the viewer. Swallowed in performance mode: a print
+	// dialog over the music stand is not what a stray key should bring.
+	{ code: 'KeyP', ctrl: true, normal: ['print', 'settings'], performance: null },
 ])
 
 /**
- * @param {{code?:string, key?:string}} event ein KeyboardEvent oder etwas mit denselben Feldern
+ * @param {{code?:string, key?:string, ctrlKey?:boolean, metaKey?:boolean}} event ein KeyboardEvent oder etwas mit denselben Feldern
  * @param {{performance?:boolean}} ctx
  * @return {?{command:string, action:?string, preventDefault:boolean}}
  *   null = diese Taste gehoert nicht dem Viewer. Eine im Aufführungsmodus
@@ -42,11 +49,13 @@ export const KEY_BINDINGS = Object.freeze([
  *   die Seite zu scrollen - ein Tipp auf die Leertaste soll dort gar nichts tun.
  */
 export function resolveKey(event, { performance = false } = {}) {
-	const binding = KEY_BINDINGS.find((b) => (b.code !== undefined ? b.code === event.code : b.key === event.key))
+	const withCtrl = event.ctrlKey === true || event.metaKey === true
+	const rows = KEY_BINDINGS.filter((b) => (b.ctrl === true) === withCtrl)
+	const binding = rows.find((b) => (b.code !== undefined ? b.code === event.code : b.key === event.key))
 	if (!binding) {
 		// Pfeile und Bildtasten ohne `code` (manche Pedale, synthetische
 		// Ereignisse) ueber `key` nachschlagen - `key` heisst dort genauso.
-		const perKey = KEY_BINDINGS.find((b) => b.code !== undefined && b.code === event.key && b.code !== 'Space')
+		const perKey = rows.find((b) => b.code !== undefined && b.code === event.key && b.code !== 'Space')
 		if (!perKey) {
 			return null
 		}

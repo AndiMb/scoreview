@@ -5,12 +5,18 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Tests\Unit\Controller;
 
 use OCA\ScoreView\Controller\PageController;
+use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\FeatureConfig;
+use OCA\ScoreView\Service\UserFileResolver;
+use OCA\ScoreView\Service\ViewerPolicy;
 use OCA\ScoreView\Service\ViewerPreferences;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
+use OCP\Files\File;
+use OCP\Files\Folder;
+use OCP\Files\Node;
 use OCP\IAppConfig;
 use OCP\IL10N;
 use OCP\IRequest;
@@ -23,6 +29,9 @@ use PHPUnit\Framework\TestCase;
  * Die Offline-Seite (E14): Mit dem Schalter aus antwortet alles 404; der
  * Service Worker darf nur die Offline-Seite steuern (Service-Worker-Allowed),
  * und die Seite gibt der CSP nur frei, was Klang und Worker brauchen.
+ *
+ * The print page (E16): a file the session cannot see is a 404 before
+ * anything else (S8); a visible one gets its name and the viewer's policy.
  */
 class PageControllerTest extends TestCase {
 	/** @var array<string, bool> */
@@ -31,6 +40,8 @@ class PageControllerTest extends TestCase {
 	/** @var array<string, mixed> */
 	private array $states = [];
 	private string $requestUri = '/index.php/apps/scoreview/offline';
+	private ?Node $ownFile = null;
+	private bool $clientFallback = false;
 
 	private function controller(): PageController {
 		$appConfig = $this->createMock(IAppConfig::class);
@@ -64,6 +75,11 @@ class PageControllerTest extends TestCase {
 		$request = $this->createMock(IRequest::class);
 		$request->method('getRequestUri')->willReturnCallback(fn () => $this->requestUri);
 
+		$resolver = $this->createMock(UserFileResolver::class);
+		$resolver->method('resolveOwnNode')->willReturnCallback(fn (int $fileId) => $fileId === 42 ? $this->ownFile : null);
+		$fallback = $this->createMock(ClientFallback::class);
+		$fallback->method('applies')->willReturnCallback(fn () => $this->clientFallback);
+
 		return new PageController(
 			$request,
 			new FeatureConfig($appConfig),
@@ -71,9 +87,18 @@ class PageControllerTest extends TestCase {
 			$session,
 			$state,
 			$url,
-			$appConfig,
+			new ViewerPolicy($appConfig),
+			$resolver,
+			$fallback,
 			$l,
 		);
+	}
+
+	private function file(): File {
+		$file = $this->createMock(File::class);
+		$file->method('getId')->willReturn(42);
+		$file->method('getName')->willReturn('Aequale.mscz');
+		return $file;
 	}
 
 	public function testSchalterAusHeisst404(): void {
@@ -107,6 +132,7 @@ class PageControllerTest extends TestCase {
 	}
 
 	public function testWorkerGiltNurFuerDieOfflineSeite(): void {
+		$this->soundFontUrl = 'https://cdn.example.org/gm.sf3';
 		$response = $this->controller()->serviceWorker();
 		$this->assertSame(Http::STATUS_OK, $response->getStatus());
 		// getHeaders() braucht den Server-Container; die eigenen Header
@@ -115,6 +141,9 @@ class PageControllerTest extends TestCase {
 		$this->assertSame('/index.php/apps/scoreview/offline', $headers['Service-Worker-Allowed']);
 		$this->assertStringStartsWith('application/javascript', $headers['Content-Type']);
 		$this->assertSame('no-cache', $headers['Cache-Control']);
+		// The worker fetches the SoundFont itself - the page's policy does not
+		// apply to it.
+		$this->assertMatchesRegularExpression('#connect-src [^;]*https://cdn\.example\.org#', $response->getContentSecurityPolicy()->buildPolicy());
 	}
 
 	public function testManifestStartetAufDerOfflineSeite(): void {
@@ -124,9 +153,48 @@ class PageControllerTest extends TestCase {
 		$this->assertSame('standalone', $data['display']);
 	}
 
-	public function testOriginNurFuerHttp(): void {
-		$this->assertSame('https://a.example', PageController::origin('https://a.example/x.sf2'));
-		$this->assertNull(PageController::origin('/apps/scoreview/api/soundfont'));
-		$this->assertNull(PageController::origin('javascript:alert(1)'));
+	// --- print page ----------------------------------------------
+
+	public function testPrintIs404ForAFileTheSessionCannotSee(): void {
+		$this->ownFile = $this->file();
+		$c = $this->controller();
+		$this->assertSame(Http::STATUS_NOT_FOUND, $c->print(43)->getStatus());
+		$this->assertArrayNotHasKey('print', $this->states);
+	}
+
+	public function testPrintIs404ForAFolder(): void {
+		// resolveOwnNode() answers with whatever node carries the id; a folder
+		// is not a score, and the page would have nothing to show.
+		$this->ownFile = $this->createMock(Folder::class);
+		$c = $this->controller();
+		$this->assertSame(Http::STATUS_NOT_FOUND, $c->print(42)->getStatus());
+		$this->assertArrayNotHasKey('print', $this->states);
+	}
+
+	public function testPrintCarriesTheFileAndTheViewerPolicy(): void {
+		$this->ownFile = $this->file();
+		$this->soundFontUrl = 'https://cdn.example.org/gm.sf3';
+		$response = $this->controller()->print(42);
+		$this->assertInstanceOf(TemplateResponse::class, $response);
+		$this->assertSame('print', $response->getTemplateName());
+		$this->assertSame(TemplateResponse::RENDER_AS_BASE, $response->getRenderAs());
+		$this->assertSame(['fileId' => 42, 'fileName' => 'Aequale.mscz'], $this->states['print']);
+		$this->assertArrayHasKey('features', $this->states);
+		$this->assertArrayHasKey('viewer-preferences', $this->states);
+		$csp = $response->getContentSecurityPolicy()->buildPolicy();
+		$this->assertStringContainsString("'wasm-unsafe-eval'", $csp);
+		$this->assertMatchesRegularExpression('#connect-src [^;]*https://cdn\.example\.org#', $csp);
+		// A healthy server converts itself: no blob workers on this page
+		// (`img-src blob:` is Nextcloud's own default and stays).
+		$this->assertDoesNotMatchRegularExpression('/worker-src [^;]*blob:/', $csp);
+		$this->assertDoesNotMatchRegularExpression('/connect-src [^;]*blob:/', $csp);
+	}
+
+	public function testPrintAllowsBlobWorkersWhereTheBrowserConverts(): void {
+		$this->ownFile = $this->file();
+		$this->clientFallback = true;
+		$csp = $this->controller()->print(42)->getContentSecurityPolicy()->buildPolicy();
+		$this->assertMatchesRegularExpression("/worker-src [^;]*'self'[^;]*blob:/", $csp);
+		$this->assertMatchesRegularExpression('/connect-src [^;]*blob:/', $csp);
 	}
 }

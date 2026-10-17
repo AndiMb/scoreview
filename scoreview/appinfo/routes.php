@@ -6,11 +6,17 @@ return [
 	'routes' => [
 		// Kein '/'-Einstieg und kein Navigations-Eintrag (siehe info.xml): Der
 		// Viewer klinkt sich ausschliesslich in Files/Viewer ein
-		// (Listener\FilesLoadAdditionalScriptsListener). Die einzige eigene
-		// Seite ist die Offline-Seite (E14) - sie zeigt nur Vorgemerktes.
+		// (Listener\FilesLoadAdditionalScriptsListener). Die eigenen Seiten
+		// sind die Offline-Seite (E14) - sie zeigt nur Vorgemerktes - und die
+		// Druckseite (E16), die aus dem Viewer heraus geoeffnet wird.
 		['name' => 'page#offline', 'url' => '/offline', 'verb' => 'GET'],
 		['name' => 'page#serviceWorker', 'url' => '/offline/sw.js', 'verb' => 'GET'],
 		['name' => 'page#manifest', 'url' => '/offline/manifest.webmanifest', 'verb' => 'GET'],
+		// The print page: all pages of one score, laid out for the browser's
+		// print dialog (Controller\PageController::print). Session only - the
+		// mobile apps print through "open in browser", a token entry would be
+		// a second surface without a use.
+		['name' => 'page#print', 'url' => '/print/{fileId}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
 
 		// Konvertierungs-Pipeline (siehe docs/architecture.md E1/E2)
 		['name' => 'conversion#status', 'url' => '/api/scores/{fileId}/status', 'verb' => 'GET'],
