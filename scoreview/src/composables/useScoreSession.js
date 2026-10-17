@@ -73,6 +73,10 @@ export function useScoreSession() {
 	// Was die Frame-Schleife aufloest: das Rechteck fuer den Cursor und das
 	// elid fuer eine neue Notiz (currentAnchor im Viewer).
 	const cursorRect = ref(null)
+	// Whether this cursor came inside a forceAutoScrollFor() window - the
+	// band and the lyrics view scroll along on it even with autoscroll off,
+	// like useAutoScroll does with `force`.
+	const cursorForced = ref(false)
 	const currentElid = ref(null)
 
 	// Zaehlt jeden reset(): Ein load(), das nach einem await eine andere Zahl
@@ -194,6 +198,8 @@ export function useScoreSession() {
 			}
 
 			sync = createScoreSync(notes, (rect) => {
+				const force = Date.now() < forceScrollUntil
+				cursorForced.value = force
 				cursorRect.value = rect
 				// Nachführen statt nur beim Seitenwechsel zu springen. Nach
 				// einem Sprung der Leitung auch dann, wenn gerade von Hand
@@ -204,7 +210,6 @@ export function useScoreSession() {
 				// Wiedergabe faellt das nicht auf, weil die naechste Note es
 				// richtet - nach einem Sprung im Stillstand kommt keine, und
 				// die Ansicht fuhr zur vorigen Stelle statt zur neuen.
-				const force = Date.now() < forceScrollUntil
 				nextTick(() => hooks.updateAutoScroll(rect, force))
 			})
 
@@ -367,6 +372,7 @@ export function useScoreSession() {
 		scoreMeta.value = null
 		pageUrls.value = []
 		cursorRect.value = null
+		cursorForced.value = false
 		totalMeasures.value = 0
 		scoreParts.value = []
 		timeline.value = null
@@ -396,6 +402,7 @@ export function useScoreSession() {
 		canWriteFolder,
 		midiUrl,
 		cursorRect,
+		cursorForced,
 		currentElid,
 		connect,
 		load,

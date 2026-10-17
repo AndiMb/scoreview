@@ -437,6 +437,12 @@
 									type="switch">
 									{{ t('Show only my part') }}
 								</NcCheckboxRadioSwitch>
+								<NcCheckboxRadioSwitch
+									v-if="has(group, 'autoScroll')"
+									v-model="autoScroll"
+									type="switch">
+									{{ t('Scroll along with playback') }}
+								</NcCheckboxRadioSwitch>
 								<ToolRow
 									v-if="has(group, 'layout')"
 									page
@@ -625,6 +631,21 @@
 					feuert auch nach dem eigenen Nachfuehren - das zaehlt nicht
 					als Eingriff (useAutoScroll.js#onScrollEnd).
 				-->
+				<!--
+					Autoscroll switched off (issue #12) and the playing position
+					gone from the screen: one tap back to it. Outside the
+					scrolling element, so it stays put while the score moves.
+				-->
+				<NcButton
+					v-if="showBackToCursor"
+					class="scoreview-back-to-cursor"
+					variant="primary"
+					@click="revealCursor">
+					<template #icon>
+						<CrosshairsGps :size="20" />
+					</template>
+					{{ t('Back to the playing position') }}
+				</NcButton>
 				<div
 					ref="scroll"
 					class="scoreview-scroll"
@@ -634,7 +655,7 @@
 					@touchstart.passive="onScrollGestureStart"
 					@touchend.passive="onScrollGestureEnd"
 					@touchcancel.passive="onScrollGestureEnd"
-					@scrollend.passive="onScrollEnd"
+					@scrollend.passive="onViewerScrollEnd"
 					@wheel="onViewerWheel">
 					<NcNoteCard v-if="soundFontLoading" type="info" class="scoreview-hint">
 						{{ t('Loading sound ({percent}%)…', { percent: soundFontLoadPercent }) }}
@@ -681,6 +702,8 @@
 					</NcNoteCard>
 					<LyricsView
 						v-if="activeLayout === 'lyrics' && timeline"
+						ref="lyrics"
+						:follow="followCursor"
 						:syllables="scoreMeta?.lyricSyllables ?? []"
 						:staves="myStaves"
 						:timeline="timeline"
@@ -689,7 +712,8 @@
 						:subscribeFrame="sessionOnFrame"
 						:canSeek="can('seek')"
 						@seek="onLyricsSeek"
-						@loop="onLyricsLoop" />
+						@loop="onLyricsLoop"
+						@cursorVisible="layoutCursorShown = $event" />
 					<SystemBand
 						v-else-if="activeLayout === 'band'"
 						ref="band"
@@ -699,9 +723,11 @@
 						:cursorRect="cursorRect"
 						:cursorElid="currentElid"
 						:needle="intonationNeedle"
+						:follow="followCursor"
 						@noteClick="onNoteClick"
 						@markerClick="onMarkerClick"
-						@indexed="onPageIndexed" />
+						@indexed="onPageIndexed"
+						@cursorVisible="layoutCursorShown = $event" />
 					<div
 						v-else
 						class="scoreview-pages"
@@ -997,6 +1023,7 @@ import {
 	findNearestOccurrenceTimeMs,
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
+import { revealsCursor } from '../lib/scrollPlan.js'
 import { MODE_TONIC, MODE_VOICE } from '../lib/startTone.js'
 import { formatTime, progressPercent, seekValue } from '../lib/viewerFormat.js'
 
@@ -1184,7 +1211,11 @@ export default {
 			rootEl: rootElement,
 			scrollEl: scrollElement,
 		})
-		const autoScroll = useAutoScroll({ scrollEl: scrollElement })
+		// Anzeigeeinstellungen der Nutzerin (Farbe/Form der Hervorhebung).
+		// Kein Bezug zur Partitur - deshalb ohne Abhaengigkeiten und ohne
+		// Ruecksetzen beim Dateiwechsel.
+		const preferences = useViewerPreferences()
+		const autoScroll = useAutoScroll({ scrollEl: scrollElement, enabled: () => preferences.autoScroll.value })
 		const playback = usePlayback({ clock, durationMs, defaultTempoBpm: DEFAULT_TEMPO_BPM })
 		const metronome = useMetronome({
 			measuresTimeline: () => measuresTimeline.value,
@@ -1200,11 +1231,6 @@ export default {
 			audioContext: playback.getAudioContext,
 			holdAudio: playback.holdAudio,
 		})
-
-		// Anzeigeeinstellungen der Nutzerin (Farbe/Form der Hervorhebung).
-		// Kein Bezug zur Partitur - deshalb ohne Abhaengigkeiten und ohne
-		// Ruecksetzen beim Dateiwechsel.
-		const preferences = useViewerPreferences()
 
 		// „Meine Stimme" je Partitur, serverseitig gemerkt - geladen im
 		// fileid-Watcher, nicht in reset(): „Neu konvertieren" setzt den
@@ -1401,7 +1427,20 @@ export default {
 			},
 		})
 		isFollowing = () => follow.following.value
-		noteNavigation = follow.noteNavigation
+		// With autoscroll switched off (issue #12) an own jump still has to
+		// show where it landed - the same window a jump of the leader gets
+		// (useMeasureNavigation.followSeek). Switched on, nothing changes.
+		const revealJump = () => {
+			if (!preferences.autoScroll.value) {
+				session.forceAutoScrollFor(1500)
+			}
+		}
+		noteNavigation = (kind) => {
+			if (revealsCursor(kind)) {
+				revealJump()
+			}
+			follow.noteNavigation(kind)
+		}
 		// The leader reports start and stop at once; its watch beat only
 		// runs while playing (useFollowSession.updatePlaybackWatch).
 		watch(() => playback.isPlaying.value, () => follow.playbackChanged())
@@ -1780,6 +1819,9 @@ export default {
 			noteNamesMine: preferences.noteNamesMine,
 			layout: preferences.layout,
 			bandOffered: preferences.bandOffered,
+			autoScroll: preferences.autoScroll,
+			cursorForced: session.cursorForced,
+			pagesCursorOutOfView: autoScroll.cursorOutOfView,
 			sessionTranspose,
 			effectiveTranspose,
 			startKey: computed(() => scoreFacts.facts.value?.keys?.[0] ?? null),
@@ -1849,7 +1891,8 @@ export default {
 			followConnected: follow.connected,
 			followBusy: follow.busy,
 			followError: follow.error,
-			followNavigation: follow.noteNavigation,
+			followNavigation: (kind) => noteNavigation(kind),
+			revealJump,
 			resumeFollow: follow.resume,
 			startFollow: follow.start,
 			endFollow: follow.end,
@@ -1933,6 +1976,9 @@ export default {
 			// Siehe emits: genau einmal, egal wie oft der Zustand danach noch
 			// wechselt.
 			readyGemeldet: false,
+			// Band and lyrics report whether the playing position is on screen
+			// (their `cursorVisible`) - for the button back to it.
+			layoutCursorShown: true,
 			// Fensterbreite beim Oeffnen - fuer das einmalige Angebot des
 			// Systembands auf Handybreite (D9).
 			viewerWidth: 0,
@@ -1951,6 +1997,21 @@ export default {
 	},
 
 	computed: {
+		// Band and lyrics scroll along when the user wants it, and for an own
+		// jump or one of the leader even when not (useScoreSession.cursorForced).
+		followCursor() {
+			return this.autoScroll || this.cursorForced
+		},
+
+		showBackToCursor() {
+			if (this.autoScroll || !this.cursorRect) {
+				return false
+			}
+			return this.activeLayout === 'band' || this.activeLayout === 'lyrics'
+				? !this.layoutCursorShown
+				: this.pagesCursorOutOfView
+		},
+
 		setlistTitle() {
 			return this.setlist?.title ?? ''
 		},
@@ -2194,6 +2255,18 @@ export default {
 		// Lesens wie ein manueller Scroll.
 		zoom() {
 			this.$nextTick(() => this.updateAutoScroll(this.cursorRect, true))
+		},
+
+		// Switched back on: straight to the playing position, not only at the
+		// next note - when paused there is none.
+		autoScroll(on) {
+			if (on) {
+				this.$nextTick(() => this.revealCursor())
+			}
+		},
+
+		activeLayout() {
+			this.layoutCursorShown = true
 		},
 	},
 
@@ -2540,6 +2613,7 @@ export default {
 		 * @param {{measure:number, text:string}} mark
 		 */
 		sendFollowMark(mark) {
+			this.revealJump()
 			this.jumpToMeasure(mark.measure)
 			return this.sendFollowPositionTo({ measure: mark.measure, mark: mark.text })
 		},
@@ -2787,6 +2861,29 @@ export default {
 			}
 			this.onWheel(event)
 		},
+
+		/**
+		 * The lyrics view scrolls the viewer's element, so only it learns
+		 * here that its syllable may have left the screen. Pages measure in
+		 * useAutoScroll, the band in its own scroller.
+		 */
+		onViewerScrollEnd() {
+			this.onScrollEnd()
+			if (!this.autoScroll && this.activeLayout === 'lyrics') {
+				this.$refs.lyrics?.reportVisibility()
+			}
+		},
+
+		/** To the playing position, whatever the layout - the button and the switch. */
+		revealCursor() {
+			if (this.activeLayout === 'band') {
+				this.$refs.band?.reveal()
+			} else if (this.activeLayout === 'lyrics') {
+				this.$refs.lyrics?.reveal()
+			} else {
+				this.updateAutoScroll(this.cursorRect, true)
+			}
+		},
 	},
 }
 </script>
@@ -2996,6 +3093,17 @@ export default {
 	 * non-passive touchmove made every one-finger scroll over the score wait
 	 * for the main thread. */
 	touch-action: pan-x pan-y;
+}
+
+/*
+ * Over the score like the badge below, at the bottom corner where it covers
+ * the least of what is being read.
+ */
+.scoreview-back-to-cursor {
+	position: absolute;
+	bottom: 16px;
+	inset-inline-end: 24px;
+	z-index: 15;
 }
 
 /*

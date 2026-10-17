@@ -200,4 +200,31 @@ class ViewerPreferencesTest extends TestCase {
 		$werte = (new ViewerPreferences($config))->get('anna');
 		$this->assertSame(['off', true, 'pages', false], [$werte['noteNames'], $werte['noteNamesMine'], $werte['layout'], $werte['bandOffered']]);
 	}
+
+	public function testScrollsAlongByDefault(): void {
+		// Without an entry the viewer behaves as it always did.
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnArgument(3);
+		$preferences = new ViewerPreferences($config);
+		$this->assertTrue($preferences->get('anna')['autoScroll']);
+		$this->assertTrue($preferences->defaults()['autoScroll']);
+	}
+
+	public function testStoresAutoScrollOnlyWhenSent(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->expects($this->once())->method('setUserValue')
+			->with('anna', Application::APP_ID, ViewerPreferences::KEY_AUTO_SCROLL, '0');
+		$preferences = new ViewerPreferences($config);
+		$this->assertSame(['autoScroll' => false], $preferences->setViewing('anna', null, null, null, null, false));
+		// An older bundle does not send it - and must not reset it.
+		$this->assertSame([], $preferences->setViewing('anna', null, null, null, null));
+	}
+
+	public function testReadsSwitchedOffAutoScroll(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnCallback(
+			fn (string $u, string $a, string $key, string $default): string => $key === ViewerPreferences::KEY_AUTO_SCROLL ? '0' : $default,
+		);
+		$this->assertFalse((new ViewerPreferences($config))->get('anna')['autoScroll']);
+	}
 }

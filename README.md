@@ -18,7 +18,8 @@ every part can be heard on its own, and every measure is one click away.
 
 **Reading music.** MuseScore's own page rendering as vector graphics – zoom
 without loss of quality, zoom presets, full screen, and an autoscroll that keeps
-the current measure in the visible band. Each user decides how the sounding
+the current measure in the visible band – or, switched off, leaves the view
+where you put it. Each user decides how the sounding
 position is marked: coloured noteheads or a band, in a colour of their choice.
 
 **Hearing what you want to practice.** Playback is synthesized in the browser,

@@ -1529,6 +1529,10 @@ msgid "Show only my part"
 msgstr "Nur meine Zeile zeigen"
 
 #: src/components/ScoreViewer.vue
+msgid "Scroll along with playback"
+msgstr "Beim Abspielen mitscrollen"
+
+#: src/components/ScoreViewer.vue
 msgid "Show notes in the score"
 msgstr "Notizen im Notenbild anzeigen"
 
@@ -1563,6 +1567,10 @@ msgstr "Die Leitung ist zu einem anderen Stück weitergegangen."
 #: src/components/ScoreViewer.vue
 msgid "Go there"
 msgstr "Dorthin wechseln"
+
+#: src/components/ScoreViewer.vue
+msgid "Back to the playing position"
+msgstr "Zur gespielten Stelle"
 
 #: src/components/ScoreViewer.vue
 msgid "Loading sound ({percent}%)…"

@@ -434,6 +434,19 @@ Trägheitsscrollens (`scrollend`) zählt nur, wenn seit dem eigenen Nachführen
 eine Geste begann (`scrollPlan.js#isManualScrollEnd`) – sonst hielte das Ende
 des eigenen weichen Nachführens das Mitscrollen an.
 
+**Abschaltbar ist nur das automatische Nachführen**, nicht das Springen auf
+Befehl (Einstellung `autoScroll`, `Service\ViewerPreferences`). Ausgeschaltet
+steht die Ansicht während der Wiedergabe und beim Loop-Rücksprung still; ein
+eigener Sprung (Taktfeld, Studierbuchstabe, Pfeiltasten, Notiz, Problemliste)
+und ein Sprung der Leitung zeigen ihr Ziel trotzdem, über dasselbe
+`forceAutoScrollFor`-Fenster. Welche Navigation dazu zählt, entscheidet
+`scrollPlan.js#revealsCursor` an der einen Stelle, an der jede eigene Navigation
+ohnehin gemeldet wird (`noteNavigation`, für „Folgt mir“). Ein Tipp auf eine
+Note zählt nicht: Sie steht schon im Bild. Band und Liedtext lesen dasselbe
+Fenster über `cursorForced`. Ist die klingende Stelle aus dem Bild, führt ein
+Knopf zurück; gemessen wird dafür nur bei Notenwechsel und nach einem
+manuellen Scrollen, nie je Frame.
+
 Was auf dem Gerät gemessen wurde, steht im Aufklapper „Darstellung" neben der
 Herkunft: Ausgabelatenz, Tonausgabe, Aussetzer und Bildrate (`audioHealth.js`).
 Rein beschreibend. Der Grund dafür ist, dass „die Wiedergabe synchronisiert

@@ -1,4 +1,5 @@
-import { isManualScrollEnd, planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from '../lib/scrollPlan.js'
+import { ref } from 'vue'
+import { isManualScrollEnd, planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll, spanInView } from '../lib/scrollPlan.js'
 
 // Pausendauer für das Nachführen nach manuellem Scrollen (siehe
 // scrollPlan.js) - lang genug, um in Ruhe zu lesen, kurz genug, um nicht wie
@@ -32,8 +33,10 @@ const RETRY_MAX = 20
  *
  * @param {object} deps
  * @param {() => HTMLElement|null} deps.scrollEl das scrollende Element
+ * @param {() => boolean} [deps.enabled] whether to follow the playback at
+ *   all (the user's switch, issue #12) - `force` still scrolls
  */
-export function useAutoScroll({ scrollEl }) {
+export function useAutoScroll({ scrollEl, enabled = () => true }) {
 	// Referenzen auf die ScorePage-Komponenten, je Seitenindex.
 	const pageRefs = []
 	// Zeitstempel (Date.now()) des Endes der letzten Nutzergeste.
@@ -47,6 +50,12 @@ export function useAutoScroll({ scrollEl }) {
 	// Nachmessen, bis die Zielseite geladen ist (siehe update()).
 	let retryTimer = null
 	let retries = 0
+	// The last cursor handed to update() - re-measured after a manual scroll.
+	let lastRect = null
+	// With autoscroll off: whether the cursor has left the screen, for the
+	// button back to it. Only measured while switched off - switched on, the
+	// view brings the cursor back by itself.
+	const cursorOutOfView = ref(false)
 
 	function setPageRef(el, index) {
 		if (el) {
@@ -106,7 +115,12 @@ export function useAutoScroll({ scrollEl }) {
 			retries = 0
 		}
 		const el = scrollEl()
+		lastRect = rect
 		if (!rect || !el) {
+			return
+		}
+		if (!force && !enabled()) {
+			measureVisibility(rect)
 			return
 		}
 		if (!force && (gestureActive || shouldSuppressAutoScroll(lastManualScrollAt, Date.now(), MANUAL_SCROLL_RESUME_MS))) {
@@ -164,6 +178,32 @@ export function useAutoScroll({ scrollEl }) {
 		if (target !== null || targetLeft !== null) {
 			scrollTo(target, targetLeft)
 		}
+		cursorOutOfView.value = false
+	}
+
+	/**
+	 * Same measurement as update(), but without scrolling - per note change
+	 * and after a manual scroll, never per frame.
+	 *
+	 * @param {{page:number}|null} rect
+	 */
+	function measureVisibility(rect) {
+		const el = scrollEl()
+		if (!rect || !el || enabled()) {
+			cursorOutOfView.value = false
+			return
+		}
+		const cursorClientRect = pageRefs[rect.page]?.getCursorClientRect?.()
+		if (!cursorClientRect) {
+			// Page not loaded yet: it is far away from what is on screen.
+			cursorOutOfView.value = true
+			return
+		}
+		const box = el.getBoundingClientRect()
+		cursorOutOfView.value = !(
+			spanInView({ start: cursorClientRect.top, size: cursorClientRect.height, viewStart: box.top, viewSize: el.clientHeight })
+			&& spanInView({ start: cursorClientRect.left, size: cursorClientRect.width, viewStart: box.left, viewSize: el.clientWidth })
+		)
 	}
 
 	// --- Manuelles Scrollen erkennen ----------------------------------------
@@ -217,6 +257,9 @@ export function useAutoScroll({ scrollEl }) {
 		ownScrollAt = null
 		if (manual) {
 			noteManualScroll()
+			if (!enabled()) {
+				measureVisibility(lastRect)
+			}
 		}
 	}
 
@@ -230,6 +273,8 @@ export function useAutoScroll({ scrollEl }) {
 		gestureActive = false
 		ownScrollAt = null
 		lastGestureAt = null
+		lastRect = null
+		cursorOutOfView.value = false
 	}
 
 	/**
@@ -242,5 +287,5 @@ export function useAutoScroll({ scrollEl }) {
 		return pageRefs
 	}
 
-	return { setPageRef, pages, update, onUserGestureStart, onUserGestureEnd, noteManualScroll, onScrollEnd, reset }
+	return { setPageRef, pages, update, cursorOutOfView, onUserGestureStart, onUserGestureEnd, noteManualScroll, onScrollEnd, reset }
 }

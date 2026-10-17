@@ -50,6 +50,8 @@ class ViewerPreferences {
 	public const KEY_LAYOUT = 'layout';
 	/** Ob das Systemband auf Handybreite schon einmal angeboten wurde (D9). */
 	public const KEY_BAND_OFFERED = 'band_offered';
+	/** Whether the view scrolls along with playback by itself (issue #12). */
+	public const KEY_AUTO_SCROLL = 'auto_scroll';
 	public const NOTE_NAME_SYSTEMS = ['off', 'de', 'en', 'solfa-fixed', 'solfa-movable'];
 	public const LAYOUTS = ['pages', 'band', 'lyrics'];
 	public const TRANSPOSE_LIMIT = 12;
@@ -89,7 +91,7 @@ class ViewerPreferences {
 	}
 
 	/**
-	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool}
+	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool}
 	 */
 	public function get(?string $userId): array {
 		if ($userId === null) {
@@ -112,6 +114,7 @@ class ViewerPreferences {
 			'noteNamesMine' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_NOTE_NAMES_MINE, '1') === '1',
 			'layout' => self::oneOf($this->config->getUserValue($userId, Application::APP_ID, self::KEY_LAYOUT, 'pages'), self::LAYOUTS),
 			'bandOffered' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_BAND_OFFERED, '0') === '1',
+			'autoScroll' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_AUTO_SCROLL, '1') === '1',
 		];
 	}
 
@@ -119,9 +122,9 @@ class ViewerPreferences {
 	 * Tonnamen und Darstellung (H2/H3/H8) - je Wert nur, wenn er mitkommt,
 	 * aus demselben Grund wie setDisplay().
 	 *
-	 * @return array{noteNames?: string, noteNamesMine?: bool, layout?: string, bandOffered?: bool}
+	 * @return array{noteNames?: string, noteNamesMine?: bool, layout?: string, bandOffered?: bool, autoScroll?: bool}
 	 */
-	public function setViewing(string $userId, ?string $noteNames, ?bool $noteNamesMine, ?string $layout, ?bool $bandOffered): array {
+	public function setViewing(string $userId, ?string $noteNames, ?bool $noteNamesMine, ?string $layout, ?bool $bandOffered, ?bool $autoScroll = null): array {
 		$werte = [];
 		if ($noteNames !== null) {
 			$werte['noteNames'] = self::oneOf($noteNames, self::NOTE_NAME_SYSTEMS);
@@ -138,6 +141,10 @@ class ViewerPreferences {
 		if ($bandOffered !== null) {
 			$werte['bandOffered'] = $bandOffered;
 			$this->config->setUserValue($userId, Application::APP_ID, self::KEY_BAND_OFFERED, $bandOffered ? '1' : '0');
+		}
+		if ($autoScroll !== null) {
+			$werte['autoScroll'] = $autoScroll;
+			$this->config->setUserValue($userId, Application::APP_ID, self::KEY_AUTO_SCROLL, $autoScroll ? '1' : '0');
 		}
 		return $werte;
 	}
@@ -307,6 +314,9 @@ class ViewerPreferences {
 			'noteNamesMine' => true,
 			'layout' => 'pages',
 			'bandOffered' => false,
+			// On: that is what the viewer always did, and what most people
+			// reading along expect.
+			'autoScroll' => true,
 		];
 	}
 

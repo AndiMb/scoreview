@@ -51,6 +51,8 @@ export function useViewerPreferences() {
 	const noteNamesMine = ref(anfang.noteNamesMine !== false)
 	const layout = ref(oneOf(anfang.layout, LAYOUTS))
 	const bandOffered = ref(anfang.bandOffered === true)
+	// On unless switched off - also for a server that does not know it yet.
+	const autoScroll = ref(anfang.autoScroll !== false)
 
 	// Ob das Nextcloud-Theme gerade dunkel ist - gelesen am Grund selbst
 	// (lib/noteTheme.js). Nachgelesen, wenn das Betriebssystem umschaltet:
@@ -83,7 +85,7 @@ export function useViewerPreferences() {
 	// (Controller\PreferenceController, E8). Wer am Telefon den
 	// Dunkelmodus waehlt, soll ihn beim naechsten Oeffnen wiederfinden.
 	let saveTimer = null
-	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered], () => {
+	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered, autoScroll], () => {
 		if (saveTimer) {
 			clearTimeout(saveTimer)
 		}
@@ -102,6 +104,7 @@ export function useViewerPreferences() {
 				noteNamesMine: noteNamesMine.value,
 				layout: layout.value,
 				bandOffered: bandOffered.value,
+				autoScroll: autoScroll.value,
 			})
 		} catch (err) {
 			// Bewusst nur ins Log: Die Einstellung wirkt im geoeffneten Viewer
@@ -114,7 +117,7 @@ export function useViewerPreferences() {
 		}
 	}
 
-	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle, noteNames, noteNamesMine, layout, bandOffered }
+	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle, noteNames, noteNamesMine, layout, bandOffered, autoScroll }
 }
 
 /**

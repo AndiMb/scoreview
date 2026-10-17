@@ -170,3 +170,39 @@ export function isManualScrollEnd({ ownScrollAt, lastGestureAt }) {
 	}
 	return lastGestureAt !== null && lastGestureAt >= ownScrollAt
 }
+
+// Own navigations that land somewhere else in the piece. Switched off,
+// autoscroll stops following the playback - but someone who types a measure
+// or taps a rehearsal mark wants to see where they landed, and a jump that
+// does not move the view looks like one that did not happen. A loop or a
+// transposition moves nothing, and a tapped note is on screen by definition -
+// forcing the scroll there would only nudge a half-visible system under the
+// finger (issue #12).
+const REVEALING_NAVIGATIONS = new Set(['measure', 'mark', 'seek', 'annotationJump'])
+
+/**
+ * Whether an own navigation (useFollowSession#noteNavigation kinds) should
+ * bring the cursor into view even with autoscroll switched off.
+ *
+ * @param {string} kind
+ * @return {boolean}
+ */
+export function revealsCursor(kind) {
+	return REVEALING_NAVIGATIONS.has(kind)
+}
+
+/**
+ * Whether a span is at least partly on screen - along one axis, in the same
+ * coordinates as the viewport. Partly is enough: the button back to the
+ * playing position is for a cursor that is gone, not for one at the edge.
+ *
+ * @param {object} params
+ * @param {number} params.start start of the span (px)
+ * @param {number} params.size its length (px)
+ * @param {number} params.viewStart start of the visible area (px)
+ * @param {number} params.viewSize its length (px)
+ * @return {boolean}
+ */
+export function spanInView({ start, size, viewStart, viewSize }) {
+	return start < viewStart + viewSize && start + Math.max(size, 0) > viewStart
+}

@@ -44,6 +44,7 @@ import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import ScorePage from './ScorePage.vue'
 import { BASE_PAGE_WIDTH_PX, parseViewBox } from '../lib/scoreLayout.js'
+import { spanInView } from '../lib/scrollPlan.js'
 import { findStaffBands, groupBandsIntoSystems } from '../lib/staffBands.js'
 import { bandWindow, cropIndexAt, cropScale, frameAt, lyricBaselines, lyricBottomsFor, systemCrops } from '../lib/systemBand.js'
 
@@ -108,9 +109,16 @@ export default {
 			type: Object,
 			default: null,
 		},
+
+		// Whether a new system scrolls into view by itself - off when the
+		// user switched autoscroll off (issue #12), on again for a jump.
+		follow: {
+			type: Boolean,
+			required: true,
+		},
 	},
 
-	emits: ['noteClick', 'markerClick', 'indexed'],
+	emits: ['noteClick', 'markerClick', 'indexed', 'cursorVisible'],
 
 	data() {
 		return {
@@ -158,9 +166,10 @@ export default {
 		// the next note brings the band back to the cursor.
 		cursorRect() {
 			const index = this.cursorCrop
-			if (index >= 0 && index !== this.current) {
+			if (this.follow && index >= 0 && index !== this.current) {
 				this.goTo(index)
 			}
+			this.reportVisibility()
 		},
 	},
 
@@ -172,6 +181,9 @@ export default {
 		this.viewWidth = 0
 		this.loadGeneration = 0
 		this.scrollPending = 0
+		// Last visibility reported (reportVisibility) - an event per change,
+		// not per note.
+		this.cursorShown = true
 		// Both change together on a piece change (useScoreSession.load) - one
 		// load for both, not one each.
 		this.$watch(() => [this.pageUrls, this.systemRectsByPage], () => this.load(), { immediate: true })
@@ -244,6 +256,35 @@ export default {
 			el?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' })
 		},
 
+		/** To the system that is playing - the button back to it, and switching autoscroll on again. */
+		reveal() {
+			if (this.cursorCrop >= 0) {
+				this.goTo(this.cursorCrop)
+			}
+		},
+
+		/**
+		 * Whether the playing system is on screen, from the cached frame
+		 * positions - per note and per scrolled frame, never a layout read.
+		 */
+		reportVisibility() {
+			const index = this.cursorCrop
+			const scroller = this.$refs.scroller
+			let visible = true
+			if (index >= 0 && scroller && this.frameLefts.length > index) {
+				visible = spanInView({
+					start: this.frameLefts[index],
+					size: this.frameWidths[index],
+					viewStart: scroller.scrollLeft,
+					viewSize: this.viewWidth,
+				})
+			}
+			if (visible !== this.cursorShown) {
+				this.cursorShown = visible
+				this.$emit('cursorVisible', visible)
+			}
+		},
+
 		/** Pedal, Bild↓ und Wischen: ein System weiter. */
 		next() {
 			this.goTo(this.current + 1)
@@ -311,6 +352,7 @@ export default {
 					this.current = index
 				}
 				this.updateWindow()
+				this.reportVisibility()
 			})
 		},
 

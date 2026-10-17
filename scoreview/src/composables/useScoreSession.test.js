@@ -197,10 +197,13 @@ describe('useScoreSession', () => {
 		expect(hooks.updateAutoScroll).not.toHaveBeenCalled()
 		await nextTick()
 		expect(hooks.updateAutoScroll).toHaveBeenLastCalledWith(rect, false)
+		expect(session.cursorForced.value).toBe(false)
 		session.forceAutoScrollFor(60_000)
 		onCursorChange(rect)
 		await nextTick()
 		expect(hooks.updateAutoScroll).toHaveBeenLastCalledWith(rect, true)
+		// The band and the lyrics view read the same window.
+		expect(session.cursorForced.value).toBe(true)
 	})
 
 	it('startet nie eine zweite Schleife neben der ersten', async () => {

@@ -1529,6 +1529,10 @@ msgid "Show only my part"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
+msgid "Scroll along with playback"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
 msgid "Show notes in the score"
 msgstr ""
 
@@ -1562,6 +1566,10 @@ msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "Go there"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Back to the playing position"
 msgstr ""
 
 #: src/components/ScoreViewer.vue

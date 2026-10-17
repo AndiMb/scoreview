@@ -64,6 +64,9 @@ export function barGroups(ctx) {
 			layout: settings,
 			appearance: settings,
 			myPart: ctx.canFocusMyPart && settings,
+			// Without a submenu, like the switch above: it is flipped while
+			// reading, not set up once (issue #12).
+			autoScroll: settings,
 			noteNames: settings,
 			noteText: settings,
 			annotations: can('annotate'),

@@ -40,6 +40,7 @@
 <script>
 import { translate } from '@nextcloud/l10n'
 import { activeSyllable, buildLyrics, occurrences, seekTimeFor, systemKeyFor, versesByElid } from '../lib/lyricsLayout.js'
+import { spanInView } from '../lib/scrollPlan.js'
 import { findStepIndex } from '../lib/timingSync.js'
 
 /** Klasse der gesungenen Silbe. */
@@ -93,9 +94,16 @@ export default {
 			type: Boolean,
 			required: true,
 		},
+
+		// Whether the sung syllable scrolls into view by itself - off when
+		// the user switched autoscroll off (issue #12), on again for a jump.
+		follow: {
+			type: Boolean,
+			required: true,
+		},
 	},
 
-	emits: ['seek', 'loop'],
+	emits: ['seek', 'loop', 'cursorVisible'],
 
 	computed: {
 		layout() {
@@ -140,6 +148,16 @@ export default {
 		blocks() {
 			this.$nextTick(() => this.indexNodes())
 		},
+
+		// The syllable changes in the frame loop, `follow` only with the
+		// viewer's next render - after a jump the new syllable is set while
+		// `follow` is still false, and the same syllable does not come again.
+		// So catch up here.
+		follow(on) {
+			if (on && this.activeNode) {
+				this.keepInView(this.activeNode)
+			}
+		},
 	},
 
 	created() {
@@ -149,6 +167,8 @@ export default {
 		this.activeId = null
 		this.offFrame = null
 		this.dragFrom = null
+		// Last visibility reported - an event per change, not per syllable.
+		this.syllableShown = true
 	},
 
 	mounted() {
@@ -209,8 +229,38 @@ export default {
 			}
 			const r = node.getBoundingClientRect()
 			const b = box.getBoundingClientRect()
+			if (!this.follow) {
+				this.report(spanInView({ start: r.top, size: r.height, viewStart: b.top, viewSize: b.height }))
+				return
+			}
 			if (r.top < b.top + b.height * 0.2 || r.bottom > b.top + b.height * 0.75) {
 				node.scrollIntoView({ block: 'center', behavior: 'smooth' })
+			}
+			this.report(true)
+		},
+
+		/** To the sung syllable - the button back to it, and switching autoscroll on again. */
+		reveal() {
+			this.activeNode?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+			this.report(true)
+		},
+
+		/** After a manual scroll: is the sung syllable still on screen? */
+		reportVisibility() {
+			const box = this.$el.closest?.('.scoreview-scroll') ?? this.$refs.root
+			if (!box || !this.activeNode) {
+				return
+			}
+			const r = this.activeNode.getBoundingClientRect()
+			const b = box.getBoundingClientRect()
+			this.report(spanInView({ start: r.top, size: r.height, viewStart: b.top, viewSize: b.height }))
+		},
+
+		/** @param {boolean} visible */
+		report(visible) {
+			if (visible !== this.syllableShown) {
+				this.syllableShown = visible
+				this.$emit('cursorVisible', visible)
 			}
 		},
 

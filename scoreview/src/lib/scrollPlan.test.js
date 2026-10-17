@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isManualScrollEnd, planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll } from './scrollPlan.js'
+import { isManualScrollEnd, planAutoScroll, planHorizontalScroll, revealsCursor, shouldSuppressAutoScroll, spanInView } from './scrollPlan.js'
 
 describe('planAutoScroll', () => {
 	// Viewport 1000px hoch, Default-Rand 24px.
@@ -133,5 +133,36 @@ describe('isManualScrollEnd', () => {
 	})
 	it('ohne eigenes Scrollen ist jedes Ende ein Eingriff (Mausrad, Tastatur)', () => {
 		expect(isManualScrollEnd({ ownScrollAt: null, lastGestureAt: null })).toBe(true)
+	})
+})
+
+describe('revealsCursor', () => {
+	it('reveals the target of an own jump', () => {
+		for (const kind of ['measure', 'mark', 'seek', 'annotationJump']) {
+			expect(revealsCursor(kind)).toBe(true)
+		}
+	})
+
+	it('leaves the view alone for navigations that move nothing', () => {
+		expect(revealsCursor('loop')).toBe(false)
+		expect(revealsCursor('noteClick')).toBe(false)
+		expect(revealsCursor('transpose')).toBe(false)
+		expect(revealsCursor('unknown')).toBe(false)
+	})
+})
+
+describe('spanInView', () => {
+	const view = { viewStart: 100, viewSize: 200 }
+
+	it('counts a partly visible span as in view', () => {
+		expect(spanInView({ start: 50, size: 60, ...view })).toBe(true)
+		expect(spanInView({ start: 290, size: 60, ...view })).toBe(true)
+		expect(spanInView({ start: 150, size: 10, ...view })).toBe(true)
+	})
+
+	it('reports a span above, below or touching the edge as out of view', () => {
+		expect(spanInView({ start: 0, size: 100, ...view })).toBe(false)
+		expect(spanInView({ start: 300, size: 50, ...view })).toBe(false)
+		expect(spanInView({ start: 500, size: 50, ...view })).toBe(false)
 	})
 })

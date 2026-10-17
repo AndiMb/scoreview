@@ -40,7 +40,7 @@ describe('barGroups', () => {
 	it('ordnet alle Werkzeuge ihrer Gruppe zu', () => {
 		expect(barGroups(ctx())).toEqual([
 			{ id: 'practice', items: ['loop', 'tempo', 'metronome', 'toneMode', 'mixer', 'coach', 'transpose', 'practice', 'export'] },
-			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'noteNames', 'noteText', 'annotations', 'pin'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'pin'] },
 			{ id: 'rehearsal', items: ['rehearsal', 'newSetlist'] },
 		])
 	})
@@ -49,7 +49,7 @@ describe('barGroups', () => {
 		const can = (action) => allowed(action, { offline: true })
 		expect(barGroups(ctx({ can, offline: true }))).toEqual([
 			{ id: 'practice', items: ['loop', 'tempo', 'metronome', 'toneMode', 'mixer', 'coach', 'transpose'] },
-			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'noteNames', 'noteText'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'autoScroll', 'noteNames', 'noteText'] },
 		])
 	})
 
@@ -88,7 +88,7 @@ describe('barGroups', () => {
 		}))
 		expect(groups).toEqual([
 			{ id: 'practice', items: ['loop', 'tempo', 'metronome'] },
-			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'noteNames', 'noteText', 'annotations', 'pin'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'pin'] },
 			{ id: 'rehearsal', items: ['rehearsal'] },
 		])
 	})

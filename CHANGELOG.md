@@ -4,6 +4,18 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Autoscroll can be switched off** (“Scroll along with playback” under
+  View, remembered per account). The view then stays where it was put while
+  the music plays on – in the pages, the system band and the lyrics view
+  alike. A jump of one's own (measure field, rehearsal mark, arrow keys, a
+  note from the list) and a jump of the leader in “Follow me” still bring
+  the position into view. Once it has left the screen, a button leads back
+  to it; switching autoscroll on again does the same. (#12)
+
 ## [1.14.4] – 2026-10-16
 
 ### Security
