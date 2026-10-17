@@ -8,6 +8,9 @@
 
 	The Print button stays locked until every sheet has loaded: otherwise
 	someone prints half a score after the first glance.
+
+	"Save as PDF in Files" (A1b) only where the person may create files next
+	to the score; it holds the music only, which the line under it says.
 -->
 <template>
 	<header class="scoreview-print-toolbar">
@@ -26,6 +29,33 @@
 				</template>
 				{{ t('Print') }}
 			</NcButton>
+			<NcButton
+				v-if="canSavePdf"
+				:disabled="!ready || pdf.state === 'working'"
+				@click="$emit('savePdf')">
+				<template #icon>
+					<NcLoadingIcon v-if="pdf.state === 'working'" :size="20" />
+					<FilePdfBox v-else :size="20" />
+				</template>
+				{{ t('Save as PDF in Files') }}
+			</NcButton>
+		</div>
+		<div v-if="pdf.state" class="scoreview-print-toolbar-row scoreview-print-pdf" role="status">
+			<span v-if="pdf.state === 'working'">{{ pdfProgressText }}</span>
+			<span v-else-if="pdf.state === 'done'">{{ t('Saved as {name} next to the score - the music only, without notes, stamps and note names.', { name: pdf.name }) }}</span>
+			<template v-else-if="pdf.state === 'exists'">
+				<span>{{ t('{name} already exists next to the score. Replace it?', { name: pdf.name }) }}</span>
+				<NcButton variant="primary" @click="$emit('replacePdf')">
+					{{ t('Replace') }}
+				</NcButton>
+				<NcButton variant="tertiary" @click="$emit('dismissPdf')">
+					{{ t('Cancel') }}
+				</NcButton>
+			</template>
+			<span v-else-if="pdf.state === 'error'" class="scoreview-print-pdf-error">{{ pdf.error }}</span>
+			<span v-if="pdf.unsupported?.length" class="scoreview-print-pdf-error">
+				{{ t('Could not be written into the PDF and left out: {list}', { list: pdf.unsupported.join(', ') }) }}
+			</span>
 		</div>
 		<div class="scoreview-print-toolbar-row scoreview-print-toolbar-switches">
 			<NcCheckboxRadioSwitch
@@ -52,7 +82,9 @@
 import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import FilePdfBox from 'vue-material-design-icons/FilePdfBox.vue'
 import Printer from 'vue-material-design-icons/Printer.vue'
 
 export default {
@@ -60,7 +92,9 @@ export default {
 
 	components: {
 		NcButton,
+		FilePdfBox,
 		NcCheckboxRadioSwitch,
+		NcLoadingIcon,
 		NcNoteCard,
 		Printer,
 	},
@@ -119,11 +153,29 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		// Whether files may be created next to the score (status endpoint).
+		canSavePdf: {
+			type: Boolean,
+			default: false,
+		},
+
+		// The PDF file: {state, page?, of?, name?, error?, unsupported?} (PrintApp.vue)
+		pdf: {
+			type: Object,
+			default: () => ({ state: '' }),
+		},
 	},
 
-	emits: ['update:withNotes', 'update:noteNames', 'print'],
+	emits: ['update:withNotes', 'update:noteNames', 'print', 'savePdf', 'replacePdf', 'dismissPdf'],
 
 	computed: {
+		pdfProgressText() {
+			return this.pdf.page
+				? this.t('Writing the PDF: page {page} of {of}…', { page: this.pdf.page, of: this.pdf.of })
+				: this.t('Saving the PDF…')
+		},
+
 		ready() {
 			return this.state === 'ready' && this.pageCount > 0 && this.loadedCount >= this.pageCount
 		},
@@ -193,6 +245,14 @@ export default {
 
 .scoreview-print-status {
 	color: var(--color-text-maxcontrast);
+}
+
+.scoreview-print-pdf {
+	gap: 8px;
+}
+
+.scoreview-print-pdf-error {
+	color: var(--color-error-text, var(--color-error));
 }
 
 @media print {

@@ -87,6 +87,12 @@ class FeatureConfigTest extends TestCase {
 		$this->assertSame(100 * 1024 * 1024, $unsinn->maxRecordingBytesTotal());
 	}
 
+	public function testPdfLimitWithDefaultAndClamp(): void {
+		$this->assertSame(50 * 1024 * 1024, $this->config([])->pdfMaxBytes());
+		$this->assertSame(500 * 1024 * 1024, $this->config([FeatureConfig::PDF_MAX_MB => 9999])->pdfMaxBytes());
+		$this->assertSame(5 * 1024 * 1024, $this->config([FeatureConfig::PDF_MAX_MB => 0])->pdfMaxBytes());
+	}
+
 	public function testSpeichertBegrenztUndAntwortetMitDemGespeicherten(): void {
 		$appConfig = $this->createMock(IAppConfig::class);
 		$appConfig->expects($this->once())->method('setValueInt')

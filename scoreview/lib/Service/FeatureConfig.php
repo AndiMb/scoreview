@@ -35,6 +35,7 @@ class FeatureConfig {
 	public const MAX_RECORDING_BYTES_PER_USER = 'max_recording_bytes_per_user';
 	public const MAX_RECORDING_BYTES_TOTAL = 'max_recording_bytes_total';
 	public const PRACTICE_TRACK_MAX_MB = 'practice_track_max_mb';
+	public const PDF_MAX_MB = 'pdf_max_mb';
 
 	private const MB = 1024 * 1024;
 
@@ -79,6 +80,11 @@ class FeatureConfig {
 	 * rund 1 MB je Minute (gemessen: 191 s -> 3,1 MB). 60 MB reichen fuer eine
 	 * Stunde - ein ganzes Oratorium in einem Stueck, mehr wird es nicht.
 	 *
+	 * `pdf_max_mb` (E16): measured, a 28-page choir score is 0.7 MB as a PDF
+	 * from the engine and 2 MB from the sidecar (vector, Flate). 50 MB leave
+	 * room for scores with large embedded images; the limit only keeps an
+	 * accident (or a forged upload) from filling a folder.
+	 *
 	 * @var array<string, array{int, int, int}>
 	 */
 	public const NUMBERS = [
@@ -88,6 +94,7 @@ class FeatureConfig {
 		self::MAX_RECORDING_BYTES_PER_USER => [200 * self::MB, 10 * self::MB, 100 * 1024 * self::MB],
 		self::MAX_RECORDING_BYTES_TOTAL => [5 * 1024 * self::MB, 100 * self::MB, 10 * 1024 * 1024 * self::MB],
 		self::PRACTICE_TRACK_MAX_MB => [60, 5, 500],
+		self::PDF_MAX_MB => [50, 5, 500],
 	];
 
 	public function __construct(
@@ -135,6 +142,10 @@ class FeatureConfig {
 
 	public function practiceTrackMaxBytes(): int {
 		return $this->number(self::PRACTICE_TRACK_MAX_MB) * self::MB;
+	}
+
+	public function pdfMaxBytes(): int {
+		return $this->number(self::PDF_MAX_MB) * self::MB;
 	}
 
 	/**

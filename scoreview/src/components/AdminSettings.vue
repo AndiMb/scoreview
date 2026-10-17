@@ -167,6 +167,14 @@
 					:placeholder="String(practiceLimit.default)"
 					:helperText="t('Allowed: {min}–{max}. Default: {default}.', { min: practiceLimit.min, max: practiceLimit.max, default: practiceLimit.default })"
 					@update:modelValue="setPracticeLimit" />
+				<NcTextField
+					:modelValue="String(form.pdfMaxMb)"
+					type="number"
+					class="scoreview-field"
+					:label="t('Maximum size of one PDF file (MB)')"
+					:placeholder="String(pdfLimit.default)"
+					:helperText="t('Allowed: {min}–{max}. Default: {default}.', { min: pdfLimit.min, max: pdfLimit.max, default: pdfLimit.default })"
+					@update:modelValue="setPdfLimit" />
 				<NcCheckboxRadioSwitch v-model="form.featureOffline" type="switch" class="scoreview-field">
 					{{ t('Offline page (scores and setlists saved in the browser)') }}
 				</NcCheckboxRadioSwitch>
@@ -301,6 +309,7 @@ export default {
 				featurePracticeExport: initial.featurePracticeExport ?? true,
 				featureOffline: initial.featureOffline ?? true,
 				practiceTrackMaxMb: initial.practiceTrackMaxMb?.value ?? 60,
+				pdfMaxMb: initial.pdfMaxMb?.value ?? 50,
 				followPollMs: initial.followPollMs ?? 800,
 				maxRecordingsPerScore: initial.recordingLimits?.maxRecordingsPerScore?.value ?? 5,
 				maxRecordingSeconds: initial.recordingLimits?.maxRecordingSeconds?.value ?? 600,
@@ -389,6 +398,11 @@ export default {
 		/** @return {{min: number, max: number, default: number}} */
 		practiceLimit() {
 			return this.initial.practiceTrackMaxMb ?? { min: 5, max: 500, default: 60 }
+		},
+
+		/** @return {{min: number, max: number, default: number}} */
+		pdfLimit() {
+			return this.initial.pdfMaxMb ?? { min: 5, max: 500, default: 50 }
 		},
 
 		/** Konvertiert dieser Server gerade gar nicht selbst? */
@@ -570,6 +584,11 @@ export default {
 			this.form.practiceTrackMaxMb = Number.isFinite(zahl) ? zahl : this.practiceLimit.default
 		},
 
+		setPdfLimit(value) {
+			const number = Number.parseInt(value, 10)
+			this.form.pdfMaxMb = Number.isFinite(number) ? number : this.pdfLimit.default
+		},
+
 		async save() {
 			this.saving = true
 			this.saveState = ''
@@ -580,7 +599,7 @@ export default {
 				if (typeof res.data?.followPollMs === 'number') {
 					this.form.followPollMs = res.data.followPollMs
 				}
-				for (const key of [...this.recordingLimitFields.map((f) => f.key), 'practiceTrackMaxMb']) {
+				for (const key of [...this.recordingLimitFields.map((f) => f.key), 'practiceTrackMaxMb', 'pdfMaxMb']) {
 					if (typeof res.data?.[key] === 'number') {
 						this.form[key] = res.data[key]
 					}

@@ -7,17 +7,12 @@ namespace OCA\ScoreView\Service;
 use OCA\ScoreView\AppInfo\Application;
 use OCP\Files\File;
 use OCP\Files\Folder;
-use OCP\Files\ForbiddenException;
-use OCP\Files\InvalidPathException;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
-use OCP\Files\NotEnoughSpaceException;
 use OCP\Files\NotFoundException;
 use OCP\Files\NotPermittedException;
-use OCP\Files\StorageNotAvailableException;
 use OCP\IConfig;
 use OCP\L10N\IFactory;
-use OCP\Lock\LockedException;
 
 /**
  * Uebe-Tracks als Dateien in Files (E13, H1/H10).
@@ -38,11 +33,17 @@ class PracticeTrackService {
 	public const TARGET_SUB = 'sub';
 	public const TARGET_OWN = 'own';
 
+	private SiblingFileService $files;
+
 	public function __construct(
 		private IRootFolder $rootFolder,
 		private IConfig $config,
 		private IFactory $l10nFactory,
+		?SiblingFileService $files = null,
 	) {
+		// Optional only so that existing callers and tests need no change;
+		// the container always passes one.
+		$this->files = $files ?? new SiblingFileService($rootFolder);
 	}
 
 	/**
@@ -53,87 +54,11 @@ class PracticeTrackService {
 	 */
 	public function save(Node $score, string $userId, $mp3, string $name, string $target, ?int $ownFolderId, bool $replace): array {
 		$folder = $this->targetFolder($score, $userId, $target, $ownFolderId);
-		$base = FileNames::clean($name, [self::EXTENSION]);
-		if ($base === null) {
-			throw new PracticeTrackException(PracticeTrackException::INVALID);
-		}
-		$fileName = $base . self::EXTENSION;
-
-		// Vorher pruefen, nicht dem Schreiben ueberlassen - gemessen: Ueber die
-		// Quota schreibt Nextcloud einen Stream bis an die Grenze, scheitert
-		// dann mit NotPermittedException und laesst eine abgeschnittene Datei
-		// zurueck. Negative Werte heissen unbegrenzt oder unbekannt.
-		$size = fstat($mp3)['size'] ?? 0;
-		$free = $folder->getFreeSpace();
-		if ($free >= 0 && $size > $free) {
-			throw new PracticeTrackException(PracticeTrackException::STORAGE_FULL);
-		}
-
-		$created = false;
 		try {
-			if ($folder->nodeExists($fileName)) {
-				$existing = $folder->get($fileName);
-				if (!$replace) {
-					throw new PracticeTrackException(
-						PracticeTrackException::EXISTS,
-						FileNames::firstFree($base, self::EXTENSION, fn (string $n) => $folder->nodeExists($n)),
-					);
-				}
-				if (!$existing instanceof File || !$existing->isUpdateable()) {
-					throw new PracticeTrackException(PracticeTrackException::FORBIDDEN);
-				}
-				$existing->putContent($mp3);
-				$file = $existing;
-			} else {
-				if (!$folder->isCreatable()) {
-					throw new PracticeTrackException(PracticeTrackException::FORBIDDEN);
-				}
-				$created = true;
-				$file = $folder->newFile($fileName, $mp3);
-			}
-		} catch (NotEnoughSpaceException) {
-			$this->removePartial($folder, $fileName, $created);
-			throw new PracticeTrackException(PracticeTrackException::STORAGE_FULL);
-		} catch (NotPermittedException|ForbiddenException) {
-			// ForbiddenException: an access-control rule (files_accesscontrol)
-			// refused the write - a refusal like a missing permission.
-			$this->removePartial($folder, $fileName, $created);
-			throw new PracticeTrackException(PracticeTrackException::FORBIDDEN);
-		} catch (LockedException|StorageNotAvailableException) {
-			// A sync client holds the file being replaced, or an external
-			// storage is offline: worth another try, not a 500.
-			$this->removePartial($folder, $fileName, $created);
-			throw new PracticeTrackException(PracticeTrackException::BUSY);
-		} catch (InvalidPathException|NotFoundException) {
-			// Ein Name, den diese Instanz nicht zulaesst (verbotene Zeichen
-			// wie `:` bei Windows-kompatiblen Namen, zu lang), oder die Datei
-			// verschwand zwischen Pruefen und Lesen: 400 statt 500.
-			throw new PracticeTrackException(PracticeTrackException::INVALID);
-		}
-
-		$userFolder = $this->rootFolder->getUserFolder($userId);
-		return [
-			'fileId' => (int)$file->getId(),
-			'name' => $file->getName(),
-			'path' => rtrim($userFolder->getRelativePath($file->getPath()) ?? '', '/'),
-		];
-	}
-
-	/**
-	 * Was ein gescheitertes Neuanlegen hinterliess, wieder weg - eine halbe
-	 * MP3 waere schlimmer als keine. Eine ersetzte Datei bleibt (ihre
-	 * vorige Fassung liegt in den Versionen).
-	 */
-	private function removePartial(Folder $folder, string $fileName, bool $created): void {
-		if (!$created) {
-			return;
-		}
-		try {
-			if ($folder->nodeExists($fileName)) {
-				$folder->get($fileName)->delete();
-			}
-		} catch (\Throwable) {
-			// Aufraeumen ist Kuer - der eigentliche Fehler geht ohnehin zurueck.
+			return $this->files->save($folder, $userId, $mp3, $name, self::EXTENSION, $replace);
+		} catch (SiblingFileException $e) {
+			// The practice-track API keeps its own exception (and its tests).
+			throw new PracticeTrackException($e->getReason(), $e->getSuggested());
 		}
 	}
 

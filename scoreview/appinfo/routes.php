@@ -64,6 +64,8 @@ return [
 		['name' => 'my_part#show', 'url' => '/api/scores/{fileId}/my-part', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'my_part#update', 'url' => '/api/scores/{fileId}/my-part', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'practice_track#create', 'url' => '/api/scores/{fileId}/practice-tracks', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		// The PDF file next to the score, written in the browser (E16).
+		['name' => 'pdf#create', 'url' => '/api/scores/{fileId}/pdf', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'my_part#updatePractice', 'url' => '/api/scores/{fileId}/practice', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
 
 		// Leitungen einer Partitur (B1, Controller\LeaderController). Die

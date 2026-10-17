@@ -142,6 +142,7 @@ class SettingsController extends Controller {
 		?bool $featurePracticeExport = null,
 		?bool $featureOffline = null,
 		?int $practiceTrackMaxMb = null,
+		?int $pdfMaxMb = null,
 	): JSONResponse {
 		// Leer = automatisch suchen (siehe Service\LocalConverter), nicht
 		// "kein node".
@@ -249,6 +250,7 @@ class SettingsController extends Controller {
 			'maxRecordingMbTotal' => [FeatureConfig::MAX_RECORDING_BYTES_TOTAL, $maxRecordingMbTotal, self::MB],
 			// Schon in MB gespeichert (E13) - die Einheit des Formulars.
 			'practiceTrackMaxMb' => [FeatureConfig::PRACTICE_TRACK_MAX_MB, $practiceTrackMaxMb, 1],
+			'pdfMaxMb' => [FeatureConfig::PDF_MAX_MB, $pdfMaxMb, 1],
 		] as $field => [$key, $value, $unit]) {
 			$stored = $value === null
 				? $this->features->number($key)

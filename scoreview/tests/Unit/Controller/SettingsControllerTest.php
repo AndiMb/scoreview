@@ -150,6 +150,15 @@ class SettingsControllerTest extends TestCase {
 		$this->assertArrayNotHasKey(FeatureConfig::MAX_RECORDING_BYTES_TOTAL, $this->ints);
 	}
 
+	public function testPdfLimitInMegabytesAndClamped(): void {
+		$data = $this->controller()->update(conversionBackend: ConversionBackend::LOCAL, pdfMaxMb: 9999)->getData();
+
+		$this->assertSame(500, $data['pdfMaxMb']);
+		$this->assertSame(500, $this->ints[FeatureConfig::PDF_MAX_MB]);
+		// Not passed: the practice-track limit stays and is reported.
+		$this->assertSame(60, $data['practiceTrackMaxMb']);
+	}
+
 	public function testOhneIntervallBleibtDerGespeicherteWert(): void {
 		$this->ints[FeatureConfig::FOLLOW_POLL_MS] = 1500;
 

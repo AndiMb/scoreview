@@ -71,6 +71,7 @@ class AdminSettings implements ISettings {
 			'featurePracticeExport' => $this->features->isEnabled(FeatureConfig::PRACTICE_EXPORT),
 			'featureOffline' => $this->features->isEnabled(FeatureConfig::OFFLINE),
 			'practiceTrackMaxMb' => self::limit(FeatureConfig::PRACTICE_TRACK_MAX_MB, intdiv($this->features->practiceTrackMaxBytes(), self::MB), 1),
+			'pdfMaxMb' => self::limit(FeatureConfig::PDF_MAX_MB, intdiv($this->features->pdfMaxBytes(), self::MB), 1),
 			'followPollMs' => $this->features->followPollMs(),
 			// Grenzen aus derselben Quelle wie die Pruefung beim Speichern -
 			// das Zahlenfeld soll nicht anbieten, was der Server danach klemmt.

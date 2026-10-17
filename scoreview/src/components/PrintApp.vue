@@ -11,6 +11,12 @@
 	server path or browser fallback alike (E7: one `if` there, none here).
 	No server-side PDF: neither conversion path can write one (E3), and the
 	browser's "Save as PDF" keeps the SVG paths as vectors (measured, 0.2).
+
+	"Save as PDF in Files" (A1b) writes the PDF here in the browser, from the
+	same page SVGs (lib/svgToPdf.js, lib/pdfWriter.js), and puts it next to
+	the score. Only the music: notes, stamps and note names are overlays
+	placed on screen, and drawing them into the file would mean a second
+	placement - the print dialog carries them.
 -->
 <template>
 	<div class="scoreview-print">
@@ -25,7 +31,12 @@
 			:pageCount="pageUrls.length"
 			:loadedCount="loadedCount"
 			:noteNamesPossible="noteNamesPossible"
-			@print="print" />
+			:canSavePdf="canWriteFolder"
+			:pdf="pdf"
+			@print="print"
+			@savePdf="savePdf(false)"
+			@replacePdf="savePdf(true)"
+			@dismissPdf="pdf = { state: '' }" />
 		<main class="scoreview-print-sheets">
 			<div
 				v-for="(url, i) in pageUrls"
@@ -59,6 +70,7 @@
 import axios from '@nextcloud/axios'
 import { loadState } from '@nextcloud/initial-state'
 import { getLanguage, translate } from '@nextcloud/l10n'
+import { generateUrl } from '@nextcloud/router'
 import { computed, ref, shallowRef } from 'vue'
 import PrintToolbar from './PrintToolbar.vue'
 import ScorePage from './ScorePage.vue'
@@ -70,9 +82,11 @@ import { useScoreFacts } from '../composables/useScoreFacts.js'
 import { useViewerPreferences } from '../composables/useViewerPreferences.js'
 import { capabilitiesOf } from '../lib/capabilities.js'
 import { spellingMap } from '../lib/noteSpellingIndex.js'
+import { createPdf } from '../lib/pdfWriter.js'
 import { pageBoxMm, pageCss } from '../lib/printLayout.js'
 import { keyByElid } from '../lib/scoreFacts.js'
 import { BASE_PAGE_WIDTH_PX, buildTimeline, groupRectsByPage } from '../lib/scoreLayout.js'
+import { svgPageToPdf } from '../lib/svgToPdf.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -82,6 +96,42 @@ const PX_PER_MM = 96 / 25.4
 // One frozen empty array for every "nothing here": a fresh [] per render
 // would count as a change and re-render every sheet.
 const NO_ITEMS = Object.freeze([])
+
+/**
+ * A PNG, GIF or BMP data URI as RGB on white, for the PDF (svgToPdf.js
+ * takes JPEG as it is). The one impure step of the PDF writing, so it
+ * lives here and not in the lib: it needs an image decoder and a canvas.
+ * White underneath because paper is white - an alpha channel has no
+ * place in a DeviceRGB image.
+ *
+ * @param {string} href data URI
+ * @return {Promise<?{kind: 'rgb', width: number, height: number, bytes: Uint8Array}>}
+ */
+async function decodeImage(href) {
+	try {
+		const image = new Image()
+		image.src = href
+		await image.decode()
+		const canvas = document.createElement('canvas')
+		canvas.width = image.naturalWidth
+		canvas.height = image.naturalHeight
+		const context = canvas.getContext('2d')
+		context.fillStyle = '#fff'
+		context.fillRect(0, 0, canvas.width, canvas.height)
+		context.drawImage(image, 0, 0)
+		const rgba = context.getImageData(0, 0, canvas.width, canvas.height).data
+		const bytes = new Uint8Array(canvas.width * canvas.height * 3)
+		for (let i = 0, j = 0; i < rgba.length; i += 4, j += 3) {
+			bytes[j] = rgba[i]
+			bytes[j + 1] = rgba[i + 1]
+			bytes[j + 2] = rgba[i + 2]
+		}
+		return { kind: 'rgb', width: canvas.width, height: canvas.height, bytes }
+	} catch {
+		// Reported as an element that could not be written.
+		return null
+	}
+}
 
 function readState(key) {
 	try {
@@ -108,6 +158,9 @@ export default {
 		const measuresTimeline = shallowRef(null)
 		const scoreMeta = shallowRef(null)
 		const currentEtag = ref(null)
+		// From the status body, as in the viewer: offer the PDF file only where
+		// the person may create files next to the score.
+		const canWriteFolder = ref(false)
 		// meta.json's duration is in seconds; the last measure of the key
 		// lookup ends there.
 		const durationMs = computed(() => Math.round((scoreMeta.value?.duration ?? 0) * 1000))
@@ -137,7 +190,8 @@ export default {
 
 		const conversion = useConversionStatus({
 			fileId: () => fileId,
-			onReady: async ({ files }) => {
+			onReady: async ({ files, canWriteFolder: mayWrite }) => {
+				canWriteFolder.value = mayWrite === true
 				try {
 					const [timingRes, measuresRes, metaRes] = await Promise.all([
 						axios.get(files.timingJson),
@@ -172,6 +226,7 @@ export default {
 			fileName: page.fileName ?? '',
 			pageUrls,
 			scoreMeta,
+			canWriteFolder,
 			state: conversion.state,
 			errorText: conversion.errorText,
 			longWait: conversion.langeWartezeit,
@@ -204,6 +259,11 @@ export default {
 			staffMappingOk: false,
 			notesLoaded: false,
 			pageStyleEl: null,
+			// The PDF file (A1b): state '' | working | done | exists | error,
+			// with progress, file name, error text and what could not be written.
+			pdf: { state: '' },
+			// The written file while "replace?" is open, so a yes sends it at once.
+			pdfBlob: null,
 		}
 	},
 
@@ -346,6 +406,66 @@ export default {
 
 		print() {
 			window.print()
+		},
+
+		/**
+		 * Write the PDF from the page SVGs and save it next to the score.
+		 * With `replace`, the file written last time is sent again instead
+		 * of writing it anew - the answer to "replace?" should be instant.
+		 *
+		 * @param {boolean} replace
+		 */
+		async savePdf(replace) {
+			if (this.pdf.state === 'working') {
+				return
+			}
+			const unsupported = new Set(replace ? (this.pdf.unsupported ?? []) : [])
+			try {
+				if (!replace || !this.pdfBlob) {
+					this.pdfBlob = await this.writePdf(unsupported)
+				}
+				this.pdf = { state: 'working', unsupported: [...unsupported] }
+				const response = await axios.post(
+					generateUrl('/apps/scoreview/api/scores/{fileId}/pdf', { fileId: this.fileId }),
+					this.pdfBlob,
+					{ params: { name: this.title, replace }, headers: { 'Content-Type': 'application/pdf' } },
+				)
+				this.pdfBlob = null
+				this.pdf = { state: 'done', name: response.data?.name ?? '', unsupported: [...unsupported] }
+			} catch (err) {
+				const data = err?.response?.data
+				if (err?.response?.status === 409 && data?.reason === 'exists') {
+					this.pdf = { state: 'exists', name: `${this.title}.pdf`, unsupported: [...unsupported] }
+					return
+				}
+				this.pdfBlob = null
+				this.pdf = { state: 'error', error: data?.error ?? err?.message ?? String(err), unsupported: [...unsupported] }
+			}
+		},
+
+		/**
+		 * All pages into one PDF. The SVG text is fetched again (the browser
+		 * has it cached from the sheets) and parsed as an inert XML document:
+		 * nothing of it reaches the DOM or runs, and svgToPdf.js reads only
+		 * the drawing elements, so the sanitizer has nothing to do here.
+		 * One await per page, so the page stays responsive and the progress
+		 * shows.
+		 *
+		 * @param {Set<string>} unsupported collects what could not be written
+		 * @return {Promise<Blob>}
+		 */
+		async writePdf(unsupported) {
+			const of = this.pageUrls.length
+			const writer = createPdf({ title: this.title, producer: 'ScoreView' })
+			for (let i = 0; i < of; i++) {
+				this.pdf = { state: 'working', page: i + 1, of }
+				const response = await axios.get(this.pageUrls[i], { responseType: 'text' })
+				const page = await svgPageToPdf(response.data, this.pageBox, { decodeImage })
+				page.unsupported.forEach((item) => unsupported.add(item))
+				writer.addPage(page)
+			}
+			this.pdf = { state: 'working' }
+			return new Blob([await writer.finish()], { type: 'application/pdf' })
 		},
 	},
 }
