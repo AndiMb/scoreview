@@ -52,7 +52,10 @@ class ViewerPreferences {
 	public const KEY_BAND_OFFERED = 'band_offered';
 	/** Whether the view scrolls along with playback by itself (issue #12). */
 	public const KEY_AUTO_SCROLL = 'auto_scroll';
+	/** Beat numbers over the notes (B1): off, on my staff, on all staves. */
+	public const KEY_BEAT_COUNTS = 'beat_counts';
 	public const NOTE_NAME_SYSTEMS = ['off', 'de', 'en', 'solfa-fixed', 'solfa-movable'];
+	public const BEAT_COUNTS = ['off', 'mine', 'all'];
 	public const LAYOUTS = ['pages', 'band', 'lyrics'];
 	public const TRANSPOSE_LIMIT = 12;
 	public const DEFAULT_OTHERS_LEVEL = 40;
@@ -91,7 +94,7 @@ class ViewerPreferences {
 	}
 
 	/**
-	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool}
+	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string}
 	 */
 	public function get(?string $userId): array {
 		if ($userId === null) {
@@ -115,6 +118,7 @@ class ViewerPreferences {
 			'layout' => self::oneOf($this->config->getUserValue($userId, Application::APP_ID, self::KEY_LAYOUT, 'pages'), self::LAYOUTS),
 			'bandOffered' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_BAND_OFFERED, '0') === '1',
 			'autoScroll' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_AUTO_SCROLL, '1') === '1',
+			'beatCounts' => self::oneOf($this->config->getUserValue($userId, Application::APP_ID, self::KEY_BEAT_COUNTS, 'off'), self::BEAT_COUNTS),
 		];
 	}
 
@@ -122,10 +126,14 @@ class ViewerPreferences {
 	 * Tonnamen und Darstellung (H2/H3/H8) - je Wert nur, wenn er mitkommt,
 	 * aus demselben Grund wie setDisplay().
 	 *
-	 * @return array{noteNames?: string, noteNamesMine?: bool, layout?: string, bandOffered?: bool, autoScroll?: bool}
+	 * @return array{noteNames?: string, noteNamesMine?: bool, layout?: string, bandOffered?: bool, autoScroll?: bool, beatCounts?: string}
 	 */
-	public function setViewing(string $userId, ?string $noteNames, ?bool $noteNamesMine, ?string $layout, ?bool $bandOffered, ?bool $autoScroll = null): array {
+	public function setViewing(string $userId, ?string $noteNames, ?bool $noteNamesMine, ?string $layout, ?bool $bandOffered, ?bool $autoScroll = null, ?string $beatCounts = null): array {
 		$werte = [];
+		if ($beatCounts !== null) {
+			$werte['beatCounts'] = self::oneOf($beatCounts, self::BEAT_COUNTS);
+			$this->config->setUserValue($userId, Application::APP_ID, self::KEY_BEAT_COUNTS, $werte['beatCounts']);
+		}
 		if ($noteNames !== null) {
 			$werte['noteNames'] = self::oneOf($noteNames, self::NOTE_NAME_SYSTEMS);
 			$this->config->setUserValue($userId, Application::APP_ID, self::KEY_NOTE_NAMES, $werte['noteNames']);
@@ -317,6 +325,7 @@ class ViewerPreferences {
 			// On: that is what the viewer always did, and what most people
 			// reading along expect.
 			'autoScroll' => true,
+			'beatCounts' => 'off',
 		];
 	}
 

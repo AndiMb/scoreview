@@ -70,6 +70,7 @@ class PreferenceController extends Controller {
 		?string $layout = null,
 		?bool $bandOffered = null,
 		?bool $autoScroll = null,
+		?string $beatCounts = null,
 	): JSONResponse {
 		$userId = $this->userSession->getUser()?->getUID();
 		if ($userId === null) {
@@ -81,7 +82,7 @@ class PreferenceController extends Controller {
 		return new JSONResponse(
 			$this->preferences->set($userId, $highlightColor, $highlightMode)
 			+ $this->preferences->setDisplay($userId, $stereoMyPart, $noteTheme)
-			+ $this->preferences->setViewing($userId, $noteNames, $noteNamesMine, $layout, $bandOffered, $autoScroll),
+			+ $this->preferences->setViewing($userId, $noteNames, $noteNamesMine, $layout, $bandOffered, $autoScroll, $beatCounts),
 		);
 	}
 }

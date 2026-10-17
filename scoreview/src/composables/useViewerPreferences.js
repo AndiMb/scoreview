@@ -2,6 +2,7 @@ import axios from '@nextcloud/axios'
 import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { COUNT_MODES } from '../lib/countLabels.js'
 import {
 	highlightCssVars,
 	normalizeHighlightColor,
@@ -53,6 +54,8 @@ export function useViewerPreferences() {
 	const bandOffered = ref(anfang.bandOffered === true)
 	// On unless switched off - also for a server that does not know it yet.
 	const autoScroll = ref(anfang.autoScroll !== false)
+	// Beat numbers over the notes (B1): off, on my staff, on all.
+	const beatCounts = ref(oneOf(anfang.beatCounts, COUNT_MODES))
 
 	// Ob das Nextcloud-Theme gerade dunkel ist - gelesen am Grund selbst
 	// (lib/noteTheme.js). Nachgelesen, wenn das Betriebssystem umschaltet:
@@ -85,7 +88,7 @@ export function useViewerPreferences() {
 	// (Controller\PreferenceController, E8). Wer am Telefon den
 	// Dunkelmodus waehlt, soll ihn beim naechsten Oeffnen wiederfinden.
 	let saveTimer = null
-	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered, autoScroll], () => {
+	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts], () => {
 		if (saveTimer) {
 			clearTimeout(saveTimer)
 		}
@@ -105,6 +108,7 @@ export function useViewerPreferences() {
 				layout: layout.value,
 				bandOffered: bandOffered.value,
 				autoScroll: autoScroll.value,
+				beatCounts: beatCounts.value,
 			})
 		} catch (err) {
 			// Bewusst nur ins Log: Die Einstellung wirkt im geoeffneten Viewer
@@ -117,7 +121,7 @@ export function useViewerPreferences() {
 		}
 	}
 
-	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle, noteNames, noteNamesMine, layout, bandOffered, autoScroll }
+	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts }
 }
 
 /**

@@ -139,6 +139,45 @@
 			class="score-page-note-name"
 			:style="{ left: label.left + '%', top: label.top + '%', fontSize: label.size + 'px', lineHeight: label.lineHeight + 'px', width: label.width + 'px', textAlign: label.align }"
 			aria-hidden="true">{{ label.text }}</span>
+		<!--
+			Beat numbers (B1) as SVG text in page units: they scale with the
+			notation, and - like the cursor - cost no style recalculation
+			during playback, since nothing of them ever changes an attribute
+			while the music runs.
+		-->
+		<!--
+			Focus on the loop: a veil in the paper's colour over everything
+			outside the looped measures. Over the notation, so the ink fades
+			with the paper; attributes only, like the cursor.
+		-->
+		<svg
+			v-if="loopDimRects.length > 0"
+			class="score-page-loopdim-layer"
+			:viewBox="viewBoxAttr"
+			preserveAspectRatio="none"
+			aria-hidden="true">
+			<rect
+				v-for="(band, i) in loopDimRects"
+				:key="`dim-${i}`"
+				class="score-page-loopdim"
+				:x="band.x"
+				:y="band.y"
+				:width="band.w"
+				:height="band.h" />
+		</svg>
+		<svg
+			v-if="countLabels.length > 0"
+			class="score-page-count-layer"
+			:viewBox="viewBoxAttr"
+			aria-hidden="true">
+			<text
+				v-for="label in countLabels"
+				:key="label.key"
+				class="score-page-count"
+				:x="label.x"
+				:y="label.y"
+				:font-size="label.size">{{ label.text }}</text>
+		</svg>
 		<span
 			v-if="tapBubble"
 			class="score-page-tap-bubble"
@@ -182,6 +221,7 @@ import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import ScoreStamps from './ScoreStamps.vue'
+import { placeCountLabels } from '../lib/countLayout.js'
 import { formatCents } from '../lib/intonation.js'
 import { createLru } from '../lib/lruCache.js'
 import { placeNoteLabels } from '../lib/noteLabelLayout.js'
@@ -400,6 +440,28 @@ export default {
 			default: () => 0,
 		},
 
+		// Beat numbers (B1): the count of every chord by elid
+		// (lib/countLabels.js), or null = off. Placed here, above the staff,
+		// because only the page knows its noteheads and staves.
+		countOfElid: {
+			type: Map,
+			default: null,
+		},
+
+		// Only these staves get beat numbers (the own part), null = all.
+		countStaves: {
+			type: Array,
+			default: null,
+		},
+
+		// Focus on the loop (B4): the measure runs of this page that lie
+		// outside the loop, as rectangles in page units (lib/loopFocus.js) -
+		// dimmed, not removed, the page image stays (E2).
+		loopDimRects: {
+			type: Array,
+			default: () => [],
+		},
+
 		// A sheet for the print page (E16): loaded at once, never unloaded,
 		// no cursor and no pointer handling. Everything placed on the page -
 		// markers, note texts, stamps, note names - stays the same code as
@@ -432,6 +494,10 @@ export default {
 			// linke obere Ecke in Prozent der Seite. Einmal je Seite und Einstellung berechnet,
 			// nicht je Rahmen (die Arbeit aus 1.10.2 bleibt so erhalten).
 			noteLabels: [],
+			// The beat numbers of this page: {key, x, y, size, text} in SVG
+			// units (lib/countLayout.js) - drawn as SVG text, so playback
+			// never touches a style attribute for them.
+			countLabels: [],
 			// Der Name des zuletzt angetippten Kopfs, kurz eingeblendet (D13).
 			tapBubble: null,
 		}
@@ -722,6 +788,14 @@ export default {
 			this.updateNoteLabels()
 		},
 
+		countOfElid() {
+			this.updateCountLabels()
+		},
+
+		countStaves() {
+			this.updateCountLabels()
+		},
+
 		zoom() {
 			// Die Schriftgroesse der Tonnamen folgt dem Notenbild.
 			this.updateNoteLabels()
@@ -809,6 +883,13 @@ export default {
 				}).filter((item) => item.box !== null)
 			}
 			this.updateNoteLabels()
+			this.updateCountLabels()
+		},
+
+		updateCountLabels() {
+			this.countLabels = this.viewBox
+				? placeCountLabels(this.noteItems, this.staffSystems, this.countOfElid, this.countStaves)
+				: []
 		},
 
 		updateNoteLabels() {
@@ -1106,6 +1187,7 @@ export default {
 			this.liveMarked = []
 			this.noteItems = []
 			this.noteLabels = []
+			this.countLabels = []
 			this.labelObstacles = null
 		},
 
@@ -1584,6 +1666,42 @@ export default {
 .score-page-note--dimmed,
 .score-page-marker--dimmed {
 	opacity: 0.45;
+}
+
+/* Beat numbers: over the notation (z-index above .score-page-svg), never
+   in the way of a tap. */
+.score-page-count-layer {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	overflow: visible;
+	z-index: 2;
+}
+
+.score-page-count {
+	fill: var(--scoreview-count, #1565c0);
+	font-family: sans-serif;
+	font-weight: bold;
+}
+
+/* The veil over measures outside the loop: paper colour, mostly opaque, so
+   the notes there stay legible but step back. Above the notation and the
+   numbers, below markers and stamps. */
+.score-page-loopdim-layer {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	overflow: visible;
+	z-index: 2;
+}
+
+.score-page-loopdim {
+	fill: var(--scoreview-page, #fff);
+	fill-opacity: 0.7;
 }
 
 .score-page-loop-marker {

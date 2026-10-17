@@ -75,6 +75,16 @@ class PreferenceControllerTest extends TestCase {
 		$this->assertSame('dark', $this->gespeichert[ViewerPreferences::KEY_NOTE_THEME]);
 	}
 
+	public function testSpeichertDieZaehlzeitenNurAlsBekanntenWert(): void {
+		$antwort = $this->controller('anna')->update('#00ff00', 'notes', beatCounts: 'mine');
+		$this->assertSame('mine', $antwort->getData()['beatCounts']);
+		$this->assertSame('mine', $this->gespeichert[ViewerPreferences::KEY_BEAT_COUNTS]);
+
+		$antwort = $this->controller('anna')->update('#00ff00', 'notes', beatCounts: 'everywhere');
+		$this->assertSame('off', $antwort->getData()['beatCounts']);
+		$this->assertSame('off', $this->gespeichert[ViewerPreferences::KEY_BEAT_COUNTS]);
+	}
+
 	public function testNormalisiertEinenUnbekanntenDunkelmodus(): void {
 		$antwort = $this->controller('anna')->update('#00ff00', 'notes', false, 'sepia;x');
 

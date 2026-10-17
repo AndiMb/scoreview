@@ -35,6 +35,33 @@
 			<p class="scoreview-popover-hint">
 				{{ t('Tap a note to hear it while playback is stopped.') }}
 			</p>
+			<!--
+				Beat numbers (B1): "1 + 2 +" over the notes, from the engine's
+				time signature per measure (E12). Unavailable where the pages
+				were set without it - the sidecar path, an older conversion.
+			-->
+			<fieldset class="scoreview-popover-group">
+				<legend>{{ t('Beat numbers') }}</legend>
+				<NcNoteCard v-if="countsUnavailable" type="info">
+					{{ countsUnavailable }}
+				</NcNoteCard>
+				<template v-else>
+					<NcCheckboxRadioSwitch
+						v-for="option in countOptions"
+						:key="option.value"
+						:modelValue="counts"
+						type="radio"
+						:value="option.value"
+						name="scoreview-beat-counts"
+						:disabled="option.value === 'mine' && !hasMyPart"
+						@update:modelValue="$emit('update:counts', $event)">
+						{{ option.label }}
+					</NcCheckboxRadioSwitch>
+					<p v-if="counts !== 'off'" class="scoreview-popover-hint">
+						{{ t('Numbers on the beats, + between them; notes off that grid stay unlabelled.') }}
+					</p>
+				</template>
+			</fieldset>
 		</template>
 	</div>
 </template>
@@ -79,11 +106,31 @@ export default {
 			type: String,
 			default: '',
 		},
+
+		// 'off' | 'mine' | 'all' (lib/countLabels.js COUNT_MODES)
+		counts: {
+			type: String,
+			default: 'off',
+		},
+
+		// Warum es keine Zaehlzeiten gibt, sonst leer
+		countsUnavailable: {
+			type: String,
+			default: '',
+		},
 	},
 
-	emits: ['update:system', 'update:onlyMine'],
+	emits: ['update:system', 'update:onlyMine', 'update:counts'],
 
 	computed: {
+		countOptions() {
+			return [
+				{ value: 'off', label: this.t('Off') },
+				{ value: 'mine', label: this.t('On my part') },
+				{ value: 'all', label: this.t('On all parts') },
+			]
+		},
+
 		options() {
 			return [
 				{ value: 'off', label: this.t('Off') },
