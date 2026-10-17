@@ -39,6 +39,10 @@ sidecar/testdata/*.mpos
 # Strophen unter einer Wiederholung - fuer Liedtext und Schreibweisen der
 # Engine im Konverter-Selbsttest, Kopie unter converter/lyrics-test.mscz.
 !sidecar/testdata/lyrics-test.mscz
+# Ebenfalls selbst erstellt (Quelle daneben als timesig-test.mscx): ein
+# Viertel Auftakt, 4/4, 3/4, 6/8 - fuer die Taktart je Takt der Engine
+# (measureFacts) im Konverter-Selbsttest, Kopie unter converter/timesig-test.mscz.
+!sidecar/testdata/timesig-test.mscz
 
 # Signaturmaterial der App: der private Schluessel darf NIE ins Repo, und
 # signature.json entsteht je Release neu (siehe docs/development.md).

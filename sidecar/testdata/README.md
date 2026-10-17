@@ -63,3 +63,17 @@ der Silben und Strophen, „Hal-le-lu-ja" mit seinen Silbenarten, dass jede
 Silbe auf eine elid aus `timing.json` zeigt und dass die Notenköpfe je
 Segment, Notenzeile und Stimme mit dem SVG übereinstimmen. Der Sidecar kennt
 diese Felder nicht und benutzt die Datei deshalb nicht.
+
+## `timesig-test.mscz` / `timesig-test.mscx`
+
+Die vierte Ausnahme, von Hand geschrieben (die Quelle liegt als
+`timesig-test.mscx` daneben, die `.mscz` ist nur ihr Zip-Container): eine
+Stimme, ein Viertel Auftakt in 4/4, ein voller 4/4-Takt, ein 3/4- und ein
+6/8-Takt – genau die Takte, bei denen eine Schätzung der Schläge aus der
+Taktdauer danebenliegt.
+
+`scoreview/converter/timesig-test.mscz` ist eine Kopie davon. Der Selbsttest
+des lokalen Wegs prüft daran `measureFacts` der Engine (ab
+`v4.7.5-engine.5`): Taktart und tatsächliche Länge je Takt (480, 1920, 1440,
+1440 Ticks) und die aufsteigenden `tick`-Werte der `noteSpellings`. Der
+Sidecar kennt das Feld nicht und benutzt die Datei deshalb nicht.

@@ -268,13 +268,95 @@ export function checkScoreFacts(meta) {
 		}
 	}
 
+	const facts = measureFactsProblems(meta)
+	problems.push(...facts.problems)
+
 	return {
 		problems,
 		details: {
 			keySigs: keySigs?.length ?? 0,
 			rehearsalMarks: marks?.length ?? 0,
+			measureFacts: facts.count,
 		},
 	}
+}
+
+/**
+ * The invariants of `measureFacts` and the `tick` of `noteSpellings`
+ * (engine v4.7.5-engine.5), on any score: one entry per notated measure,
+ * ticks contiguous (tick[i+1] === tick[i] + ticks[i]), every spelling's tick
+ * inside its measure. The metronome and the beat numbers in the viewer
+ * read exactly these relations; a list that is complete but has a gap
+ * would put every later beat number in the wrong place.
+ *
+ * @param {object} meta
+ * @return {{problems: string[], count: number}}
+ */
+function measureFactsProblems(meta) {
+	const problems = []
+	const facts = Array.isArray(meta?.measureFacts) ? meta.measureFacts : null
+	if (facts === null) {
+		problems.push('meta.json has no measureFacts - the metronome falls back to estimating the beats')
+		return { problems, count: 0 }
+	}
+	if (facts.length !== meta.measures) {
+		problems.push(`measureFacts has ${facts.length} entries for ${meta.measures} measures`)
+	}
+	for (let i = 0; i < facts.length; i++) {
+		const f = facts[i]
+		if (f.measure !== i + 1 || !(f.sigN > 0) || !(f.sigD > 0) || !(f.ticks > 0)) {
+			problems.push(`measureFacts[${i}] is not a usable measure: ${JSON.stringify(f)}`)
+			break
+		}
+		if (i > 0 && f.tick !== facts[i - 1].tick + facts[i - 1].ticks) {
+			problems.push(`measureFacts: measure ${f.measure} starts at tick ${f.tick}, measure ${facts[i - 1].measure} ends at ${facts[i - 1].tick + facts[i - 1].ticks}`)
+			break
+		}
+	}
+	const spellings = Array.isArray(meta?.noteSpellings) ? meta.noteSpellings : []
+	const outside = spellings.filter((s) => !Number.isInteger(s.tick)
+		|| !facts.some((f) => s.tick >= f.tick && s.tick < f.tick + f.ticks)).length
+	if (outside > 0) {
+		problems.push(`${outside} noteSpellings entries carry no tick inside a measure`)
+	}
+	return { problems, count: facts.length }
+}
+
+/**
+ * The time signatures the engine reports at timesig-test.mscz: a
+ * one-quarter pickup written in 4/4, a full 4/4 measure, 3/4, 6/8. The
+ * promise behind the beat numbers (B1) and the metronome's meter: the
+ * nominal signature and the real length are both there and tell a pickup
+ * from a full measure. A guess from the duration cannot, which is why the
+ * field exists at all.
+ *
+ * @param {object} meta meta.json of timesig-test.mscz
+ * @return {{problems: string[], details: object}}
+ */
+export function checkMeters(meta) {
+	const problems = []
+	const expected = [
+		{ measure: 1, tick: 0, sigN: 4, sigD: 4, ticks: 480 },
+		{ measure: 2, tick: 480, sigN: 4, sigD: 4, ticks: 1920 },
+		{ measure: 3, tick: 2400, sigN: 3, sigD: 4, ticks: 1440 },
+		{ measure: 4, tick: 3840, sigN: 6, sigD: 8, ticks: 1440 },
+	]
+	const facts = Array.isArray(meta?.measureFacts) ? meta.measureFacts : null
+	if (facts === null) {
+		problems.push('meta.json has no measureFacts - the time signature per measure is missing')
+	} else {
+		const got = facts.map((f) => `${f.measure}:${f.tick}:${f.sigN}/${f.sigD}:${f.ticks}`).join(' ')
+		const want = expected.map((f) => `${f.measure}:${f.tick}:${f.sigN}/${f.sigD}:${f.ticks}`).join(' ')
+		if (got !== want) {
+			problems.push(`measureFacts of timesig-test are not pickup/4/4/3/4/6/8: ${got}`)
+		}
+	}
+	const spellings = Array.isArray(meta?.noteSpellings) ? meta.noteSpellings : []
+	const ticks = spellings.map((s) => s.tick)
+	if (ticks.length !== 14 || ticks.some((t, i) => i > 0 && !(t > ticks[i - 1]))) {
+		problems.push(`noteSpellings of timesig-test are not 14 chords with ascending ticks: ${ticks.join(',')}`)
+	}
+	return { problems, details: { measureFacts: facts?.length ?? 0, chords: spellings.length } }
 }
 
 /**

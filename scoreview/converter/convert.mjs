@@ -24,7 +24,7 @@ import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { cpus } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
-import { checkLyrics, checkPromises, checkScoreFacts, toPositions } from './lib/artifacts.mjs'
+import { checkLyrics, checkMeters, checkPromises, checkScoreFacts, toPositions } from './lib/artifacts.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
@@ -226,11 +226,15 @@ async function main() {
 		const mitText = await convert(join(HERE, 'lyrics-test.mscz'), fontVerzeichnis)
 		const text = checkLyrics({ meta: mitText.meta, timing: mitText.timing, svgs: mitText.pages })
 		problems.push(...text.problems)
+		// Fourth: the time signature per measure (E12), on a score whose
+		// measures a guess from the duration gets wrong - a pickup, 3/4, 6/8.
+		const meters = checkMeters((await convert(join(HERE, 'timesig-test.mscz'), fontVerzeichnis)).meta)
+		problems.push(...meters.problems)
 		stdoutWrite(JSON.stringify({
 			ok: problems.length === 0,
 			error: problems.length > 0 ? problems.join('; ') : null,
 			problems,
-			details: { musescoreVersion: await museScoreVersion(), seconds, ...details, scoreFacts: fakten.details, lyrics: text.details },
+			details: { musescoreVersion: await museScoreVersion(), seconds, ...details, scoreFacts: fakten.details, lyrics: text.details, meters: meters.details },
 		}) + '\n')
 		return
 	}

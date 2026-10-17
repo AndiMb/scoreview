@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkLyrics, checkPromises, checkScoreFacts, toPositions } from './artifacts.mjs'
+import { checkLyrics, checkMeters, checkPromises, checkScoreFacts, toPositions } from './artifacts.mjs'
 
 /**
  * Diese Umformung ist die Stelle, an der der lokale Konvertierungsweg das
@@ -193,12 +193,14 @@ describe('checkScoreFacts', () => {
 			{ measure: 3, text: 'B', tick: 3840 },
 			{ measure: 4, text: 'C', tick: 5760 },
 		],
+		measureFacts: [0, 1920, 3840, 5760, 7680].map((tick, i) => ({ measure: i + 1, tick, sigN: 4, sigD: 4, ticks: 1920 })),
+		noteSpellings: [0, 480, 960, 1440, 1920, 9120].map((tick, i) => ({ elid: i, staff: 0, voice: 0, tick, notes: [[60, 14]] })),
 	})
 
 	it('nimmt c-Moll, den Wechsel nach D-Dur und A/B/C ab', () => {
 		expect(checkScoreFacts(engineMeta())).toEqual({
 			problems: [],
-			details: { keySigs: 2, rehearsalMarks: 3 },
+			details: { keySigs: 2, rehearsalMarks: 3, measureFacts: 5 },
 		})
 	})
 
@@ -207,7 +209,29 @@ describe('checkScoreFacts', () => {
 		expect(problems).toEqual([
 			expect.stringContaining('keySigs'),
 			expect.stringContaining('rehearsalMarks'),
+			expect.stringContaining('measureFacts'),
 		])
+	})
+
+	it('erkennt eine Luecke in den Taktticks und einen Eintrag zu wenig', () => {
+		const meta = engineMeta()
+		meta.measureFacts[2].tick = 3850
+		expect(checkScoreFacts(meta).problems).toEqual([expect.stringContaining('measure 3 starts at tick 3850')])
+		// One measure short: the count is wrong, and the chord in that
+		// measure has no measure left to lie in.
+		const kurz = engineMeta()
+		kurz.measureFacts.pop()
+		expect(checkScoreFacts(kurz).problems).toEqual([
+			expect.stringContaining('4 entries for 5 measures'),
+			expect.stringContaining('1 noteSpellings entries'),
+		])
+	})
+
+	it('erkennt Schreibweisen ohne Tick im Takt', () => {
+		const meta = engineMeta()
+		meta.noteSpellings[1].tick = 99999
+		delete meta.noteSpellings[2].tick
+		expect(checkScoreFacts(meta).problems).toEqual([expect.stringContaining('2 noteSpellings entries')])
 	})
 
 	it('erkennt ein verlorenes Moll (mode null wie bei "unknown")', () => {
@@ -220,6 +244,38 @@ describe('checkScoreFacts', () => {
 		const meta = engineMeta()
 		meta.rehearsalMarks[1] = { measure: 2, text: '<b>B</b>', tick: 1920 }
 		expect(checkScoreFacts(meta).problems).toEqual([expect.stringContaining('A@1,<b>B</b>@2,C@4')])
+	})
+})
+
+describe('checkMeters', () => {
+	/** So liefert die Engine timesig-test.mscz - gemessen an v4.7.5-engine.5. */
+	const timesigMeta = () => ({
+		measures: 4,
+		measureFacts: [
+			{ measure: 1, sigD: 4, sigN: 4, tick: 0, ticks: 480 },
+			{ measure: 2, sigD: 4, sigN: 4, tick: 480, ticks: 1920 },
+			{ measure: 3, sigD: 4, sigN: 3, tick: 2400, ticks: 1440 },
+			{ measure: 4, sigD: 8, sigN: 6, tick: 3840, ticks: 1440 },
+		],
+		noteSpellings: [0, 480, 960, 1440, 1920, 2400, 2880, 3360, 3840, 4080, 4320, 4560, 4800, 5040]
+			.map((tick, i) => ({ elid: i, staff: 0, voice: 0, tick, notes: [[60, 14]] })),
+	})
+
+	it('nimmt Auftakt, 4/4, 3/4 und 6/8 ab', () => {
+		expect(checkMeters(timesigMeta())).toEqual({ problems: [], details: { measureFacts: 4, chords: 14 } })
+	})
+
+	it('erkennt eine Engine, die den Auftakt als vollen Takt meldet', () => {
+		const meta = timesigMeta()
+		meta.measureFacts[0].ticks = 1920
+		expect(checkMeters(meta).problems).toEqual([expect.stringContaining('pickup/4/4/3/4/6/8')])
+	})
+
+	it('meldet fehlende Felder', () => {
+		expect(checkMeters({ measures: 4 }).problems).toEqual([
+			expect.stringContaining('no measureFacts'),
+			expect.stringContaining('14 chords'),
+		])
 	})
 })
 

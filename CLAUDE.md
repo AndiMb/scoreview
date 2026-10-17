@@ -235,8 +235,9 @@ Alle ausführlich in `docs/troubleshooting.md`:
 `sidecar/testdata/` sind nicht garantiert frei lizenziert und bleiben draußen –
 Ausnahmen sind nur die selbst erstellten `repeat-test.*`,
 `keys-marks-test.mscz` (Tonarten mit Modus und Studierbuchstaben für den
-Konverter-Selbsttest) und `lyrics-test.*` (Liedtext mit drei Strophen für
-`lyricSyllables`/`noteSpellings`). Ebenso draußen:
+Konverter-Selbsttest), `lyrics-test.*` (Liedtext mit drei Strophen für
+`lyricSyllables`/`noteSpellings`) und `timesig-test.*` (Auftakt, 3/4, 6/8
+für `measureFacts`). Ebenso draußen:
 `scoreview/js/` und `scoreview/l10n/` (Build-Artefakte), `node_modules/` und das lokale
 Wegwerf-Verzeichnis `spike/`.
 

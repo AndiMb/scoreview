@@ -50,8 +50,14 @@ class ConversionService {
 	 *    `noteSpellings` (E15). Ohne Erhoehung boten vorhandene Konvertierungen
 	 *    Liedtext-Ansicht und Tonnamen nie an - der Viewer entscheidet am
 	 *    Inhalt, und dort fehlten die Listen, obwohl der Server sie liefern kann.
+	 * 5: meta.json carries `measureFacts` (time signature and length per
+	 *    measure) and a `tick` per noteSpellings entry (E12). The metronome
+	 *    would otherwise keep estimating beats from the measure's duration,
+	 *    and beat numbers over the notes would never be offered, for every
+	 *    score converted before - again decided at the content, which lacked
+	 *    the fields.
 	 */
-	public const CURRENT_FORMAT_VERSION = 4;
+	public const CURRENT_FORMAT_VERSION = 5;
 
 	/**
 	 * Wie lange ein Lauf einen Datensatz halten darf, bevor er als tot gilt.
