@@ -16,16 +16,18 @@ const TORN_DOWN = 'ScoreViewTornDown'
  * Die gemeinsame Mikrofonstrecke (docs/architecture.md, Abschnitt Mikrofon) - **die einzige
  * Stelle mit `getUserMedia`** in der App.
  *
- * - **An- und Abmelden je Nutzer** (`recorder`, `intonation`, `follower`):
+ * - **An- und Abmelden je Nutzer** (`recorder`, `intonation`, `tuner`, `follower`):
  *   Solange niemand angemeldet ist, ist das Mikrofon aus, und zwar ganz - die
  *   Spuren werden gestoppt, die Anzeige des Browsers erlischt (pro
  *   Nutzung ausdruecklich einzuschalten).
  * - **Eine Handlung schaltet alles aus**: `turnOff()` sagt jedem
  *   Nutzer Bescheid und baut die Strecke ab. Der rote Punkt in der Leiste
  *   (MicIndicator.vue) ruft genau das.
- * - **Der Aufnahmeweg ist nur fuer Aufnahme und Intonation** (S7): Wer sich
- *   als `follower` anmeldet, bekommt die Quelle fuer eigene Analyser, aber
- *   keine Bloecke. Das Mitverfolgen kann also strukturell nichts speichern.
+ * - **Der Aufnahmeweg ist nur fuer Aufnahme und Analyse** (S7): Aufnahme,
+ *   Intonation und Stimmgeraet bekommen Bloecke - das Stimmgeraet liest sie
+ *   nur und schreibt nichts. Wer sich als `follower` anmeldet, bekommt die
+ *   Quelle fuer eigene Analyser, aber keine Bloecke. Das Mitverfolgen kann
+ *   also strukturell nichts speichern.
  * - **Im Wiedergabe-AudioContext**, damit Zeitstempel, Latenz und Sequencer
  *   dieselbe Uhr haben (lib/recordingAlign.js). Nur ohne Ton (stummer
  *   Platzhalter) entsteht ein eigener.
@@ -69,7 +71,7 @@ export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 	 * Mikrofon fuer einen Nutzer einschalten. Muss aus einer Nutzerhandlung
 	 * kommen (Klick) - sonst verweigern Browser Rueckfrage und AudioContext.
 	 *
-	 * @param {'recorder'|'intonation'|'follower'} consumer
+	 * @param {'recorder'|'intonation'|'tuner'|'follower'} consumer
 	 * @param {object} [options]
 	 * @param {() => void} [options.onStop] gerufen, wenn die Strecke von aussen
 	 *   abgeschaltet wird (roter Punkt, Stueckwechsel)

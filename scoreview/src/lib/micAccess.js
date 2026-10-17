@@ -34,7 +34,7 @@ export const MIC_CONSTRAINTS = Object.freeze({
  * @return {boolean}
  */
 export function mayUseCapturePath(consumer) {
-	return consumer === 'recorder' || consumer === 'intonation'
+	return consumer === 'recorder' || consumer === 'intonation' || consumer === 'tuner'
 }
 
 /**

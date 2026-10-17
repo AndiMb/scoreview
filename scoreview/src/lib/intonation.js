@@ -19,6 +19,9 @@
 
 import { CLARITY_THRESHOLD } from './pitchDetect.js'
 
+/** Reference pitch of a' - shared with the tuner (lib/tuner.js): one place to make it adjustable later. */
+export const A4_HZ = 440
+
 export const DEFAULT_THRESHOLDS = { green: 25, yellow: 50 }
 /** Vorgabe, bis das Einschwingen an echten Laienstimmen gemessen ist (docs/limits.md). */
 export const DEFAULT_SKIP_ATTACK_MS = 100
@@ -41,7 +44,7 @@ const MIN_VOICED_SHARE = 0.5
  * @param {number} [a4]
  * @return {number}
  */
-export function centsOff(hz, midiPitch, a4 = 440) {
+export function centsOff(hz, midiPitch, a4 = A4_HZ) {
 	const target = a4 * 2 ** ((midiPitch - 69) / 12)
 	return 1200 * Math.log2(hz / target)
 }

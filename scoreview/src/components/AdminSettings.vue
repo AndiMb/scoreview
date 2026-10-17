@@ -142,7 +142,7 @@
 						@update:modelValue="(value) => setRecordingLimit(field.key, value)" />
 				</template>
 				<NcCheckboxRadioSwitch v-model="form.featureIntonation" type="switch" class="scoreview-field">
-					{{ t('Intonation feedback while singing') }}
+					{{ t('Intonation feedback while singing, and the tuner') }}
 				</NcCheckboxRadioSwitch>
 
 				<!--

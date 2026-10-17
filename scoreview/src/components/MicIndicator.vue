@@ -41,6 +41,7 @@ export default {
 			const names = {
 				recorder: this.t('Recording'),
 				intonation: this.t('Intonation'),
+				tuner: this.t('Tuner'),
 				follower: this.t('Score following'),
 			}
 			return this.consumers.map((c) => names[c] ?? c).join(', ')
