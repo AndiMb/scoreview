@@ -24,9 +24,6 @@ export const MIC_CONSTRAINTS = Object.freeze({
 	video: false,
 })
 
-/** Die Nutzer der Mikrofonstrecke. */
-export const CONSUMERS = Object.freeze(['recorder', 'intonation', 'follower'])
-
 /**
  * Welche Nutzer den Aufnahmeweg (Bloecke aus dem Worklet) bekommen. Das
  * Mitverfolgen nie: Es speichert nichts und haengt an eigenen

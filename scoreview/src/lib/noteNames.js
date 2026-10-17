@@ -135,9 +135,6 @@ function movable(tpc, concertKey) {
 	return MOVABLE_BASE[degree] + (EN_ALTER[rel] ?? '')
 }
 
-/** Die waehlbaren Systeme, in der Reihenfolge der Auswahl. */
-export const SYSTEMS = Object.freeze(['de', 'en', 'solfa-fixed', 'solfa-movable'])
-
 /**
  * Die Vorzeichnung nach einer Transposition um `semitones`: jede Quinte ein
  * Kreuz mehr, gefaltet auf -5..6 - "Es" statt "Dis", "Fis" statt "Ges", wie

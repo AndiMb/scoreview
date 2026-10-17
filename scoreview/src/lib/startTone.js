@@ -11,7 +11,6 @@ const MIDI_CHANNELS = 16
 export const MODE_VOICE = 'voice'
 /** Der Grundton der dort gueltigen Tonart - der Stimmpfeifenersatz. */
 export const MODE_TONIC = 'tonic'
-export const START_TONE_MODES = Object.freeze([MODE_VOICE, MODE_TONIC])
 
 /**
  * Steht der Cursor auf einem Einsatz, ist DIESE Note gemeint, nicht die davor

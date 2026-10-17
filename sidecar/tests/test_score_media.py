@@ -13,7 +13,6 @@ Selbsttest gegen das echte Image (``GET /selftest``).
 """
 
 import json
-import subprocess
 import pytest
 
 from scoreview_sidecar import musescore
