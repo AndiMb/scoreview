@@ -4,6 +4,19 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.15.1] – 2026-10-17
+
+### Fixed
+
+- **On the iPhone the view keeps following the playing position sideways.**
+  Safari zoomed the whole web page when a field such as the measure number
+  was tapped, or when two fingers landed on the bar or the system band. The
+  score then stood wider than the screen, and since that zoom is invisible
+  to the viewer, it no longer scrolled after the music within a page. Input
+  fields on touch devices now use a font size that Safari does not zoom
+  into, and Safari's own pinch zoom is switched off across the whole viewer;
+  two fingers on the score still zoom it the viewer's way. (#13)
+
 ## [1.15.0] – 2026-10-17
 
 ### Added
@@ -1202,6 +1215,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.15.1]: https://github.com/AndiMb/scoreview/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/AndiMb/scoreview/compare/v1.14.4...v1.15.0
 [1.14.4]: https://github.com/AndiMb/scoreview/compare/v1.14.3...v1.14.4
 [1.14.3]: https://github.com/AndiMb/scoreview/compare/v1.14.2...v1.14.3

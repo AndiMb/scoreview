@@ -2905,6 +2905,14 @@ export default {
 	overflow: hidden;
 	box-sizing: border-box;
 	background: var(--color-main-background);
+	/* No browser pinch zoom anywhere in the viewer, not only over the pages
+	 * (see .scoreview-pages): iOS Safari ignores user-scalable=no, and a pinch
+	 * that starts on the bar enlarges the whole Nextcloud page. Autoscroll
+	 * only knows its own scroll container, so it then stops following
+	 * sideways while the score runs off the screen (issue #13). Repeated on
+	 * every own scroll container below rather than trusting the ancestor
+	 * intersection to cross them. */
+	touch-action: pan-x pan-y;
 }
 
 /*
@@ -3076,6 +3084,8 @@ export default {
 	overflow-x: auto;
 	box-sizing: border-box;
 	padding: 12px;
+	/* See .scoreview-viewer - also covers the lyrics view, which scrolls here. */
+	touch-action: pan-x pan-y;
 }
 
 /*
@@ -3091,7 +3101,9 @@ export default {
 	 * here two fingers zoom the score (useZoom.js). Declared in CSS instead
 	 * of preventDefault() so the touch listeners can be passive - a
 	 * non-passive touchmove made every one-finger scroll over the score wait
-	 * for the main thread. */
+	 * for the main thread. The rest of the viewer has the same rule (see
+	 * .scoreview-viewer); here it is the one that matters, because two
+	 * fingers on the pages are the app's own zoom gesture. */
 	touch-action: pan-x pan-y;
 }
 
@@ -3148,8 +3160,33 @@ export default {
 	padding: 8px;
 	box-sizing: border-box;
 	overflow-y: auto;
+	/* An own scroll container - see .scoreview-viewer. */
+	touch-action: pan-x pan-y;
 	/* Nur die Karten selbst fangen Klicks - der Zwischenraum gehört weiter
 	   dem Notenbild darunter (Klick auf eine Note springt dorthin). */
 	pointer-events: none;
+}
+</style>
+
+<style>
+/*
+ * iOS zooms the whole page into any field that gets focus with a font smaller
+ * than 16px, and does not zoom back out - NcTextField brings 15px. Afterwards
+ * the score is wider than the screen while autoscroll, which only knows its
+ * own scroll container, sees nothing to follow (issue #13).
+ *
+ * Not scoped, because two of the places are not in this component's DOM:
+ * NcPopover (loop, speed trainer) and NcModal (setlist editor) mount on
+ * <body>. Every selector is tied to an own class, so nothing outside the app
+ * is touched. `any-pointer` rather than `pointer`: an iPad with a trackpad
+ * reports a fine primary pointer and zooms all the same. The input types are
+ * listed instead of excluded, so a future slider or colour picker does not
+ * pick the rule up.
+ */
+@media (any-pointer: coarse) {
+	:is(.scoreview-viewer, .scoreview-popover, .scoreview-setlist-editor)
+		:is(input:not([type]), input[type="text"], input[type="number"], input[type="search"], textarea) {
+		font-size: 16px;
+	}
 }
 </style>

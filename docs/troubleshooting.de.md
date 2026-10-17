@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:3f0543b5eeda -->
+<!-- translation-of: troubleshooting.md sha256:bf0b3d791b07 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -319,6 +319,19 @@ Die Auswahl nennt den Grund:
 Ist die gewählte Darstellung bei einer Partitur nicht verfügbar, zeigt der
 Viewer die Seiten mit einem Hinweis und behält die Wahl für die nächste
 Partitur.
+
+## Am iPhone ist die Partitur breiter als der Bildschirm und läuft seitlich nicht mit
+
+Safari hat die ganze Webseite vergrößert, nicht die Partitur. Diesen Zoom
+sieht der Viewer nicht: Er hält die Seite so breit, wie er den Bildschirm
+glaubt, und scrollt der Spielposition nicht seitlich nach.
+
+- **Zurück verkleinern** mit zwei Fingern auf der Kopfleiste von Nextcloud
+  oder über **aA → 100 %** in Safaris Adressleiste. Über dem Viewer selbst
+  ist Safaris Zoom abgeschaltet, dort wirkt die Geste nicht.
+- **Zum Vergrößern der Partitur** zwei Finger auf dem Notenbild oder der
+  Zoomregler in der Leiste – dieser Zoom gehört dem Viewer, und die Ansicht
+  folgt der Spielposition damit weiter.
 
 ## Die Konvertierung kommt nicht voran
 

@@ -377,6 +377,9 @@ export default {
 	scroll-padding-inline-start: 8%;
 	padding: 0 8px;
 	box-sizing: border-box;
+	/* An own scroll container: without this, a pinch on the band enlarged
+	   the whole page in iOS Safari (see .scoreview-viewer, issue #13). */
+	touch-action: pan-x pan-y;
 }
 
 .scoreview-band-system {

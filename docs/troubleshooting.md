@@ -319,6 +319,19 @@ If the chosen display is not available for a score, the
 viewer shows the pages with a notice and keeps the choice for the next
 score.
 
+## On the iPhone the score is wider than the screen and does not follow sideways
+
+Safari has enlarged the whole web page, not the score. The viewer cannot see
+that zoom, so it keeps the page as wide as it believes the screen to be and
+does not scroll sideways after the playing position.
+
+- **Zoom back out** with two fingers on the Nextcloud header bar, or via
+  **aA → 100 %** in Safari's address bar. Over the viewer itself Safari's
+  zoom is switched off, so the gesture does not work there.
+- **To enlarge the score**, use two fingers on the score or the zoom
+  control in the bar – that zoom is the viewer's own, and the view follows
+  the playing position with it.
+
 ## The conversion does not make progress
 
 Background jobs are not running. Nextcloud's default mode `ajax` is not
