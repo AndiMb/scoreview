@@ -16,9 +16,35 @@
 // auseinander. Deshalb `getSharedContext`: Wo die Wiedergabe läuft, klickt es
 // durch deren Kette mit - und der Latenzausgleich (playbackTime.js) gilt für
 // beide gleichzeitig.
+//
+// Three sounds for three levels (lib/metronome.js): the downbeat high, a
+// beat lower, a subdivision lower still and shorter - it has to be heard as
+// "between", not as another beat, or an eighth-note click in 4/4 sounds like
+// 8/8. The render worker (workers/renderWorker.js) mixes the same three
+// into a practice track.
 
 /** Silence after which the metronome's own context rests. */
 const OWN_REST_MS = 3000
+
+/**
+ * Frequency, gain and decay per level: 0 = downbeat, 1 = beat, 2 = subdivision.
+ */
+const SOUNDS = Object.freeze([
+	{ hz: 1500, gain: 0.3, decayS: 0.05 },
+	{ hz: 1000, gain: 0.3, decayS: 0.05 },
+	{ hz: 1000, gain: 0.12, decayS: 0.03 },
+])
+
+/**
+ * @param {0|1|2|boolean} level a level, or the pre-1.16 accent flag (true = downbeat)
+ * @return {{hz: number, gain: number, decayS: number}}
+ */
+function soundOf(level) {
+	if (typeof level === 'boolean') {
+		return SOUNDS[level ? 0 : 1]
+	}
+	return SOUNDS[level] ?? SOUNDS[1]
+}
 
 /**
  * @param {?() => ?AudioContext} [getSharedContext] liefert den AudioContext
@@ -48,7 +74,8 @@ export function createMetronomeClick(getSharedContext = null) {
 	}
 
 	/**
-	 * @param {boolean} [accent] höherer Ton, z.B. für die Eins im Takt
+	 * @param {0|1|2|boolean} [level] 0 = die Eins, 1 = Schlag, 2 = Unterteilung
+	 *   (lib/metronome.js); ein Boolean wie vor 1.16 (true = die Eins)
 	 * @param {number} [delaySeconds] Vorlauf: Klick genau in dieser Zeit,
 	 *   terminiert über die Uhr des AudioContext statt über setTimeout/rAF.
 	 *   Das Metronom klickt auf jedem Schlag, nicht nur auf dem Taktanfang -
@@ -58,20 +85,20 @@ export function createMetronomeClick(getSharedContext = null) {
 	 *   nicht auf, auf Schlagebene hört man es. Der Aufrufer fragt deshalb
 	 *   leicht in die Zukunft und reicht die Restzeit hier durch.
 	 */
-	function click(accent = false, delaySeconds = 0) {
+	function click(level = 1, delaySeconds = 0) {
 		const ctx = ensureContext()
-		return clickAt(accent, ctx.currentTime + Math.max(0, delaySeconds))
+		return clickAt(level, ctx.currentTime + Math.max(0, delaySeconds))
 	}
 
 	/**
 	 * A click at a fixed time on the context clock - for the count-in, which
 	 * plans all its clicks from one base (planCountIn in metronome.js).
 	 *
-	 * @param {boolean} accent
+	 * @param {0|1|2|boolean} level see click()
 	 * @param {number} at AudioContext time in seconds
 	 * @return {{ cancel: () => void }} silences a click that has not sounded
 	 */
-	function clickAt(accent, at) {
+	function clickAt(level, at) {
 		const ctx = ensureContext()
 		// A safeguard: whoever clicks should hold the context awake
 		// (useMetronome), but a click on a resting context would only sound
@@ -86,15 +113,16 @@ export function createMetronomeClick(getSharedContext = null) {
 			clearTimeout(ownRestTimer)
 			ownRestTimer = setTimeout(() => ownContext?.suspend().catch(() => {}), OWN_REST_MS + (startAt - ctx.currentTime) * 1000)
 		}
+		const sound = soundOf(level)
 		const osc = ctx.createOscillator()
 		const gain = ctx.createGain()
-		osc.frequency.value = accent ? 1500 : 1000
-		gain.gain.setValueAtTime(0.3, startAt)
-		gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.05)
+		osc.frequency.value = sound.hz
+		gain.gain.setValueAtTime(sound.gain, startAt)
+		gain.gain.exponentialRampToValueAtTime(0.001, startAt + sound.decayS)
 		osc.connect(gain)
 		gain.connect(ctx.destination)
 		osc.start(startAt)
-		osc.stop(startAt + 0.06)
+		osc.stop(startAt + sound.decayS + 0.01)
 		return { cancel: () => gain.disconnect() }
 	}
 

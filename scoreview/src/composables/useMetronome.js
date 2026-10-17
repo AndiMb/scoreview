@@ -50,7 +50,9 @@ export function useMetronome({
 }) {
 	const enabled = ref(false)
 	// 'all' = jeder Schlag (Voreinstellung), 'downbeat' = nur der
-	// Taktanfang.
+	// Taktanfang, 'eighths' = dazu die Haelfte jedes Schlags leiser
+	// (lib/metronome.js). A session choice: the practice settings of a score
+	// (useMyPart.practice) carry transposition, coach and level, not this.
 	const beats = ref('all')
 
 	let click = null
@@ -122,17 +124,19 @@ export function useMetronome({
 		const measureEndMs = index + 1 < measures.events.length
 			? measures.events[index + 1].timeMs
 			: durationMs()
-		const beat = resolveBeatInMeasure(measureStartMs, measureEndMs, lookaheadMs, baseTempoBpm(), beats.value === 'all')
+		const beat = resolveBeatInMeasure(measureStartMs, measureEndMs, lookaheadMs, baseTempoBpm(), beats.value)
 		if (!beat) {
 			return
 		}
-		const key = `${index}:${beat.index}`
+		// The mode is part of the key: switched from beats to eighths mid-
+		// measure, the same index means another click.
+		const key = `${index}:${beats.value}:${beat.index}`
 		if (key === lastBeatKey) {
 			return
 		}
 		lastBeatKey = key
 		const delaySeconds = Math.max(0, (beat.timeMs - currentTimeMs) / (tempoFactor() || 1) / 1000)
-		ensureClick().click(beat.index === 0, delaySeconds)
+		ensureClick().click(beat.level, delaySeconds)
 	}
 
 	/**
@@ -177,7 +181,9 @@ export function useMetronome({
 	function scheduleCountIn(clicker, delays, beatIntervalMs, mine) {
 		const ctx = clicker.context()
 		const plan = planCountIn(ctx.currentTime, delays, beatIntervalMs)
-		countInClicks = plan.clickAt.map((at, i) => clicker.clickAt(i === 0, at))
+		// Beats only, whatever the mode: a count-in in eighths would be twice
+		// as many clicks to count along to.
+		countInClicks = plan.clickAt.map((at, i) => clicker.clickAt(i === 0 ? 0 : 1, at))
 		// Die Wiedergabe startet einen Schlag NACH dem letzten Einzähler-Klick:
 		// würde sie auf dem letzten Klick starten, zählte der Einzähler bei
 		// vier Schlägen nur drei, und der vierte fiele mit der Eins zusammen.

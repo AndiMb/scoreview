@@ -74,7 +74,9 @@ export function usePracticeExport(deps) {
 	/**
 	 * @param {object} options
 	 * @param {boolean} options.metronome mit Klick
-	 * @param {boolean} options.everyBeat jeder Schlag statt nur die Eins
+	 * @param {'downbeat'|'all'|'eighths'} [options.mode] the click mode of the
+	 *   viewer's metronome (lib/metronome.js) - the track clicks like the room did
+	 * @param {boolean} [options.everyBeat] the form before 1.16
 	 * @param {?{fromMs: number, toMs: number}} options.range nur der Loop
 	 * @param {'folder'|'own'} options.target
 	 * @param {?number} options.ownFolder
@@ -87,7 +89,7 @@ export function usePracticeExport(deps) {
 			...deps.mix(),
 			...base,
 			range: options.range ?? null,
-			metronome: options.metronome ? { everyBeat: options.everyBeat } : null,
+			metronome: options.metronome ? { mode: options.mode ?? options.everyBeat } : null,
 		})
 		const part = deps.myPartName()
 		const name = options.name ?? practiceTrackName({
@@ -105,7 +107,7 @@ export function usePracticeExport(deps) {
 	 * Je Stimme ein Coach-Track in den Unterordner (H10). Ersetzt vorhandene -
 	 * wer neu erzeugt, will die alten nicht daneben liegen haben.
 	 *
-	 * @param {{metronome: boolean, everyBeat: boolean}} options
+	 * @param {{metronome: boolean, mode?: string, everyBeat?: boolean}} options
 	 */
 	async function exportAllParts(options) {
 		const base = deps.base()
@@ -114,7 +116,7 @@ export function usePracticeExport(deps) {
 			parts: deps.parts(),
 			othersLevel: deps.othersLevel(),
 			programs: deps.mix().programs,
-			base: { ...base, metronome: options.metronome ? { everyBeat: options.everyBeat } : null },
+			base: { ...base, metronome: options.metronome ? { mode: options.mode ?? options.everyBeat } : null },
 		})
 		const jobs = plans.map(({ name, plan }) => ({
 			name: practiceTrackName({ title: deps.score().title, part: name, coach: true, tempoPercent: base.rate * 100, transpose: base.transpose }, labels()),

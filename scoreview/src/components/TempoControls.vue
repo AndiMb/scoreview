@@ -40,6 +40,18 @@
 				name="scoreview-metronome-beats">
 				{{ t('Downbeat only') }}
 			</NcCheckboxRadioSwitch>
+			<!--
+				Subdivisions (B2): a quieter click between the beats, for a
+				slow passage or a dotted rhythm. Halves of the beat as long as
+				the artifacts carry no time signature (docs/limits.md).
+			-->
+			<NcCheckboxRadioSwitch
+				v-model="beats"
+				type="radio"
+				value="eighths"
+				name="scoreview-metronome-beats">
+				{{ t('Eighth notes') }}
+			</NcCheckboxRadioSwitch>
 		</fieldset>
 		<!--
 			Bild und Ton abgleichen. Der Cursor stuende sonst
@@ -109,7 +121,7 @@ export default {
 			required: true,
 		},
 
-		// 'all' | 'downbeat' (useMetronome.js), als v-model:metronomeBeats.
+		// 'all' | 'downbeat' | 'eighths' (useMetronome.js), als v-model:metronomeBeats.
 		metronomeBeats: {
 			type: String,
 			required: true,

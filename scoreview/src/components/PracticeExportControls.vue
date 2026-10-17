@@ -160,6 +160,13 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		// The viewer's metronome mode (useMetronome.beats): the track clicks
+		// the way the room did, subdivisions included.
+		metronomeMode: {
+			type: String,
+			default: 'all',
+		},
 	},
 
 	emits: ['export', 'exportAll', 'cancel', 'resolveConflict'],
@@ -208,7 +215,7 @@ export default {
 		start() {
 			this.$emit('export', {
 				metronome: this.metronome,
-				everyBeat: true,
+				mode: this.metronomeMode,
 				range: this.loopOnly && this.loopRange ? { fromMs: this.loopRange.fromMs, toMs: this.loopRange.toMs } : null,
 				target: this.target,
 				ownFolder: this.target === 'own' ? this.ownFolder?.fileId ?? null : null,
@@ -216,7 +223,7 @@ export default {
 		},
 
 		startAll() {
-			this.$emit('exportAll', { metronome: this.metronome, everyBeat: true })
+			this.$emit('exportAll', { metronome: this.metronome, mode: this.metronomeMode })
 		},
 
 		async pickFolder() {

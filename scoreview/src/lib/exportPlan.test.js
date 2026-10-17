@@ -34,20 +34,31 @@ describe('buildExportPlan', () => {
 	})
 
 	it('klickt jeden Schlag mit betonter Eins', () => {
-		const plan = buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { everyBeat: true }, baseBpm: 120 })
+		const plan = buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { mode: 'all' }, baseBpm: 120 })
 		expect(plan.clicks).toHaveLength(16)
-		expect(plan.clicks[0]).toEqual({ timeMs: 0, accent: true })
-		expect(plan.clicks[1]).toEqual({ timeMs: 500, accent: false })
-		expect(plan.clicks[4]).toEqual({ timeMs: 2000, accent: true })
+		expect(plan.clicks[0]).toEqual({ timeMs: 0, level: 0 })
+		expect(plan.clicks[1]).toEqual({ timeMs: 500, level: 1 })
+		expect(plan.clicks[4]).toEqual({ timeMs: 2000, level: 0 })
 	})
 
 	it('klickt nur die Eins, wenn so eingestellt', () => {
-		const plan = buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { everyBeat: false } })
+		const plan = buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { mode: 'downbeat' } })
 		expect(plan.clicks.map((c) => c.timeMs)).toEqual([0, 2000, 4000, 6000])
 	})
 
+	it('clicks the eighths between the beats at the lowest level', () => {
+		const plan = buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { mode: 'eighths' }, baseBpm: 120 })
+		expect(plan.clicks).toHaveLength(32)
+		expect(plan.clicks.slice(0, 4).map((c) => [c.timeMs, c.level])).toEqual([[0, 0], [250, 2], [500, 1], [750, 2]])
+	})
+
+	it('understands the everyBeat form from before 1.16', () => {
+		expect(buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { everyBeat: false } }).clicks).toHaveLength(4)
+		expect(buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { everyBeat: true }, baseBpm: 120 }).clicks).toHaveLength(16)
+	})
+
 	it('klickt im Loop nur im Bereich', () => {
-		const plan = buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { everyBeat: false }, range: { fromMs: 2000, toMs: 6000 } })
+		const plan = buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { mode: 'downbeat' }, range: { fromMs: 2000, toMs: 6000 } })
 		expect(plan.clicks.map((c) => c.timeMs)).toEqual([2000, 4000])
 	})
 

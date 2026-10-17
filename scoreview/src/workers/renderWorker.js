@@ -143,24 +143,28 @@ function panGains(channels) {
 }
 
 /**
- * Metronom wie lib/metronomeClick.js: 1000 Hz, betont 1500 Hz, 0,3 und in
- * 50 ms exponentiell auf 0,001.
+ * Metronom wie lib/metronomeClick.js: die Eins 1500 Hz, ein Schlag 1000 Hz,
+ * beide 0,3 und in 50 ms exponentiell auf 0,001; eine Unterteilung (Stufe 2)
+ * 1000 Hz bei 0,12 und 30 ms, damit sie hoerbar hinter den Schlaegen bleibt.
  *
  * @param {Float32Array} outL
  * @param {Float32Array} outR
  * @param {import('../lib/exportPlan.js').ExportPlan} plan
  */
 function addClicks(outL, outR, plan) {
-	const length = Math.round(0.06 * SAMPLE_RATE)
 	for (const click of plan.clicks) {
 		const start = Math.round((click.timeMs - plan.startMs) / plan.rate / 1000 * SAMPLE_RATE)
-		const freq = click.accent ? 1500 : 1000
+		const level = click.level ?? (click.accent ? 0 : 1)
+		const freq = level === 0 ? 1500 : 1000
+		const gain = level === 2 ? 0.12 : 0.3
+		const decay = level === 2 ? 0.03 : 0.05
+		const length = Math.round((decay + 0.01) * SAMPLE_RATE)
 		for (let i = 0; i < length && start + i < outL.length; i++) {
 			if (start + i < 0) {
 				continue
 			}
 			const t = i / SAMPLE_RATE
-			const v = 0.3 * Math.pow(0.001 / 0.3, t / 0.05) * Math.sin(2 * Math.PI * freq * t)
+			const v = gain * Math.pow(0.001 / gain, t / decay) * Math.sin(2 * Math.PI * freq * t)
 			outL[start + i] += v
 			outR[start + i] += v
 		}

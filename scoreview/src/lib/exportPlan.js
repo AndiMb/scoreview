@@ -9,7 +9,7 @@
 // genau einer Stelle, wie der Player mit playbackRate.
 
 import { coachMix } from './coachMix.js'
-import { estimateBeatsInMeasure } from './metronome.js'
+import { measureClicks, normalizeMetronomeMode } from './metronome.js'
 import { channelsOfPart } from './panLayout.js'
 
 /** Ausklang nach dem letzten Ton - ohne ihn bricht der Hall hart ab. */
@@ -22,7 +22,7 @@ export const TAIL_MS = 1000
  * @property {number} rate Tempofaktor (playbackRate), 1 = Original
  * @property {number} startMs Partiturzeit, ab der gerendert wird
  * @property {number} endMs Partiturzeit, bis zu der Noten zaehlen
- * @property {Array<{timeMs:number, accent:boolean}>} clicks Metronom, Partiturzeit
+ * @property {Array<{timeMs:number, level:0|1|2}>} clicks Metronom, Partiturzeit; level wie metronome.js (0 Eins, 1 Schlag, 2 Unterteilung)
  * @property {number} outputSeconds Laenge der Datei einschliesslich Ausklang
  */
 
@@ -34,7 +34,7 @@ export const TAIL_MS = 1000
  * @param {number} [input.transpose]
  * @param {number} [input.rate]
  * @param {?{fromMs:number, toMs:number}} [input.range] nur dieser Bereich (Loop)
- * @param {?{everyBeat:boolean}} [input.metronome] null = ohne Klick
+ * @param {?{mode?:'downbeat'|'all'|'eighths', everyBeat?:boolean}} [input.metronome] null = ohne Klick; `everyBeat` ist die Form vor 1.16
  * @param {?{events:Array<{timeMs:number}>}} [input.measures] measures.json als Timeline
  * @param {number} input.durationMs Ende des Stuecks
  * @param {number} [input.baseBpm] Viertel-BPM der Partitur (fuer die Schlagzahl)
@@ -50,7 +50,7 @@ export function buildExportPlan({ volumes, pans, programs = new Map(), transpose
 	const r = rate > 0 ? rate : 1
 	const startMs = Math.max(0, range ? range.fromMs : 0)
 	const endMs = Math.min(durationMs, range ? range.toMs : durationMs)
-	const clicks = metronome ? clickTimes(measures, startMs, endMs, durationMs, baseBpm, metronome.everyBeat) : []
+	const clicks = metronome ? clickTimes(measures, startMs, endMs, durationMs, baseBpm, normalizeMetronomeMode(metronome.mode ?? metronome.everyBeat)) : []
 	return {
 		channels,
 		transpose: Math.trunc(transpose) || 0,
@@ -63,19 +63,19 @@ export function buildExportPlan({ volumes, pans, programs = new Map(), transpose
 }
 
 /**
- * Dieselben Schlaege, die das Metronom im Viewer klickt (metronome.js):
- * je Takt die aus Dauer und Tempo geschaetzte Schlagzahl, gleichmaessig
- * verteilt, die Eins betont.
+ * Dieselben Klicks, die das Metronom im Viewer klickt (metronome.js,
+ * measureClicks): je Takt dieselbe Schlagzahl und Unterteilung, gleichmaessig
+ * verteilt, mit derselben Stufe je Klick.
  *
  * @param {?{events:Array<{timeMs:number}>}} measures
  * @param {number} startMs
  * @param {number} endMs
  * @param {number} durationMs
  * @param {number} baseBpm
- * @param {boolean} everyBeat
- * @return {Array<{timeMs:number, accent:boolean}>}
+ * @param {'downbeat'|'all'|'eighths'} mode
+ * @return {Array<{timeMs:number, level:0|1|2}>}
  */
-function clickTimes(measures, startMs, endMs, durationMs, baseBpm, everyBeat) {
+function clickTimes(measures, startMs, endMs, durationMs, baseBpm, mode) {
 	const events = measures?.events ?? []
 	const clicks = []
 	for (let i = 0; i < events.length; i++) {
@@ -84,12 +84,9 @@ function clickTimes(measures, startMs, endMs, durationMs, baseBpm, everyBeat) {
 		if (!(to > from) || to <= startMs || from >= endMs) {
 			continue
 		}
-		const beats = everyBeat ? estimateBeatsInMeasure(to - from, baseBpm) : 1
-		const beatMs = (to - from) / beats
-		for (let b = 0; b < beats; b++) {
-			const t = from + b * beatMs
-			if (t >= startMs && t < endMs) {
-				clicks.push({ timeMs: t, accent: b === 0 })
+		for (const click of measureClicks(from, to, baseBpm, mode)) {
+			if (click.timeMs >= startMs && click.timeMs < endMs) {
+				clicks.push(click)
 			}
 		}
 	}
