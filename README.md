@@ -21,9 +21,13 @@ without loss of quality, zoom presets, full screen, and an autoscroll that keeps
 the current measure in the visible band – or, switched off, leaves the view
 where you put it. Each user decides how the sounding
 position is marked: coloured noteheads or a band, in a colour of their choice.
-**Print** opens every page of the score in its own page format for the
-browser's print dialog – on paper or as a PDF, with or without your notes and
-stamps, with or without note names.
+On a wide screen two pages stand side by side, like an open booklet – with
+page 1 on the left or alone on the right. **Print** opens every page of the
+score in its own page format for the browser's print dialog – on paper or as
+a PDF, with or without your notes and stamps, with or without note names –
+and **Save as PDF in Files** puts a PDF of the music next to the score.
+Nextcloud's search finds a score by its title and composer, not only by its
+file name.
 
 **Hearing what you want to practice.** Playback is synthesized in the browser,
 not played from a finished MP3. That is why you can adjust the volume of each

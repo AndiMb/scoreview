@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:1eeb43024dda -->
+<!-- translation-of: limits.md sha256:91ec684e5360 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -582,6 +582,14 @@ mehrere Minuten ist nicht gemessen.
   Die Grenzen der Systeme kommen aus den Notenlinien, mit begrenztem Rand
   darüber und darunter – was weit darüber hinausragt, kann angeschnitten
   werden.
+- **Zwei Seiten nebeneinander** nur in der Seitenansicht und erst ab einer
+  Notenfläche von 900 px Breite – gemessen an der Fläche, nicht am Gerät: Ein
+  Telefon quer bleibt einspaltig, ein schmales Desktop-Fenster auch. Die
+  Einstellung (aus, Seite 1 links, Seite 1 rechts) sagt, was über dieser
+  Breite geschieht; darunter nennt sie den Grund. Wer über das Paar hinaus
+  hineinzoomt, schiebt waagerecht, die Reihe klappt nicht in eine Spalte um.
+  Geblättert wird reihenweise; eine Reihe, die höher ist als der Ausschnitt,
+  nach Systemen.
 - **Tonnamen stehen links neben dem Kopf**, wo Platz ist; sonst darunter,
   darüber oder rechts davon (`lib/noteLabelLayout.js`). Hindernisse sind
   Vorzeichen, Wiederholungspunkte, Hälse, Punkte, Pausen, Liedtext und
@@ -629,6 +637,64 @@ es nicht, eine 100-seitige Partitur sollte deutlich unter 1 GB bleiben.
   Bildschirm zeigt.
 - **Was auch der Viewer nicht aufs Papier bringt:** Cursor, Loop-Marken, die
   Hervorhebung von „meine Stimme“, Intonationsfarben.
+
+### PDF-Datei
+
+„Als PDF in Dateien speichern“ auf der Druckseite schreibt die PDF im Browser
+und legt sie neben die Partitur
+([E16](architecture.md#e16-drucken-aus-den-seiten-svgs)). Gemessen in einem
+Desktop-Chromium mit dem eigenen Schreiber der App:
+
+| Partitur | Seiten | Weg | Schreiben | PDF-Größe | Abweichende Pixel gegen das SVG |
+|---|---|---|---|---|---|
+| Chorsatz | 4 | Engine / Sidecar | 0,6 s / 0,6 s | 0,7 MB / 1,2 MB | höchstens 0,012 % je Seite |
+| Chorsatz | 28 | Engine / Sidecar | 0,9 s / 0,6 s | 0,7 MB / 2,0 MB | höchstens 0,004 % je Seite |
+| Partitur mit einem PNG und einem JPEG | 1 | Engine / Sidecar | 0,2 s / 0,1 s | 20 KB / 30 KB | 0,000 % |
+
+Verglichen wurde bei 100 dpi mit einem Pixel Toleranz für die Kantenglättung.
+In der App, vom Klick bis zur Datei in Files (Seiten erneut laden,
+schreiben, hochladen), dauerte es 0,8–1,0 s für die 4 Seiten und 1,0–1,7 s
+für die 28 Seiten, auf beiden Wegen.
+
+- **Nur das Notenbild.** Notizen, Stempel, Tonnamen und Zählzeiten stehen
+  nicht in der Datei; die trägt der Druckdialog.
+- **Vektor, keine eingebettete Schrift:** Text in der PDF lässt sich nicht
+  markieren oder durchsuchen, wie beim Druckdialog.
+- **Unterstützt** ist das SVG, das beide Konvertierungswege schreiben: Pfade,
+  Polylinien, Polygone, Glyphen, Matrizen, eingebettete Bilder. Alles andere
+  (Text, Verläufe, Clip-Pfade, Bögen, Transparenz) nennt die Druckseite und
+  lässt es weg, statt es anzunähern.
+- **Bilder:** JPEG unverändert; PNG, GIF und BMP als RGB auf Weiß – ein
+  durchsichtiges Bild bekommt weißen Grund.
+- **Größe je Datei** `pdf_max_mb` (Vorgabe 50 MB, 5–500).
+- **Ohne `CompressionStream`** (ältere Browser) wird unkomprimiert
+  geschrieben, etwa dreimal so groß.
+- **Nur wo neben der Partitur angelegt werden darf;** sonst fehlt der Knopf,
+  ebenso auf der Seite der mobilen Apps (sie hat keine Druckseite).
+- **Ein zweites Speichern fragt,** ob ersetzt werden soll; still
+  überschrieben wird nichts.
+
+### Suche
+
+Titel, Untertitel, Komponist und Textdichter einer Partitur findet die
+globale Suche von Nextcloud
+([E17](architecture.md#e17-suche-über-die-konvertierungstabelle)).
+
+- **Nur auf dem Server konvertierte Partituren.** Eine im Browser
+  konvertierte ([Konvertierung im Browser](#konvertierung-im-browser)) hat
+  keinen Eintrag und ist nur über ihren Dateinamen zu finden, mit Nextclouds
+  eigener Dateisuche.
+- **Partituren von vor 1.18** füllt das Update einmal aus dem, was ihre
+  Konvertierung schon hat – ohne Neukonvertierung. Eine Partitur ohne Titel
+  und Komponist bietet nichts zum Finden.
+- **Rechte werden beim Lesen geprüft:** Ein Treffer außerhalb der eigenen
+  Dateien fällt spurlos weg; eine nur-lesend geteilte Partitur wird gefunden.
+- **Teilwortsuche, kein Volltextindex.** Durchsucht werden die vier Felder
+  oben in Kleinbuchstaben, höchstens 1024 Bytes; kein Liedtext. Für eine
+  Chor-Instanz mit hunderten Partituren sind das Millisekunden; zehntausende
+  bräuchten einen Index.
+- **Das Symbol eines Treffers** ist das Dateisymbol, das Nextcloud für
+  `.mscz` hat; ein Vorschaubild einer Partitur gibt es nicht.
 
 ### Offline
 

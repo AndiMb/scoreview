@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:e5c70971fd11 -->
+<!-- translation-of: README.md sha256:ecd966b2b5c6 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -22,9 +22,14 @@ Qualitätsverlust, Zoom-Presets, Vollbild, und ein Autoscroll, das den laufenden
 Takt im Sichtband hält – oder, abgeschaltet, die Ansicht dort lässt, wo man sie
 hingeschoben hat. Wie die klingende Stelle markiert wird, entscheidet
 jede Nutzerin selbst: eingefärbte Notenköpfe oder ein Band, in einer frei
-wählbaren Farbe. **Drucken** öffnet alle Seiten der Partitur in ihrem eigenen
+wählbaren Farbe. Auf einem breiten Bildschirm stehen zwei Seiten
+nebeneinander wie in einem aufgeschlagenen Heft – mit Seite 1 links oder
+allein rechts. **Drucken** öffnet alle Seiten der Partitur in ihrem eigenen
 Seitenformat für den Druckdialog des Browsers – auf Papier oder als PDF, mit
-oder ohne die eigenen Notizen und Stempel, mit oder ohne Tonnamen.
+oder ohne die eigenen Notizen und Stempel, mit oder ohne Tonnamen –, und
+**Als PDF in Dateien speichern** legt eine PDF des Notenbilds neben die
+Partitur. Die Suche von Nextcloud findet eine Partitur über Titel und
+Komponist, nicht nur über den Dateinamen.
 
 **Hören, was man üben will.** Die Wiedergabe wird im Browser synthetisiert, nicht
 als fertiges MP3 abgespielt. Deshalb lässt sich pro Stimme die Lautstärke regeln,

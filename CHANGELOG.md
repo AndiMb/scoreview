@@ -4,6 +4,31 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.18.0] – 2026-10-17
+
+### Added
+
+- **Two pages side by side** in the page view, from a page area 900 px wide:
+  page 1 on the left (default) or alone on the right, like a booklet, set
+  under View → Layout. The zoom presets fit the pair, and `PgDn`/`PgUp` or a
+  pedal turn a whole row. A phone in landscape and a narrow window stay
+  single; the setting says why.
+- **Save as PDF in Files** on the print page: the PDF of the music is written
+  in the browser, from the page SVGs both conversion paths deliver, and put
+  next to the score – vector, in the score's page format; a second save asks
+  before replacing. Notes, stamps and note names stay with the print dialog.
+  New admin limit “Maximum size of one PDF file” (default 50 MB).
+- **Title and composer in Nextcloud's search**: scores are found by title,
+  subtitle, composer and lyricist, only within the searcher's own files, and
+  a hit opens the score in Files. Scores converted before are made findable
+  by the update, without a reconversion.
+
+### Changed
+
+- Practice tracks and the PDF file share one way of saving next to the score
+  (`SiblingFileService`); behaviour and error codes of practice tracks are
+  unchanged.
+
 ## [1.17.0] – 2026-10-17
 
 ### Added

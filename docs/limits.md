@@ -578,6 +578,13 @@ plays with controls. A lock lasting several minutes has not been measured.
   power saving mode the phone throttles even an empty page to 24 fps.
   The boundaries of the systems come from the staff lines, with a limited
   margin above and below – anything reaching far beyond that may be cut off.
+- **Two pages side by side** only in the page view and only from a page area
+  of 900 px width – measured on the area, not the device: a phone in
+  landscape stays single, a narrow desktop window too. The setting
+  (off, page 1 on the left, page 1 on the right) says what happens above
+  that width; below it, the setting names the reason. Zooming in beyond
+  the pair scrolls sideways, the row does not fold into one column.
+  Paging goes row by row; a row taller than the view is paged by systems.
 - **Note names sit to the left of the note head** where there is room;
   otherwise below, above or to the right of it (`lib/noteLabelLayout.js`).
   Obstacles are accidentals, repeat dots, stems, dots, rests, lyrics and
@@ -625,6 +632,63 @@ either file. Derived: about 5 MB of memory per page; no page limit is set, a
   note theme on screen.
 - **What the viewer does not show on paper either:** the cursor, loop
   markers, the highlight of “my part”, intonation colours.
+
+### PDF file
+
+“Save as PDF in Files” on the print page writes the PDF in the browser and
+puts it next to the score
+([E16](architecture.md#e16-drucken-aus-den-seiten-svgs) (German)). Measured
+in a desktop Chromium with the app's own writer:
+
+| Score | Pages | Path | Writing | PDF size | Differing pixels against the SVG |
+|---|---|---|---|---|---|
+| Choral piece | 4 | engine / sidecar | 0.6 s / 0.6 s | 0.7 MB / 1.2 MB | at most 0.012 % per page |
+| Choral piece | 28 | engine / sidecar | 0.9 s / 0.6 s | 0.7 MB / 2.0 MB | at most 0.004 % per page |
+| Score with a PNG and a JPEG | 1 | engine / sidecar | 0.2 s / 0.1 s | 20 KB / 30 KB | 0.000 % |
+
+Pixels were compared at 100 dpi with a tolerance of one pixel for
+antialiasing. In the app, from the click to the file in Files (loading the
+pages again, writing, uploading), it took 0.8–1.0 s for the 4 pages and
+1.0–1.7 s for the 28 pages, on both paths.
+
+- **The music only.** Notes, stamps, note names and beat numbers are not in
+  the file; the print dialog carries them.
+- **Vector, no embedded font:** text in the PDF cannot be selected or
+  searched, as in the print dialog.
+- **What is supported** is the SVG both conversion paths write: paths,
+  polylines, polygons, glyphs, matrices, embedded images. Anything else
+  (text, gradients, clip paths, arcs, transparency) is named on the print
+  page and left out, not approximated.
+- **Images:** JPEG as it is; PNG, GIF and BMP as RGB on white – a transparent
+  image gets a white background.
+- **Size per file** `pdf_max_mb` (default 50 MB, 5–500).
+- **Without `CompressionStream`** (older browsers) the file is written
+  uncompressed, about three times as large.
+- **Only where files may be created** next to the score; the button is
+  missing otherwise, and on the mobile apps' page (it has no print page).
+- **A second save asks** whether to replace the file; nothing is overwritten
+  silently.
+
+### Search
+
+Title, subtitle, composer and lyricist of a score are found by Nextcloud's
+global search
+([E17](architecture.md#e17-suche-über-die-konvertierungstabelle) (German)).
+
+- **Only scores converted on the server.** A score converted in the browser
+  ([Conversion in the browser](#conversion-in-the-browser)) has no entry and
+  is found by its file name only, through Nextcloud's own file search.
+- **Scores from before 1.18** are filled once by the update, from what their
+  conversion already holds – no reconversion. A score without title and
+  composer has nothing to find.
+- **Access is checked on reading:** a hit outside the searcher's own files
+  is left out without a trace; a score shared read-only is found.
+- **A substring search, no full-text index.** Searched are the four fields
+  above in lower case, at most 1024 bytes; no lyrics. For a choir instance
+  with hundreds of scores this takes milliseconds; tens of thousands would
+  want an index.
+- **The icon of a hit** is the file icon Nextcloud has for `.mscz`; there is
+  no preview image of a score.
 
 ### Offline
 

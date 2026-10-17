@@ -127,6 +127,7 @@ Route mit Token annimmt; Einzelheiten in
 | `GET\|PUT /api/scores/{fileId}/my-part` | „Meine Stimme“ je Partitur und Nutzerin; `GET` liefert die Übe-Einstellungen (`practice`) mit | ja |
 | `PUT /api/scores/{fileId}/practice` | Übe-Einstellungen je Partitur und Nutzerin: Transposition, Coach, Pegel der übrigen Stimmen. Was fehlt, bleibt unverändert | ja |
 | `POST /api/scores/{fileId}/practice-tracks` | Einen im Browser gerenderten Übe-Track als MP3 in Files ablegen ([E13](#e13-übe-tracks-sind-dateien-in-files)) | Direct-Editing-Token nur neben die Partitur, Begleit-Token nein |
+| `POST /api/scores/{fileId}/pdf?name=&replace=` | Eine im Browser geschriebene PDF-Datei der Partitur neben ihr ablegen ([E16](#e16-drucken-aus-den-seiten-svgs)); 409 mit freiem Namen, wenn es die Datei schon gibt | Direct-Editing-Token ja (es gibt nur das Ziel neben der Partitur), Begleit-Token nein |
 | `GET\|POST /api/scores/{fileId}/leaders`, `DELETE …/leaders/{uid}` | Leitungen lesen, ernennen, abberufen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | ja |
 | `GET /api/scores/{fileId}/leader-candidates?q=` | Nutzersuche für die Ernennung, nur Leitungen, 30 Aufrufe je Minute | ja |
 | `GET\|POST\|PATCH\|DELETE /api/scores/{fileId}/follow`, `POST …/follow/join` | „Folgt mir“: Zustand lesen (alle mit Dateizugriff), Sitzung führen (Leitung), für Push anmelden ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | ja |
@@ -146,7 +147,11 @@ Route mit Token annimmt; Einzelheiten in
 
 Der Statusendpunkt trägt zusätzlich `canWriteFolder`: ob die Person neben der
 Partitur anlegen darf. Daran hängt, ob der Viewer „Tracks für alle Stimmen“
-anbietet.
+anbietet und die Druckseite „Als PDF in Dateien speichern“.
+
+Ohne eigene Route: Der Suchprovider `Search\ScoreSearchProvider` hängt an
+Nextclouds globaler Suche (`/ocs/v2.php/search/providers/scoreview/search`,
+[E17](#e17-suche-über-die-konvertierungstabelle)).
 
 Die Endpunkte von „Folgt mir“, Aufnahme, Übe-Tracks und der Offline-Seite
 hängen an je einem Schalter der Verwaltung (`FeatureConfig`). Ist er aus,
@@ -233,7 +238,7 @@ Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 
 | Tabelle | Inhalt |
 |---|---|
-| `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version`, `backend` |
+| `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version`, `backend`, `title`, `composer`, `search_text` |
 | `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag`, `kind`, `stamp`, `target_parts`, `by_leader`, `end_measure` |
 | `scoreview_leaders` | `file_id`, `user_id`, `appointed_by`, `created_at` – ernannte Leitungen; die Eigentümerin steht nie darin ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) |
 | `scoreview_follow` | `file_id` (Primärschlüssel: höchstens eine Sitzung je Datei), `leader_uid`, `started_at`, `heartbeat_at`, `version`, `state` ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) |
@@ -244,6 +249,15 @@ Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 Nur so bleibt die Frage später beantwortbar: Die Admin-Einstellung sagt, was
 *jetzt* gilt, nicht, was beim Konvertieren dieser Datei galt. Die Spalte ist
 rein beschreibend – nichts im Server und nichts im Viewer verzweigt danach.
+
+`title`, `composer` und `search_text` sind für die Suche da
+([E17](#e17-suche-über-die-konvertierungstabelle)): die ersten beiden zum
+Anzeigen eines Treffers, die dritte – Titel, Untertitel, Komponist und
+Textdichter in Kleinbuchstaben – zum Suchen. `ConversionService::markReady()`
+füllt sie aus `meta.json`, für Datensätze von vor den Spalten der
+Repair-Step `Migration\BackfillSearchText` beim Update. Gekürzt wird nach
+Bytes (255/1024), nicht nach Zeichen: Auf Oracle ist ein `VARCHAR(1024)`
+1024 Bytes lang.
 
 Notizen hängen an einer **musikalischen** Position (Takt + Anteil im Takt), nicht
 an Pixelkoordinaten. Nur deshalb überstehen sie ein Neurendern und einen
@@ -515,6 +529,8 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | Stimmnotizen, Stempel, Studierbuchstaben | `annotationFilter.js`, `stampLayout.js`, `scoreFacts.js` | `useAnnotations`, `useScoreFacts` | `ScoreStamps.vue`, `StampSymbol.vue` |
 | Taktart, Zählzeiten, Loop-Fokus, gespeicherte Loops (1.17) | `scoreFacts.js` (`metersFromArtifacts`), `countLabels.js`, `countLayout.js`, `loopFocus.js` | `useScoreFacts`, `useMetronome`, `useAnnotations` | `NoteNameControls.vue`, `LoopSaveForm.vue`, Overlays in `ScorePage.vue` |
 | Drucken ([E16](#e16-drucken-aus-den-seiten-svgs)), Stimmgerät | `printLayout.js`, `tuner.js` | `useConversionStatus`, `useTuner` | `PrintApp.vue`, `PrintToolbar.vue`, `TunerPanel.vue`, `TunerNeedle.vue` |
+| PDF-Datei neben der Partitur (1.18, E16) | `svgToPdf.js`, `pdfWriter.js` | – | `PrintApp.vue`, `PrintToolbar.vue` |
+| Zwei Seiten nebeneinander (1.18) | `spreadLayout.js`, `pagingPlan.js` (`nextRowScrollTop`) | `useZoom`, `usePaging`, `useViewerPreferences` | `LayoutControls.vue`, Gitter in `ScoreViewer.vue` |
 | „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js`, `leaderQueue.js`, `followPlayback.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
 | Setliste ([E11](#e11-die-setliste-als-markdown-datei)) | `setlistNav.js`, `setlistEdit.js`, `soundFontCache.js` | `useSetlist` | `SetlistBar.vue`, `SetlistEditor.vue` |
 | Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js` | `useMicrophone`, `useRecorder`, `useIntonation` | `MicIndicator.vue`, `RecordingPanel.vue` |
@@ -595,6 +611,21 @@ Seite und funktionieren deshalb unverändert. Gerendert werden nur das
 sichtbare System und seine Nachbarn. `Bild↓`/`Bild↑` und ein Pedal gehen ein
 System weiter. Wer den Viewer zum ersten Mal unter 600 px Breite mit Seiten
 öffnet, bekommt das Band einmal angeboten; die Antwort merkt sich die App.
+
+**Zwei Seiten nebeneinander.** Keine vierte Darstellung, sondern eine
+Eigenschaft der Seitenansicht: Sie gilt, sobald die Notenfläche mindestens
+900 px breit ist (`spreadLayout.js`), und die Einstellung `double_page`
+(`off`, `left`, `right`; Vorgabe `left`) sagt, was dann geschieht – Seite 1
+links (Paare 1–2, 3–4) oder allein rechts wie im Heft (1, 2–3). Die Schwelle
+hängt an der Fläche, nicht am Gerät: Ein Telefon quer bleibt einspaltig, ein
+schmales Desktop-Fenster auch. Die Zoom-Presets passen dann das Paar ein;
+wer darüber hinaus zoomt, schiebt waagerecht, die Reihe klappt nicht um.
+`ScorePage` bleibt unverändert, das Gitter liegt am Container. Blättern geht
+reihenweise (`nextRowScrollTop`): Die halbe Seitenwende der einspaltigen
+Ansicht schöbe das letzte System der Reihe nach oben und zerschnitte die
+nächste Reihe – wer dann noch links liest, verlöre den Anfang der rechten
+Seite. Nur eine Reihe, die höher ist als der Ausschnitt, wird wie bisher
+nach Systemen geblättert.
 
 **Liedtext-Ansicht.** Nur der Text der eigenen Stimme – ohne gewählte Stimme
 der der obersten Notenzeile mit Text –, die Strophen untereinander, ein Block
@@ -2190,6 +2221,65 @@ es: „Als PDF speichern“ hält die SVG-Pfade als Vektoren (gemessen, siehe
 tut: drucken, bevor jedes Blatt geladen ist – der Knopf bleibt gesperrt, bis
 jede `ScorePage` `loaded` gemeldet hat; sonst druckt jemand nach dem ersten
 Blick eine halbe Partitur.
+
+**Die PDF-Datei neben der Partitur.** „Als PDF in Dateien speichern“ auf der
+Druckseite schreibt die PDF im Browser und legt sie über
+`POST /api/scores/{fileId}/pdf` neben die Partitur. Warum kein Server-PDF,
+steht oben; warum keine Bibliothek: Das Release-Paket liegt rund 200 KB unter
+der Grenze des App Stores (20 MiB), und eine PDF-Bibliothek im Browser
+(jsPDF mit svg2pdf.js, pdf-lib) wiegt das Doppelte. Gebraucht wird wenig:
+MuseScore zeichnet alles als Pfade, Polylinien und Polygone mit Matrizen, die
+Engine dazu Glyphen per `<use>` – der Teil von SVG, der sich eins zu eins auf
+PDF-Operatoren abbildet. `svgToPdf.js` übersetzt genau den Dialekt beider
+Wege (gemessen: Engine mit verschachtelten `g`, `use` und Pfaden mit `Q`;
+Sidecar flach, Matrizen an jedem Pfad, ein weißer Hintergrundpfad, der
+entfällt), Glyphen werden Form-XObjects (eines je Glyphe statt ihres
+Umrisses an jeder Stelle), Bilder JPEG unverändert, sonst über ein `canvas`
+als RGB auf Weiß. `pdfWriter.js` schreibt PDF 1.4 mit Flate über
+`CompressionStream`, ohne es unkomprimiert. Was außerhalb des Dialekts liegt
+(Text, Verläufe, Clip-Pfade, Bögen, Deckkraft), wird nicht still angenähert,
+sondern auf der Druckseite genannt. Die Datei trägt **nur das Notenbild**:
+Notizen, Stempel und Tonnamen sind Overlays mit eigener Platzierung, sie in
+die PDF zu zeichnen wäre die zweite Platzierung – wer sie auf Papier will,
+nimmt den Druckdialog. Gespeichert wird über `Service\SiblingFileService`,
+denselben Weg wie die Übe-Tracks ([E13](#e13-übe-tracks-sind-dateien-in-files)):
+Schreibrecht im Ordner, bereinigter Name, 409 statt stillem Überschreiben,
+Prüfung gegen das Kontingent vor dem Schreiben, keine halbe Datei. Der Server
+prüft Größe (`pdf_max_mb`, Vorgabe 50) und den Anfang `%PDF-`; mehr nicht –
+eine Datei in Files wird nie ausgeführt.
+
+### E17: Suche über die Konvertierungstabelle
+
+Titel, Untertitel, Komponist und Textdichter einer Partitur stehen in der
+globalen Suche von Nextcloud. Nextclouds eigene Dateisuche findet weiter den
+Dateinamen; `Search\ScoreSearchProvider` ergänzt, was auf den Noten steht.
+
+**Warum über die eigene Tabelle.** Die Alternativen hätten an die Dateien
+selbst geschrieben – Metadaten oder Systemtags. Das braucht Schreibrecht, das
+eine Person mit einer Freigabe nur-lesen nicht hat, und es verändert fremde
+Dateien. Die Konvertierungstabelle hat eine Zeile je Partitur und kennt Titel
+und Komponist ohnehin aus `meta.json`; beide Serverwege laufen durch
+`markReady()`, das die drei Spalten füllt (siehe [Datenbank](#datenbank)).
+Eine Neukonvertierung aller Partituren für drei Textspalten wäre
+unverhältnismäßig gewesen; den Bestand füllt einmal ein Repair-Step.
+
+**Rechte beim Lesen.** Die Tabelle kennt Dateien, keine Personen. Jeder
+Treffer wird deshalb im **eigenen** Dateibaum der suchenden Person aufgelöst
+(`IRootFolder::getUserFolder()->getById()`); was dort nicht liegt, fällt
+spurlos weg – der Provider verrät nie, dass es eine Partitur gibt
+([S8](#s8-404-vor-403) sinngemäß). Eine nur-lesend geteilte Partitur liegt im
+Baum und wird gefunden. Weil weggefallene Zeilen Lücken lassen, liest der
+Provider in bis zu drei Runden nach; der Cursor ist der Zeilenversatz hinter
+der letzten gelesenen Zeile.
+
+**Was das kostet und was fehlt.** Ein `LIKE '%…%'` ohne Index (er nützte
+nichts) und ein Dateicache-Zugriff je Treffer – für hunderte Partituren
+Millisekunden. Eine im Browser konvertierte Partitur
+([E7](#e7-konvertierung-im-browser-als-rückfall)) hat keinen Datensatz und
+wird nicht gefunden. Die Suche erscheint überall, auf Files-Seiten mit
+Reihenfolge 25 (Files hat 5), sonst mit 60, hinter Dateien, Kontakten und
+Kalender. Der Treffer öffnet die Datei über `/f/{fileId}` – denselben Einstieg
+wie Files ([E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)).
 
 ## Formatgrundlagen
 
