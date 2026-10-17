@@ -52,6 +52,15 @@ describe('buildExportPlan', () => {
 		expect(plan.clicks.slice(0, 4).map((c) => [c.timeMs, c.level])).toEqual([[0, 0], [250, 2], [500, 1], [750, 2]])
 	})
 
+	it('clicks by the meter of each measure where there is one (6/8: two beats, three parts)', () => {
+		const withElids = { events: measures.events.map((e, i) => ({ ...e, elid: i })) }
+		const meters = [null, null, { beats: 2, subdivisions: 3 }, { beats: 2, subdivisions: 3 }]
+		const plan = buildExportPlan({ volumes, pans, durationMs: 8000, measures: withElids, meters, metronome: { mode: 'all' }, baseBpm: 120 })
+		expect(plan.clicks.map((c) => c.timeMs)).toEqual([0, 500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 5000, 6000, 7000])
+		const eighths = buildExportPlan({ volumes, pans, durationMs: 8000, measures: withElids, meters, metronome: { mode: 'eighths' }, baseBpm: 120 })
+		expect(eighths.clicks.filter((c) => c.timeMs >= 4000).map((c) => c.level)).toEqual([0, 2, 2, 1, 2, 2, 0, 2, 2, 1, 2, 2])
+	})
+
 	it('understands the everyBeat form from before 1.16', () => {
 		expect(buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { everyBeat: false } }).clicks).toHaveLength(4)
 		expect(buildExportPlan({ volumes, pans, durationMs: 8000, measures, metronome: { everyBeat: true }, baseBpm: 120 }).clicks).toHaveLength(16)

@@ -35,12 +35,13 @@ export const TAIL_MS = 1000
  * @param {number} [input.rate]
  * @param {?{fromMs:number, toMs:number}} [input.range] nur dieser Bereich (Loop)
  * @param {?{mode?:'downbeat'|'all'|'eighths', everyBeat?:boolean}} [input.metronome] null = ohne Klick; `everyBeat` ist die Form vor 1.16
- * @param {?{events:Array<{timeMs:number}>}} [input.measures] measures.json als Timeline
+ * @param {?{events:Array<{timeMs:number, elid?:number}>}} [input.measures] measures.json als Timeline
+ * @param {?Array<object>} [input.meters] the meter per displayed measure (scoreFacts.metersFromArtifacts), indexed by elid; null = estimate the beats
  * @param {number} input.durationMs Ende des Stuecks
  * @param {number} [input.baseBpm] Viertel-BPM der Partitur (fuer die Schlagzahl)
  * @return {ExportPlan}
  */
-export function buildExportPlan({ volumes, pans, programs = new Map(), transpose = 0, rate = 1, range = null, metronome = null, measures = null, durationMs, baseBpm = 120 }) {
+export function buildExportPlan({ volumes, pans, programs = new Map(), transpose = 0, rate = 1, range = null, metronome = null, measures = null, meters = null, durationMs, baseBpm = 120 }) {
 	const channels = [...volumes.keys()].sort((a, b) => a - b).map((channel) => ({
 		channel,
 		volume: volumes.get(channel) ?? 100,
@@ -50,7 +51,7 @@ export function buildExportPlan({ volumes, pans, programs = new Map(), transpose
 	const r = rate > 0 ? rate : 1
 	const startMs = Math.max(0, range ? range.fromMs : 0)
 	const endMs = Math.min(durationMs, range ? range.toMs : durationMs)
-	const clicks = metronome ? clickTimes(measures, startMs, endMs, durationMs, baseBpm, normalizeMetronomeMode(metronome.mode ?? metronome.everyBeat)) : []
+	const clicks = metronome ? clickTimes(measures, startMs, endMs, durationMs, baseBpm, normalizeMetronomeMode(metronome.mode ?? metronome.everyBeat), meters) : []
 	return {
 		channels,
 		transpose: Math.trunc(transpose) || 0,
@@ -73,9 +74,10 @@ export function buildExportPlan({ volumes, pans, programs = new Map(), transpose
  * @param {number} durationMs
  * @param {number} baseBpm
  * @param {'downbeat'|'all'|'eighths'} mode
+ * @param {?Array<object>} meters per displayed measure (elid), or null
  * @return {Array<{timeMs:number, level:0|1|2}>}
  */
-function clickTimes(measures, startMs, endMs, durationMs, baseBpm, mode) {
+function clickTimes(measures, startMs, endMs, durationMs, baseBpm, mode, meters) {
 	const events = measures?.events ?? []
 	const clicks = []
 	for (let i = 0; i < events.length; i++) {
@@ -84,7 +86,10 @@ function clickTimes(measures, startMs, endMs, durationMs, baseBpm, mode) {
 		if (!(to > from) || to <= startMs || from >= endMs) {
 			continue
 		}
-		for (const click of measureClicks(from, to, baseBpm, mode)) {
+		// The same measure plays in every unrolled pass; its meter is keyed by
+		// the displayed measure (elid), not by the pass.
+		const meter = meters?.[events[i].elid] ?? null
+		for (const click of measureClicks(from, to, baseBpm, mode, meter)) {
 			if (click.timeMs >= startMs && click.timeMs < endMs) {
 				clicks.push(click)
 			}

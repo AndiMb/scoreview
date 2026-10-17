@@ -25,7 +25,20 @@ import { resolveMeasurePosition } from './scoreLayout.js'
  * @typedef {{measure:number, concertKey:number, mode:?string}} KeyFact
  * @typedef {{measure:number, text:string}} MarkFact
  * @typedef {{keys:KeyFact[], marks:MarkFact[]}} ScoreFacts
+ * @typedef {object} Meter
+ * @property {number} n nominal time signature, numerator
+ * @property {number} d nominal time signature, denominator
+ * @property {number} beats clicks per measure - the conducted beats, so 6/8 has two
+ * @property {number} beatTicks length of one beat, 480 per quarter
+ * @property {2|3} subdivisions parts of a beat: 3 in compound metres, else 2
+ * @property {?number} tick notated start of the measure (engine only)
+ * @property {number} ticks actual length of the measure
+ * @property {boolean} pickup shorter than the signature says
+ * @property {'engine'|'midi'} source where the meter came from (E12)
  */
+
+/** Ticks per quarter in measureFacts and in MuseScore's MIDI (division 480). */
+const TICKS_PER_QUARTER = 480
 
 /**
  * Abstand der Tonika vom Dur-Grundton derselben Vorzeichen, in Halbtoenen.
@@ -322,6 +335,113 @@ export function fromArtifacts(meta, midi, measuresTimeline) {
 				.map(({ measure, event }) => ({ measure, text: event.text })))
 
 	return { keys, marks }
+}
+
+/**
+ * The meter of one measure from its signature and real length.
+ *
+ * Beats are the conducted beats, not the numerator: 6/8, 9/8 and 12/8 are
+ * felt in dotted quarters with three subdivisions each (compound metre:
+ * numerator divisible by three and above three, denominator eighth or
+ * finer); everything else counts the numerator with halves between. A
+ * pickup or an irregular measure keeps the beat length of its signature and
+ * takes as many beats as fit its real length, at least one - a one-quarter
+ * pickup in 4/4 clicks once, exactly what the duration estimate got right by
+ * luck and 6/8 got wrong.
+ *
+ * @param {number} n
+ * @param {number} d
+ * @param {?number} [actualTicks] real length; null = as the signature says
+ * @return {?Meter} null for an unusable signature
+ */
+export function meterOf(n, d, actualTicks = null) {
+	if (!(n > 0) || !(d > 0)) {
+		return null
+	}
+	const compound = n % 3 === 0 && n > 3 && d >= 8
+	const beatTicks = (compound ? 3 : 1) * (4 * TICKS_PER_QUARTER) / d
+	const nominalTicks = n * (4 * TICKS_PER_QUARTER) / d
+	const ticks = actualTicks > 0 ? actualTicks : nominalTicks
+	return {
+		n,
+		d,
+		beats: Math.max(1, Math.round(ticks / beatTicks)),
+		beatTicks,
+		subdivisions: compound ? 3 : 2,
+		tick: null,
+		ticks,
+		pickup: ticks < nominalTicks,
+		source: 'midi',
+	}
+}
+
+/**
+ * The meter of every displayed measure, indexed like measures.json's
+ * elements (elid = displayed measure index). Same rule as for keys and
+ * marks: the engine's measureFacts where meta.json carries them and counts
+ * like the viewer (engineMeasuresMatch), otherwise the MIDI's time
+ * signatures (FF 58) mapped onto the measures by time. Empty when neither
+ * is there - the metronome then keeps estimating beats from the duration.
+ *
+ * On the MIDI path a pickup appears as a signature of its own length
+ * (M11), so its beats are right but `n`/`d` name the pickup, not the
+ * metre; `pickup` is false there, since nothing says it is one.
+ *
+ * @param {?object} meta meta.json
+ * @param {?{timeSigs?:Array<{timeMs:number,n:number,d:number}>, durationMs:number}} midi
+ * @param {?{events:Array, times:number[], elements:object}} measuresTimeline
+ * @return {Meter[]}
+ */
+export function metersFromArtifacts(meta, midi, measuresTimeline) {
+	const facts = Array.isArray(meta?.measureFacts) ? meta.measureFacts : null
+	if (facts !== null && facts.length > 0 && engineMeasuresMatch(meta, measuresTimeline)) {
+		const meters = []
+		for (const f of facts) {
+			const meter = meterOf(Number(f.sigN), Number(f.sigD), Number(f.ticks))
+			if (!meter) {
+				return []
+			}
+			meters.push({ ...meter, tick: Number(f.tick), source: 'engine' })
+		}
+		return meters
+	}
+	const count = displayedMeasureCount(measuresTimeline)
+	const changes = midiToMeasures(midi?.timeSigs, midi, measuresTimeline)
+	if (count === 0 || changes.length === 0) {
+		return []
+	}
+	// The first signature at or before a measure wins - MuseScore restates
+	// it at every unrolled repeat pass, which is no change.
+	const perMeasure = new Map()
+	for (const { measure, event } of changes) {
+		if (!perMeasure.has(measure)) {
+			perMeasure.set(measure, event)
+		}
+	}
+	const meters = []
+	let current = perMeasure.get(1) ?? changes[0].event
+	for (let measure = 1; measure <= count; measure++) {
+		current = perMeasure.get(measure) ?? current
+		const meter = meterOf(current.n, current.d)
+		if (!meter) {
+			return []
+		}
+		meters.push(meter)
+	}
+	return meters
+}
+
+/**
+ * @param {?object} measuresTimeline
+ * @return {number} displayed measures, from the highest elid in measures.json
+ *   (its elements, or - where a timeline carries none - its events)
+ */
+function displayedMeasureCount(measuresTimeline) {
+	const ids = [
+		...Object.keys(measuresTimeline?.elements ?? {}).map(Number),
+		...(measuresTimeline?.events ?? []).map((e) => Number(e.elid)),
+	].filter(Number.isFinite)
+	return ids.length === 0 ? 0 : Math.max(...ids) + 1
 }
 
 /**

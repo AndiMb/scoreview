@@ -8,6 +8,8 @@ import {
 	keyAt,
 	keyByElid,
 	marksNeedMidi,
+	meterOf,
+	metersFromArtifacts,
 	pitchAt,
 	positionWithMark,
 	resolveJumpTarget,
@@ -158,6 +160,88 @@ describe('Mehrtaktpausen', () => {
 		expect(marksNeedMidi(engineMeta, measuresTimeline)).toBe(false)
 		expect(marksNeedMidi(mmRestMeta, mmRestTimeline)).toBe(true)
 		expect(marksNeedMidi({ measures: 5 }, measuresTimeline)).toBe(true)
+	})
+})
+
+describe('meterOf', () => {
+	it('counts simple metres by the numerator with halves between', () => {
+		expect(meterOf(4, 4)).toMatchObject({ beats: 4, beatTicks: 480, subdivisions: 2, ticks: 1920, pickup: false })
+		expect(meterOf(3, 4)).toMatchObject({ beats: 3, beatTicks: 480, subdivisions: 2 })
+		expect(meterOf(2, 2)).toMatchObject({ beats: 2, beatTicks: 960, subdivisions: 2 })
+		expect(meterOf(3, 8)).toMatchObject({ beats: 3, beatTicks: 240, subdivisions: 2 })
+	})
+
+	it('feels compound metres in dotted beats with three parts', () => {
+		expect(meterOf(6, 8)).toMatchObject({ beats: 2, beatTicks: 720, subdivisions: 3, ticks: 1440 })
+		expect(meterOf(9, 8)).toMatchObject({ beats: 3, beatTicks: 720, subdivisions: 3 })
+		expect(meterOf(12, 16)).toMatchObject({ beats: 4, beatTicks: 360, subdivisions: 3 })
+	})
+
+	it('gives a pickup as many beats as fit, at least one', () => {
+		expect(meterOf(4, 4, 480)).toMatchObject({ beats: 1, beatTicks: 480, pickup: true, ticks: 480 })
+		expect(meterOf(4, 4, 1440)).toMatchObject({ beats: 3, pickup: true })
+		expect(meterOf(6, 8, 240)).toMatchObject({ beats: 1, pickup: true })
+		// An irregular measure longer than its signature.
+		expect(meterOf(4, 4, 2400)).toMatchObject({ beats: 5, pickup: false })
+	})
+
+	it('rejects an unusable signature', () => {
+		expect(meterOf(0, 4)).toBeNull()
+		expect(meterOf(4, 0)).toBeNull()
+	})
+})
+
+describe('metersFromArtifacts', () => {
+	// The engine's measureFacts for a pickup, 4/4, 3/4, 6/8 (timesig-test.mscz).
+	const timesigMeta = {
+		measures: 4,
+		measureFacts: [
+			{ measure: 1, tick: 0, sigN: 4, sigD: 4, ticks: 480 },
+			{ measure: 2, tick: 480, sigN: 4, sigD: 4, ticks: 1920 },
+			{ measure: 3, tick: 2400, sigN: 3, sigD: 4, ticks: 1440 },
+			{ measure: 4, tick: 3840, sigN: 6, sigD: 8, ticks: 1440 },
+		],
+	}
+	const timesigTimeline = buildTimeline({
+		events: [{ elid: 0, timeMs: 0 }, { elid: 1, timeMs: 500 }, { elid: 2, timeMs: 2500 }, { elid: 3, timeMs: 4000 }],
+		elements: Object.fromEntries([0, 1, 2, 3].map((id) => [String(id), { page: 0, x: id * 100, y: 0, w: 100, h: 50 }])),
+	})
+
+	it('takes the engine facts, one meter per measure, pickup included', () => {
+		const meters = metersFromArtifacts(timesigMeta, null, timesigTimeline)
+		expect(meters.map((m) => [m.n, m.d, m.beats, m.subdivisions, m.tick, m.pickup, m.source])).toEqual([
+			[4, 4, 1, 2, 0, true, 'engine'],
+			[4, 4, 4, 2, 480, false, 'engine'],
+			[3, 4, 3, 2, 2400, false, 'engine'],
+			[6, 8, 2, 3, 3840, false, 'engine'],
+		])
+	})
+
+	it('falls back to the MIDI time signatures without engine facts', () => {
+		// m1-test: 4/4 at 0 ms and again at the second pass - no change.
+		const meters = metersFromArtifacts({ measures: 5 }, midi, measuresTimeline)
+		expect(meters).toHaveLength(5)
+		expect(meters.every((m) => m.n === 4 && m.d === 4 && m.beats === 4 && m.source === 'midi')).toBe(true)
+	})
+
+	it('applies a MIDI change from its measure on, and keeps the first signature before any change', () => {
+		const timeSigs = [{ timeMs: 0, n: 4, d: 4 }, { timeMs: 5999.9, n: 6, d: 8 }]
+		const meters = metersFromArtifacts({ measures: 5 }, { timeSigs, durationMs: 12000 }, measuresTimeline)
+		expect(meters.map((m) => `${m.n}/${m.d}:${m.beats}`)).toEqual(['4/4:4', '4/4:4', '6/8:2', '6/8:2', '6/8:2'])
+	})
+
+	it('uses the MIDI where the engine counts differently (multi-measure rests)', () => {
+		const meta = { ...mmRestMeta, measureFacts: Array.from({ length: 8 }, (_, i) => ({ measure: i + 1, tick: i * 1920, sigN: 4, sigD: 4, ticks: 1920 })) }
+		const meters = metersFromArtifacts(meta, mmRestMidi, mmRestTimeline)
+		expect(meters).toHaveLength(6)
+		expect(meters[0].source).toBe('midi')
+	})
+
+	it('is empty without any source, and on an unusable fact', () => {
+		expect(metersFromArtifacts({ measures: 5 }, null, measuresTimeline)).toEqual([])
+		expect(metersFromArtifacts({ measures: 5 }, { timeSigs: [], durationMs: 1 }, measuresTimeline)).toEqual([])
+		expect(metersFromArtifacts({ measures: 5 }, midi, buildTimeline({ events: [] }))).toEqual([])
+		expect(metersFromArtifacts({ measures: 1, measureFacts: [{ measure: 1, tick: 0, sigN: 0, sigD: 4, ticks: 1 }] }, null, buildTimeline({ events: [{ elid: 0, timeMs: 0 }], elements: { 0: {} } }))).toEqual([])
 	})
 })
 

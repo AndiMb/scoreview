@@ -19,6 +19,7 @@ const DEFAULT_TEMPO_US_PER_QUARTER = 500000
 
 const META_MARKER = 0x06
 const META_TEMPO = 0x51
+const META_TIME_SIGNATURE = 0x58
 const META_KEY_SIGNATURE = 0x59
 const META_END_OF_TRACK = 0x2f
 
@@ -26,7 +27,8 @@ const META_END_OF_TRACK = 0x2f
  * @typedef {{onMs:number, offMs:number, pitch:number, channel:number, track:number, velocity:number}} MidiNote
  * @typedef {{timeMs:number, text:string}} MidiMarker
  * @typedef {{timeMs:number, sf:number, mi:number}} MidiKeySig
- * @typedef {{notes:MidiNote[], markers:MidiMarker[], keySigs:MidiKeySig[], durationMs:number}} ParsedMidi
+ * @typedef {{timeMs:number, n:number, d:number}} MidiTimeSig
+ * @typedef {{notes:MidiNote[], markers:MidiMarker[], keySigs:MidiKeySig[], timeSigs:MidiTimeSig[], durationMs:number}} ParsedMidi
  */
 
 /**
@@ -70,6 +72,7 @@ export function parseMidiNotes(input) {
 	const notes = []
 	const markers = []
 	const keySigs = []
+	const timeSigs = []
 	let endTick = 0
 	const decoder = new TextDecoder('utf-8')
 
@@ -98,6 +101,13 @@ export function parseMidiNotes(input) {
 				// MuseScore schreibt mi gemessen immer 0 - deshalb
 				// traegt der Rueckfall in scoreFacts.js keinen Modus.
 				keySigs.push({ timeMs: toMs(event.tick), sf: (event.data[0] << 24) >> 24, mi: event.data[1] })
+			} else if (event.type === 'meta' && event.metaType === META_TIME_SIGNATURE && event.data.length >= 2) {
+				// nn / 2^dd; the metronome and 32nd-note bytes that follow
+				// say nothing a score needs. MuseScore writes one per change,
+				// unrolled like the markers, and a pickup as a signature of
+				// its own length (measured, M11) - so the nominal signature of
+				// a pickup comes only from the engine's measureFacts.
+				timeSigs.push({ timeMs: toMs(event.tick), n: event.data[0], d: 2 ** event.data[1] })
 			}
 		}
 		// Ohne Note-off (abgeschnittene Datei) endet die Note mit der Spur.
@@ -112,8 +122,9 @@ export function parseMidiNotes(input) {
 	notes.sort((a, b) => a.onMs - b.onMs || a.pitch - b.pitch)
 	markers.sort((a, b) => a.timeMs - b.timeMs)
 	keySigs.sort((a, b) => a.timeMs - b.timeMs)
+	timeSigs.sort((a, b) => a.timeMs - b.timeMs)
 
-	return { notes, markers, keySigs, durationMs: toMs(endTick) }
+	return { notes, markers, keySigs, timeSigs, durationMs: toMs(endTick) }
 }
 
 function makeNote(begin, endTick, track, toMs) {

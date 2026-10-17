@@ -36,6 +36,10 @@ const LOOKAHEAD_MS = 60
  *   Pufferkette wie die Musik (siehe lib/metronomeClick.js)
  * @param {(reason: string) => (() => void)} [deps.holdAudio] keeps that
  *   context awake during the count-in (lib/audioIdle.js)
+ * @param {(measureIndex: number) => ?object} [deps.meterAt] the meter of a
+ *   displayed measure (scoreFacts.metersFromArtifacts: beats, beatTicks,
+ *   subdivisions), or null where there is none - then the beats are
+ *   estimated from the measure's duration (lib/metronome.js)
  */
 export function useMetronome({
 	measuresTimeline,
@@ -47,6 +51,7 @@ export function useMetronome({
 	play,
 	audioContext,
 	holdAudio = () => Object.assign(() => {}, { ready: Promise.resolve() }),
+	meterAt = () => null,
 }) {
 	const enabled = ref(false)
 	// 'all' = jeder Schlag (Voreinstellung), 'downbeat' = nur der
@@ -124,7 +129,7 @@ export function useMetronome({
 		const measureEndMs = index + 1 < measures.events.length
 			? measures.events[index + 1].timeMs
 			: durationMs()
-		const beat = resolveBeatInMeasure(measureStartMs, measureEndMs, lookaheadMs, baseTempoBpm(), beats.value)
+		const beat = resolveBeatInMeasure(measureStartMs, measureEndMs, lookaheadMs, baseTempoBpm(), beats.value, meterAt(measures.events[index].elid))
 		if (!beat) {
 			return
 		}
@@ -161,9 +166,13 @@ export function useMetronome({
 		const nextMs = index + 1 < measures.events.length
 			? measures.events[index + 1].timeMs
 			: durationMs()
-		const beatsInMeasure = estimateBeatsInMeasure(nextMs - measureStartMs, baseTempoBpm())
+		// With a meter the count-in counts its conducted beats - two in 6/8,
+		// each a dotted quarter long; without one, the estimate from the
+		// measure's length in quarters.
+		const meter = meterAt(measures.events[index].elid)
+		const beatsInMeasure = meter?.beats > 0 ? meter.beats : estimateBeatsInMeasure(nextMs - measureStartMs, baseTempoBpm())
 		const bpm = effectiveTempoBpm() > 0 ? effectiveTempoBpm() : defaultBpm
-		const beatIntervalMs = 60000 / bpm
+		const beatIntervalMs = (60000 / bpm) * ((meter?.beatTicks > 0 ? meter.beatTicks : 480) / 480)
 		const delays = computeCountInDelaysMs(beatsInMeasure, beatIntervalMs)
 		isCountingIn = true
 		const clicker = ensureClick()

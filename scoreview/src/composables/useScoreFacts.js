@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
 import { computed, shallowRef } from 'vue'
 import { parseMidiNotes } from '../lib/midiNotes.js'
-import { fromArtifacts, marksNeedMidi } from '../lib/scoreFacts.js'
+import { fromArtifacts, marksNeedMidi, metersFromArtifacts } from '../lib/scoreFacts.js'
 
 /**
  * Partiturfakten (Tonarten, Studierbuchstaben) fuer den ganzen Viewer - EIN
@@ -46,6 +46,12 @@ export function useScoreFacts({ midiData, meta, measuresTimeline }) {
 
 	const facts = computed(() => fromArtifacts(meta(), parsed.value, measuresTimeline()))
 
+	// The meter per displayed measure, for the metronome and the beat
+	// numbers. Engine facts where they are, else the MIDI's time signatures
+	// - which is loaded whenever the marks need it, and that is exactly the
+	// case without engine facts (sidecar path, differing measure count).
+	const meters = computed(() => metersFromArtifacts(meta(), parsed.value, measuresTimeline()))
+
 	// Getrennt von `facts`, damit die Buchstaben das MIDI nur anfassen, wenn
 	// sie es brauchen - `facts` liest es immer (Tonarten ohne Engine-Feld).
 	const marks = computed(() => {
@@ -86,5 +92,5 @@ export function useScoreFacts({ midiData, meta, measuresTimeline }) {
 		ownMidi.value = null
 	}
 
-	return { parsed, facts, marks, ensureMidi, reset }
+	return { parsed, facts, marks, meters, ensureMidi, reset }
 }

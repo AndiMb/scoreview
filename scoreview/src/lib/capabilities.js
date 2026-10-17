@@ -11,6 +11,7 @@
  * @property {boolean} lyrics Silbenliste mit mindestens einer Silbe
  * @property {boolean} spellings Tonhoehe und Schreibweise je Notenkopf
  * @property {boolean} keyModes mindestens eine Tonart mit Modus (Dur/Moll)
+ * @property {boolean} meters Taktart und Laenge je Takt, Tick je Schreibweise (Zaehlzeiten)
  */
 
 /**
@@ -24,6 +25,11 @@ export function capabilitiesOf({ meta, svgHasSegIds } = {}) {
 		lyrics: Array.isArray(m.lyricSyllables) && m.lyricSyllables.length > 0,
 		spellings: Array.isArray(m.noteSpellings) && m.noteSpellings.length > 0,
 		keyModes: Array.isArray(m.keySigs) && m.keySigs.some((k) => typeof k?.mode === 'string' && k.mode !== ''),
+		// Time signature and length per measure, with a tick per spelling
+		// (engine v4.7.5-engine.5): what beat numbers need. The metronome
+		// does without, it estimates - counting over the notes must not.
+		meters: Array.isArray(m.measureFacts) && m.measureFacts.length > 0
+			&& Array.isArray(m.noteSpellings) && m.noteSpellings.every((s) => Number.isInteger(s?.tick)),
 	}
 }
 
@@ -34,6 +40,9 @@ export function capabilitiesOf({ meta, svgHasSegIds } = {}) {
 const NEEDS = Object.freeze({
 	lyrics: ['lyrics', 'segIds'],
 	noteNames: ['spellings', 'segIds'],
+	// Beat numbers over the notes (B1): the spellings place them, the
+	// meters say which beat a chord stands on.
+	counts: ['meters', 'spellings', 'segIds'],
 	band: [],
 	pages: [],
 })
@@ -50,7 +59,7 @@ const NEEDS = Object.freeze({
  * - `no-data`: Die Seiten wurden ohne die noetigen Daten gesetzt.
  *
  * @param {Capabilities} cap
- * @param {'lyrics'|'noteNames'|'band'|'pages'} feature
+ * @param {'lyrics'|'noteNames'|'counts'|'band'|'pages'} feature
  * @param {?object} meta
  * @return {null|'no-lyrics'|'too-large'|'no-data'}
  */

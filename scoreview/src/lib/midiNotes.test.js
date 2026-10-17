@@ -80,6 +80,10 @@ describe('parseMidiNotes an der Testpartitur m1-test', () => {
 		])
 	})
 
+	it('reads the time signature, restated at the start of the second pass', () => {
+		expect(midi.timeSigs).toEqual([{ timeMs: 0, n: 4, d: 4 }, { timeMs: 4000, n: 4, d: 4 }])
+	})
+
 	it('nimmt auch einen ArrayBuffer', () => {
 		const buffer = fixture.buffer.slice(fixture.byteOffset, fixture.byteOffset + fixture.byteLength)
 		expect(parseMidiNotes(buffer).notes).toHaveLength(24)
@@ -125,6 +129,15 @@ describe('parseMidiNotes mit Tempokarte und Randfaellen', () => {
 			87 40 ff 2f 00  # Spurende nach 960 Ticks
 		`)
 		expect(parseMidiNotes(bytes).notes[0]).toMatchObject({ onMs: 0, offMs: 1000 })
+	})
+
+	it('reads time signatures as n / 2^d and ignores the metronome bytes', () => {
+		const bytes = smf(`
+			00 ff 58 04 06 03 18 08  # 6/8
+			83 60 ff 58 04 03 02 18 08  # 3/4 after 480 ticks
+			00 ff 2f 00
+		`)
+		expect(parseMidiNotes(bytes).timeSigs).toEqual([{ timeMs: 0, n: 6, d: 8 }, { timeMs: 500, n: 3, d: 4 }])
 	})
 
 	it('liest eine Moll-Tonart und negative Vorzeichen', () => {
