@@ -117,3 +117,73 @@ export function nextScrollTop(systemRects, viewport, scrollTop, dir, { margin = 
 	}
 	return clamp(scrollTop - height * FALLBACK_STEP)
 }
+
+/**
+ * Pages to rows: pages whose vertical extents overlap stand side by side
+ * (the two-page spread, spreadLayout.js). In a single column every page is
+ * its own row.
+ *
+ * @param {Array<{top:number, bottom:number}>} pageRects in scroll coordinates
+ * @return {Array<{top:number, bottom:number}>} sorted by height
+ */
+export function groupRows(pageRects) {
+	return groupSystems((pageRects ?? []).map((r) => ({ y: r.top, h: r.bottom - r.top })))
+}
+
+/**
+ * The target of a paging step when two pages stand side by side.
+ *
+ * The half page turn of nextScrollTop() breaks here: it moves the last
+ * system of the row to the top, so the next row is cut in half - and the
+ * reader, still on the left page, would lose the top of the right page,
+ * which is read later. In a spread the row is the unit of reading, so a
+ * step goes from row to row. Only a row taller than the view (zoomed in
+ * beyond the pair) is paged through by its systems as before; there no
+ * rule keeps the reading order anyway.
+ *
+ * @param {Array<{top:number, bottom:number}>} rows groupRows() of the pages
+ * @param {Array<{top:number, bottom:number}>} systemRects as for nextScrollTop()
+ * @param {{height:number, maxScrollTop?:number}} viewport
+ * @param {number} scrollTop
+ * @param {number} dir +1 forward, -1 back
+ * @param {{margin?:number}} [opts]
+ * @return {number} new scrollTop
+ */
+export function nextRowScrollTop(rows, systemRects, viewport, scrollTop, dir, { margin = DEFAULT_MARGIN_PX } = {}) {
+	const sorted = [...(rows ?? [])].sort((a, b) => a.top - b.top)
+	const maxScrollTop = viewport.maxScrollTop ?? Infinity
+	const clamp = (value) => Math.min(Math.max(0, value), maxScrollTop)
+	const viewTop = scrollTop
+	const viewBottom = scrollTop + viewport.height
+	// The row the view starts in: the first one that reaches below its top
+	// edge. After a step the view starts in the gap just above the row.
+	const index = sorted.findIndex((r) => r.bottom > viewTop + EPS_PX)
+	if (index === -1) {
+		return nextScrollTop(systemRects, viewport, scrollTop, dir, { margin })
+	}
+	const row = sorted[index]
+	// "In view" with a little slack: at "fit whole page" a row is exactly as
+	// high as the view, but the scroll element's padding puts the first row
+	// 12 px down - measured, the first PgDn then moved 20 px instead of a row.
+	const slack = Math.max(EPS_PX, 2 * margin)
+	if (dir >= 0) {
+		const next = sorted[index + 1]
+		if (next && row.bottom <= viewBottom + slack) {
+			return clamp(next.top - margin)
+		}
+		if (row.bottom > viewBottom + slack) {
+			// Taller than the view: page within the row, but not past its end.
+			return Math.min(nextScrollTop(systemRects, viewport, scrollTop, dir, { margin }), clamp(row.bottom + margin - viewport.height))
+		}
+		return clamp(viewBottom - margin)
+	}
+	if (row.top < viewTop - EPS_PX - margin) {
+		// Inside the row: back to its start, or by systems if it is taller.
+		const back = row.bottom - row.top + 2 * margin <= viewport.height
+			? row.top - margin
+			: nextScrollTop(systemRects, viewport, scrollTop, dir, { margin })
+		return clamp(Math.max(back, row.top - margin))
+	}
+	const previous = sorted[index - 1]
+	return previous ? clamp(previous.top - margin) : clamp(row.top - margin)
+}

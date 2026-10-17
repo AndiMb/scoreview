@@ -1,4 +1,4 @@
-import { groupSystems, nextScrollTop } from '../lib/pagingPlan.js'
+import { groupRows, groupSystems, nextRowScrollTop, nextScrollTop } from '../lib/pagingPlan.js'
 
 /**
  * Blaettern um einen Ausschnitt: PageDown/PageUp, im Aufführungsmodus
@@ -15,9 +15,10 @@ import { groupSystems, nextScrollTop } from '../lib/pagingPlan.js'
  * @param {() => Array<object>} deps.pages ScorePage-Komponenten je Seitenindex
  * @param {(pageIndex: number) => Array<object>} deps.measureRects Taktrechtecke einer Seite
  * @param {() => void} deps.onManualScroll das Autoscroll pausieren (es ist ein Nutzereingriff)
+ * @param {() => boolean} [deps.spread] two pages side by side (A2): page by rows
  * @return {{page: (dir: number) => void, systemRects: () => Array}}
  */
-export function usePaging({ scrollEl, pages, measureRects, onManualScroll }) {
+export function usePaging({ scrollEl, pages, measureRects, onManualScroll, spread = () => false }) {
 	/**
 	 * Alle Systeme in Scroll-Koordinaten (scrollTop-Basis).
 	 *
@@ -53,6 +54,26 @@ export function usePaging({ scrollEl, pages, measureRects, onManualScroll }) {
 	}
 
 	/**
+	 * Every page in scroll coordinates - also one that was never loaded: its
+	 * estimated height still places it in its row, which is all the row rule
+	 * needs.
+	 *
+	 * @return {Array<{top:number, bottom:number}>}
+	 */
+	function pageRects() {
+		const el = scrollEl()
+		if (!el) {
+			return []
+		}
+		const container = el.getBoundingClientRect()
+		return pages().filter((page) => page?.$el).map((page) => {
+			const rect = page.$el.getBoundingClientRect()
+			const top = el.scrollTop + (rect.top - container.top)
+			return { top, bottom: top + rect.height }
+		})
+	}
+
+	/**
 	 * Einen Schritt blaettern. Ohne weiches Scrollen: Ein Pedal, zweimal
 	 * schnell getreten, muss zweimal genau eine Seitenwende ergeben - waehrend
 	 * einer Gleitbewegung stuende der zweite Schritt auf einer
@@ -65,12 +86,10 @@ export function usePaging({ scrollEl, pages, measureRects, onManualScroll }) {
 		if (!el) {
 			return
 		}
-		const target = nextScrollTop(
-			systemRects(),
-			{ height: el.clientHeight, maxScrollTop: Math.max(0, el.scrollHeight - el.clientHeight) },
-			el.scrollTop,
-			dir,
-		)
+		const viewport = { height: el.clientHeight, maxScrollTop: Math.max(0, el.scrollHeight - el.clientHeight) }
+		const target = spread()
+			? nextRowScrollTop(groupRows(pageRects()), systemRects(), viewport, el.scrollTop, dir)
+			: nextScrollTop(systemRects(), viewport, el.scrollTop, dir)
 		onManualScroll()
 		el.scrollTo({ top: target, behavior: 'auto' })
 	}

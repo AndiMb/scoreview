@@ -85,6 +85,16 @@ class PreferenceControllerTest extends TestCase {
 		$this->assertSame('off', $this->gespeichert[ViewerPreferences::KEY_BEAT_COUNTS]);
 	}
 
+	public function testStoresTheDoublePageOnlyAsAKnownValue(): void {
+		$response = $this->controller('anna')->update('#00ff00', 'notes', doublePage: 'right');
+		$this->assertSame('right', $response->getData()['doublePage']);
+		$this->assertSame('right', $this->gespeichert[ViewerPreferences::KEY_DOUBLE_PAGE]);
+
+		// Unknown falls back to the default, which is not the first value of the list.
+		$response = $this->controller('anna')->update('#00ff00', 'notes', doublePage: 'both');
+		$this->assertSame('left', $response->getData()['doublePage']);
+	}
+
 	public function testNormalisiertEinenUnbekanntenDunkelmodus(): void {
 		$antwort = $this->controller('anna')->update('#00ff00', 'notes', false, 'sepia;x');
 

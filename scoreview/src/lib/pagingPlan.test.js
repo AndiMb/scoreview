@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupSystems, nextScrollTop } from './pagingPlan.js'
+import { groupRows, groupSystems, nextRowScrollTop, nextScrollTop } from './pagingPlan.js'
 
 // Ein Ausschnitt von 600 px, Systeme zu 150 px mit 30 px Abstand.
 const VIEW = { height: 600, maxScrollTop: 10000 }
@@ -119,5 +119,60 @@ describe('pagingPlan.nextScrollTop', () => {
 				}
 			}
 		}
+	})
+})
+
+describe('groupRows', () => {
+	it('puts side-by-side pages into one row', () => {
+		const pages = [
+			{ top: 0, bottom: 800 },
+			{ top: 0, bottom: 800 },
+			{ top: 816, bottom: 1616 },
+			{ top: 816, bottom: 1616 },
+		]
+		expect(groupRows(pages)).toEqual([{ top: 0, bottom: 800 }, { top: 816, bottom: 1616 }])
+	})
+})
+
+describe('nextRowScrollTop', () => {
+	// Three rows of 800 px with a 16 px gap; systems of both pages per row.
+	const rows = [{ top: 0, bottom: 800 }, { top: 816, bottom: 1616 }, { top: 1632, bottom: 2432 }]
+	const systems = rows.flatMap((r) => [100, 400, 700].flatMap((y) => [
+		{ top: r.top + y - 80, bottom: r.top + y },
+		{ top: r.top + y - 70, bottom: r.top + y + 10 },
+	]))
+	const view = { height: 820, maxScrollTop: 1700 }
+
+	it('steps from a whole row to the top of the next one', () => {
+		expect(nextRowScrollTop(rows, systems, view, 0, 1)).toBe(816 - 8)
+		expect(nextRowScrollTop(rows, systems, view, 808, 1)).toBe(1632 - 8)
+	})
+
+	it('steps back to the start of the previous row', () => {
+		expect(nextRowScrollTop(rows, systems, view, 1624, -1)).toBe(808)
+		expect(nextRowScrollTop(rows, systems, view, 808, -1)).toBe(0)
+	})
+
+	it('goes back to the start of the row when the view is inside it', () => {
+		expect(nextRowScrollTop(rows, systems, view, 1000, -1)).toBe(808)
+	})
+
+	it('pages by systems inside a row taller than the view, never past its end', () => {
+		const small = { height: 500, maxScrollTop: 2432 - 500 }
+		const first = nextRowScrollTop(rows, systems, small, 0, 1)
+		expect(first).toBeGreaterThan(0)
+		expect(first).toBeLessThanOrEqual(800 + 8 - 500)
+		// Once the end of the row is in view, the next step is the next row.
+		expect(nextRowScrollTop(rows, systems, small, 800 + 8 - 500, 1)).toBe(808)
+	})
+
+	it('takes a row that sticks out by the scroll padding as in view', () => {
+		// Fit whole page: rows 651 px high from 12 px down, view 651 px.
+		const fitted = [{ top: 12, bottom: 663 }, { top: 679, bottom: 1330 }]
+		expect(nextRowScrollTop(fitted, [], { height: 651, maxScrollTop: 700 }, 0, 1)).toBe(671)
+	})
+
+	it('stays at the end of the last row', () => {
+		expect(nextRowScrollTop(rows, systems, view, 1624, 1)).toBe(1700)
 	})
 })

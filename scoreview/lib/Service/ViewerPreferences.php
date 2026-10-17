@@ -54,8 +54,22 @@ class ViewerPreferences {
 	public const KEY_AUTO_SCROLL = 'auto_scroll';
 	/** Beat numbers over the notes (B1): off, on my staff, on all staves. */
 	public const KEY_BEAT_COUNTS = 'beat_counts';
+	/**
+	 * Two pages side by side (A2): off, page 1 on the left, page 1 alone on
+	 * the right. It applies only where the page area is wide enough
+	 * (src/lib/spreadLayout.js); the setting says what to do then.
+	 */
+	public const KEY_DOUBLE_PAGE = 'double_page';
 	public const NOTE_NAME_SYSTEMS = ['off', 'de', 'en', 'solfa-fixed', 'solfa-movable'];
 	public const BEAT_COUNTS = ['off', 'mine', 'all'];
+	/** The first value of a list is NOT the default here - see DEFAULT_DOUBLE_PAGE. */
+	public const DOUBLE_PAGE = ['off', 'left', 'right'];
+	/**
+	 * Page 1 on the left: choir scores often open with a title page, and a
+	 * pair 1-2 then shows it next to the first page of music. Decided
+	 * 2026-10-17 against the booklet order (page 1 alone on the right).
+	 */
+	public const DEFAULT_DOUBLE_PAGE = 'left';
 	public const LAYOUTS = ['pages', 'band', 'lyrics'];
 	public const TRANSPOSE_LIMIT = 12;
 	public const DEFAULT_OTHERS_LEVEL = 40;
@@ -94,7 +108,7 @@ class ViewerPreferences {
 	}
 
 	/**
-	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string}
+	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string, doublePage: string}
 	 */
 	public function get(?string $userId): array {
 		if ($userId === null) {
@@ -119,6 +133,7 @@ class ViewerPreferences {
 			'bandOffered' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_BAND_OFFERED, '0') === '1',
 			'autoScroll' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_AUTO_SCROLL, '1') === '1',
 			'beatCounts' => self::oneOf($this->config->getUserValue($userId, Application::APP_ID, self::KEY_BEAT_COUNTS, 'off'), self::BEAT_COUNTS),
+			'doublePage' => self::doublePage($this->config->getUserValue($userId, Application::APP_ID, self::KEY_DOUBLE_PAGE, self::DEFAULT_DOUBLE_PAGE)),
 		];
 	}
 
@@ -126,10 +141,14 @@ class ViewerPreferences {
 	 * Tonnamen und Darstellung (H2/H3/H8) - je Wert nur, wenn er mitkommt,
 	 * aus demselben Grund wie setDisplay().
 	 *
-	 * @return array{noteNames?: string, noteNamesMine?: bool, layout?: string, bandOffered?: bool, autoScroll?: bool, beatCounts?: string}
+	 * @return array{noteNames?: string, noteNamesMine?: bool, layout?: string, bandOffered?: bool, autoScroll?: bool, beatCounts?: string, doublePage?: string}
 	 */
-	public function setViewing(string $userId, ?string $noteNames, ?bool $noteNamesMine, ?string $layout, ?bool $bandOffered, ?bool $autoScroll = null, ?string $beatCounts = null): array {
+	public function setViewing(string $userId, ?string $noteNames, ?bool $noteNamesMine, ?string $layout, ?bool $bandOffered, ?bool $autoScroll = null, ?string $beatCounts = null, ?string $doublePage = null): array {
 		$werte = [];
+		if ($doublePage !== null) {
+			$werte['doublePage'] = self::doublePage($doublePage);
+			$this->config->setUserValue($userId, Application::APP_ID, self::KEY_DOUBLE_PAGE, $werte['doublePage']);
+		}
 		if ($beatCounts !== null) {
 			$werte['beatCounts'] = self::oneOf($beatCounts, self::BEAT_COUNTS);
 			$this->config->setUserValue($userId, Application::APP_ID, self::KEY_BEAT_COUNTS, $werte['beatCounts']);
@@ -326,7 +345,13 @@ class ViewerPreferences {
 			// reading along expect.
 			'autoScroll' => true,
 			'beatCounts' => 'off',
+			'doublePage' => self::DEFAULT_DOUBLE_PAGE,
 		];
+	}
+
+	/** One of DOUBLE_PAGE, otherwise the default (not the first value). */
+	private static function doublePage(string $value): string {
+		return in_array($value, self::DOUBLE_PAGE, true) ? $value : self::DEFAULT_DOUBLE_PAGE;
 	}
 
 	/**

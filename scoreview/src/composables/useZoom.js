@@ -7,6 +7,7 @@ import {
 	MAX_ZOOM,
 	MIN_ZOOM,
 } from '../lib/scoreLayout.js'
+import { fitSpreadPageZoom, fitSpreadWidthZoom } from '../lib/spreadLayout.js'
 
 // Zoomschritt fuer Tastatur (+/-) und Strg+Mausrad - multiplikativ, damit sich
 // die gefuehlte Schrittweite ueber den ganzen Bereich (0,25-4) gleich anfuehlt.
@@ -29,8 +30,13 @@ const ZOOM_STEP = 1.2
  * @param {() => HTMLElement|null} deps.rootEl Wurzelelement des Viewers
  *   (für Vollbild und den ResizeObserver)
  * @param {() => HTMLElement|null} deps.scrollEl das scrollende Element
+ * @param {() => boolean} [deps.spread] whether two pages stand side by side
+ *   (A2) - the presets then fit the pair, not one page
+ * @param {(widthPx: number) => void} [deps.onWidth] the measured width of
+ *   the page area, before the width preset is applied - the spread rule
+ *   (spreadLayout.js) depends on it, and the preset on the rule
  */
-export function useZoom({ rootEl, scrollEl }) {
+export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () => {} }) {
 	const zoom = ref(1)
 	// Solange niemand selbst gezoomt hat, folgt der Zoom der Fenstergröße
 	// („Seitenbreite"). Ab dem ersten eigenen Zoom gilt der gewählte Faktor
@@ -149,7 +155,8 @@ export function useZoom({ rootEl, scrollEl }) {
 			// Als einziger Zoomweg OHNE followsWidth = false: „an die Breite
 			// anpassen" ist genau die Ansage, dass es das auch nach dem
 			// nächsten Drehen/Vergrößern noch tun soll.
-			zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, computeFitWidthZoom(pagesEl.clientWidth)))
+			const fit = spread() ? fitSpreadWidthZoom(pagesEl.clientWidth) : computeFitWidthZoom(pagesEl.clientWidth)
+			zoom.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, fit))
 			followsWidth.value = true
 			chosen.value = 'width'
 			return
@@ -161,12 +168,34 @@ export function useZoom({ rootEl, scrollEl }) {
 			// Die Leiste liegt außerhalb des Scroll-Elements - dessen
 			// clientHeight IST die verfügbare Höhe, es ist nichts mehr
 			// abzuziehen.
-			set(computeFitPageZoom(dims.viewBox, pagesEl.clientWidth, scroll.clientHeight))
+			set(spread()
+				? fitSpreadPageZoom(dims.viewBox, pagesEl.clientWidth, scroll.clientHeight)
+				: computeFitPageZoom(dims.viewBox, pagesEl.clientWidth, scroll.clientHeight))
 		} else if (preset === 'actual') {
 			set(computeActualSizeZoom(dims?.sizeMm ?? null))
 		}
 		// Nach set(), das jeden Zoom als eigenen wertet.
 		chosen.value = preset
+	}
+
+	/**
+	 * Width of the page area. Measured on `.scoreview-pages` when it is
+	 * there; in the band and lyrics views it is not, and the scroll
+	 * element's content box has the same width (the pages are a block in it).
+	 *
+	 * @return {number}
+	 */
+	function pagesWidth() {
+		const scroll = scrollEl()
+		const pagesEl = scroll?.querySelector('.scoreview-pages')
+		if (pagesEl) {
+			return pagesEl.clientWidth
+		}
+		if (!scroll) {
+			return 0
+		}
+		const style = getComputedStyle(scroll)
+		return scroll.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0)
 	}
 
 	/**
@@ -183,6 +212,7 @@ export function useZoom({ rootEl, scrollEl }) {
 			return
 		}
 		viewportObserver = new ResizeObserver(() => {
+			onWidth(pagesWidth())
 			if (followsWidth.value) {
 				applyPreset('width')
 			}

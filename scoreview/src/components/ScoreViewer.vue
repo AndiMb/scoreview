@@ -570,6 +570,8 @@
 							<template #page-layout>
 								<LayoutControls
 									v-model:layout="layout"
+									v-model:doublePage="doublePage"
+									:spreadUnavailable="spreadUnavailable"
 									:lyricsUnavailable="lyricsUnavailable" />
 							</template>
 							<template #page-noteNames>
@@ -802,6 +804,7 @@
 					<div
 						v-else
 						class="scoreview-pages"
+						:class="spreadClasses"
 						@touchstart.passive="onTouchStart"
 						@touchmove.passive="onTouchMove"
 						@touchend.passive="onTouchEnd">
@@ -1117,6 +1120,7 @@ import {
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
 import { revealsCursor } from '../lib/scrollPlan.js'
+import { MIN_SPREAD_WIDTH_PX, spreadMode as spreadModeOf } from '../lib/spreadLayout.js'
 import { MODE_TONIC, MODE_VOICE } from '../lib/startTone.js'
 import { formatTime, progressPercent, seekValue } from '../lib/viewerFormat.js'
 
@@ -1305,9 +1309,21 @@ export default {
 		const scroll = ref(null)
 		const rootElement = () => root.value
 		const scrollElement = () => scroll.value
+		// Two pages side by side (A2): the rule needs the active layout, an
+		// options computed that does not exist yet here - it is bound in
+		// created(). The width comes from the zoom's own ResizeObserver.
+		const pagesWidthPx = ref(0)
+		let spreadNow = () => false
+		const bindSpread = (rule) => {
+			spreadNow = rule
+		}
 		const zoomApi = useZoom({
 			rootEl: rootElement,
 			scrollEl: scrollElement,
+			spread: () => spreadNow(),
+			onWidth: (px) => {
+				pagesWidthPx.value = px
+			},
 		})
 		// Anzeigeeinstellungen der Nutzerin (Farbe/Form der Hervorhebung).
 		// Kein Bezug zur Partitur - deshalb ohne Abhaengigkeiten und ohne
@@ -1433,6 +1449,7 @@ export default {
 			pages: autoScroll.pages,
 			measureRects: (pageIndex) => systemRectsByPage.value[pageIndex] ?? [],
 			onManualScroll: autoScroll.noteManualScroll,
+			spread: () => spreadNow(),
 		})
 
 		// Tonarten und Studierbuchstaben - fuer Anfangston UND Taktnavigation
@@ -1820,6 +1837,10 @@ export default {
 			loadSetlistOffers: setlist.loadOffers,
 			acceptSetlistOffer: setlist.acceptOffer,
 			zoom: zoomApi.zoom,
+			zoomPreset: zoomApi.preset,
+			pagesWidthPx,
+			bindSpread,
+			doublePage: preferences.doublePage,
 			zoomFollowsWidth: zoomApi.followsWidth,
 			isFullscreen: zoomApi.isFullscreen,
 			fullscreenPossible: zoomApi.fullscreenPossible,
@@ -2232,6 +2253,32 @@ export default {
 			return reason === null ? '' : this.unavailableText(reason)
 		},
 
+		/** Two pages side by side now: 'off' | 'left' | 'right' (lib/spreadLayout.js). */
+		spreadMode() {
+			return spreadModeOf(this.doublePage, this.activeLayout, this.pagesWidthPx)
+		},
+
+		spreadClasses() {
+			return {
+				'scoreview-pages--spread': this.spreadMode !== 'off',
+				'scoreview-pages--first-right': this.spreadMode === 'right',
+			}
+		},
+
+		/**
+		 * Why the chosen spread does not show right now, or empty - so that
+		 * nobody looks for a switch that on a phone never acts (N3).
+		 */
+		spreadUnavailable() {
+			if (this.doublePage === 'off' || this.spreadMode !== 'off') {
+				return ''
+			}
+			if (this.activeLayout !== 'pages') {
+				return this.t('Only in the page view.')
+			}
+			return this.t('Needs a page area at least {px} px wide - this one is narrower.', { px: MIN_SPREAD_WIDTH_PX })
+		},
+
 		/** Die Darstellung, die gezeigt wird: die gewaehlte, wenn sie geht. */
 		activeLayout() {
 			if (this.layout === 'lyrics' && this.lyricsUnavailable !== '') {
@@ -2398,6 +2445,15 @@ export default {
 	},
 
 	watch: {
+		// The presets fit one page or the pair: when the spread comes or goes,
+		// a chosen fit is fitted again (a zoom of one's own stays as it is).
+		spreadMode() {
+			const preset = this.zoomPreset
+			if (preset === 'width' || preset === 'page') {
+				this.$nextTick(() => this.applyZoomPreset(preset))
+			}
+		},
+
 		// The focus is a property of the running loop: off with it, so the
 		// next loop starts with the whole score in view.
 		loopActive(active) {
@@ -2466,6 +2522,10 @@ export default {
 		activeLayout() {
 			this.layoutCursorShown = true
 		},
+	},
+
+	created() {
+		this.bindSpread(() => this.spreadMode !== 'off')
 	},
 
 	mounted() {
@@ -3376,6 +3436,30 @@ export default {
 	 * .scoreview-viewer); here it is the one that matters, because two
 	 * fingers on the pages are the app's own zoom gesture. */
 	touch-action: pan-x pan-y;
+}
+
+/*
+ * Two pages side by side (A2, lib/spreadLayout.js): a grid of two
+ * columns as wide as the pages. `safe center` for the same reason the
+ * single column is a block - zoomed beyond the pair, the row overflows,
+ * and plain centring would push its left part out of reach. ScorePage
+ * keeps its width and aspect ratio; only its margin goes, the grid gap
+ * (SPREAD_GAP_PX) takes over.
+ */
+.scoreview-pages--spread {
+	display: grid;
+	grid-template-columns: repeat(2, max-content);
+	justify-content: safe center;
+	gap: 16px;
+}
+
+.scoreview-pages--spread > :deep(.score-page) {
+	margin: 0;
+}
+
+/* Page 1 alone on the right, like the first page of a booklet. */
+.scoreview-pages--first-right > :deep(.score-page:first-child) {
+	grid-column: 2;
 }
 
 /*
