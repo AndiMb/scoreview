@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php
+#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php
 msgid "File not found or no access."
 msgstr "Datei nicht gefunden oder kein Zugriff."
 
@@ -108,33 +108,41 @@ msgstr "Die Offline-Seite ist auf diesem Server ausgeschaltet."
 msgid "ScoreView offline"
 msgstr "ScoreView offline"
 
-#: lib/Controller/PracticeTrackController.php
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
 msgid "Saving here is not possible from the mobile app."
 msgstr "Von der Mobil-App aus lässt sich hier nicht speichern."
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "You cannot save files in this folder."
+msgstr "In diesem Ordner darfst du keine Dateien speichern."
+
+#: lib/Controller/PdfController.php
+msgid "This is not a PDF file."
+msgstr "Das ist keine PDF-Datei."
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "A file with this name already exists."
+msgstr "Eine Datei mit diesem Namen gibt es schon."
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "Not enough storage space."
+msgstr "Nicht genug Speicherplatz."
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "The file or folder is in use right now. Try again in a moment."
+msgstr "Die Datei oder der Ordner wird gerade benutzt. Bitte gleich noch einmal versuchen."
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "Invalid file name or folder."
+msgstr "Ungültiger Dateiname oder Ordner."
+
+#: lib/Controller/PdfController.php
+msgid "The PDF file is larger than allowed ({mb} MB)."
+msgstr "Die PDF-Datei ist größer als erlaubt ({mb} MB)."
 
 #: lib/Controller/PracticeTrackController.php
 msgid "This is not an MP3 file."
 msgstr "Das ist keine MP3-Datei."
-
-#: lib/Controller/PracticeTrackController.php
-msgid "A file with this name already exists."
-msgstr "Eine Datei mit diesem Namen gibt es schon."
-
-#: lib/Controller/PracticeTrackController.php
-msgid "You cannot save files in this folder."
-msgstr "In diesem Ordner darfst du keine Dateien speichern."
-
-#: lib/Controller/PracticeTrackController.php
-msgid "Not enough storage space."
-msgstr "Nicht genug Speicherplatz."
-
-#: lib/Controller/PracticeTrackController.php
-msgid "The file or folder is in use right now. Try again in a moment."
-msgstr "Die Datei oder der Ordner wird gerade benutzt. Bitte gleich noch einmal versuchen."
-
-#: lib/Controller/PracticeTrackController.php
-msgid "Invalid file name or folder."
-msgstr "Ungültiger Dateiname oder Ordner."
 
 #: lib/Controller/PracticeTrackController.php
 msgid "The practice track is larger than allowed ({mb} MB)."
@@ -207,6 +215,10 @@ msgstr "Adressen für den Konvertierungsdienst und die SoundFont-Quelle müssen 
 #: lib/Controller/SoundFontController.php
 msgid "The server could not provide the SoundFont. The ScoreView status in the administration settings shows why."
 msgstr "Der Server konnte das SoundFont nicht bereitstellen. Warum, zeigt der Status von ScoreView in den Verwaltungseinstellungen."
+
+#: lib/Search/ScoreSearchProvider.php
+msgid "Scores"
+msgstr "Partituren"
 
 #: lib/Service/HealthService.php
 msgid "PHP is not allowed to start processes (proc_open is blocked by disable_functions)."
@@ -323,6 +335,10 @@ msgstr "Übe-Tracks als MP3-Dateien in Dateien"
 #: src/components/AdminSettings.vue
 msgid "Maximum size of one practice track (MB)"
 msgstr "Höchstgröße eines Übe-Tracks (MB)"
+
+#: src/components/AdminSettings.vue
+msgid "Maximum size of one PDF file (MB)"
+msgstr "Höchstgröße einer PDF-Datei (MB)"
 
 #: src/components/AdminSettings.vue
 msgid "Offline page (scores and setlists saved in the browser)"
@@ -637,6 +653,10 @@ msgid "Layout"
 msgstr "Darstellung der Noten"
 
 #: src/components/LayoutControls.vue
+msgid "Two pages side by side"
+msgstr "Zwei Seiten nebeneinander"
+
+#: src/components/LayoutControls.vue
 msgid "Pages"
 msgstr "Seiten"
 
@@ -647,6 +667,18 @@ msgstr "Systemband (Notenzeilen nebeneinander, fürs Handy)"
 #: src/components/LayoutControls.vue
 msgid "Lyrics only"
 msgstr "Nur Liedtext"
+
+#: src/components/LayoutControls.vue src/components/NoteNameControls.vue src/components/TunerPanel.vue
+msgid "Off"
+msgstr "Aus"
+
+#: src/components/LayoutControls.vue
+msgid "Page 1 on the left"
+msgstr "Seite 1 links"
+
+#: src/components/LayoutControls.vue
+msgid "Page 1 on the right"
+msgstr "Seite 1 rechts"
 
 #: src/components/LeaderPanel.vue
 msgid "Leaders"
@@ -784,7 +816,7 @@ msgstr "Stimmen"
 msgid "Only singers of the chosen voices see it"
 msgstr "Nur wer eine der gewählten Stimmen singt, sieht sie"
 
-#: src/components/LoopSaveForm.vue src/components/PracticeExportControls.vue src/components/RecordingPanel.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue src/components/SetlistEditor.vue
+#: src/components/LoopSaveForm.vue src/components/PracticeExportControls.vue src/components/PrintToolbar.vue src/components/RecordingPanel.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue src/components/SetlistEditor.vue
 msgid "Cancel"
 msgstr "Abbrechen"
 
@@ -835,10 +867,6 @@ msgstr "Zählzeiten"
 #: src/components/NoteNameControls.vue
 msgid "Numbers on the beats, + between them; notes off that grid stay unlabelled."
 msgstr "Zahlen auf den Schlägen, + dazwischen; Noten außerhalb dieses Rasters bleiben ohne Zahl."
-
-#: src/components/NoteNameControls.vue src/components/TunerPanel.vue
-msgid "Off"
-msgstr "Aus"
 
 #: src/components/NoteNameControls.vue
 msgid "On my part"
@@ -1012,7 +1040,7 @@ msgstr "Je Stimme ein Coach-Track, für alle in einem Ordner mit Übe-Tracks neb
 msgid "“{name}” already exists."
 msgstr "„{name}“ gibt es schon."
 
-#: src/components/PracticeExportControls.vue
+#: src/components/PracticeExportControls.vue src/components/PrintToolbar.vue
 msgid "Replace"
 msgstr "Ersetzen"
 
@@ -1045,8 +1073,32 @@ msgid "Print"
 msgstr "Drucken"
 
 #: src/components/PrintToolbar.vue
+msgid "Save as PDF in Files"
+msgstr "Als PDF in Dateien speichern"
+
+#: src/components/PrintToolbar.vue
+msgid "Saved as {name} next to the score - the music only, without notes, stamps and note names."
+msgstr "Als {name} neben der Partitur gespeichert – nur das Notenbild, ohne Notizen, Stempel und Tonnamen."
+
+#: src/components/PrintToolbar.vue
+msgid "{name} already exists next to the score. Replace it?"
+msgstr "{name} liegt schon neben der Partitur. Ersetzen?"
+
+#: src/components/PrintToolbar.vue
+msgid "Could not be written into the PDF and left out: {list}"
+msgstr "Ließ sich nicht in die PDF schreiben und fehlt dort: {list}"
+
+#: src/components/PrintToolbar.vue
 msgid "Notes and stamps"
 msgstr "Notizen und Stempel"
+
+#: src/components/PrintToolbar.vue
+msgid "Writing the PDF: page {page} of {of}…"
+msgstr "PDF wird geschrieben: Seite {page} von {of}…"
+
+#: src/components/PrintToolbar.vue
+msgid "Saving the PDF…"
+msgstr "PDF wird gespeichert…"
 
 #: src/components/PrintToolbar.vue
 msgid "Converting in this browser: page {page} of {of}…"
@@ -1703,6 +1755,14 @@ msgstr "Wähle zuerst deine Stimme: Tippe auf das Stimmsymbol neben deiner Stimm
 #: src/components/ScoreViewer.vue
 msgid "My voice on the right, the others on the left"
 msgstr "Meine Stimme rechts, die anderen links"
+
+#: src/components/ScoreViewer.vue
+msgid "Only in the page view."
+msgstr "Nur in der Seitenansicht."
+
+#: src/components/ScoreViewer.vue
+msgid "Needs a page area at least {px} px wide - this one is narrower."
+msgstr "Braucht eine Notenfläche von mindestens {px} px Breite – diese ist schmaler."
 
 #: src/components/ScoreViewer.vue
 msgid "Band"

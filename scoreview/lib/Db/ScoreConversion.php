@@ -26,6 +26,12 @@ use OCP\AppFramework\Db\Entity;
  * @method void setBackend(?string $backend)
  * @method int getFormatVersion()
  * @method void setFormatVersion(int $formatVersion)
+ * @method ?string getTitle()
+ * @method void setTitle(?string $title)
+ * @method ?string getComposer()
+ * @method void setComposer(?string $composer)
+ * @method ?string getSearchText()
+ * @method void setSearchText(?string $searchText)
  * @method \DateTime getCreatedAt()
  * @method void setCreatedAt(\DateTime $createdAt)
  * @method \DateTime getUpdatedAt()
@@ -87,6 +93,15 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	 */
 	protected $backend;
 	protected $formatVersion;
+	/**
+	 * For the search provider (E17), from meta.json - see
+	 * ConversionService::searchFields(). NULL for a score without a title
+	 * and for rows from before the columns that the repair step could not
+	 * fill.
+	 */
+	protected $title;
+	protected $composer;
+	protected $searchText;
 	protected $createdAt;
 	protected $updatedAt;
 

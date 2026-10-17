@@ -180,4 +180,57 @@ class ConversionServiceTest extends TestCase {
 		$conversion->setUpdatedAt((new \DateTime())->setTimestamp($aktualisiertAm));
 		return $conversion;
 	}
+
+	// --- Search fields (E17) ------------------------------------------------
+
+	public function testSearchFieldsJoinTitleSubtitleComposerAndPoetInLowerCase(): void {
+		$fields = ConversionService::searchFields(json_encode([
+			'title' => 'Aequale  No. 1',
+			'subtitle' => '',
+			'composer' => 'Anton Bruckner',
+			'poet' => 'Ödön',
+			'pages' => 4,
+		]));
+
+		$this->assertSame('Aequale No. 1', $fields['title'], 'runs of white space become one');
+		$this->assertSame('Anton Bruckner', $fields['composer']);
+		$this->assertSame('aequale no. 1 anton bruckner ödön', $fields['searchText']);
+	}
+
+	public function testEmptyValuesAreNull(): void {
+		$fields = ConversionService::searchFields(json_encode(['title' => ' ', 'composer' => '', 'pages' => 1]));
+		$this->assertSame(['title' => null, 'composer' => null, 'searchText' => null], $fields);
+	}
+
+	public function testUnreadableMetaGivesNull(): void {
+		$this->assertSame(['title' => null, 'composer' => null, 'searchText' => null], ConversionService::searchFields('{broken'));
+		$this->assertNull(ConversionService::searchFields(json_encode(['title' => ['not', 'text']]))['title']);
+	}
+
+	public function testLongValuesAreCutByBytesWithoutBreakingACharacter(): void {
+		$fields = ConversionService::searchFields(json_encode(['title' => str_repeat('ü', 300), 'composer' => str_repeat('x', 2000)]));
+
+		$this->assertSame(254, strlen($fields['title']), '127 two-byte characters fit into 255 bytes');
+		$this->assertTrue(mb_check_encoding($fields['title'], 'UTF-8'));
+		$this->assertSame(255, strlen($fields['composer']));
+		$this->assertLessThanOrEqual(1024, strlen($fields['searchText']));
+	}
+
+	public function testMarkReadyFillsTheSearchColumns(): void {
+		$folder = $this->createMock(ISimpleFolder::class);
+		$folder->method('fileExists')->willReturn(false);
+		$folder->method('newFile')->willReturn($this->createMock(ISimpleFile::class));
+		$root = $this->createMock(ISimpleFolder::class);
+		$root->method('getFolder')->willReturn($folder);
+		$this->appData->method('getFolder')->willReturn($root);
+		$this->mapper->method('findAllByFileId')->willReturn([]);
+		$this->mapper->expects($this->once())->method('update')->with($this->callback(
+			fn (ScoreConversion $c) => $c->getTitle() === 'Ave' && $c->getComposer() === 'Bruckner' && $c->getSearchText() === 'ave bruckner',
+		));
+		$conversion = new ScoreConversion();
+		$conversion->setFileId(7);
+		$conversion->setEtag('e');
+
+		$this->service()->markReady($conversion, ['<svg/>'], 'MThd', '{}', '{}', json_encode(['title' => 'Ave', 'composer' => 'Bruckner']), 'local');
+	}
 }

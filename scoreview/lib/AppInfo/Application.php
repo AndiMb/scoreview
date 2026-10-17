@@ -16,6 +16,7 @@ use OCA\ScoreView\Listener\ScoreMimetypeListener;
 use OCA\ScoreView\Listener\UserDeletedListener;
 use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Middleware\DirectAccessMiddleware;
+use OCA\ScoreView\Search\ScoreSearchProvider;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -49,6 +50,9 @@ class Application extends App implements IBootstrap {
 	}
 
 	public function register(IRegistrationContext $context): void {
+		// Title and composer in the Nextcloud search (E17).
+		$context->registerSearchProvider(ScoreSearchProvider::class);
+
 		// NICHT ueber <background-jobs> in info.xml - das ist fuer periodische
 		// Jobs ohne eigenes Argument gedacht. ConvertScoreJob wird stattdessen
 		// hier ausgeloest, gezielt pro Datei, mit fileId/userId als Argument

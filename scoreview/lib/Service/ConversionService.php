@@ -134,8 +134,48 @@ class ConversionService {
 		$this->writeFile($folder, self::META_FILE, $metaJson);
 		$conversion->setBackend($backend);
 		$conversion->setFormatVersion(self::CURRENT_FORMAT_VERSION);
+		$this->applySearchFields($conversion, $metaJson);
 		$this->updateStatus($conversion, ScoreConversion::STATUS_READY);
 		$this->gcOldVersions($conversion->getFileId(), $conversion->getEtag());
+	}
+
+	/**
+	 * Title, composer and the searched text of a score (E17) from its
+	 * meta.json. Both server paths end in markReady() (E3), so this is the one
+	 * place that fills them; the repair step BackfillSearchText uses it for
+	 * the scores converted before. Cut by BYTES, not characters: a
+	 * VARCHAR(1024) is 1024 bytes on Oracle, and four-byte characters would
+	 * otherwise overflow it.
+	 *
+	 * @return array{title: ?string, composer: ?string, searchText: ?string}
+	 */
+	public static function searchFields(string $metaJson): array {
+		try {
+			$meta = json_decode($metaJson, true, 512, JSON_THROW_ON_ERROR);
+		} catch (\JsonException) {
+			$meta = null;
+		}
+		if (!is_array($meta)) {
+			return ['title' => null, 'composer' => null, 'searchText' => null];
+		}
+		$text = static function (string $key) use ($meta): string {
+			$value = $meta[$key] ?? '';
+			return is_string($value) ? trim(preg_replace('/\s+/u', ' ', $value) ?? '') : '';
+		};
+		$cut = static fn (string $value, int $bytes): ?string => $value === '' ? null : rtrim(mb_strcut($value, 0, $bytes, 'UTF-8'));
+		$parts = array_filter([$text('title'), $text('subtitle'), $text('composer'), $text('poet')], static fn (string $p) => $p !== '');
+		return [
+			'title' => $cut($text('title'), 255),
+			'composer' => $cut($text('composer'), 255),
+			'searchText' => $cut(mb_strtolower(implode(' ', $parts), 'UTF-8'), 1024),
+		];
+	}
+
+	public function applySearchFields(ScoreConversion $conversion, string $metaJson): void {
+		$fields = self::searchFields($metaJson);
+		$conversion->setTitle($fields['title']);
+		$conversion->setComposer($fields['composer']);
+		$conversion->setSearchText($fields['searchText']);
 	}
 
 	/** Siehe CURRENT_FORMAT_VERSION. */

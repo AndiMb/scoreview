@@ -109,7 +109,7 @@ side, a lyrics view of your own voice, note names on the notes, and scores
 with sound without a network via an offline page in the browser. "Follow me"
 takes everyone along to the next piece of the setlist.
 	]]></description>
-	<version>1.17.0</version>
+	<version>1.18.0</version>
 	<licence>agpl</licence>
 	<author mail="hauffe.andreas@googlemail.com">Andreas Hauffe</author>
 	<namespace>ScoreView</namespace>
@@ -144,6 +144,8 @@ takes everyone along to the next piece of the setlist.
 		<post-migration>
 			<step>OCA\ScoreView\Migration\RegisterScoreMimetype</step>
 			<step>OCA\ScoreView\Migration\GenerateCompanionSecret</step>
+			<!-- Only on update: a fresh install has no conversions yet. -->
+			<step>OCA\ScoreView\Migration\BackfillSearchText</step>
 		</post-migration>
 		<install>
 			<step>OCA\ScoreView\Migration\RegisterScoreMimetype</step>

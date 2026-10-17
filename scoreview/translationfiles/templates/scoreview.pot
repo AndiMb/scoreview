@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php
+#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php
 msgid "File not found or no access."
 msgstr ""
 
@@ -108,32 +108,40 @@ msgstr ""
 msgid "ScoreView offline"
 msgstr ""
 
-#: lib/Controller/PracticeTrackController.php
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
 msgid "Saving here is not possible from the mobile app."
+msgstr ""
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "You cannot save files in this folder."
+msgstr ""
+
+#: lib/Controller/PdfController.php
+msgid "This is not a PDF file."
+msgstr ""
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "A file with this name already exists."
+msgstr ""
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "Not enough storage space."
+msgstr ""
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "The file or folder is in use right now. Try again in a moment."
+msgstr ""
+
+#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
+msgid "Invalid file name or folder."
+msgstr ""
+
+#: lib/Controller/PdfController.php
+msgid "The PDF file is larger than allowed ({mb} MB)."
 msgstr ""
 
 #: lib/Controller/PracticeTrackController.php
 msgid "This is not an MP3 file."
-msgstr ""
-
-#: lib/Controller/PracticeTrackController.php
-msgid "A file with this name already exists."
-msgstr ""
-
-#: lib/Controller/PracticeTrackController.php
-msgid "You cannot save files in this folder."
-msgstr ""
-
-#: lib/Controller/PracticeTrackController.php
-msgid "Not enough storage space."
-msgstr ""
-
-#: lib/Controller/PracticeTrackController.php
-msgid "The file or folder is in use right now. Try again in a moment."
-msgstr ""
-
-#: lib/Controller/PracticeTrackController.php
-msgid "Invalid file name or folder."
 msgstr ""
 
 #: lib/Controller/PracticeTrackController.php
@@ -206,6 +214,10 @@ msgstr ""
 
 #: lib/Controller/SoundFontController.php
 msgid "The server could not provide the SoundFont. The ScoreView status in the administration settings shows why."
+msgstr ""
+
+#: lib/Search/ScoreSearchProvider.php
+msgid "Scores"
 msgstr ""
 
 #: lib/Service/HealthService.php
@@ -322,6 +334,10 @@ msgstr ""
 
 #: src/components/AdminSettings.vue
 msgid "Maximum size of one practice track (MB)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Maximum size of one PDF file (MB)"
 msgstr ""
 
 #: src/components/AdminSettings.vue
@@ -637,6 +653,10 @@ msgid "Layout"
 msgstr ""
 
 #: src/components/LayoutControls.vue
+msgid "Two pages side by side"
+msgstr ""
+
+#: src/components/LayoutControls.vue
 msgid "Pages"
 msgstr ""
 
@@ -646,6 +666,18 @@ msgstr ""
 
 #: src/components/LayoutControls.vue
 msgid "Lyrics only"
+msgstr ""
+
+#: src/components/LayoutControls.vue src/components/NoteNameControls.vue src/components/TunerPanel.vue
+msgid "Off"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "Page 1 on the left"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "Page 1 on the right"
 msgstr ""
 
 #: src/components/LeaderPanel.vue
@@ -784,7 +816,7 @@ msgstr ""
 msgid "Only singers of the chosen voices see it"
 msgstr ""
 
-#: src/components/LoopSaveForm.vue src/components/PracticeExportControls.vue src/components/RecordingPanel.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue src/components/SetlistEditor.vue
+#: src/components/LoopSaveForm.vue src/components/PracticeExportControls.vue src/components/PrintToolbar.vue src/components/RecordingPanel.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue src/components/SetlistEditor.vue
 msgid "Cancel"
 msgstr ""
 
@@ -834,10 +866,6 @@ msgstr ""
 
 #: src/components/NoteNameControls.vue
 msgid "Numbers on the beats, + between them; notes off that grid stay unlabelled."
-msgstr ""
-
-#: src/components/NoteNameControls.vue src/components/TunerPanel.vue
-msgid "Off"
 msgstr ""
 
 #: src/components/NoteNameControls.vue
@@ -1012,7 +1040,7 @@ msgstr ""
 msgid "“{name}” already exists."
 msgstr ""
 
-#: src/components/PracticeExportControls.vue
+#: src/components/PracticeExportControls.vue src/components/PrintToolbar.vue
 msgid "Replace"
 msgstr ""
 
@@ -1045,7 +1073,31 @@ msgid "Print"
 msgstr ""
 
 #: src/components/PrintToolbar.vue
+msgid "Save as PDF in Files"
+msgstr ""
+
+#: src/components/PrintToolbar.vue
+msgid "Saved as {name} next to the score - the music only, without notes, stamps and note names."
+msgstr ""
+
+#: src/components/PrintToolbar.vue
+msgid "{name} already exists next to the score. Replace it?"
+msgstr ""
+
+#: src/components/PrintToolbar.vue
+msgid "Could not be written into the PDF and left out: {list}"
+msgstr ""
+
+#: src/components/PrintToolbar.vue
 msgid "Notes and stamps"
+msgstr ""
+
+#: src/components/PrintToolbar.vue
+msgid "Writing the PDF: page {page} of {of}…"
+msgstr ""
+
+#: src/components/PrintToolbar.vue
+msgid "Saving the PDF…"
 msgstr ""
 
 #: src/components/PrintToolbar.vue
@@ -1702,6 +1754,14 @@ msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "My voice on the right, the others on the left"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Only in the page view."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Needs a page area at least {px} px wide - this one is narrower."
 msgstr ""
 
 #: src/components/ScoreViewer.vue

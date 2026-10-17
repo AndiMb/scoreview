@@ -58,4 +58,49 @@ class ScoreConversionMapper extends QBMapper {
 			->where($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)));
 		return $this->findEntities($qb);
 	}
+
+	/**
+	 * Ready conversions whose title, subtitle, composer or lyricist contain
+	 * the term (E17). Newest first, so that a page of hits shows what was
+	 * worked on last. One ready row per file: markReady() removes the older
+	 * versions of a file (gcOldVersions).
+	 *
+	 * Access is NOT checked here - the table knows files, not people. The
+	 * search provider resolves every hit in the searcher's own file tree and
+	 * drops what is not there.
+	 *
+	 * @return ScoreConversion[]
+	 */
+	public function search(string $term, int $limit, int $offset): array {
+		$qb = $this->db->getQueryBuilder();
+		// `%` and `_` in the term are literal characters, not wildcards.
+		$pattern = '%' . $this->db->escapeLikeParameter(mb_strtolower($term, 'UTF-8')) . '%';
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('status', $qb->createNamedParameter(ScoreConversion::STATUS_READY)))
+			->andWhere($qb->expr()->like('search_text', $qb->createNamedParameter($pattern)))
+			->orderBy('updated_at', 'DESC')
+			->addOrderBy('id', 'DESC')
+			->setMaxResults($limit)
+			->setFirstResult($offset);
+		return $this->findEntities($qb);
+	}
+
+	/**
+	 * Ready conversions from before the search columns, in id order - for
+	 * the repair step BackfillSearchText, which walks them in batches.
+	 *
+	 * @return ScoreConversion[]
+	 */
+	public function findReadyWithoutSearchText(int $afterId, int $limit): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('status', $qb->createNamedParameter(ScoreConversion::STATUS_READY)))
+			->andWhere($qb->expr()->isNull('search_text'))
+			->andWhere($qb->expr()->gt('id', $qb->createNamedParameter($afterId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'ASC')
+			->setMaxResults($limit);
+		return $this->findEntities($qb);
+	}
 }
