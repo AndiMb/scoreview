@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:99c3e7c22b7c -->
+<!-- translation-of: README.md sha256:200d294b5bff -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -22,13 +22,16 @@ Qualitätsverlust, Zoom-Presets, Vollbild, und ein Autoscroll, das den laufenden
 Takt im Sichtband hält – oder, abgeschaltet, die Ansicht dort lässt, wo man sie
 hingeschoben hat. Wie die klingende Stelle markiert wird, entscheidet
 jede Nutzerin selbst: eingefärbte Notenköpfe oder ein Band, in einer frei
-wählbaren Farbe.
+wählbaren Farbe. **Drucken** öffnet alle Seiten der Partitur in ihrem eigenen
+Seitenformat für den Druckdialog des Browsers – auf Papier oder als PDF, mit
+oder ohne die eigenen Notizen und Stempel, mit oder ohne Tonnamen.
 
 **Hören, was man üben will.** Die Wiedergabe wird im Browser synthetisiert, nicht
 als fertiges MP3 abgespielt. Deshalb lässt sich pro Stimme die Lautstärke regeln,
 stummschalten und solo hören, das Tempo in BPM ändern und ein Metronom
-zuschalten – auf jedem Schlag oder nur auf dem Taktanfang. „Meine Stimme" hebt
-eine Stimme hervor und lässt die übrigen leise mithörbar.
+zuschalten – auf jedem Schlag, nur auf dem Taktanfang oder mit einem leiseren
+Klick auf jedem Achtel. „Meine Stimme" hebt eine Stimme hervor und lässt die
+übrigen leise mithörbar.
 
 ![Mixer mit Lautstärke, Mute und Solo je Stimme](docs/img/mixer.de.png)
 
@@ -94,8 +97,9 @@ SoundFont neu geladen werden.
 **Sich selbst hören.** **Eigene Aufnahmen**, synchron zu Cursor und Begleitung
 abspielbar, hört nur, wer sie gemacht hat. Die **Rückmeldung zur Intonation**
 zeigt beim Singen eine Nadel am Cursor und danach die Stellen, die zu hoch oder
-zu tief waren. Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt
-zeigt wofür.
+zu tief waren. Das **Stimmgerät** zeigt den gesungenen Ton mit Oktave, Frequenz
+und Abweichung in Cent, geschrieben nach der Tonart an der aktuellen Stelle.
+Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt zeigt wofür.
 
 Das geht auch in den mobilen Nextcloud-Apps, mit wenigen Einschränkungen: Das
 Mikrofon gibt die Android-App nicht frei, dort führt „Im Browser öffnen“ weiter.
@@ -109,7 +113,7 @@ enden, steht in docs/limits.de.md unter
 und [Üben und Lesen auf dem Handy](docs/limits.de.md#üben-und-lesen-auf-dem-handy).
 
 Tastatur im Viewer: `Leertaste` Start/Stopp · `←` `→` Takt zurück/vor · `L` Loop
-· `+` `−` Zoom · `0` Seitenbreite · `Bild↓` `Bild↑` blättern.
+· `+` `−` Zoom · `0` Seitenbreite · `Bild↓` `Bild↑` blättern · `Strg+P` drucken.
 
 Oberfläche auf Deutsch und Englisch; weitere Sprachen sind willkommen (siehe
 [Mitarbeiten](#mitarbeiten)).

@@ -21,12 +21,16 @@ without loss of quality, zoom presets, full screen, and an autoscroll that keeps
 the current measure in the visible band – or, switched off, leaves the view
 where you put it. Each user decides how the sounding
 position is marked: coloured noteheads or a band, in a colour of their choice.
+**Print** opens every page of the score in its own page format for the
+browser's print dialog – on paper or as a PDF, with or without your notes and
+stamps, with or without note names.
 
 **Hearing what you want to practice.** Playback is synthesized in the browser,
 not played from a finished MP3. That is why you can adjust the volume of each
 part, mute it or hear it solo, change the tempo in BPM and switch on a
-metronome – on every beat or only on the downbeat. "My voice" brings one part
-to the front and keeps the others quietly audible.
+metronome – on every beat, only on the downbeat, or with a quieter click on
+every eighth. "My voice" brings one part to the front and keeps the others
+quietly audible.
 
 ![Mixer with volume, mute and solo per part](docs/img/mixer.png)
 
@@ -91,8 +95,10 @@ zoom or load the SoundFont again.
 **Hearing yourself.** **Own recordings**, playable in sync with the cursor and
 accompaniment, can only be heard by the person who made them. **Intonation
 feedback** shows a needle at the cursor while you sing and afterwards the spots
-that were too sharp or too flat. The microphone only runs when explicitly
-requested, and a red dot shows what for.
+that were too sharp or too flat. The **tuner** shows the note you are singing
+with its octave, frequency and deviation in cents, spelled for the key at the
+current position. The microphone only runs when explicitly requested, and a
+red dot shows what for.
 
 This also works in the Nextcloud mobile apps, with a few limitations: the
 Android app does not grant access to the microphone; there, "Open in browser"
@@ -106,7 +112,7 @@ the features cost and where they end is described in docs/limits.md under
 and [Practising and reading on a phone](docs/limits.md#practising-and-reading-on-a-phone).
 
 Keyboard in the viewer: `Space` play/stop · `←` `→` previous/next measure · `L` loop
-· `+` `−` zoom · `0` page width · `PgDn` `PgUp` turn pages.
+· `+` `−` zoom · `0` page width · `PgDn` `PgUp` turn pages · `Ctrl+P` print.
 
 Interface in English and German; more languages are welcome (see
 [Contributing](#contributing)).

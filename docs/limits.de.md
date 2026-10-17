@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:65e5e41bcf4b -->
+<!-- translation-of: limits.md sha256:4edddbb5fb69 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -103,6 +103,14 @@ Wiederholungen und Volten funktionieren gemessen korrekt.
 **Große Partituren.** Orchesterpartituren sind nicht gemessen. Die
 Server-Messreihe oben stammt von Chorsätzen bis fünf Seiten; im Browser ist
 zusätzlich ein 28-seitiger Chorsatz gemessen.
+
+**Metronom ohne Taktart.** Die Artefakte tragen keine Taktart je Takt; das
+Metronom schätzt die Schläge eines Taktes aus seiner Dauer und dem
+Viertel-Tempo und teilt den Takt gleichmäßig. „Achtel“ halbiert jeden
+geschätzten Schlag. In zusammengesetzten Taktarten (6/8, 9/8) fallen die
+Klicks deshalb auf die Achtel, die lauteren aber auf jedes zweite Achtel statt
+auf die punktierten Viertel; ein Auftakt bekommt so viele Schläge, wie in
+seine Länge passen.
 
 **Die Bedienung auf Telefonbreite.** Dass der Viewer in den mobilen Apps
 überhaupt läuft, ist gemessen (siehe unten). Die Bedienleiste ist auf
@@ -380,7 +388,17 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   ersten **100 ms** jeder Note (`skipAttackMs`); ob das für Laienstimmen
   reicht, steht aus.
 - **Die Referenzstimmung ist fest: a' = 440 Hz.** Ein Chor, der als Ganzes
-  absinkt, wird gegen 440 bewertet, nicht gegen sich selbst.
+  absinkt, wird gegen 440 bewertet, nicht gegen sich selbst. Das Stimmgerät
+  nutzt dieselbe Referenz.
+- **Das Stimmgerät zeigt eine Stimme.** Es nutzt dieselbe Analyse wie die
+  Intonation (Median über 120 ms, höchstens zwölfmal je Sekunde erneuert); ein
+  Signal ohne klare Tonhöhe – zwei Stimmen, Atem, ein Akkord – zeigt nichts
+  statt einer Schätzung, und nach 300 ms Stille erlischt die Anzeige. Die
+  Note wird nach der Tonart an der aktuellen Stelle so geschrieben, wie
+  MuseScore sie schriebe (in F-Dur B, in G-Dur Fis). Geprüft mit synthetischen
+  Signalen, noch nicht mit einer echten Stimme am Handy
+  ([Offene Prüfungen](#offene-prüfungen)). In der Android-App nicht verfügbar,
+  wie alles, was das Mikrofon braucht.
 - **Oktaven werden gefaltet.** Ein Tenor, der die Altstimme eine Oktave tiefer
   singt, singt sie richtig; eine Oktave daneben fällt also nicht auf.
 - **Farbige Notenköpfe nur auf dem lokalen Konvertierungsweg**, und nur, wo
@@ -457,7 +475,11 @@ Umgesetzt und im Browser geprüft, aber **nicht am Gerät**:
   Fenster nur gegen eine nachgebaute `navigator.wakeLock` geprüft;
 - eine ganze Probe mit echten Stimmen, echtem WLAN und `notify_push`;
 - die Geräteabnahme der Übe- und Lesefunktionen am Galaxy S23, siehe
-  [Am Gerät offen](#am-gerät-offen).
+  [Am Gerät offen](#am-gerät-offen);
+- das Stimmgerät mit einer echten Stimme am Galaxy S23 und die
+  Metronom-Unterteilungen über Bluetooth;
+- der Druck aus Safari auf iPadOS („Teilen → Drucken“): ob der Dialog das
+  Seitenformat aus der Partitur übernimmt und ohne leeres letztes Blatt endet.
 
 ## Üben und Lesen auf dem Handy
 
@@ -544,6 +566,42 @@ mehrere Minuten ist nicht gemessen.
   Stimmen zuordnen lassen; sonst stehen Namen an allen Zeilen.
 - **Passt die Zahl der Köpfe eines Segments nicht zur Liste**, bleibt dieses
   Segment ohne Namen und ohne Ton beim Antippen, statt falsche zu zeigen.
+
+### Drucken
+
+Die Druckseite hält alle Seiten einer Partitur zugleich und überlässt den Rest
+dem Druckdialog des Browsers
+([E16](architecture.md#e16-drucken-aus-den-seiten-svgs)). Gemessen in einem
+Desktop-Chromium:
+
+| Partitur | Seiten | SVG gesamt | DOM-Knoten | Bereit | PDF | PDF-Größe | Speicher des Tabs |
+|---|---|---|---|---|---|---|---|
+| Chorsatz | 4 | 0,8 MB | 9 900 | 0,7 s | 0,4 s | 0,9 MB, 4 Seiten, A4 | +60 MB |
+| Chorsatz | 28 | 3,2 MB | 33 000 | 0,5 s (Artefakte im Cache) | 0,5 s | 0,8 MB, 28 Seiten | +150 MB |
+
+Die PDF hält die Noten als Vektorpfade – in keiner der beiden Dateien fanden
+sich Bildobjekte. Abgeleitet: rund 5 MB Speicher je Seite; eine Obergrenze gibt
+es nicht, eine 100-seitige Partitur sollte deutlich unter 1 GB bleiben.
+
+- **Nur im Browser, mit Sitzung.** Die mobilen Apps drucken über „Im Browser
+  öffnen“; die Offline-Seite hat keinen Druckknopf – ihr Service Worker
+  deckt die Druckseite nicht ab.
+- **Wo der Browser konvertiert** ([Konvertierung im Browser](#konvertierung-im-browser)),
+  konvertiert die Druckseite die Partitur erneut: Auf diesem Weg gibt es
+  keinen Cache, und die Engine (rund 7 MB) wird je Browser einmal geladen.
+- **Seitenformat aus der Partitur.** `@page` nimmt die Größe aus `meta.json`;
+  das Blatt ist so breit wie die Seite der Partitur, ohne Browserränder.
+  Chromium hält sich daran. Ob Safari auf iPadOS das Seitenformat von der
+  Seite übernimmt, ist **ungeprüft** ([Offene Prüfungen](#offene-prüfungen)).
+- **Gedruckt wird nichts, bevor jedes Blatt geladen ist**; der Druckknopf
+  bleibt bis dahin gesperrt.
+- **Notizen und Stempel sind voreingestellt aus** und werden je Druck
+  eingeschaltet; „Tonnamen“ folgt der Einstellung des Viewers, und „nur meine
+  Stimme“ braucht Notenzeilen, die sich Stimmen zuordnen lassen, wie im
+  Viewer. Die Blätter sind immer hell, gleich welches Notenthema der
+  Bildschirm zeigt.
+- **Was auch der Viewer nicht aufs Papier bringt:** Cursor, Loop-Marken, die
+  Hervorhebung von „meine Stimme“, Intonationsfarben.
 
 ### Offline
 

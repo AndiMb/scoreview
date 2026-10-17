@@ -4,6 +4,35 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.0] – 2026-10-17
+
+### Added
+
+- **Printing.** “Print” in the View group (or `Ctrl`/`Cmd+P` in the viewer)
+  opens a print page that holds every page of the score in the score's own
+  page format, ready for the browser's print dialog – “Save as PDF” keeps the
+  notation as vectors. Notes, note texts and stamps go on paper on request,
+  placed exactly as on screen; note names follow the viewer setting. The page
+  converts in the browser where the server cannot, like the viewer.
+- **Metronome subdivisions.** Besides “Every beat” and “Downbeat only”,
+  “Eighth notes” adds a quieter click between the beats – in the viewer and in
+  practice tracks saved with the metronome.
+- **Tuner.** Under Practice, next to recording and intonation: the sounding
+  note with octave, frequency and deviation in cents on a needle, named in
+  the note-name system of the viewer and spelled for the key at the current
+  position. Reference a′ = 440 Hz. It hangs on the administration's
+  “Intonation” switch and runs on the shared microphone chain, storing
+  nothing.
+
+### Changed
+
+- Keyboard shortcuts without a modifier no longer react while `Ctrl` or `Cmd`
+  is held – `Ctrl+L` now reaches the browser's address bar instead of toggling
+  the loop.
+- The viewer's Content Security Policy directives live in one place
+  (`Service\ViewerPolicy`), shared by the Files page, the offline page and
+  the print page.
+
 ## [1.15.1] – 2026-10-17
 
 ### Fixed

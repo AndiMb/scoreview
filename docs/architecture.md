@@ -82,12 +82,15 @@ nie als Weg ([E15](#e15-fähigkeiten-statt-weg)).
 
 ### HTTP-API
 
-Die Routen stehen in `scoreview/appinfo/routes.php` und liegen bis auf drei
+Die Routen stehen in `scoreview/appinfo/routes.php` und liegen bis auf vier
 unter `/apps/scoreview/api/`. Die App hat bewusst **keinen Einstieg in
 Partituren außerhalb von Files** und keinen Navigationseintrag;
-`/apps/scoreview/` antwortet 404. Die einzige eigene Seite ist die
-Offline-Seite unter `/apps/scoreview/offline`, und die zeigt nur, was vorher
-in Files vorgemerkt wurde ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)).
+`/apps/scoreview/` antwortet 404. Eigene Seiten gibt es zwei, und keine ist
+ein Einstieg: die Offline-Seite unter `/apps/scoreview/offline` zeigt nur, was
+vorher in Files vorgemerkt wurde
+([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)); die Druckseite
+unter `/apps/scoreview/print/{fileId}` wird aus dem Viewer heraus geöffnet
+([E16](#e16-drucken-aus-den-seiten-svgs)).
 Eingestiegen wird auf vier Wegen, und alle vier zeigen **dieselbe Komponente**:
 
 1. **Nextclouds Viewer**, am Mimetype `application/x-musescore` – der
@@ -139,6 +142,7 @@ Route mit Token annimmt; Einzelheiten in
 | `POST /api/settings` | Admin-Einstellungen speichern | – |
 | `GET /api/health`, `POST /api/selftest` | Betriebsdiagnose, Sidecar-Selbsttest (nur Admins) | – |
 | `GET /offline`, `GET /offline/sw.js`, `GET /offline/manifest.webmanifest` | Offline-Seite, ihr Service Worker und ihr Web-App-Manifest ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)); Worker und Manifest **ohne Anmeldung** – statischer Code ohne Daten, den der Browser beim Aktualisieren ohne Sitzung holt | – |
+| `GET /print/{fileId}` | Die Druckseite: alle Seiten einer Partitur für den Druckdialog des Browsers ([E16](#e16-drucken-aus-den-seiten-svgs)); 404 für jede Datei außerhalb des eigenen Dateibaums | – |
 
 Der Statusendpunkt trägt zusätzlich `canWriteFolder`: ob die Person neben der
 Partitur anlegen darf. Daran hängt, ob der Viewer „Tracks für alle Stimmen“
@@ -644,7 +648,7 @@ Tipp, der nie losgelassen wird, endet nach 8 s von selbst.
 ### Mikrofon
 
 `useMicrophone.js` ist **die einzige Stelle mit `getUserMedia`**. Aufnahme,
-Intonation und (vorgesehen) Mitverfolgen melden sich dort an und ab; solange
+Intonation, Stimmgerät und (vorgesehen) Mitverfolgen melden sich dort an und ab; solange
 niemand angemeldet ist, ist das Mikrofon ganz aus, und die Anzeige des Browsers
 erlischt. Ein roter Punkt in der Leiste (`MicIndicator.vue`) zeigt, wofür es
 gerade läuft, und schaltet es mit einem Tipp für alle ab. Echounterdrückung,
@@ -658,7 +662,8 @@ ab; ändert sie das, geht es ohne Zutun. Bis dahin führt der Knopf „Im Browse
 öffnen“ dorthin, wo es geht.
 
 **Der Aufnahmeweg ist strukturell getrennt ([S7](#s7-der-aufnahmeweg-ist-strukturell-getrennt)).** Blöcke aus dem Worklet
-bekommen nur Aufnahme und Intonation (`mayUseCapturePath`). Ein
+bekommen nur Aufnahme, Intonation und Stimmgerät (`mayUseCapturePath`); das
+Stimmgerät liest sie und schreibt nichts. Ein
 Mitverfolgen bekäme die Quelle für eigene Analyser, aber keine Blöcke – es
 kann also nichts speichern, auch nicht durch einen Fehler im Aufrufer.
 
@@ -690,6 +695,18 @@ Notenköpfe färben sich nur, wo das SVG `st-`/`vc-` trägt
 ([M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)) und
 sich Notenzeilen den Stimmen zuordnen lassen; sonst bleibt es bei Nadel und
 Problemliste.
+
+**Das Stimmgerät** (`useTuner.js`, `tuner.js`) nimmt dieselbe Kette – Blöcke
+in denselben Worker, Rahmen zurück –, hat aber keine Sollnote: Es faltet auf
+die nächste Note, nicht auf die Oktave, denn ein Stimmgerät zeigt die Oktave.
+Der Median über die letzten 120 ms hält die Nadel durch Vibrato hindurch
+ruhig; ein Signal ohne klare Tonhöhe (zwei Stimmen, Atem) zeigt nichts statt
+einer Schätzung. Benannt wird die Note nach dem Tonnamen-System der Person
+und der Tonart an der aktuellen Stelle (`tpcForPitch`: die Schreibweise, die
+MuseScore selbst wählte – in F-Dur B, nicht Ais). Der Referenzton ist dieselbe
+Konstante wie bei der Intonation (`A4_HZ`), damit beide gemeinsam einstellbar
+werden können. Das Stimmgerät hängt am Schalter „Intonation“ der Verwaltung:
+dieselbe Analyse, dieselbe Mikrofonfrage.
 
 **Die Berechtigungsrichtlinie.** Nextcloud schickt jede Seite mit
 `Feature-Policy: … microphone 'none'`, und `getUserMedia` scheitert dort, bevor
@@ -1308,10 +1325,12 @@ dafür bewusst **nicht** als Direct Editor an – es erschiene sonst bei jeder
 Markdown-Datei. Mobil öffnet eine Setliste deshalb über eine ihrer Partituren
 (siehe [E11](#e11-die-setliste-als-markdown-datei)).
 
-**Eine eigene Seite gibt es genau eine: `/apps/scoreview/offline`.** Sie zeigt
-nur, was in Files vorgemerkt wurde, und ist kein zweiter Einstieg in
-Partituren; `/apps/scoreview/` antwortet weiterhin 404. Warum es sie trotzdem
-braucht, steht in [E14](#e14-eine-offline-seite-mit-eigenem-service-worker).
+**Eigene Seiten gibt es zwei, und keine ist ein Einstieg.**
+`/apps/scoreview/offline` zeigt nur, was in Files vorgemerkt wurde
+([E14](#e14-eine-offline-seite-mit-eigenem-service-worker));
+`/apps/scoreview/print/{fileId}` wird aus dem Viewer heraus geöffnet und hat
+keine Navigation ([E16](#e16-drucken-aus-den-seiten-svgs)).
+`/apps/scoreview/` antwortet weiterhin 404.
 
 ### E7: Konvertierung im Browser als Rückfall
 
@@ -1359,7 +1378,7 @@ wird nur, wo es nichts gibt.
 | Cache | **keiner.** Jedes Gerät und jedes Öffnen rechnet neu; im Browser bleibt nur ein Sitzungscache mit einem Eintrag |
 | Vorab-Konvertierung | entfällt – es gibt nichts vorzubereiten |
 | `occ`-Selbsttest | prüft weiterhin nur die Serverwege |
-| CSP | `blob:` in `worker-src` und `connect-src`, begrenzt auf `/apps/files` und nur solange der Rückfall greift (`Listener\AddCspListener`) |
+| CSP | `blob:` in `worker-src` und `connect-src`, begrenzt auf `/apps/files` und nur solange der Rückfall greift (`Listener\AddCspListener`, die Direktiven selbst in `Service\ViewerPolicy` – dieselben für Offline- und Druckseite) |
 | App-Paket | rund 40 KB. Wasm und Ressourcenpaket liegen ohnehin für den Node-Weg darin – ausgeliefert wird zusätzlich nur der Browser-Glue |
 
 **Warum keine Zeile im Viewer.** Der Vertrag ist der Körper von `onReady()`,
@@ -2099,6 +2118,56 @@ Weg. Nicht verfügbare Optionen sind in der Auswahl ausgegraut und nennen den
 Grund; ist die gewählte Darstellung bei einer Partitur nicht verfügbar, zeigt
 der Viewer die Seiten mit einer Hinweisleiste, und die Wahl bleibt
 gespeichert.
+
+### E16: Drucken aus den Seiten-SVGs
+
+Wer vom Bildschirm aufs Papier will, soll die Partitur so bekommen, wie der
+Viewer sie zeigt – im Seitenformat der Partitur, auf Wunsch mit Notizen,
+Stempeln und Tonnamen.
+
+**Warum eine eigene Seite.** Der Viewer in Files lädt Seiten erst, wenn sie
+in die Nähe des Sichtbereichs kommen, und gibt sie wieder frei, wenn sie weit
+draußen sind (`ScorePage.vue`, `IntersectionObserver`) – eine Orchesterpartitur
+hielte sonst zehntausende `<path>`-Knoten zugleich im DOM. Der Druckbefehl des
+Browsers auf der Files-Seite druckte also die zwei, drei Seiten, die gerade
+geladen sind, samt Nextclouds Rahmen. Die Druckseite `/apps/scoreview/print/{fileId}`
+(`PageController::print`, `PrintApp.vue`) hält **alle** Seiten einer Partitur
+zugleich und sonst nichts; der Viewer öffnet sie in einem neuen Tab („Drucken“
+in der Gruppe „Ansicht“, `Ctrl`/`Cmd+P`). Sie ist kein zweiter Einstieg in
+Partituren: Sie hat keine Navigation, verlangt eine Sitzung und die Datei muss
+im eigenen Dateibaum liegen – 404 vor allem anderen
+([S8](#s8-404-vor-403)). Ein Token-Zugang ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps))
+wäre eine neue Fläche ohne Nutzen: Die Apps drucken über „Im Browser öffnen“.
+
+**Dieselbe Komponente, ein Prop.** Jede Seite zeichnet `ScorePage.vue` mit
+`printSheet`: sofort geladen, nie freigegeben, ohne Cursor und
+Zeigerbehandlung. Marker, Notiztexte, Stempel (`stampLayout.js`) und Tonnamen
+(`noteLabelLayout.js`) werden von **demselben Code** gesetzt wie am
+Bildschirm – der Druck zeigt, was der Bildschirm zeigt. Eine zweite
+Platzierungslogik fürs Papier wäre die erste Abweichung. Die Breite des
+Blatts kommt aus `meta.json` (`pageFormat`, in mm, auf beiden Wegen); daraus
+entstehen `@page { size }` und die Zoomstufe, mit der die Seite genau so breit
+ist wie das Blatt (`printLayout.js`). Ränder setzt die Seite keine: MuseScores
+Seitensatz trägt sie schon ([E2](#e2-musescore-svg-statt-neusatz-im-browser)).
+
+**Derselbe Weg zu den Artefakten.** Die Seite holt die Artefakte über
+`useConversionStatus` – Serverweg oder Rückfall im Browser, dasselbe eine `if`
+([E7](#e7-konvertierung-im-browser-als-rückfall)), hier keines. Deshalb trägt
+sie dieselbe Content Security Policy wie der Viewer, und zwar aus **einer**
+Stelle: `Service\ViewerPolicy` nennt die Direktiven, die der Viewer über
+Nextclouds Vorgabe hinaus braucht (`wasm-unsafe-eval`, Worker und Verbindungen
+aus `blob:`, der SoundFont-Host), und `Listener\AddCspListener`, die
+Offline-Seite und die Druckseite rufen sie. Vorher stand die Liste zweimal; die
+dritte Kopie wäre die gewesen, die abweicht.
+
+**Kein Server-PDF.** Keiner der beiden Konvertierungswege kann eines schreiben
+([E3](#e3-zwei-konvertierungswege-hinter-einer-api): die Engine hat kein Qt,
+der Sidecar schriebe es nur auf einem Weg). Der Druckdialog des Browsers macht
+es: „Als PDF speichern“ hält die SVG-Pfade als Vektoren (gemessen, siehe
+[Grenzwerte](limits.de.md#drucken)). Was die Seite deshalb bewusst **nicht**
+tut: drucken, bevor jedes Blatt geladen ist – der Knopf bleibt gesperrt, bis
+jede `ScorePage` `loaded` gemeldet hat; sonst druckt jemand nach dem ersten
+Blick eine halbe Partitur.
 
 ## Formatgrundlagen
 

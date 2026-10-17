@@ -107,6 +107,13 @@ repeats and voltas were measured to work correctly.
 measurement series above comes from choral pieces of up to five pages; in the
 browser, a 28-page choral piece was measured as well.
 
+**Metronome without a time signature.** The artifacts carry no time signature
+per measure; the metronome estimates the beats of a measure from its length
+and the quarter-note tempo, dividing the measure evenly. “Eighth notes” halves
+every estimated beat. In compound metres (6/8, 9/8) the clicks therefore fall
+on the eighths, but the louder ones on every second eighth rather than on the
+dotted-quarter beats; a pickup measure gets as many beats as fit its length.
+
 **Operation at phone width.** That the viewer runs in the mobile apps at all
 has been measured (see below). At phone width the control bar is a single row –
 play, measure field, starting note, lock and “Tools”, with everything else in
@@ -381,7 +388,16 @@ re-measured on real devices and with real input latency.
   **100 ms** of each note (`skipAttackMs`); whether that is enough for amateur
   voices is still open.
 - **The reference pitch is fixed: a' = 440 Hz.** A choir that sinks as a whole
-  is judged against 440, not against itself.
+  is judged against 440, not against itself. The tuner uses the same
+  reference.
+- **The tuner shows one voice.** It uses the same analysis as intonation
+  (median over 120 ms, refreshed at most 12 times per second); a signal
+  without a clear pitch – two voices, breath, a chord – shows nothing rather
+  than a guess, and the reading clears after 300 ms of silence. The note is
+  spelled for the key at the current position the way MuseScore would spell
+  it (in F major B♭, in G major F♯). Checked with synthetic signals, not yet
+  with a real voice on a phone ([Open checks](#open-checks)). Not available in
+  the Android app, like everything that needs the microphone.
 - **Octaves are folded.** A tenor singing the alto part an octave lower sings
   it correctly; an octave off therefore goes unnoticed.
 - **Coloured note heads only on the local conversion path**, and only where
@@ -461,7 +477,11 @@ Implemented and checked in the browser, but **not on a device**:
   window, only checked against a mocked `navigator.wakeLock`;
 - a whole rehearsal with real voices, real Wi-Fi and `notify_push`;
 - the device acceptance of the practising and reading features on the
-  Galaxy S23, see [Open on the device](#open-on-the-device).
+  Galaxy S23, see [Open on the device](#open-on-the-device);
+- the tuner with a real voice on the Galaxy S23, and the metronome
+  subdivisions over Bluetooth;
+- printing from Safari on iPadOS (“Share → Print”): whether the dialog takes
+  the page size from the score and ends without an empty last sheet.
 
 ## Practising and reading on a phone
 
@@ -545,6 +565,41 @@ plays with controls. A lock lasting several minutes has not been measured.
 - **If the number of note heads in a segment does not match the list**, that
   segment stays without names and without sound on tapping, rather than
   showing wrong ones.
+
+### Printing
+
+The print page holds every page of a score at once and leaves the rest to the
+browser's print dialog
+([E16](architecture.md#e16-drucken-aus-den-seiten-svgs) (German)). Measured in
+a desktop Chromium:
+
+| Score | Pages | SVG total | DOM nodes | Ready | PDF | PDF size | Memory of the tab |
+|---|---|---|---|---|---|---|---|
+| Choral piece | 4 | 0.8 MB | 9 900 | 0.7 s | 0.4 s | 0.9 MB, 4 pages, A4 | +60 MB |
+| Choral piece | 28 | 3.2 MB | 33 000 | 0.5 s (artifacts cached) | 0.5 s | 0.8 MB, 28 pages | +150 MB |
+
+The PDF keeps the notation as vector paths – no image objects were found in
+either file. Derived: about 5 MB of memory per page; no page limit is set, a
+100-page score should stay well under 1 GB.
+
+- **Only in the browser, with a session.** The mobile apps print through
+  “Open in browser”; the offline page has no print button – its service
+  worker does not cover the print page.
+- **Where the browser converts** ([Conversion in the browser](#conversion-in-the-browser)),
+  the print page converts the score again: there is no cache on that path,
+  and the engine download (about 7 MB) happens once per browser.
+- **Page format from the score.** `@page` takes the size from `meta.json`;
+  the sheet is as wide as the score's page, without browser margins. Chromium
+  honours this. Whether Safari on iPadOS takes the page size from the page
+  is **unchecked** ([Open checks](#open-checks)).
+- **Nothing prints before every sheet has loaded**; the Print button stays
+  locked until then.
+- **Notes and stamps are off by default** and switch on per print; “Note
+  names” follows the viewer setting, and “only my part” needs staves that
+  map to parts, as in the viewer. The sheets are always light, whatever the
+  note theme on screen.
+- **What the viewer does not show on paper either:** the cursor, loop
+  markers, the highlight of “my part”, intonation colours.
 
 ### Offline
 
