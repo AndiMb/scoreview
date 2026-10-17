@@ -317,6 +317,26 @@ class AnnotationServiceTest extends TestCase {
 		$this->assertTrue($data['byLeader']);
 	}
 
+	public function testEinLoopHaeltSeinEndeUndIstOhneSeinEndeVerwaist(): void {
+		$this->mapper->expects($this->once())->method('insert')->willReturnArgument(0);
+
+		$a = $this->service->create(42, 'alice', 12, 0.0, null, null, 'Refrain', Annotation::VISIBILITY_PRIVATE,
+			Annotation::KIND_LOOP, null, null, false, 20);
+
+		$this->assertSame(Annotation::KIND_LOOP, $a->getKind());
+		$this->assertSame(20, $a->getEndMeasure());
+		$this->assertSame(20, $a->jsonSerialize()['endMeasure']);
+		$this->assertFalse($this->service->serialize($a, 'alice', 20)['orphaned']);
+		$this->assertTrue($this->service->serialize($a, 'alice', 19)['orphaned']);
+	}
+
+	public function testEinEndtaktZaehltNurFuerLoops(): void {
+		$this->mapper->method('insert')->willReturnArgument(0);
+		$a = $this->service->create(42, 'alice', 1, 0.0, null, null, 'Notiz', Annotation::VISIBILITY_PRIVATE,
+			Annotation::KIND_TEXT, null, null, false, 9);
+		$this->assertNull($a->getEndMeasure());
+	}
+
 	public function testAnDerObergrenzeWirdNichtsMehrAngelegt(): void {
 		$this->mapper->method('countByFileAndUser')->with(42, 'alice')->willReturn(AnnotationService::MAX_PER_USER_AND_FILE);
 		$this->mapper->expects($this->never())->method('insert');

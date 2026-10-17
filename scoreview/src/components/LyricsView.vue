@@ -16,7 +16,8 @@
 		<section
 			v-for="block in blocks"
 			:key="block.key"
-			class="scoreview-lyrics-block">
+			class="scoreview-lyrics-block"
+			:class="{ 'scoreview-lyrics-block--dimmed': focusKeys !== null && !focusKeys.has(block.key) }">
 			<p
 				v-for="verse in block.verses"
 				:key="verse.verse"
@@ -100,6 +101,14 @@ export default {
 		follow: {
 			type: Boolean,
 			required: true,
+		},
+
+		// Focus on the loop (B4): the block keys (lib/loopFocus.js
+		// loopSystemKeys) the loop touches - the other blocks step back.
+		// null = no focus.
+		focusKeys: {
+			type: Set,
+			default: null,
 		},
 	},
 
@@ -322,6 +331,10 @@ export default {
 .scoreview-lyrics-block {
 	padding: 10px 0;
 	border-bottom: 1px solid var(--color-border, #ddd);
+}
+
+.scoreview-lyrics-block--dimmed {
+	opacity: 0.35;
 }
 
 .scoreview-lyrics-verse {

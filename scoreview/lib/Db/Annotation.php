@@ -38,6 +38,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setTargetParts(?string $targetParts)
  * @method ?bool getByLeader()
  * @method void setByLeader(?bool $byLeader)
+ * @method ?int getEndMeasure()
+ * @method void setEndMeasure(?int $endMeasure)
  */
 class Annotation extends Entity implements \JsonSerializable {
 	public const VISIBILITY_PRIVATE = 'private';
@@ -54,6 +56,12 @@ class Annotation extends Entity implements \JsonSerializable {
 
 	public const KIND_TEXT = 'text';
 	public const KIND_STAMP = 'stamp';
+	/**
+	 * A saved loop (B5): measure_number is its first measure, end_measure
+	 * its last, content its name. Everything else a note has - visibility,
+	 * target parts, the anchor surviving a re-upload - a loop has too.
+	 */
+	public const KIND_LOOP = 'loop';
 
 	/**
 	 * Die Stempel als feste Liste: Der Client zeichnet jedes Symbol
@@ -91,10 +99,13 @@ class Annotation extends Entity implements \JsonSerializable {
 	/** JSON `[{id, name}]`, roh wie in der Spalte - ausgewertet wird im Service. */
 	protected $targetParts;
 	protected $byLeader = false;
+	/** Last measure of a saved loop (Migration Version000100Date20261017120000); null for notes and stamps. */
+	protected $endMeasure;
 
 	public function __construct() {
 		$this->addType('fileId', 'integer');
 		$this->addType('measureNumber', 'integer');
+		$this->addType('endMeasure', 'integer');
 		$this->addType('fraction', 'float');
 		$this->addType('elid', 'integer');
 		$this->addType('createdAt', 'datetime');
@@ -116,6 +127,7 @@ class Annotation extends Entity implements \JsonSerializable {
 			'visibility' => $this->visibility,
 			'kind' => $this->kind ?? self::KIND_TEXT,
 			'stamp' => $this->stamp,
+			'endMeasure' => $this->endMeasure,
 			'targetParts' => $this->decodedTargetParts(),
 			// Beim Anlegen festgehalten, nicht bei jeder Anzeige neu
 			// geprueft: Eine abberufene Leitung behaelt ihre Hinweise.

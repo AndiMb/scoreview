@@ -116,7 +116,7 @@ class AnnotationController extends Controller {
 	// RateLimitingMiddleware anonym sind (wie bei den Aufnahmen).
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[AnonRateLimit(limit: 60, period: 60)]
-	public function create(int $fileId, int $measureNumber, float $fraction, string $content = '', ?int $elid = null, ?string $anchorEtag = null, string $visibility = Annotation::VISIBILITY_PRIVATE, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?array $targetParts = null): JSONResponse {
+	public function create(int $fileId, int $measureNumber, float $fraction, string $content = '', ?int $elid = null, ?string $anchorEtag = null, string $visibility = Annotation::VISIBILITY_PRIVATE, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?array $targetParts = null, ?int $endMeasure = null): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
 		if ($node === null || $userId === null) {
@@ -125,14 +125,27 @@ class AnnotationController extends Controller {
 		// Ein unbekannter Typ wird zur Textnotiz - der engere Fall: Sie
 		// braucht Text, ein Tippfehler endet also als 400 statt als Stempel
 		// ohne Bild.
-		$kind = $kind === Annotation::KIND_STAMP ? Annotation::KIND_STAMP : Annotation::KIND_TEXT;
-		$fehler = ($kind === Annotation::KIND_STAMP ? $this->validateStamp($stamp, $content) : $this->validateContent($content))
-			?? $this->validateAnchorEtag($anchorEtag);
+		$kind = in_array($kind, [Annotation::KIND_STAMP, Annotation::KIND_LOOP], true) ? $kind : Annotation::KIND_TEXT;
+		$fehler = match ($kind) {
+			Annotation::KIND_STAMP => $this->validateStamp($stamp, $content),
+			Annotation::KIND_LOOP => $this->validateLoop($measureNumber, $endMeasure, $content),
+			default => $this->validateContent($content),
+		} ?? $this->validateAnchorEtag($anchorEtag);
 		if ($fehler !== null) {
 			return $fehler;
 		}
-		if ($kind === Annotation::KIND_TEXT) {
+		if ($kind !== Annotation::KIND_STAMP) {
 			$stamp = null;
+		}
+		if ($kind === Annotation::KIND_LOOP) {
+			// A loop is a range of whole measures: it has no point within a
+			// measure and no note to hang on. Its name may be empty - the
+			// range names it then.
+			$fraction = 0.0;
+			$elid = null;
+			$anchorEtag = null;
+		} else {
+			$endMeasure = null;
 		}
 		// Unbekannte Werte defensiv auf 'private' abbilden statt sie
 		// ungeprueft in die Spalte zu schreiben - visibility steuert
@@ -174,7 +187,7 @@ class AnnotationController extends Controller {
 		$fraction = is_finite($fraction) ? min(1.0, max(0.0, $fraction)) : 0.0;
 
 		try {
-			$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content, $visibility, $kind, $stamp, $targetPartsJson, $byLeader);
+			$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content, $visibility, $kind, $stamp, $targetPartsJson, $byLeader, $endMeasure);
 		} catch (AnnotationLimitException) {
 			return new JSONResponse([
 				'error' => $this->l->t('You already have the maximum number of notes for this score. Delete some notes first.'),
@@ -270,6 +283,21 @@ class AnnotationController extends Controller {
 			return new JSONResponse(['error' => $this->l->t('Note is too long.')], Http::STATUS_BAD_REQUEST);
 		}
 		return null;
+	}
+
+	/**
+	 * A saved loop needs an end measure at or after its start; its name is
+	 * optional and only bounded in length. No upper bound against the score:
+	 * like a note's measure, a range beyond the current score shows as
+	 * orphaned (AnnotationService::serialize) rather than being refused.
+	 *
+	 * @return ?JSONResponse null when the loop is in order
+	 */
+	private function validateLoop(int $measureNumber, ?int $endMeasure, string $content): ?JSONResponse {
+		if ($endMeasure === null || $endMeasure < max(1, $measureNumber)) {
+			return new JSONResponse(['error' => $this->l->t('A loop needs an end measure at or after its start.')], Http::STATUS_BAD_REQUEST);
+		}
+		return $this->validateContentLength($content);
 	}
 
 	/**

@@ -28,6 +28,7 @@
 					:pageIndex="crop.page"
 					:zoom="layouts[i].zoom"
 					:systemRects="systemRectsByPage[crop.page] ?? NO_RECTS"
+					:loopDimRects="loopDimRectsByPage[crop.page] ?? NO_RECTS"
 					:cursorRect="crop.index === cursorCrop ? cursorRect : null"
 					:cursorElid="crop.index === cursorCrop ? cursorElid : null"
 					:needle="crop.index === cursorCrop ? needle : null"
@@ -43,6 +44,7 @@
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import ScorePage from './ScorePage.vue'
+import { cropsInLoop } from '../lib/loopFocus.js'
 import { BASE_PAGE_WIDTH_PX, parseViewBox } from '../lib/scoreLayout.js'
 import { spanInView } from '../lib/scrollPlan.js'
 import { findStaffBands, groupBandsIntoSystems } from '../lib/staffBands.js'
@@ -110,6 +112,19 @@ export default {
 			default: null,
 		},
 
+		// Focus on the loop (B4): the looped measures' rectangles - only the
+		// frames holding one are shown; null = all frames.
+		loopRects: {
+			type: Array,
+			default: null,
+		},
+
+		// The dim rectangles per page for the pages inside the frames.
+		loopDimRectsByPage: {
+			type: Array,
+			default: () => [],
+		},
+
 		// Whether a new system scrolls into view by itself - off when the
 		// user switched autoscroll off (issue #12), on again for a jump.
 		follow: {
@@ -122,7 +137,8 @@ export default {
 
 	data() {
 		return {
-			crops: [],
+			// Every system of every page; `crops` narrows it to the loop.
+			allCrops: [],
 			viewBoxes: [],
 			heightPx: 300,
 			current: 0,
@@ -136,6 +152,15 @@ export default {
 
 	computed: {
 		NO_RECTS: () => NO_RECTS,
+
+		/**
+		 * The frames shown: all systems, or - focused on the loop (B4) - only
+		 * those a looped measure lies in. The others are not dimmed but gone:
+		 * side by side, a dimmed system would still cost a swipe.
+		 */
+		crops() {
+			return this.loopRects ? cropsInLoop(this.allCrops, this.loopRects) : this.allCrops
+		},
 
 		/** The frame showing the cursor, or -1. */
 		cursorCrop() {
@@ -162,6 +187,12 @@ export default {
 	},
 
 	watch: {
+		// A loop focus adds or removes frames: measure them again, like
+		// after a load.
+		crops() {
+			this.$nextTick(() => this.measureFrames())
+		},
+
 		// Every note, not only on a new frame: after scrolling away by hand,
 		// the next note brings the band back to the cursor.
 		cursorRect() {
@@ -230,7 +261,7 @@ export default {
 				for (const p of pages) {
 					this.viewBoxes[p.page] = p.viewBox
 				}
-				this.crops = systemCrops(pages)
+				this.allCrops = systemCrops(pages)
 				this.$nextTick(() => this.measureFrames())
 			} catch (err) {
 				if (generation !== this.loadGeneration) {
@@ -238,7 +269,7 @@ export default {
 				}
 				// eslint-disable-next-line no-console
 				console.error('ScoreView: could not build the system band.', err)
-				this.crops = []
+				this.allCrops = []
 			} finally {
 				if (generation === this.loadGeneration) {
 					this.loading = false

@@ -353,6 +353,13 @@
 										</template>
 										{{ loopActive ? t('Loop on') : t('Loop off') }}
 									</NcButton>
+									<!-- Focus (B4): only while a loop runs, gone with it. -->
+									<NcCheckboxRadioSwitch
+										v-if="loopActive"
+										v-model="loopFocus"
+										type="switch">
+										{{ t('Show only the loop') }}
+									</NcCheckboxRadioSwitch>
 									<ScoreSpeedTrainer
 										v-if="loopActive && hasRealPlayer"
 										v-model:startBpm="trainerStartBpm"
@@ -364,6 +371,44 @@
 										:passes="trainerPasses"
 										:currentBpm="effectiveTempoBpm"
 										@toggle="toggleSpeedTrainer" />
+									<!--
+										Saved loops (B5): kept like notes, so a
+										leader can save "Alto: 12-20" for the altos
+										and everyone else sees it dimmed.
+									-->
+									<fieldset v-if="savedLoops.length > 0" class="scoreview-popover-group">
+										<legend>{{ t('Saved loops') }}</legend>
+										<button
+											v-for="savedLoop in savedLoops"
+											:key="savedLoop.id"
+											type="button"
+											class="scoreview-saved-loop"
+											:class="{ 'scoreview-saved-loop--dimmed': savedLoop.dimmed }"
+											:disabled="savedLoop.orphaned || !can('loop')"
+											@click="applySavedLoop(savedLoop)">
+											<span class="scoreview-saved-loop-name">{{ savedLoop.name || t('Measures {from}–{to}', { from: savedLoop.from, to: savedLoop.to }) }}</span>
+											<span class="scoreview-saved-loop-meta">{{ savedLoopMeta(savedLoop) }}</span>
+										</button>
+									</fieldset>
+									<NcButton
+										v-if="loopActive && can('annotate') && !loopSaving"
+										wide
+										:aria-label="t('Save this loop…')"
+										@click="loopSaving = true">
+										<template #icon>
+											<ContentSave :size="20" />
+										</template>
+										{{ t('Save this loop…') }}
+									</NcButton>
+									<LoopSaveForm
+										v-if="loopSaving && loopActive"
+										:from="Number(loopFromMeasure)"
+										:to="Number(loopToMeasure)"
+										:isLeader="isLeader"
+										:parts="scoreParts"
+										:error="annotationError"
+										@save="saveLoop"
+										@cancel="loopSaving = false" />
 								</div>
 							</template>
 							<template #page-coach>
@@ -469,9 +514,9 @@
 								<ToolRow
 									v-if="has(group, 'noteNames')"
 									page
-									:label="t('Note names')"
-									:value="noteNames !== 'off' ? noteNameShort : ''"
-									@click="openPage('noteNames', t('Note names'))">
+									:label="t('Note names and counting')"
+									:value="noteNameRowValue"
+									@click="openPage('noteNames', t('Note names and counting'))">
 									<template #icon>
 										<Alphabetical :size="20" />
 									</template>
@@ -531,9 +576,11 @@
 								<NoteNameControls
 									v-model:system="noteNames"
 									v-model:onlyMine="noteNamesMine"
+									v-model:counts="beatCounts"
 									:hasMyPart="myPartId !== null"
 									:transpose="effectiveTranspose"
-									:unavailable="noteNamesUnavailable" />
+									:unavailable="noteNamesUnavailable"
+									:countsUnavailable="countsUnavailable" />
 							</template>
 							<template #page-appearance>
 								<AppearanceControls
@@ -729,6 +776,7 @@
 						:staves="myStaves"
 						:timeline="timeline"
 						:measureRectsByPage="systemRectsByPage"
+						:focusKeys="loopFocusKeys"
 						:readTimeMs="readDisplayTimeMs"
 						:subscribeFrame="sessionOnFrame"
 						:canSeek="can('seek')"
@@ -741,6 +789,8 @@
 						:pageUrls="pageUrls"
 						:systemRectsByPage="systemRectsByPage"
 						:pageProps="bandPageProps"
+						:loopRects="loopMeasureRects"
+						:loopDimRectsByPage="loopDimRectsByPage"
 						:cursorRect="cursorRect"
 						:cursorElid="currentElid"
 						:needle="intonationNeedle"
@@ -768,6 +818,7 @@
 							:stamps="annotationStamps"
 							:loopMarkers="loopMarkers"
 							:systemRects="systemRectsByPage[i] ?? NO_RECTS"
+							:loopDimRects="loopDimRectsByPage[i] ?? NO_RECTS"
 							:myPartIndex="myPartIndex"
 							:focusMyPart="focusMyPart"
 							:partCount="partCount"
@@ -781,6 +832,8 @@
 							:noteNameSystem="noteNameSystem"
 							:noteNameStaves="noteNameStaves"
 							:keyOfElid="keyOfElid"
+							:countOfElid="countOfElid"
+							:countStaves="countStaves"
 							@indexed="onPageIndexed"
 							@noteClick="onNoteClick"
 							@markerClick="onMarkerClick"
@@ -963,6 +1016,7 @@ import Alphabetical from 'vue-material-design-icons/Alphabetical.vue'
 import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import CloudDownloadOutline from 'vue-material-design-icons/CloudDownloadOutline.vue'
+import ContentSave from 'vue-material-design-icons/ContentSave.vue'
 import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
 import Download from 'vue-material-design-icons/Download.vue'
 import EyeOutline from 'vue-material-design-icons/EyeOutline.vue'
@@ -989,6 +1043,7 @@ import FollowBadge from './FollowBadge.vue'
 import LayoutControls from './LayoutControls.vue'
 import LeaderPanel from './LeaderPanel.vue'
 import LiveValue from './LiveValue.vue'
+import LoopSaveForm from './LoopSaveForm.vue'
 import LyricsView from './LyricsView.vue'
 import MicIndicator from './MicIndicator.vue'
 import NoteNameControls from './NoteNameControls.vue'
@@ -1046,8 +1101,10 @@ import { useZoom } from '../composables/useZoom.js'
 import nodeText from '../directives/nodeText.js'
 import { anyGroupActive, groupActive as isGroupActive, barGroups as visibleBarGroups } from '../lib/barGroups.js'
 import { capabilitiesOf, unavailableReason } from '../lib/capabilities.js'
+import { countLabels } from '../lib/countLabels.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
 import { resolveKey } from '../lib/keyMap.js'
+import { loopDimRects, loopMeasureRects, loopSystemKeys } from '../lib/loopFocus.js'
 import { browserFileUrl } from '../lib/micAccess.js'
 import { nameOf } from '../lib/noteNames.js'
 import { spellingMap } from '../lib/noteSpellingIndex.js'
@@ -1117,6 +1174,7 @@ export default {
 		Tune,
 		NotebookOutline,
 		CloudDownloadOutline,
+		ContentSave,
 		PinControls,
 		Close,
 		Repeat,
@@ -1135,6 +1193,7 @@ export default {
 		Alphabetical,
 		Download,
 		LayoutControls,
+		LoopSaveForm,
 		LyricsView,
 		NoteNameControls,
 		SystemBand,
@@ -1256,9 +1315,13 @@ export default {
 		const preferences = useViewerPreferences()
 		const autoScroll = useAutoScroll({ scrollEl: scrollElement, enabled: () => preferences.autoScroll.value })
 		const playback = usePlayback({ clock, durationMs, defaultTempoBpm: DEFAULT_TEMPO_BPM })
+		// The meter per measure comes from the score facts, which need the
+		// MIDI and are built further down - the lookup is handed in later.
+		let meterAt = () => null
 		const metronome = useMetronome({
 			measuresTimeline: () => measuresTimeline.value,
 			durationMs: () => durationMs.value,
+			meterAt: (index) => meterAt(index),
 			baseTempoBpm: () => playback.baseTempoBpm.value,
 			effectiveTempoBpm: () => playback.effectiveTempoBpm.value,
 			tempoFactor: () => playback.tempo.value,
@@ -1379,6 +1442,7 @@ export default {
 			meta: () => scoreMeta.value,
 			measuresTimeline: () => measuresTimeline.value,
 		})
+		meterAt = (index) => scoreFacts.meters.value[index] ?? null
 
 		const startTone = useStartTone({
 			clock: () => clock.value,
@@ -1637,6 +1701,7 @@ export default {
 				transpose: effectiveTranspose.value,
 				rate: playback.tempo.value,
 				measures: measuresTimeline.value,
+				meters: scoreFacts.meters.value,
 				durationMs: durationMs.value,
 				baseBpm: playback.baseTempoBpm.value,
 			}),
@@ -1792,6 +1857,8 @@ export default {
 			loopMarkers: loop.markers,
 			toggleLoop: loop.toggle,
 			setLoopFromMeasure: loop.setFromCurrentMeasure,
+			setLoopRange: loop.setRange,
+			savedLoops: annotations.savedLoops,
 			resetLoop: loop.reset,
 			trainerStartBpm: speedTrainer.startBpm,
 			trainerTargetBpm: speedTrainer.targetBpm,
@@ -1859,6 +1926,8 @@ export default {
 			spellings,
 			noteNames: preferences.noteNames,
 			noteNamesMine: preferences.noteNamesMine,
+			beatCounts: preferences.beatCounts,
+			scoreMeters: scoreFacts.meters,
 			layout: preferences.layout,
 			bandOffered: preferences.bandOffered,
 			autoScroll: preferences.autoScroll,
@@ -2034,6 +2103,10 @@ export default {
 			// Der Aufklapper „Aufnahme und Intonation".
 			showPractice: false,
 			showTuner: false,
+			// Focus on the loop (B4) - a session switch, it dies with the loop.
+			loopFocus: false,
+			// The save form of the running loop (B5) is open.
+			loopSaving: false,
 			// Welche Stimme "meine" ist (`myPartId`, aus useMyPart in setup())
 			// wird ueber "Meine Stimme" im Mixer gesetzt (ScoreMixer.vue).
 			// Dieselbe Wahl steuert Lautstaerke UND Markierung im Notenbild;
@@ -2125,7 +2198,7 @@ export default {
 				coachActive: this.practice.coach,
 				transposed: this.effectiveTranspose !== 0,
 				focusMyPart: this.focusMyPart,
-				showNoteNames: this.noteNameSystem !== null,
+				showNoteNames: this.noteNameSystem !== null || this.countOfElid !== null,
 				showNoteText: this.showNoteText,
 				showAnnotations: this.showAnnotations,
 				showRehearsal: this.showRehearsal,
@@ -2203,6 +2276,8 @@ export default {
 				noteNameSystem: this.noteNameSystem,
 				noteNameStaves: this.noteNameStaves,
 				keyOfElid: this.keyOfElid,
+				countOfElid: this.countOfElid,
+				countStaves: this.countStaves,
 			}
 		},
 
@@ -2246,6 +2321,39 @@ export default {
 			return { de: 'C D H', en: 'C D B', 'solfa-fixed': 'do', 'solfa-movable': 'do' }[this.noteNames] ?? ''
 		},
 
+		/** Names and counts side by side in the group row, whichever is on. */
+		noteNameRowValue() {
+			return [
+				this.noteNames !== 'off' ? this.noteNameShort : '',
+				this.countOfElid !== null ? '1 + 2' : '',
+			].filter(Boolean).join(' · ')
+		},
+
+		/** Why there are no beat numbers - or empty. */
+		countsUnavailable() {
+			const reason = unavailableReason(this.capabilities, 'counts', this.scoreMeta)
+			return reason === null ? '' : this.unavailableText(reason)
+		},
+
+		/**
+		 * The count of every chord (lib/countLabels.js), built once per
+		 * score and setting, or null while the numbers are off.
+		 */
+		countOfElid() {
+			if (this.beatCounts === 'off' || this.countsUnavailable !== '') {
+				return null
+			}
+			return countLabels({ meters: this.scoreMeters, spellings: this.scoreMeta?.noteSpellings })
+		},
+
+		/** Only my staff - where staves map to parts, as for the note names. */
+		countStaves() {
+			if (this.beatCounts !== 'mine' || this.myPartIndex === null || !this.staffMappingOk) {
+				return null
+			}
+			return [this.myPartIndex]
+		},
+
 		/** Die Transposition als Wert in der Gruppenzeile, wenn sie gilt. */
 		transposeLabel() {
 			const n = this.effectiveTranspose
@@ -2255,6 +2363,22 @@ export default {
 		/** Der Loop-Bereich als Wert in der Gruppenzeile, wenn er laeuft. */
 		loopLabel() {
 			return this.loopActive ? `${this.loopFromMeasure}–${this.loopToMeasure}` : ''
+		},
+
+		/** The looped measures' rectangles while the focus is on (lib/loopFocus.js). */
+		loopMeasureRects() {
+			if (!this.loopFocus || !this.loopActive || !this.measuresTimeline) {
+				return null
+			}
+			return loopMeasureRects(this.measuresTimeline.elements, this.loopFromMeasure, this.loopToMeasure)
+		},
+
+		loopDimRectsByPage() {
+			return this.loopMeasureRects ? loopDimRects(this.measuresTimeline.elements, this.loopFromMeasure, this.loopToMeasure) : []
+		},
+
+		loopFocusKeys() {
+			return this.loopMeasureRects ? loopSystemKeys(this.loopMeasureRects) : null
 		},
 
 		/** Das Tempo in der Gruppenzeile; „*" heisst geschaetzt (M8). */
@@ -2274,6 +2398,15 @@ export default {
 	},
 
 	watch: {
+		// The focus is a property of the running loop: off with it, so the
+		// next loop starts with the whole score in view.
+		loopActive(active) {
+			if (!active) {
+				this.loopFocus = false
+				this.loopSaving = false
+			}
+		},
+
 		/**
 		 * Sichtbar heisst: Noten oder Fehlermeldung. Beides beendet das
 		 * Warten - fuer die App ist der Unterschied keiner, ihr Ladebildschirm
@@ -2689,6 +2822,60 @@ export default {
 				this.followNavigation('loop')
 				this.toggleLoop()
 			}
+		},
+
+		/**
+		 * A saved loop (B5) becomes the running loop and the playback
+		 * position moves to its start - no count-in, like a range sent by
+		 * the leader.
+		 *
+		 * @param {{from: number, to: number}} saved
+		 */
+		applySavedLoop(saved) {
+			if (!this.can('loop')) {
+				return
+			}
+			this.followNavigation('loop')
+			if (this.setLoopRange(saved.from, saved.to)) {
+				this.jumpToMeasure(saved.from)
+			}
+		},
+
+		/**
+		 * @param {{name: string, visibility: string, targetParts: ?Array}} choice
+		 */
+		async saveLoop(choice) {
+			await this.onAnnotationCreate({
+				measureNumber: Number(this.loopFromMeasure),
+				endMeasure: Number(this.loopToMeasure),
+				fraction: 0,
+				elid: null,
+				anchorEtag: null,
+				content: choice.name,
+				visibility: choice.visibility,
+				kind: 'loop',
+				targetParts: choice.targetParts,
+			})
+			if (!this.annotationError) {
+				this.loopSaving = false
+			}
+		},
+
+		/**
+		 * The second line of a saved loop in the list: its range, and whom
+		 * it is for.
+		 *
+		 * @param {object} saved
+		 * @return {string}
+		 */
+		savedLoopMeta(saved) {
+			const parts = [saved.name ? `${saved.from}–${saved.to}` : '']
+			if (saved.visibility === 'parts') {
+				parts.push(this.t('For {voices}', { voices: saved.voices.join(', ') }))
+			} else if (saved.visibility === 'shared' && !saved.mine) {
+				parts.push(this.t('by {name}', { name: saved.authorName }))
+			}
+			return parts.filter(Boolean).join(' · ')
 		},
 
 		/**
@@ -3249,6 +3436,43 @@ export default {
 	/* Nur die Karten selbst fangen Klicks - der Zwischenraum gehört weiter
 	   dem Notenbild darunter (Klick auf eine Note springt dorthin). */
 	pointer-events: none;
+}
+/* A saved loop in the loop page: name above, range and audience below. */
+.scoreview-saved-loop {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	inline-size: 100%;
+	margin: 0 0 4px 0;
+	padding: 6px 8px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--border-radius-large, 8px);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	text-align: start;
+	cursor: pointer;
+}
+
+.scoreview-saved-loop:hover:not(:disabled) {
+	background: var(--color-background-hover);
+}
+
+.scoreview-saved-loop:disabled {
+	cursor: default;
+	opacity: 0.5;
+}
+
+.scoreview-saved-loop--dimmed {
+	opacity: 0.55;
+}
+
+.scoreview-saved-loop-name {
+	font-weight: bold;
+}
+
+.scoreview-saved-loop-meta {
+	color: var(--color-text-maxcontrast);
+	font-size: 0.9em;
 }
 </style>
 

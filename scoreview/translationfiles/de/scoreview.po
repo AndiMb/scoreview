@@ -20,7 +20,7 @@ msgstr "Du hast keine Berechtigung, geteilte Notizen für diese Datei anzulegen.
 msgid "Only leaders can address notes to voices."
 msgstr "Nur Leitungen können Notizen an Stimmen richten."
 
-#: lib/Controller/AnnotationController.php src/components/ScoreAnnotations.vue
+#: lib/Controller/AnnotationController.php src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
 msgid "Choose at least one voice."
 msgstr "Wähle mindestens eine Stimme."
 
@@ -43,6 +43,10 @@ msgstr "Notiz nicht gefunden oder kein Zugriff."
 #: lib/Controller/AnnotationController.php
 msgid "Note is too long."
 msgstr "Notiz ist zu lang."
+
+#: lib/Controller/AnnotationController.php
+msgid "A loop needs an end measure at or after its start."
+msgstr "Ein Loop braucht einen Endtakt an oder nach seinem Anfang."
 
 #: lib/Controller/AnnotationController.php
 msgid "Unknown stamp."
@@ -324,7 +328,7 @@ msgstr "Höchstgröße eines Übe-Tracks (MB)"
 msgid "Offline page (scores and setlists saved in the browser)"
 msgstr "Offline-Seite (Partituren und Setlisten im Browser gespeichert)"
 
-#: src/components/AdminSettings.vue src/components/ScoreAnnotations.vue
+#: src/components/AdminSettings.vue src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
 msgid "Save"
 msgstr "Speichern"
 
@@ -748,6 +752,42 @@ msgstr "besitzt die Datei"
 msgid "you"
 msgstr "du"
 
+#: src/components/LoopSaveForm.vue
+msgid "Name of the loop"
+msgstr "Name des Loops"
+
+#: src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
+msgid "Measures {from}–{to}"
+msgstr "Takte {from}–{to}"
+
+#: src/components/LoopSaveForm.vue
+msgid "For"
+msgstr "Für"
+
+#: src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
+msgid "Private"
+msgstr "Privat"
+
+#: src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
+msgid "Shared with everyone who has access to this file"
+msgstr "Für alle mit Dateizugriff geteilt"
+
+#: src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
+msgid "Shared"
+msgstr "Geteilt"
+
+#: src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
+msgid "Voices"
+msgstr "Stimmen"
+
+#: src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
+msgid "Only singers of the chosen voices see it"
+msgstr "Nur wer eine der gewählten Stimmen singt, sieht sie"
+
+#: src/components/LoopSaveForm.vue src/components/PracticeExportControls.vue src/components/RecordingPanel.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue src/components/SetlistEditor.vue
+msgid "Cancel"
+msgstr "Abbrechen"
+
 #: src/components/LyricsView.vue
 msgid "This part has no lyrics."
 msgstr "Diese Stimme hat keinen Liedtext."
@@ -772,7 +812,7 @@ msgstr "Mitverfolgen"
 msgid "Microphone on for: {purpose}. Tap to turn it off."
 msgstr "Mikrofon an für: {purpose}. Antippen schaltet es aus."
 
-#: src/components/NoteNameControls.vue src/components/PrintToolbar.vue src/components/ScoreViewer.vue
+#: src/components/NoteNameControls.vue src/components/PrintToolbar.vue
 msgid "Note names"
 msgstr "Tonnamen"
 
@@ -788,9 +828,25 @@ msgstr "Die Namen nennen die geschriebenen Noten; transponiert ist nur der Klang
 msgid "Tap a note to hear it while playback is stopped."
 msgstr "Tippe bei angehaltener Wiedergabe auf eine Note, um sie zu hören."
 
+#: src/components/NoteNameControls.vue
+msgid "Beat numbers"
+msgstr "Zählzeiten"
+
+#: src/components/NoteNameControls.vue
+msgid "Numbers on the beats, + between them; notes off that grid stay unlabelled."
+msgstr "Zahlen auf den Schlägen, + dazwischen; Noten außerhalb dieses Rasters bleiben ohne Zahl."
+
 #: src/components/NoteNameControls.vue src/components/TunerPanel.vue
 msgid "Off"
 msgstr "Aus"
+
+#: src/components/NoteNameControls.vue
+msgid "On my part"
+msgstr "An meiner Stimme"
+
+#: src/components/NoteNameControls.vue
+msgid "On all parts"
+msgstr "An allen Stimmen"
 
 #: src/components/NoteNameControls.vue
 msgid "German (C D E F G A H)"
@@ -951,10 +1007,6 @@ msgstr "Tracks für alle Stimmen"
 #: src/components/PracticeExportControls.vue
 msgid "One coach track per part, saved for everyone in a folder of practice tracks next to the score. Existing tracks are replaced."
 msgstr "Je Stimme ein Coach-Track, für alle in einem Ordner mit Übe-Tracks neben der Partitur. Vorhandene Tracks werden ersetzt."
-
-#: src/components/PracticeExportControls.vue src/components/RecordingPanel.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue src/components/SetlistEditor.vue
-msgid "Cancel"
-msgstr "Abbrechen"
 
 #: src/components/PracticeExportControls.vue
 msgid "“{name}” already exists."
@@ -1189,26 +1241,6 @@ msgid "New notes and stamps are for"
 msgstr "Neue Notizen und Stempel sind für"
 
 #: src/components/ScoreAnnotations.vue
-msgid "Private"
-msgstr "Privat"
-
-#: src/components/ScoreAnnotations.vue
-msgid "Shared with everyone who has access to this file"
-msgstr "Für alle mit Dateizugriff geteilt"
-
-#: src/components/ScoreAnnotations.vue
-msgid "Shared"
-msgstr "Geteilt"
-
-#: src/components/ScoreAnnotations.vue
-msgid "Voices"
-msgstr "Stimmen"
-
-#: src/components/ScoreAnnotations.vue
-msgid "Only singers of the chosen voices see it"
-msgstr "Nur wer eine der gewählten Stimmen singt, sieht sie"
-
-#: src/components/ScoreAnnotations.vue
 msgid "Stamps"
 msgstr "Stempel"
 
@@ -1232,7 +1264,7 @@ msgstr "Notiz…"
 msgid "(orphaned)"
 msgstr "(verwaist)"
 
-#: src/components/ScoreAnnotations.vue
+#: src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
 msgid "by {name}"
 msgstr "von {name}"
 
@@ -1252,7 +1284,7 @@ msgstr "Leitung {name}"
 msgid "Voice no longer in the score ({voices}) – shown to everyone"
 msgstr "Stimme nicht mehr in der Partitur ({voices}) – für alle sichtbar"
 
-#: src/components/ScoreAnnotations.vue
+#: src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
 msgid "For {voices}"
 msgstr "Für {voices}"
 
@@ -1263,6 +1295,10 @@ msgstr "Bearbeiten"
 #: src/components/ScoreAnnotations.vue
 msgid "Delete"
 msgstr "Löschen"
+
+#: src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
+msgid "Saved loops"
+msgstr "Gespeicherte Loops"
 
 #: src/components/ScoreBar.vue
 msgid "Show playback controls"
@@ -1549,6 +1585,14 @@ msgid "Loop off"
 msgstr "Loop aus"
 
 #: src/components/ScoreViewer.vue
+msgid "Show only the loop"
+msgstr "Nur den Loop zeigen"
+
+#: src/components/ScoreViewer.vue
+msgid "Save this loop…"
+msgstr "Diesen Loop speichern…"
+
+#: src/components/ScoreViewer.vue
 msgid "View"
 msgstr "Ansicht"
 
@@ -1563,6 +1607,10 @@ msgstr "Nur meine Zeile zeigen"
 #: src/components/ScoreViewer.vue
 msgid "Scroll along with playback"
 msgstr "Beim Abspielen mitscrollen"
+
+#: src/components/ScoreViewer.vue
+msgid "Note names and counting"
+msgstr "Tonnamen und Zählzeiten"
 
 #: src/components/ScoreViewer.vue
 msgid "Show notes in the score"

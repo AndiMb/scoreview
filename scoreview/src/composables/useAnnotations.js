@@ -108,7 +108,8 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 		return listed.value
 			// Stempel zeichnet ScoreStamps.vue als Symbol - ein Marker mit
 			// Aufklapptext waere genau das, was ein Stempel nicht sein soll: er gehoert sichtbar in die Noten.
-			.filter((a) => a.kind !== 'stamp')
+			// A saved loop is a range to set, not a spot to mark (savedLoops).
+			.filter((a) => a.kind !== 'stamp' && a.kind !== 'loop')
 			.map((a) => {
 				const rect = (a.elid !== null && a.anchorEtag === currentEtag() ? notes.elements[String(a.elid)] : null)
 					?? measures.elements[String(a.measureNumber - 1)]
@@ -167,6 +168,28 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			.filter(Boolean)
 	})
 
+	/**
+	 * Saved loops (B5): a range of measures with a name, kept like a note -
+	 * private, shared, or for parts (leaders), filtered the same way, so a
+	 * loop for the altos dims for everyone else and hides from the basses.
+	 */
+	const savedLoops = computed(() => listed.value
+		.filter((a) => a.kind === 'loop' && Number.isFinite(a.endMeasure))
+		.map((a) => ({
+			id: a.id,
+			name: a.content ?? '',
+			from: a.measureNumber,
+			to: a.endMeasure,
+			visibility: a.visibility,
+			mine: a.mine,
+			authorName: a.authorName ?? null,
+			byLeader: a.byLeader === true,
+			orphaned: a.orphaned === true,
+			dimmed: a.display === DIM,
+			voices: a.voices,
+		}))
+		.sort((a, b) => a.from - b.from || a.to - b.to))
+
 	async function load() {
 		const mine = generation
 		try {
@@ -196,6 +219,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 				kind: draft.kind ?? 'text',
 				stamp: draft.stamp ?? null,
 				targetParts: draft.visibility === 'parts' ? draft.targetParts : null,
+				endMeasure: draft.endMeasure ?? null,
 			})
 			if (mine === generation) {
 				annotations.value = [...annotations.value, { ...res.data, orphaned: false }]
@@ -318,5 +342,5 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 		armedStamp.value = null
 	}
 
-	return { annotations, listed, error, visible, markers, stamps, armedStamp, load, create, update, remove, jumpTo, jumpToById, armStamp, disarmStamp, placeArmedStamp, reset }
+	return { annotations, listed, error, visible, markers, stamps, savedLoops, armedStamp, load, create, update, remove, jumpTo, jumpToById, armStamp, disarmStamp, placeArmedStamp, reset }
 }

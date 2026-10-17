@@ -218,6 +218,51 @@
 				</template>
 			</li>
 		</ul>
+		<!--
+			Saved loops (B5): one place to delete them - the loop page sets
+			them, a list that only grows would need one anyway.
+		-->
+		<template v-if="loops.length > 0">
+			<h4 class="scoreview-annotations-section">
+				{{ t('Saved loops') }}
+			</h4>
+			<ul class="scoreview-annotations-list">
+				<li
+					v-for="a in loops"
+					:key="a.id"
+					class="scoreview-annotation"
+					:class="{
+						orphaned: a.orphaned,
+						shared: a.visibility === 'shared',
+						parts: a.visibility === 'parts',
+						dimmed: a.display === 'dim',
+					}">
+					<span class="scoreview-annotation-anchor">
+						{{ a.content || t('Measures {from}–{to}', { from: a.measureNumber, to: a.endMeasure }) }}
+						<em v-if="a.orphaned">{{ t('(orphaned)') }}</em>
+						<span v-if="a.visibility === 'shared'" class="scoreview-annotation-badge" :title="t('Shared with everyone who has access to this file')">
+							<AccountGroup :size="14" />
+							<template v-if="!a.mine">{{ t('by {name}', { name: a.authorName }) }}</template>
+						</span>
+					</span>
+					<p v-if="a.visibility === 'parts'" class="scoreview-annotation-voices">
+						<AccountMusic :size="14" />
+						{{ t('For {voices}', { voices: a.voices.join(', ') }) }}
+					</p>
+					<p v-if="a.content" class="scoreview-annotation-content">
+						{{ t('Measures {from}–{to}', { from: a.measureNumber, to: a.endMeasure }) }}
+					</p>
+					<div v-if="canChange(a)" class="scoreview-annotation-actions">
+						<NcButton :aria-label="t('Delete')" @click="$emit('delete', a)">
+							<template #icon>
+								<Delete :size="20" />
+							</template>
+							{{ t('Delete') }}
+						</NcButton>
+					</div>
+				</li>
+			</ul>
+		</template>
 	</div>
 </template>
 
@@ -363,7 +408,13 @@ export default {
 		},
 
 		visibleAnnotations() {
-			return this.onlyMine ? this.annotations.filter((a) => a.mine) : this.annotations
+			return (this.onlyMine ? this.annotations.filter((a) => a.mine) : this.annotations)
+				.filter((a) => a.kind !== 'loop')
+		},
+
+		/** Saved loops (B5) are listed apart: they are set from the loop page, deleted here. */
+		loops() {
+			return this.annotations.filter((a) => a.kind === 'loop' && (!this.onlyMine || a.mine))
 		},
 	},
 
@@ -479,6 +530,11 @@ export default {
 
 .scoreview-annotations-empty {
 	color: var(--color-text-maxcontrast);
+}
+
+.scoreview-annotations-section {
+	margin: 12px 0 4px;
+	font-size: 1em;
 }
 
 .scoreview-annotations-list {

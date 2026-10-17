@@ -88,7 +88,9 @@ class AnnotationService {
 			// bewusst NICHT als verwaist - der Anker ist weiterhin gueltig,
 			// genau das ist der Sinn eines musikalischen statt eines
 			// Pixel-Ankers (siehe Migrationskommentar).
-			$data['orphaned'] = $a->getMeasureNumber() > $currentMeasureCount;
+			// A loop reaches to its end measure: gone with the last of its
+			// measures, not only with the first.
+			$data['orphaned'] = max($a->getMeasureNumber(), $a->getEndMeasure() ?? 0) > $currentMeasureCount;
 		}
 		return $data;
 	}
@@ -97,9 +99,11 @@ class AnnotationService {
 	 * @param ?string $targetPartsJson JSON `[{id, name}]`, bereits geprueft
 	 *                                 (Controller) - nur bei `parts`
 	 * @param bool $byLeader ob die Autorin beim Anlegen Leitung ist
+	 * @param ?int $endMeasure last measure of a saved loop (KIND_LOOP), already
+	 *                         checked against the start (Controller); null otherwise
 	 * @throws AnnotationLimitException bei MAX_PER_USER_AND_FILE
 	 */
-	public function create(int $fileId, string $userId, int $measureNumber, float $fraction, ?int $elid, ?string $anchorEtag, string $content, string $visibility, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?string $targetPartsJson = null, bool $byLeader = false): Annotation {
+	public function create(int $fileId, string $userId, int $measureNumber, float $fraction, ?int $elid, ?string $anchorEtag, string $content, string $visibility, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?string $targetPartsJson = null, bool $byLeader = false, ?int $endMeasure = null): Annotation {
 		if ($this->mapper->countByFileAndUser($fileId, $userId) >= self::MAX_PER_USER_AND_FILE) {
 			throw new AnnotationLimitException('Too many annotations for this file.');
 		}
@@ -117,6 +121,7 @@ class AnnotationService {
 		$annotation->setStamp($stamp);
 		$annotation->setTargetParts($targetPartsJson);
 		$annotation->setByLeader($byLeader);
+		$annotation->setEndMeasure($kind === Annotation::KIND_LOOP ? $endMeasure : null);
 		$annotation->setCreatedAt($now);
 		$annotation->setUpdatedAt($now);
 		return $this->mapper->insert($annotation);

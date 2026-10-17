@@ -274,6 +274,37 @@ class AnnotationControllerTest extends TestCase {
 	 * Die Rolle wird serverseitig geprueft. Auch mit vollem
 	 * Schreibrecht an der Datei - Schreibrecht ist nicht Leitung.
 	 */
+	public function testEinLoopBrauchtEinEndeNachSeinemAnfang(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->never())->method('create');
+
+		foreach ([null, 11, 0] as $ende) {
+			$response = $this->controller()->create(42, 12, 0.0, 'Refrain', null, null, 'private', 'loop', null, null, $ende);
+			$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus(), 'Ende: ' . var_export($ende, true));
+		}
+	}
+
+	public function testEinLoopWirdAlsTaktbereichOhneNotenankerAngelegt(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->once())->method('create')
+			->with(42, 'andreas', 12, 0.0, null, null, '', 'private', 'loop', null, null, false, 12)
+			->willReturn(new Annotation());
+
+		// Point within the measure, note and stamp are not a loop's: dropped,
+		// and an empty name is allowed - the range names it.
+		$response = $this->controller()->create(42, 12, 0.5, '', 7, 'etag1', 'private', 'loop', 'breath', null, 12);
+		$this->assertSame(Http::STATUS_CREATED, $response->getStatus());
+	}
+
+	public function testEinEndtaktAnEinerNotizWirdVerworfen(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->once())->method('create')
+			->with(42, 'andreas', 1, 0.0, null, null, 'Notiz', 'private', 'text', null, null, false, null)
+			->willReturn(new Annotation());
+
+		$this->controller()->create(42, 1, 0.0, 'Notiz', null, null, 'private', 'text', null, null, 9);
+	}
+
 	public function testOhneLeitungsrolleGibtEsKeineStimmnotiz(): void {
 		$this->angemeldetMitDatei(Constants::PERMISSION_ALL);
 		$this->leaders->method('isLeader')->willReturn(false);
