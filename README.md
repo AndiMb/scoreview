@@ -36,7 +36,9 @@ quietly audible.
 
 **Targeted rehearsal.** Measure navigation with an always-visible measure
 number, a loop over any range of measures, highlighted in the score, and a click
-on a note jumps exactly there.
+on a note jumps exactly there. **Show only the loop** fades everything
+outside the passage, and a loop can be **saved** with a name – privately,
+shared, or by a leader for particular voices – and set again with one tap.
 
 **Taking notes.** Private, or shared with everyone who can see the file. Notes
 are attached to a musical position rather than to pixels, so they survive a
@@ -69,7 +71,8 @@ click. For reading on a phone, the **system band** lays the systems out side by
 side, each as tall as the screen, and the **lyrics view** shows only the text of
 your own part with all verses, the sung syllable highlighted. **Note names** can
 be shown next to the noteheads – German, English or as solfège – and tapping a
-note plays its pitch. With **"Save for offline use"**, a piece or an entire
+note plays its pitch; **beat numbers** (“1 + 2 +”) can sit above the staff of
+your part. With **"Save for offline use"**, a piece or an entire
 setlist, sound included, is kept ready in the browser and opens without a
 network through the app's offline page.
 

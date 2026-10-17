@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:200d294b5bff -->
+<!-- translation-of: README.md sha256:e5c70971fd11 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -37,7 +37,10 @@ Klick auf jedem Achtel. „Meine Stimme" hebt eine Stimme hervor und lässt die
 
 **Gezielt proben.** Taktnavigation mit dauerhaft sichtbarer Taktangabe, ein Loop
 über einen frei gewählten Taktbereich mit Markierung im Notenbild, und ein Klick
-auf eine Note springt genau dorthin.
+auf eine Note springt genau dorthin. **Nur den Loop zeigen** blendet alles
+außerhalb der Stelle zurück, und ein Loop lässt sich mit Namen **speichern** –
+privat, geteilt oder von einer Leitung für bestimmte Stimmen – und mit einem
+Tipp wieder setzen.
 
 **Notizen machen.** Privat oder mit allen geteilt, die die Datei sehen. Sie
 hängen an einer musikalischen Position statt an Pixeln und überstehen deshalb
@@ -70,7 +73,8 @@ alle Stimmen**. Zum Lesen auf dem Telefon stellt das **Systemband** die Systeme
 nebeneinander, jedes so hoch wie der Bildschirm, und die **Liedtext-Ansicht**
 zeigt nur den Text der eigenen Stimme mit allen Strophen, die gesungene Silbe
 hervorgehoben. **Tonnamen** stehen auf Wunsch neben den Notenköpfen – deutsch,
-englisch oder als Solmisation –, und ein Tipp auf eine Note spielt ihren Ton.
+englisch oder als Solmisation –, und ein Tipp auf eine Note spielt ihren Ton;
+**Zählzeiten** („1 + 2 +“) stehen auf Wunsch über der eigenen Notenzeile.
 Mit **„Offline vormerken“** liegen ein Stück oder eine ganze Setliste samt
 Klang im Browser bereit und öffnen sich ohne Netz über die Offline-Seite der
 App.

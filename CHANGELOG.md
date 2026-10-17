@@ -4,6 +4,36 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] – 2026-10-17
+
+### Added
+
+- **Time signature per measure from the engine** (scoreview-engine
+  v4.7.5-engine.5: `measureFacts`, a tick per chord in `noteSpellings`). The
+  metronome and the count-in now click the conducted beats – two in 6/8,
+  three in 9/8, a pickup as it is – instead of estimating them from the
+  measure's length; practice tracks follow. Scores converted earlier are
+  reconverted the next time they are opened (format version 5). Without the
+  engine's facts the MIDI's time signatures are read, and failing those the
+  old estimate remains.
+- **Beat numbers** over the notes (“Note names and counting” under View):
+  “1 2 3 4” on the beats, “+” between them, every eighth in compound metres,
+  on all staves or only on my part. Only with the engine's data; the setting
+  says when it is unavailable.
+- **Show only the loop**: with a loop running, everything outside it steps
+  back – veiled on the pages, dropped from the system band, dimmed in the
+  lyrics view.
+- **Saved loops**: a running loop can be saved with a name, privately, shared
+  or – by a leader – for particular voices, and set again with one tap from
+  the loop page. Saved loops are notes with an end measure: they survive a
+  re-upload, count towards the 500 notes per person and score, and are
+  deleted in the Notes panel.
+
+### Changed
+
+- The converter self-test checks the time signature facts on a new fixture
+  with a pickup, a 3/4 and a 6/8 measure (`timesig-test.mscz`).
+
 ## [1.16.0] – 2026-10-17
 
 ### Added

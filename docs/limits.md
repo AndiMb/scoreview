@@ -107,12 +107,16 @@ repeats and voltas were measured to work correctly.
 measurement series above comes from choral pieces of up to five pages; in the
 browser, a 28-page choral piece was measured as well.
 
-**Metronome without a time signature.** The artifacts carry no time signature
-per measure; the metronome estimates the beats of a measure from its length
-and the quarter-note tempo, dividing the measure evenly. “Eighth notes” halves
-every estimated beat. In compound metres (6/8, 9/8) the clicks therefore fall
-on the eighths, but the louder ones on every second eighth rather than on the
-dotted-quarter beats; a pickup measure gets as many beats as fit its length.
+**Metronome and time signature.** With the engine's time signature per
+measure (`measureFacts`, local path and browser fallback since
+`v4.7.5-engine.5`) the metronome clicks the conducted beats: 6/8 and 9/8 in
+dotted quarters with three subdivisions, a pickup with as many beats as fit
+its length, counted as the signature would. Without it – sidecar path, a
+conversion from before 1.17 – the beats come from the MIDI's time signature
+events, which MuseScore writes per change but with a pickup as a signature of
+its own length, and where even those are missing, from the measure's length
+and the quarter-note tempo. The count-in always counts beats, not
+subdivisions.
 
 **Operation at phone width.** That the viewer runs in the mobile apps at all
 has been measured (see below). At phone width the control bar is a single row –
@@ -336,9 +340,18 @@ For operation this means:
 
 ### Notes
 
-- **At most 500 notes per person and score**, all visibilities and stamps
-  together; beyond that the server answers 409. Two simultaneous requests can
-  exceed the limit by one note.
+- **At most 500 notes per person and score**, all visibilities, stamps and
+  saved loops together; beyond that the server answers 409. Two simultaneous
+  requests can exceed the limit by one note.
+- **A saved loop is a note with an end measure.** It survives a re-upload
+  like a note does; once its end lies beyond the score it is shown as
+  orphaned and cannot be set. Loops for voices behave like notes for voices:
+  dimmed without a chosen part, hidden for the other parts. Setting a saved
+  loop works on the offline page, saving one does not.
+- **“Show only the loop” dims, it does not rewrap.** The pages veil the
+  measures outside the loop, the system band shows only the systems the loop
+  touches, the lyrics view dims the other blocks (E2: no reflow). The switch
+  is a session choice and ends with the loop.
 - **Creating and changing are each limited to 60 calls per minute** – anyone
   setting stamps very quickly in a row briefly gets “Too many changes in a
   short time”.
@@ -480,6 +493,9 @@ Implemented and checked in the browser, but **not on a device**:
   Galaxy S23, see [Open on the device](#open-on-the-device);
 - the tuner with a real voice on the Galaxy S23, and the metronome
   subdivisions over Bluetooth;
+- beat numbers and the loop focus on the Galaxy S23 at page width, and the
+  style cost of the beat numbers during playback (they are SVG text, so none
+  is expected, but it is not measured);
 - printing from Safari on iPadOS (“Share → Print”): whether the dialog takes
   the page size from the score and ends without an empty last sheet.
 
@@ -529,8 +545,17 @@ plays with controls. A lock lasting several minutes has not been measured.
   neither can be selected, and both say why; a reconversion there does not change
   that ([E15](architecture.md#e15-fähigkeiten-statt-weg) (German)). The system band
   works on both paths.
-- **A cache entry below `CURRENT_FORMAT_VERSION` 4** is reconverted the next
+- **A cache entry below `CURRENT_FORMAT_VERSION` 5** is reconverted the next
   time it is opened and gets the lists in the process.
+- **Beat numbers need the engine as well**: the time signature per measure
+  and a tick per chord (`measureFacts`, `noteSpellings[].tick`). On the
+  sidecar path the setting says why it is unavailable. The numbers follow
+  one voice (the first) and sit in a row above the staff: “1 2 3 4” on the
+  beats, “+” on the halves between them in simple metres, every eighth
+  numbered in compound metres; triplets, sixteenths and anything else off
+  that grid stay blank rather than wrong. A pickup is counted from its end.
+  Readability on a phone at page width has not been checked
+  ([Open checks](#open-checks)).
 - **Above 20,000 syllables there is no lyrics view** – the engine then omits
   the list entirely instead of truncating it.
 - **The verse sung follows the unrolled repeats:** the n-th occurrence of a

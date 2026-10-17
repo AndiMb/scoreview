@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:4edddbb5fb69 -->
+<!-- translation-of: limits.md sha256:1eeb43024dda -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -104,13 +104,16 @@ Wiederholungen und Volten funktionieren gemessen korrekt.
 Server-Messreihe oben stammt von Chorsätzen bis fünf Seiten; im Browser ist
 zusätzlich ein 28-seitiger Chorsatz gemessen.
 
-**Metronom ohne Taktart.** Die Artefakte tragen keine Taktart je Takt; das
-Metronom schätzt die Schläge eines Taktes aus seiner Dauer und dem
-Viertel-Tempo und teilt den Takt gleichmäßig. „Achtel“ halbiert jeden
-geschätzten Schlag. In zusammengesetzten Taktarten (6/8, 9/8) fallen die
-Klicks deshalb auf die Achtel, die lauteren aber auf jedes zweite Achtel statt
-auf die punktierten Viertel; ein Auftakt bekommt so viele Schläge, wie in
-seine Länge passen.
+**Metronom und Taktart.** Mit der Taktart je Takt aus der Engine
+(`measureFacts`, lokaler Weg und Rückfall im Browser ab `v4.7.5-engine.5`)
+klickt das Metronom die dirigierten Schläge: 6/8 und 9/8 in punktierten
+Vierteln mit drei Unterteilungen, ein Auftakt mit so vielen Schlägen, wie in
+seine Länge passen, gezählt wie die Taktart es täte. Ohne sie – Sidecar-Weg,
+eine Konvertierung von vor 1.17 – kommen die Schläge aus den
+Taktart-Ereignissen des MIDI, die MuseScore je Wechsel schreibt, einen
+Auftakt aber als eigene Taktart seiner Länge; und wo auch die fehlen, aus
+der Taktdauer und dem Viertel-Tempo. Der Einzähler zählt immer Schläge, keine
+Unterteilungen.
 
 **Die Bedienung auf Telefonbreite.** Dass der Viewer in den mobilen Apps
 überhaupt läuft, ist gemessen (siehe unten). Die Bedienleiste ist auf
@@ -337,9 +340,20 @@ Daraus folgt für den Betrieb:
 
 ### Notizen
 
-- **Höchstens 500 Notizen je Person und Partitur**, alle Sichtbarkeiten und
-  Stempel zusammen; darüber antwortet der Server 409. Zwei gleichzeitige
-  Anfragen können die Grenze um eine Notiz überschreiten.
+- **Höchstens 500 Notizen je Person und Partitur**, alle Sichtbarkeiten,
+  Stempel und gespeicherte Loops zusammen; darüber antwortet der Server 409.
+  Zwei gleichzeitige Anfragen können die Grenze um eine Notiz überschreiten.
+- **Ein gespeicherter Loop ist eine Notiz mit Endtakt.** Er übersteht einen
+  Re-Upload wie eine Notiz; liegt sein Ende einmal jenseits der Partitur,
+  erscheint er als verwaist und lässt sich nicht setzen. Loops für Stimmen
+  verhalten sich wie Stimmnotizen: ohne gewählte Stimme gedimmt, für die
+  anderen Stimmen verborgen. Einen gespeicherten Loop setzen geht auf der
+  Offline-Seite, einen speichern nicht.
+- **„Nur den Loop zeigen“ dimmt, es bricht nicht um.** Die Seiten
+  verschleiern die Takte außerhalb des Loops, das Systemband zeigt nur die
+  Systeme, die der Loop berührt, die Liedtext-Ansicht dimmt die übrigen
+  Blöcke (E2: kein Reflow). Der Schalter ist eine Sitzungswahl und endet mit
+  dem Loop.
 - **Anlegen und Ändern sind auf je 60 Aufrufe je Minute begrenzt** – wer
   Stempel sehr schnell hintereinander setzt, bekommt kurz „Zu viele Änderungen“.
 
@@ -478,6 +492,9 @@ Umgesetzt und im Browser geprüft, aber **nicht am Gerät**:
   [Am Gerät offen](#am-gerät-offen);
 - das Stimmgerät mit einer echten Stimme am Galaxy S23 und die
   Metronom-Unterteilungen über Bluetooth;
+- Zählzeiten und Loop-Fokus am Galaxy S23 bei Seitenbreite sowie die
+  Stilkosten der Zählzeiten während der Wiedergabe (sie sind SVG-Text, also
+  werden keine erwartet, gemessen ist es nicht);
 - der Druck aus Safari auf iPadOS („Teilen → Drucken“): ob der Dialog das
   Seitenformat aus der Partitur übernimmt und ohne leeres letztes Blatt endet.
 
@@ -529,8 +546,18 @@ mehrere Minuten ist nicht gemessen.
   dort ändert daran nichts
   ([E15](architecture.md#e15-fähigkeiten-statt-weg)). Das Systemband geht auf
   beiden Wegen.
-- **Ein Cache-Eintrag unter `CURRENT_FORMAT_VERSION` 4** wird beim nächsten
+- **Ein Cache-Eintrag unter `CURRENT_FORMAT_VERSION` 5** wird beim nächsten
   Öffnen neu konvertiert und bekommt dabei die Listen.
+- **Zählzeiten brauchen ebenfalls die Engine**: die Taktart je Takt und einen
+  Tick je Akkord (`measureFacts`, `noteSpellings[].tick`). Auf dem
+  Sidecar-Weg sagt die Einstellung, warum es sie nicht gibt. Die Zahlen folgen
+  einer Stimme (der ersten) und stehen in einer Reihe über der Notenzeile:
+  „1 2 3 4“ auf den Schlägen, „+“ auf den Hälften dazwischen in einfachen
+  Taktarten, jedes Achtel nummeriert in zusammengesetzten; Triolen,
+  Sechzehntel und alles andere außerhalb dieses Rasters bleiben leer statt
+  falsch. Ein Auftakt wird von seinem Ende her gezählt. Die Lesbarkeit am
+  Telefon bei Seitenbreite ist nicht geprüft
+  ([Offene Prüfungen](#offene-prüfungen)).
 - **Über 20 000 Silben gibt es keine Liedtext-Ansicht** – die Engine lässt die
   Liste dann ganz weg, statt sie abzuschneiden.
 - **Die gesungene Strophe folgt den ausgerollten Wiederholungen:** Das n-te

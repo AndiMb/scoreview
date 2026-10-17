@@ -234,7 +234,7 @@ Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 | Tabelle | Inhalt |
 |---|---|
 | `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version`, `backend` |
-| `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag`, `kind`, `stamp`, `target_parts`, `by_leader` |
+| `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag`, `kind`, `stamp`, `target_parts`, `by_leader`, `end_measure` |
 | `scoreview_leaders` | `file_id`, `user_id`, `appointed_by`, `created_at` – ernannte Leitungen; die Eigentümerin steht nie darin ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) |
 | `scoreview_follow` | `file_id` (Primärschlüssel: höchstens eine Sitzung je Datei), `leader_uid`, `started_at`, `heartbeat_at`, `version`, `state` ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) |
 | `scoreview_recordings` | `file_id`, `user_id`, `created_at`, `duration_ms`, `size_bytes`, `score_start_ms`, `tempo_factor`, `with_accompaniment` – die WAV selbst liegt in IAppData |
@@ -262,7 +262,13 @@ steht doppelt darin, als Part-ID und als Name, weil nicht belegt ist, dass
 MuseScores Part-ID einen Re-Upload übersteht. Ein **Stempel** (`kind = stamp`)
 ist eine Notiz mit einem Symbol aus einer festen Liste (Atemzeichen, Zäsur,
 Dynamik, Fermate …) statt Text; `by_leader` wird beim Anlegen festgehalten,
-damit eine abberufene Leitung ihre Hinweise behält.
+damit eine abberufene Leitung ihre Hinweise behält. Ein **gespeicherter
+Loop** (`kind = loop`, ab 1.17) ist eine Notiz mit Endtakt (`end_measure`):
+`measure_number` ist der erste Takt, `content` der Name, `fraction` 0 und
+kein Notenanker. Eine vierte Art statt einer eigenen Tabelle, weil ein Loop
+genau das will, was eine Notiz hat – den musikalischen Anker, die drei
+Sichtbarkeiten samt Stimmen für Leitungen, die Obergrenze je Person, einen
+Löschort. Verwaist ist er, sobald sein *Ende* jenseits der Partitur liegt.
 
 Aufnahmen liegen in IAppData unter `recordings/<uid>/<fileId>/<id>.wav`, nicht
 in Files: Nur die Aufnehmende hört sie, und in Files tauchten sie in Freigaben,
@@ -507,6 +513,8 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | Aufführungsmodus, Blättern per Taste/Pedal | `interactionPolicy.js`, `pagingPlan.js`, `keyMap.js` | `usePerformanceMode`, `usePaging`, `useWakeLock` | `ScoreLockButton.vue` |
 | Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | `leaders.js` | `useLeaders` | `LeaderPanel.vue` |
 | Stimmnotizen, Stempel, Studierbuchstaben | `annotationFilter.js`, `stampLayout.js`, `scoreFacts.js` | `useAnnotations`, `useScoreFacts` | `ScoreStamps.vue`, `StampSymbol.vue` |
+| Taktart, Zählzeiten, Loop-Fokus, gespeicherte Loops (1.17) | `scoreFacts.js` (`metersFromArtifacts`), `countLabels.js`, `countLayout.js`, `loopFocus.js` | `useScoreFacts`, `useMetronome`, `useAnnotations` | `NoteNameControls.vue`, `LoopSaveForm.vue`, Overlays in `ScorePage.vue` |
+| Drucken ([E16](#e16-drucken-aus-den-seiten-svgs)), Stimmgerät | `printLayout.js`, `tuner.js` | `useConversionStatus`, `useTuner` | `PrintApp.vue`, `PrintToolbar.vue`, `TunerPanel.vue`, `TunerNeedle.vue` |
 | „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js`, `leaderQueue.js`, `followPlayback.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
 | Setliste ([E11](#e11-die-setliste-als-markdown-datei)) | `setlistNav.js`, `setlistEdit.js`, `soundFontCache.js` | `useSetlist` | `SetlistBar.vue`, `SetlistEditor.vue` |
 | Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js` | `useMicrophone`, `useRecorder`, `useIntonation` | `MicIndicator.vue`, `RecordingPanel.vue` |
@@ -1942,8 +1950,21 @@ Selbsttest prüft beide Listen an `lyrics-test.mscz` – drei Strophen unter ein
 Wiederholung, 56 Silben, jede an einer `elid` aus `timing.json`, und je Segment,
 Notenzeile und Stimme so viele Schreibweisen wie Notenköpfe im SVG.
 
+**Die Taktart je Takt kommt ebenfalls aus der Engine** (ab
+`v4.7.5-engine.5`): `measureFacts` nennt je notiertem Takt die nominelle
+Taktart und die tatsächliche Länge in Ticks, und jeder `noteSpellings`-Eintrag
+trägt den notierten `tick` seines Segments ([Artefaktschema](#artefaktschema)).
+`measures.json` sagt nur, wann ein Takt beginnt, nicht was er ist; das Metronom
+schätzte die Schläge deshalb aus der Taktdauer und dem Viertel-Tempo – was 6/8
+nicht von 3/4 unterscheidet und einen Auftakt falsch zählt. Der Rückfall ohne
+das Feld bleibt die Schätzung, ergänzt um die Taktart-Ereignisse des MIDI
+(`FF 58`, M11); der Selbsttest prüft die Felder an `timesig-test.mscz`
+(ein Viertel Auftakt, 4/4, 3/4, 6/8) und die Lückenlosigkeit der Ticks an
+`keys-marks-test.mscz`. Der Viewer übernimmt sie wie die Tonarten nur bei
+`engineMeasuresMatch`.
+
 **Ein Cache-Eintrag mit kleinerer `format_version` wird beim nächsten Öffnen
-neu erzeugt** (`CURRENT_FORMAT_VERSION` = 4) – so bekommt jede Partitur die
+neu erzeugt** (`CURRENT_FORMAT_VERSION` = 5) – so bekommt jede Partitur die
 Felder ([Konvertierung und Cache](#konvertierung-und-cache)).
 
 ### E13: Übe-Tracks sind Dateien in Files
@@ -2106,6 +2127,7 @@ denselben Daten dazu, würde er ohne eine Zeile im Viewer mitgenutzt.
 | Systemband | nichts – die Systemgrenzen kommen aus den Notenlinien, auf beiden Wegen |
 | Liedtext | `lyricSyllables` mit mindestens einer Silbe **und** Kennungen nach M10 (`segIds`) |
 | Tonnamen, Ton beim Antippen | `noteSpellings` **und** Kennungen nach M10 (`segIds`) |
+| Zählzeiten | dazu `measureFacts` und ein `tick` je `noteSpellings`-Eintrag (`meters`, ab `v4.7.5-engine.5`, [E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)) – das Metronom kommt ohne aus und schätzt, die Zahlen über den Noten dürfen das nicht |
 
 **Kein stiller Rückfall.** Anders als die Färbung der Notenköpfe, die still auf
 das Band zurückfällt, sagen die neuen Darstellungen, warum sie nicht gehen
@@ -2403,6 +2425,15 @@ Studierbuchstaben A/B/C, eine Wiederholung) auf beiden Wegen:
   eines Studierbuchstabens gibt es dort nur als Glyphenpfad. Auslesen ließe er
   sich nur über eine Glyphenerkennung – deshalb die Felder in `meta.json`.
 - **`meta.json` des Sidecars hat weder `keySigs` noch `rehearsalMarks`.**
+- **Das MIDI trägt Taktarten als `FF 58`**, je Wechsel und ausgerollt wie die
+  Marker (gemessen an `timesig-test.mscz` und `keys-marks-test.mscz` mit
+  der Engine, deren MIDI dem des Sidecars byteweise gleicht): 4/4 bei Tick 0,
+  3/4 bei 2400, 6/8 bei 3840, und nach einer ausgerollten Wiederholung die
+  Taktart erneut am Beginn des zweiten Durchgangs. **Einen Auftakt schreibt
+  MuseScore als eigene Taktart seiner Länge** – ein Viertel Auftakt in 4/4
+  erscheint als `1/4` bei Tick 0 und `4/4` bei Tick 480. Aus dem MIDI lässt
+  sich also die Taktart jedes Takts gewinnen, nicht aber die *nominelle*
+  Taktart eines Auftakts; dafür gibt es `measureFacts`.
 - Ein MIDI-Marker liegt gerechnet oft einen Bruchteil einer Millisekunde vor
   dem Taktanfang (Gleitkomma aus der Tempokarte), `measures.json` auf ganzen
   Millisekunden. Ohne 1 ms Zugabe landete ein Buchstabe gelegentlich im Takt
@@ -2467,7 +2498,7 @@ beim Abspielen durchlaufen wird.
 
 `meta.json` ist das `metadata`-Objekt des Konverters, unverändert
 ([M8](#m8-metadata-trägt-tempo-und-titel-tracks-ist-aber-nicht-garantiert)).
-Die Engine des lokalen Wegs ergänzt vier Felder
+Die Engine des lokalen Wegs ergänzt fünf Felder
 ([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)), zuerst zwei
 für Tonarten und Studierbuchstaben:
 
@@ -2493,7 +2524,7 @@ Dann zwei für Liedtext und Schreibweisen (ab `v4.7.5-engine.4`):
 ```json
 "lyricSyllables": [{"elid": 0, "staff": 0, "voice": 0, "verse": 0,
                     "syllabic": "begin", "text": "Hal", "melisma": false}],
-"noteSpellings":  [{"elid": 3, "staff": 0, "voice": 0, "notes": [[67, 15], [71, 19]]}]
+"noteSpellings":  [{"elid": 3, "staff": 0, "voice": 0, "tick": 1440, "notes": [[67, 15], [71, 19]]}]
 ```
 
 - `elid` ist dieselbe Segmentnummer wie in `timing.json` und `seg-N` im SVG
@@ -2516,6 +2547,26 @@ Dann zwei für Liedtext und Schreibweisen (ab `v4.7.5-engine.4`):
 - Fehlen die Felder, gibt es Liedtext-Ansicht und Tonnamen nicht
   ([E15](#e15-fähigkeiten-statt-weg)); einen Rückfall aus dem MIDI gibt es
   dafür nicht.
+
+Und eines für die Taktart je Takt (ab `v4.7.5-engine.5`), dazu je
+`noteSpellings`-Eintrag der notierte `tick` seines Segments:
+
+```json
+"measureFacts": [{"measure": 1, "tick": 0,    "sigN": 4, "sigD": 4, "ticks": 480},
+                 {"measure": 2, "tick": 480,  "sigN": 4, "sigD": 4, "ticks": 1920},
+                 {"measure": 3, "tick": 2400, "sigN": 3, "sigD": 4, "ticks": 1440}]
+```
+
+- Ein Eintrag je **notiertem** Takt, gezählt wie `keySigs`; `sigN`/`sigD` ist
+  die nominelle Taktart, `ticks` die tatsächliche Länge (480 je Viertel) –
+  ein Auftakt ist kürzer als seine Taktart sagt, ein unregelmäßiger Takt
+  länger. Aufeinanderfolgende Einträge schließen lückenlos aneinander an.
+- `tick` am Segment liegt auf derselben Skala: Wo im Takt ein Akkord steht,
+  ist `tick − measureFacts[i].tick`, exakt und ohne Umweg über Zeit und Tempo.
+  Darauf bauen Metronom-Schläge nach Taktart und Zählzeiten auf.
+- Fehlt das Feld (Sidecar, ältere Engine), schätzt der Viewer die Schläge aus
+  der Taktdauer und liest Taktartwechsel aus dem MIDI
+  ([M11](#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen)).
 
 Welche Fassung dieses Schemas ein Cache-Eintrag hat, hält `format_version` fest
 (`CURRENT_FORMAT_VERSION` = 4, [Konvertierung und Cache](#konvertierung-und-cache)).
