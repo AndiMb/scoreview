@@ -516,10 +516,13 @@ re-measured on real devices and with real input latency.
   a leader, as it does in fullscreen; a tap on the line brings it back. What
   stays is not ScoreView's: Safari's own bars (a web page cannot go fullscreen
   on the iPhone, and Safari only shrinks its bars when the page itself
-  scrolls) and the header of Nextcloud's viewer with the file name and ✕. The
-  height budget (about 390 px in landscape, roughly 240 px of it for the
-  score with the bar standing) is estimated from the code, not measured on an
-  iPhone ([Troubleshooting](troubleshooting.md#on-a-phone-in-landscape-the-score-gets-little-height)).
+  scrolls) and Nextcloud's viewer, which keeps 50 px for its header with the
+  file name and ✕ and another 50 px below the score. Measured in Files in a
+  Chromium emulating a phone in landscape (844 × 340 px, that is after about
+  50 px of Safari bars): the viewer gets 240 px, the standing bar takes 59 of
+  them, and retracted to its 8 px line the score's area grows from 132 to
+  183 px. On an iPhone this has not been measured
+  ([Troubleshooting](troubleshooting.md#on-a-phone-in-landscape-the-score-gets-little-height)).
 
 ### Open checks
 

@@ -317,6 +317,18 @@ export default {
 	cursor: pointer;
 }
 
+/*
+ * Nextcloud's global button style gives every <button> a 44 px minimum height
+ * and a 3 px margin - measured in Files, the "8 px" line was 44 px tall and
+ * left the score 9 px of the bar's height. The margin comes from
+ * `button:not(.button-vue, …):not(…)`, specificity (0,2,1), which beats one
+ * scoped class; hence the doubled class.
+ */
+.scoreview-bar-line.scoreview-bar-line {
+	min-block-size: 0;
+	margin: 0;
+}
+
 .scoreview-bar-line-fill {
 	display: block;
 	inline-size: 100%;

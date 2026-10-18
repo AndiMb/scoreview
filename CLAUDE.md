@@ -109,9 +109,14 @@ Alles davon läuft zusätzlich in CI (`.github/workflows/ci.yml`).
 
 ## Testumgebung
 
-Zwei Docker-Container, `nextcloud-test` (Port 8080) und `scoreview-sidecar`.
+Zwei Docker-Container, `scoreview-nc` (Port 8081) und `scoreview-sidecar`.
+`scoreview-nc` gehört allein dieser App. Die ältere Instanz `nextcloud-test`
+(Port 8080) teilt sich ScoreView mit der Vereinsbuchhaltung-App, und deren
+Sitzung stoppt sie für ihre E2E-Läufe – dort also nicht testen und sie nicht
+anfassen. Die Prüfskripte unter `spike/abnahme/h/lib.mjs` zeigen auf
+`scoreview-nc`; `SV_BASE` und `SV_CONTAINER` stellen sie um.
 Der lokale Konvertierungsweg ist die Voreinstellung und braucht in
-`nextcloud-test` eine Node-Laufzeit (`apt-get install -y nodejs`, das Image
+`scoreview-nc` eine Node-Laufzeit (`apt-get install -y nodejs`, das Image
 bringt keine mit) – ohne die läuft dort gar nichts, auch wenn nichts
 umgestellt wurde. Auf den Sidecar wechselt
 `occ config:app:set scoreview conversion_backend --value sidecar`.
@@ -134,13 +139,13 @@ Testinstanz stehen in `docs/development.md#testumgebung`.
   Zeile „Konvertierung“ rot, mit einer cURL-Meldung zur Namensauflösung.
 - **Kein System-Cron im Image.** Ohne den manuellen Loop laufen
   Background-Jobs nicht, und Konvertierungen bleiben auf „pending" stehen.
-  Vor der Fehlersuche prüfen: `docker exec nextcloud-test ps aux | grep cron.php`.
+  Vor der Fehlersuche prüfen: `docker exec scoreview-nc ps aux | grep cron.php`.
   Der Loop:
-  `docker exec -d -u www-data nextcloud-test sh -c 'while true; do php -f /var/www/html/cron.php; sleep 15; done'`
+  `docker exec -d -u www-data scoreview-nc sh -c 'while true; do php -f /var/www/html/cron.php; sleep 15; done'`
   – kürzer als 15 s taktet er sich unter SQLite in „database is locked".
 - Passwörter der Testnutzer sind rotierbar und stehen bewusst nirgends im
   Repo. Bei Bedarf neu setzen:
-  `docker exec -u www-data -e OC_PASS='…' nextcloud-test php occ user:resetpassword --password-from-env Andreas`
+  `docker exec -u www-data -e OC_PASS='…' scoreview-nc php occ user:resetpassword --password-from-env Andreas`
 
 Ein Browser-Test läuft über `playwright-core` gegen das gecachte Chromium
 unter `%LOCALAPPDATA%\ms-playwright\`, gesteuert aus kleinen Wegwerf-Skripten

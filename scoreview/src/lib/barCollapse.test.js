@@ -3,9 +3,9 @@ import { isTight, shouldCollapse, TIGHT_ENTER, TIGHT_LEAVE } from './barCollapse
 
 describe('isTight', () => {
 	it('counts a phone in landscape as tight and the same phone upright as not', () => {
-		// compact bar 53 px; viewer under Safari and the viewer header
-		expect(isTight(53, 290, false)).toBe(true)
-		expect(isTight(53, 650, false)).toBe(false)
+		// measured in Files: compact bar 59 px, viewer 240 px across, 600 px upright
+		expect(isTight(59, 240, false)).toBe(true)
+		expect(isTight(59, 600, false)).toBe(false)
 	})
 
 	it('does not count a desktop window as tight', () => {

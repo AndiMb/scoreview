@@ -17,6 +17,11 @@ All notable changes to ScoreView. The format follows
 - In that situation the viewer offers the **system band** once, as it already
   did below 600 px width.
 
+### Fixed
+
+- The retracted bar was 44 px tall instead of 8 px in Files: Nextcloud's
+  global button style gave the line a minimum height and a margin.
+
 ## [1.19.0] – 2026-10-18
 
 ### Added

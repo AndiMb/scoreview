@@ -1722,8 +1722,9 @@ Grund und keinen Bedarf: Grund ist Vollbild **oder knapper Platz** – die
 stehende Leiste belegt mindestens 15 % der Höhe des Viewers (zurück erst unter
 12 %) –, und niemand braucht sie während der Wiedergabe, im Aufführungsmodus
 und beim Folgen einer Leitung. Knapper Platz ist der Ersatz für das Vollbild,
-wo es keins gibt: iPhone und WebView der Android-App, Telefon quer kommt auf
-rund 18 %, hochkant auf 8 %. Ein Anteil statt einer Media Query auf
+wo es keins gibt: iPhone und WebView der Android-App. Gemessen in Files mit
+emuliertem Telefon: Die 59-px-Leiste belegt quer 25 % des Viewers, hochkant
+10 %. Ein Anteil statt einer Media Query auf
 Ausrichtung oder Höhe aus demselben Grund wie beim Überlauf: Der Viewer
 steckt in verschiedenen Rahmen. Die Leistenhöhe wird gemessen, solange die
 Leiste steht, und gilt weiter, solange sie eingefahren ist – sonst hieße die

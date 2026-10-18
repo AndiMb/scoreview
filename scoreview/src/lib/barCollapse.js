@@ -9,8 +9,9 @@
 // "Short" is the bar's share of the viewer's height, not a media query on
 // orientation or height: the viewer sits in Nextcloud's viewer, in its own
 // modal, in the mobile apps' frame or in fullscreen, and a share follows what
-// it really has. A phone in landscape lands at about 18 %, the same phone
-// upright at about 8 %, a desktop window far below (issue #15).
+// it really has. Measured in Files, emulating a phone: the 59 px bar takes
+// 25 % of the viewer in landscape, 10 % upright; a desktop window stays far
+// below (issue #15).
 
 /** Share of the viewer's height from which the bar counts as too tall. */
 export const TIGHT_ENTER = 0.15

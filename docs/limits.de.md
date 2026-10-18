@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:d04190f09426 -->
+<!-- translation-of: limits.md sha256:ea4249212962 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -517,10 +517,13 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   dünnen Fortschrittslinie ein, wie im Vollbild; ein Tipp auf die Linie holt
   sie zurück. Was bleibt, gehört nicht ScoreView: Safaris eigene Leisten (eine
   Webseite kann am iPhone nicht ins Vollbild, und Safari verkleinert seine
-  Leisten nur, wenn die Seite selbst scrollt) und die Kopfzeile von Nextclouds
-  Viewer mit Dateiname und ✕. Der Höhenhaushalt (quer rund 390 px, davon bei
-  stehender Leiste etwa 240 px für die Noten) ist aus dem Code geschätzt,
-  nicht am iPhone gemessen ([Fehlersuche](troubleshooting.de.md#am-telefon-quer-bleibt-den-noten-wenig-höhe)).
+  Leisten nur, wenn die Seite selbst scrollt) und Nextclouds Viewer, der 50 px
+  für seine Kopfzeile mit Dateiname und ✕ und weitere 50 px unter den Noten
+  freihält. Gemessen in Files mit einem Chromium, das ein Telefon quer
+  nachbildet (844 × 340 px, also nach rund 50 px Safari-Leisten): Der Viewer
+  bekommt 240 px, die stehende Leiste belegt 59 davon, und zur 8-px-Linie
+  eingefahren wächst die Notenfläche von 132 auf 183 px. Am iPhone ist das
+  nicht gemessen ([Fehlersuche](troubleshooting.de.md#am-telefon-quer-bleibt-den-noten-wenig-höhe)).
 
 ### Offene Prüfungen
 
