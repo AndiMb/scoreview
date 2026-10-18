@@ -4,6 +4,17 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **Local conversion with Node 20 aborted** before converting anything
+  (`Assertion failed: !path_prefix.empty()`), since 1.19.0: the sandbox
+  granted the output directory twice, once with a trailing slash and once as
+  its resolved path, and Node 20's permission model crashes on that pair
+  (Node 22 and 24 do not). Each directory is now granted once. Affects the
+  Node of Debian 13, among others.
+
 ## [1.20.0] – 2026-10-18
 
 ### Changed

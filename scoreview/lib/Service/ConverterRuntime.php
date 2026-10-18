@@ -94,6 +94,8 @@ final class ConverterRuntime {
 	 * @throws LocalConverterException if a path cannot be granted
 	 */
 	public function command(string $script, array $read, array $write, array $args): array {
+		$read = self::distinctPaths($read);
+		$write = self::distinctPaths($write);
 		if ($this->kind === self::DENO) {
 			return array_merge(
 				// No --no-config: it also ignores package.json, and the bare
@@ -123,6 +125,25 @@ final class ConverterRuntime {
 			[$script],
 			$args,
 		);
+	}
+
+	/**
+	 * Each directory once, without a trailing slash. Measured on Node 20.19:
+	 * granting the same directory as `/tmp/out/` and `/tmp/out` aborts the
+	 * runtime before the script starts (assertion `!path_prefix.empty()` in
+	 * its permission tree; 22 and 24 accept it) - and that pair is exactly
+	 * what an output directory plus its realpath() produces.
+	 *
+	 * @param string[] $paths
+	 * @return string[]
+	 */
+	private static function distinctPaths(array $paths): array {
+		$result = [];
+		foreach ($paths as $path) {
+			$trimmed = rtrim($path, '/');
+			$result[] = $trimmed === '' ? '/' : $trimmed;
+		}
+		return array_values(array_unique($result));
 	}
 
 	/**

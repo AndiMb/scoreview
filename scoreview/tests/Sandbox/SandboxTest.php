@@ -107,7 +107,10 @@ class SandboxTest extends TestCase {
 	public function testKonvertierungSchreibtNurInsAusgabeverzeichnis(): void {
 		$out = $this->tempDir();
 		$tempManager = $this->createMock(ITempManager::class);
-		$tempManager->method('getTemporaryFolder')->willReturn($out);
+		// With the trailing slash, as Nextcloud's ITempManager returns it: the
+		// realpath() of that differs, and both reach the grants - the pair
+		// Node 20 aborts on unless ConverterRuntime merges it.
+		$tempManager->method('getTemporaryFolder')->willReturn($out . '/');
 		$converter = $this->converter([], $tempManager);
 
 		$artifacts = $converter->convert($converter->getConverterDir() . '/lyrics-test.mscz');

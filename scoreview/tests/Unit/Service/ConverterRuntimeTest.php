@@ -66,6 +66,19 @@ class ConverterRuntimeTest extends TestCase {
 		], $runtime->command('/app/convert.mjs', ['/app', '/tmp/in.mscz', '/fonts,cjk'], ['/tmp/out'], ['--selftest']));
 	}
 
+	public function testGrantsEachDirectoryOnceWithoutTrailingSlash(): void {
+		// Node 20 aborts on `/tmp/out/` next to `/tmp/out` - the pair an
+		// output directory and its realpath() produce.
+		$runtime = ConverterRuntime::fromVersionOutput('/usr/bin/node', 'v20.19.2');
+
+		$this->assertSame([
+			'/usr/bin/node', '--experimental-permission',
+			'--allow-fs-read=/app', '--allow-fs-read=/',
+			'--allow-fs-write=/tmp/out',
+			'/app/convert.mjs', '/tmp/out/',
+		], $runtime->command('/app/convert.mjs', ['/app/', '/app', '/'], ['/tmp/out/', '/tmp/out'], ['/tmp/out/']));
+	}
+
 	public function testDenoBekommtNurLesenUndSchreiben(): void {
 		$runtime = ConverterRuntime::fromVersionOutput('/usr/local/bin/deno', "deno 2.9.7 (stable)\n");
 
