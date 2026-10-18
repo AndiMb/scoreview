@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:f330cdc3aae2 -->
+<!-- translation-of: installation.md sha256:928dc3056ed6 -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -9,7 +9,7 @@ es **zwei zur Wahl**, und sie liefern dasselbe Ergebnis
 
 | | **Weg A: Lokal** (Voreinstellung) | **Weg B: Sidecar** |
 |---|---|---|
-| Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
+| Braucht | Node.js ≥ 18 oder Deno ≥ 2 auf dem Nextcloud-Server | einen Docker-Host |
 | MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
 | SoundFont | holt der Server selbst, Adresse voreingestellt | bringt der Container mit |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
@@ -36,8 +36,8 @@ wird nichts zwischengespeichert. Wo der Server konvertieren kann, ist er nicht a
 - PHP 8.1 bis 8.5
 - SQLite, MySQL/MariaDB oder PostgreSQL
 - Background-Jobs im Modus `cron` (Schritt 5)
-- Je nach Weg: **A** eine Node.js-Laufzeit ab Version 18 auf dem
-  Nextcloud-Server, und PHP muss Prozesse starten dürfen (`proc_open` nicht per
+- Je nach Weg: **A** eine Node.js-Laufzeit ab Version 18 oder Deno ab
+  Version 2 auf dem Nextcloud-Server, und PHP muss Prozesse starten dürfen (`proc_open` nicht per
   `disable_functions` gesperrt). **B** ein Docker-Host – dieselbe Maschine wie
   Nextcloud oder eine andere, erreichbar über HTTP. **Keins von beidem** ist
   auch möglich: Dann konvertiert der Browser (siehe oben); vorausgesetzt wird
@@ -73,6 +73,25 @@ das ein Image-Update übersteht, gehört die Zeile in ein eigenes Dockerfile
 
 Der Konverter selbst ist reines JavaScript und WebAssembly, also unabhängig von
 Betriebssystem und Prozessorarchitektur – es gibt nichts zu kompilieren.
+
+**Abschottung.** Jede Konvertierung läuft eingeschlossen: Sie darf die
+Partitur lesen und ihr Ergebnis schreiben, sonst nichts
+([S11](architecture.md#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)).
+Wie weit das reicht, hängt an der Laufzeit – Node.js 20.7 bis 24 sperren
+Dateisystem und Prozesse, aber nicht das Netz, Node.js ab 25 und Deno sperren
+alles, Node.js 18 nichts
+([Grenzwerte](limits.de.md#abschottung-des-lokalen-konverters)). Die
+Betriebsdiagnose zeigt die Stufe in der Zeile **Abschottung**. Einzuschalten
+ist dafür nichts.
+
+**Deno statt Node.js.** Kann das Node.js der Distribution das Netz nicht
+sperren, kann es Deno: die offizielle Binärdatei installieren (etwa nach
+`/usr/local/bin/deno`, siehe [deno.com](https://deno.com)), wo der
+Nextcloud-Prozess sie ausführen darf, und ihren Pfad als `node_path` eintragen
+(Schritt 3). Von selbst sucht die App nicht nach Deno – es ist eine Wahl,
+nichts, was übernommen wird, weil es zufällig installiert ist. Nötig ist Deno 2
+oder neuer; Bun wird nicht unterstützt, weil es den Konverter nicht abschotten
+kann.
 
 ## 1b. Weg B: Sidecar starten
 
@@ -144,6 +163,13 @@ von einer voreingestellten Adresse (siehe [SoundFont](#soundfont)). Nur wenn
 
 ```sh
 occ config:app:set scoreview node_path --value=/usr/bin/node   # nur falls nötig
+```
+
+Dieselbe Einstellung nimmt Deno, für die vollständige Abschottung (siehe
+[1a](#1a-weg-a-nodejs-bereitstellen)):
+
+```sh
+occ config:app:set scoreview node_path --value=/usr/local/bin/deno
 ```
 
 ### Weg B: Sidecar
@@ -424,7 +450,7 @@ Offline-Seite gibt dessen Herkunft in ihrer CSP selbst frei.
 | Schlüssel | Wo | Bedeutung |
 |---|---|---|
 | `conversion_backend` | Verwaltung | `local` (Voreinstellung) oder `sidecar` |
-| `node_path` | Verwaltung¹ | Pfad zu `node`; leer = übliche Orte durchsuchen (Weg A). Absolut, Programmname `node` oder `nodejs` (auch `node20`, `.exe`) |
+| `node_path` | Verwaltung¹ | Pfad zu `node` oder `deno`; leer = übliche Orte nach `node` durchsuchen (Weg A). Absolut, Programmname `node`, `nodejs` oder `deno` (auch `node20`, `.exe`) |
 | `soundfont_fetch_url` | Verwaltung¹ | Adresse, von der der Server das SoundFont einmalig holt; leer = voreingestellte Adresse (Weg A) |
 | `sidecar_url` | Verwaltung¹ | Adresse des Konvertierungsdienstes (Weg B) |
 | `sidecar_secret` | Verwaltung¹ | Shared Secret, als sensibel geführt und in `occ config:list` ausgeblendet (Weg B) |

@@ -8,7 +8,7 @@ nicht offensichtlich ist – **die fachliche Wahrheit steht in `docs/`**.
 
 | Frage | Dokument |
 |---|---|
-| Warum ist das so gebaut? | `docs/architecture.md` – Aufbau, Sicherheitsregeln S1–S10, Entscheidungen E1–E17, Formatgrundlagen M1–M12 (ohne M5) |
+| Warum ist das so gebaut? | `docs/architecture.md` – Aufbau, Sicherheitsregeln S1–S11, Entscheidungen E1–E18, Formatgrundlagen M1–M12 (ohne M5) |
 | Was ist gemessen, was ist offen? | `docs/limits.md` |
 | Wie baue/teste ich? | `docs/development.md` |
 | Wie wird das installiert? | `docs/installation.md` |
@@ -75,6 +75,7 @@ Backend, ebenfalls aus `scoreview/`:
 ```sh
 composer install                # einmalig, bringt phpunit + php-cs-fixer + OCP-Stubs
 composer run test:unit          # PHPUnit gegen Interface-Mocks, keine Instanz nötig
+SCOREVIEW_RUNTIME=/usr/bin/node composer run test:sandbox  # S11 gegen echtes node/deno, braucht converter/node_modules
 composer run cs:check           # Nextcloud-Codingstandard, --fix über composer run cs:fix
 ```
 
@@ -183,7 +184,7 @@ misst er nur den Effektbus und meldet fälschlich „kein Ton".
   Entscheidungen, die von außen falsch aussehen. Der Bestand ist so
   geschrieben; bitte in dieser Dichte weiterführen statt sie zu verwässern.
   **Keine Prozess-Chronik im Code**: nicht „Phase 17 hat gemessen, dass …",
-  sondern „gemessen: …". Referenzen auf `S1`–`S10`/`E1`–`E17`/`M1`–`M12` (ohne M5) sind erwünscht,
+  sondern „gemessen: …". Referenzen auf `S1`–`S11`/`E1`–`E18`/`M1`–`M12` (ohne M5) sind erwünscht,
   sie zeigen auf `docs/architecture.md`.
 - Commit-Messages beschreiben Ursache und Wirkung, nicht nur den Fix. Kurze
   Betreffzeile, dann ein Fließtext-Body.

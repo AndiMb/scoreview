@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:91ec684e5360 -->
+<!-- translation-of: limits.md sha256:8179341d58ca -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -89,6 +89,39 @@ Leitung.
 Die Artefakte sind dieselben: `timing.json`, `measures.json` und `meta.json`
 sind Byte für Byte identisch zu `node convert.mjs` derselben Partitur, die
 SVG-Seite ist gleich lang (gemessen an der Minipartitur).
+
+### Abschottung des lokalen Konverters
+
+Was eine Konvertierung auf Weg A außer der Partitur und ihrem
+Ausgabeverzeichnis erreichen kann
+([S11](architecture.md#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)).
+Gemessen unter Linux mit einem Prüfskript, das jedes davon versucht, mit den
+Flags, die die App setzt:
+
+| | Node 18 | Node 20.7–24 | Node 25, 26 | Deno 2 |
+|---|---|---|---|---|
+| Andere Dateien lesen oder schreiben | möglich | gesperrt | gesperrt | gesperrt |
+| Prozesse starten | möglich | gesperrt | gesperrt | gesperrt |
+| Netz | möglich | **möglich** | gesperrt | gesperrt |
+| Umgebungsvariablen | lesbar¹ | lesbar¹ | lesbar¹ | gesperrt |
+| Stufe in der Diagnose | keine | teilweise | vollständig | vollständig |
+
+¹ Die App startet den Konverter mit einer minimalen Umgebung (`PATH`, `LANG`)
+statt der des Webservers; zu lesen gibt es also nichts.
+
+- **Node 20.0–20.6** werten von mehreren `--allow-fs-read` nur das letzte aus;
+  der Konverter könnte sein eigenes Verzeichnis und die Partitur nicht
+  zugleich lesen. Sie laufen ohne Abschottung, wie Node 18.
+- **Die Engine braucht nichts von dem Gesperrten** – keine Worker, keine
+  Prozesse, kein Netz –, gemessen auch an einer Partitur mit 4 Seiten und
+  58 Takten.
+- **Die Dauer bleibt gleich:** Der Selbsttest braucht unter Node wie unter
+  Deno 0,7–0,8 s.
+- **Unter Deno darf kein freigegebener Pfad ein Komma enthalten.** Deno trennt
+  Freigaben an Kommas und kennt kein Escape dafür. Ein solcher Lauf wird mit
+  Nennung des Pfads abgelehnt, statt mehr freizugeben oder ohne Abschottung zu
+  laufen. Betroffen ist praktisch ein App- oder Temp-Verzeichnis oder ein
+  `cjk_font_dir` mit Komma im Pfad.
 
 ## Bekannte Lücken
 

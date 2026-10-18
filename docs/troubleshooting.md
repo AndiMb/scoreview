@@ -392,6 +392,24 @@ separately, because from the outside they all look the same:
   `converter/node_modules`. This happens when the app was installed from a Git checkout
   instead of a release tarball; there the directory is
   gitignored. Fix it with `npm ci` in `scoreview/converter/`.
+- **“Deno … is too old”** – `node_path` points to Deno 1.x. Deno 2 or later
+  is required; `deno upgrade` or a current binary fixes it.
+
+**The conversion fails with “Access to this API has been restricted” or
+“NotCapable” in the log.** That is the isolation of the converter
+([S11](architecture.md#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis), German)
+refusing an access. Normally the converter needs nothing beyond what it is
+granted; the usual causes are a `cjk_font_dir` the web server account cannot
+read, or a converter directory reached through a symlink that also points
+somewhere else. **“Deno cannot grant access to a path containing a comma”**
+names the path: move it (temp directory, `cjk_font_dir`) to one without a
+comma, or use Node.js. The isolation cannot be switched off – that is on
+purpose.
+
+**The “Isolation” row is yellow.** The runtime cannot lock the converter in –
+Node.js 18 or 20.0–20.6. Conversion works as before. Node.js 20.7 or later
+locks the file system, Node.js 25 or later or Deno locks the network as well
+([1a](installation.md#1a-path-a-provide-nodejs)).
 
 The “Run conversion self-test” button converts a bundled
 mini score via the

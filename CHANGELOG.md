@@ -4,6 +4,30 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.0] – 2026-10-18
+
+### Added
+
+- **Deno as a runtime for the local converter** (#16): enter the path to
+  `deno` (2 or later) in the existing “Path to node or deno” setting. Deno
+  locks the converter in completely – no other files, no network, no
+  processes, no environment. The automatic search still looks for `node`
+  only; Bun is not supported, as it has no permission model.
+- **The local converter runs isolated** on every runtime that can: it may
+  read its own directory, the score and the CJK font directory, and write
+  its output directory – nothing else. Node.js 20.7 to 24 lock the file
+  system and processes, Node.js 25 and later the network as well; Node.js 18
+  and 20.0–20.6 convert as before, without isolation. The converter also no
+  longer inherits the web server's environment variables.
+- New **Isolation** row in the status diagnostics: full, partial (network
+  open) or none, with what to install for more.
+
+### Changed
+
+- CI checks the local converter under Node.js 18, 20, 22, 26 and Deno, each
+  time through the app's own command line and with a probe that tries what
+  the sandbox must block.
+
 ## [1.18.0] – 2026-10-17
 
 ### Added

@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:bf0b3d791b07 -->
+<!-- translation-of: troubleshooting.md sha256:c72454aceb79 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -393,6 +393,24 @@ getrennt, weil sie von außen alle gleich aussehen:
   `converter/node_modules`. Das passiert, wenn die App aus einem Git-Checkout
   statt aus einem Release-Tarball installiert wurde; dort ist das Verzeichnis
   gitignored. Nachholen mit `npm ci` in `scoreview/converter/`.
+- **„Deno … ist zu alt"** – `node_path` zeigt auf Deno 1.x. Nötig ist Deno 2
+  oder neuer; `deno upgrade` oder eine aktuelle Binärdatei behebt das.
+
+**Die Konvertierung scheitert mit „Access to this API has been restricted“
+oder „NotCapable“ im Log.** Das ist die Abschottung des Konverters
+([S11](architecture.md#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)),
+die einen Zugriff verweigert. Normalerweise braucht der Konverter nichts über
+das Freigegebene hinaus; die üblichen Ursachen sind ein `cjk_font_dir`, das
+das Konto des Webservers nicht lesen kann, oder ein Konverterverzeichnis, das
+über einen Symlink erreicht wird, der seinerseits woandershin zeigt. **„Deno
+cannot grant access to a path containing a comma“** nennt den Pfad: ihn
+(Temp-Verzeichnis, `cjk_font_dir`) an einen Ort ohne Komma legen oder Node.js
+verwenden. Abschalten lässt sich die Abschottung nicht – mit Absicht.
+
+**Die Zeile „Abschottung“ ist gelb.** Die Laufzeit kann den Konverter nicht
+einschließen – Node.js 18 oder 20.0–20.6. Konvertiert wird wie bisher. Node.js
+ab 20.7 sperrt das Dateisystem, Node.js ab 25 oder Deno auch das Netz
+([1a](installation.de.md#1a-weg-a-nodejs-bereitstellen)).
 
 Der Knopf „Konvertierung selbst testen“ konvertiert eine mitgelieferte
 Minipartitur über den

@@ -8,7 +8,7 @@ ScoreView consists of the Nextcloud app and a conversion path. There are
 
 | | **Path A: Local** (default) | **Path B: Sidecar** |
 |---|---|---|
-| Requires | Node.js ≥ 18 on the Nextcloud server | a Docker host |
+| Requires | Node.js ≥ 18 or Deno ≥ 2 on the Nextcloud server | a Docker host |
 | MuseScore | MuseScore 4.7.5 as WebAssembly, in the app package | real MuseScore 4 in the container |
 | SoundFont | fetched by the server itself from a preset address | shipped with the container |
 | To set up | nothing | start the container, enter address and secret |
@@ -35,8 +35,8 @@ it is not active.
 - PHP 8.1 to 8.5
 - SQLite, MySQL/MariaDB or PostgreSQL
 - Background jobs in `cron` mode (step 5)
-- Depending on the path: **A** a Node.js runtime, version 18 or later, on the
-  Nextcloud server, and PHP must be allowed to start processes (`proc_open` not
+- Depending on the path: **A** a Node.js runtime, version 18 or later, or
+  Deno 2 or later, on the Nextcloud server, and PHP must be allowed to start processes (`proc_open` not
   blocked via `disable_functions`). **B** a Docker host – the same machine as
   Nextcloud or a different one, reachable over HTTP. **Neither** is also
   possible: then the browser converts (see above); this requires a browser that
@@ -73,6 +73,24 @@ on `FROM nextcloud:…` rather than in the running container.
 The converter itself is pure JavaScript and WebAssembly, and therefore
 independent of operating system and processor architecture – there is nothing
 to compile.
+
+**Isolation.** Every conversion runs locked in: it may read the score and
+write its result, nothing else
+([S11](architecture.md#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis), German).
+How far that goes depends on the runtime – Node.js 20.7 to 24 lock the file
+system and processes but not the network, Node.js 25 and later and Deno lock
+everything, Node.js 18 nothing
+([Limits](limits.md#isolation-of-the-local-converter)). The status
+diagnostics show the level in the **Isolation** row. Nothing needs to be
+switched on for it.
+
+**Deno instead of Node.js.** If the distribution's Node.js cannot block
+network access, Deno can: install the official binary (for example to
+`/usr/local/bin/deno`, see [deno.com](https://deno.com)) where the Nextcloud
+process may run it, and enter its path as `node_path` (step 3). The app does
+not search for Deno by itself – it is a choice, not something picked up
+because it happens to be installed. Deno 2 or later is required; Bun is not
+supported, as it cannot isolate the converter.
 
 ## 1b. Path B: Start the sidecar
 
@@ -144,6 +162,13 @@ lives elsewhere does it need to be specified:
 
 ```sh
 occ config:app:set scoreview node_path --value=/usr/bin/node   # only if needed
+```
+
+The same setting takes Deno, for full isolation (see
+[1a](#1a-path-a-provide-nodejs)):
+
+```sh
+occ config:app:set scoreview node_path --value=/usr/local/bin/deno
 ```
 
 ### Path B: Sidecar
@@ -422,7 +447,7 @@ allows its origin in its own CSP.
 | Key | Where | Meaning |
 |---|---|---|
 | `conversion_backend` | Administration | `local` (default) or `sidecar` |
-| `node_path` | Administration¹ | Path to `node`; empty = search the usual places (path A). Absolute, program name `node` or `nodejs` (also `node20`, `.exe`) |
+| `node_path` | Administration¹ | Path to `node` or `deno`; empty = search the usual places for `node` (path A). Absolute, program name `node`, `nodejs` or `deno` (also `node20`, `.exe`) |
 | `soundfont_fetch_url` | Administration¹ | Address from which the server fetches the SoundFont once; empty = preset address (path A) |
 | `sidecar_url` | Administration¹ | Address of the conversion service (path B) |
 | `sidecar_secret` | Administration¹ | Shared secret, stored as sensitive and hidden in `occ config:list` (path B) |

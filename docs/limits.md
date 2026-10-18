@@ -93,6 +93,38 @@ The artifacts are the same: `timing.json`, `measures.json` and `meta.json` are
 byte-for-byte identical to `node convert.mjs` for the same score, and the SVG
 page has the same length (measured on the mini score).
 
+### Isolation of the local converter
+
+What a conversion on path A can reach besides the score and its output
+directory
+([S11](architecture.md#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis) (German)).
+Measured on Linux with a probe that tries each of these, using the flags the
+app sets:
+
+| | Node 18 | Node 20.7–24 | Node 25, 26 | Deno 2 |
+|---|---|---|---|---|
+| Other files, read or write | possible | blocked | blocked | blocked |
+| Start processes | possible | blocked | blocked | blocked |
+| Network | possible | **possible** | blocked | blocked |
+| Environment variables | readable¹ | readable¹ | readable¹ | blocked |
+| Level in the diagnostics | none | partial | full | full |
+
+¹ The app starts the converter with a minimal environment (`PATH`, `LANG`)
+instead of the web server's, so there is nothing to read.
+
+- **Node 20.0–20.6** honour only the last of several `--allow-fs-read`
+  flags; the converter could not read its own directory and the score at
+  the same time. They run without isolation, like Node 18.
+- **The engine needs none of the blocked capabilities** – no workers, no
+  processes, no network – also measured with a 4-page, 58-measure score.
+- **Duration is unchanged:** the self-test takes 0.7–0.8 s under Node and
+  Deno alike.
+- **Under Deno, no granted path may contain a comma.** Deno splits grants at
+  commas and has no way to escape one. Such a run is refused with the path
+  named, instead of granting more or running without isolation. Affected in
+  practice: an app or temp directory path, or `cjk_font_dir`, with a comma
+  in it.
+
 ## Known gaps
 
 **D.C./D.S./coda jumps.** MuseScore's `--score-media` does not unroll them into

@@ -812,7 +812,7 @@ Navigation, sonst wird das neue Stück als Einzelstück geöffnet
 Die Regeln, die die Probe- und Konzertfunktionen und die eigenständige Seite
 ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)) verbindlich
 einhalten. Die Begründungen stehen ausführlich an den verlinkten Stellen; hier
-steht, was nicht aufgeweicht werden darf. Im Code sind sie als `S1`…`S10`
+steht, was nicht aufgeweicht werden darf. Im Code sind sie als `S1`…`S11`
 referenziert.
 
 ### S1: Begleit-Token sind an Zweck, Datei und Direct-Editing-Token gebunden
@@ -933,7 +933,9 @@ darf diese Felder deshalb nur, wer in der Gruppe `admin` ist
 (`SettingsController::update`, 403); unverändert mitgeschickt stören sie
 nicht, damit delegierte Admins den Rest der Seite weiter speichern können.
 Geänderte Werte werden außerdem geprüft: `node_path` leer oder absolut mit
-dem Programmnamen `node`/`nodejs`, die Adressen nur `http(s)` mit Host.
+dem Programmnamen `node`/`nodejs`/`deno`
+([E18](#e18-deno-als-zweite-laufzeit-bun-nicht)), die Adressen nur `http(s)`
+mit Host.
 
 ### S10: Vorgemerktes gehört einem Konto und verschwindet mit der Anmeldung
 
@@ -975,6 +977,59 @@ Origin, nicht am Konto. Deshalb:
 - **Schreibendes geht nie aus dem Cache.** Nur `GET` wird beantwortet; alles
   andere geht unverändert ans Netz, und die Oberfläche bietet es offline gar
   nicht an.
+
+### S11: Der lokale Konverter sieht nur die Partitur und sein Ergebnis
+
+Der lokale Weg ([E3](#e3-zwei-konvertierungswege-hinter-einer-api)) führt eine
+Partitur aus Files durch rund 9 MB Wasm-Code und den Emscripten-Glue. Ein
+Fehler darin soll nicht mehr erreichen als diese eine Konvertierung. Jeder
+Lauf von `convert.mjs`, Konvertierung wie Selbsttest, bekommt deshalb nur:
+
+- **Lesen:** das Konverterverzeichnis, die Eingabedatei (eine eigene
+  Temp-Datei je Lauf) und, falls gesetzt, `cjk_font_dir`. Liegt ein Pfad
+  hinter einem Symlink, wird zusätzlich sein Ziel freigegeben.
+- **Schreiben:** das Ausgabeverzeichnis, beim Selbsttest nichts.
+- **Nichts sonst**, soweit die Laufzeit es durchsetzen kann: kein Netz, keine
+  Kindprozesse, keine Worker (Node), keine Umgebungsvariablen (Deno), keine
+  Rückfrage.
+- **Eine minimale Umgebung** (`PATH`, `LANG`, zwei Schalter für Deno) statt
+  der von PHP-FPM. Node kann Umgebungsvariablen auch mit `--permission`
+  nicht sperren; sie nicht weiterzugeben, wirkt für jede Laufzeit.
+
+Wie weit das reicht, hängt an der Laufzeit (gemessen, Tabelle in den
+[Grenzwerten](limits.de.md#abschottung-des-lokalen-konverters)):
+
+| Stufe | Laufzeit | gesperrt |
+|---|---|---|
+| vollständig | Deno ≥ 2, Node ≥ 25 | Dateisystem, Prozesse, Netz |
+| teilweise | Node 20.7–24 | Dateisystem, Prozesse – das Netz bleibt offen |
+| keine | Node < 20.7 | nichts |
+
+Unter Node 20.0–20.6 zählt von mehreren `--allow-fs-read` nur das letzte, und
+Komma-Listen sind ab Node 22 Teil des Pfads – darum beginnt die Abschottung
+erst mit 20.7.
+
+Was nicht aufgeweicht werden darf:
+
+- **Kein Schalter.** Die Abschottung gilt immer in dem Umfang, den die
+  Laufzeit hergibt. Eine Laufzeit ohne Abschottung konvertiert weiter, aber
+  die Betriebsdiagnose sagt es (Zeile „Isolation“) – sie läuft nie still ohne
+  Schutz, wo Schutz möglich wäre.
+- **Nicht großzügiger freigeben, um einen Lauf zu retten.** Deno trennt jede
+  Freigabe an Kommas und kennt kein Escape. Ein Pfad mit Komma wird deshalb
+  abgelehnt (`local_unavailable`, der Pfad steht in der Meldung), statt das
+  Elternverzeichnis freizugeben oder ohne Flags zu starten.
+- **Geprüft wird durch Versuch.** `tests/Sandbox/` startet mit genau den
+  Bausteinen der App (`ConverterRuntime::command()`, die Umgebung von
+  `LocalConverter`) ein Skript, das alles Verbotene versucht, und erwartet je
+  Stufe die Sperren. CI führt das für jede Laufzeit aus.
+- **Die Stufe entscheidet nicht über die Verfügbarkeit.** `describe()` meldet
+  sie, `ClientFallback` liest weiter nur `available` – der Rückfall in den
+  Browser ([E7](#e7-konvertierung-im-browser-als-rückfall)) bleibt davon
+  unberührt.
+
+Der Lebendtest `<laufzeit> --version` läuft ohne Abschottung: Er führt kein
+Skript aus, und welche Flags gelten, ergibt sich erst aus seiner Antwort.
 
 ## Entwurfsentscheidungen
 
@@ -1035,8 +1090,8 @@ zu beantworten.
 | | Lokal (Voreinstellung) | Sidecar |
 |---|---|---|
 | MuseScore | MuseScore 4.7.5 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) | echtes MuseScore 4 aus gepinntem AppImage |
-| Läuft als | Kindprozess der Node-Laufzeit des Servers | eigener Container, HTTP-API |
-| Voraussetzung beim Betreiber | Node.js ≥ 18, `proc_open` erlaubt | Docker o. ä. |
+| Läuft als | abgeschotteter Kindprozess der Node- oder Deno-Laufzeit des Servers ([S11](#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)) | eigener Container, HTTP-API |
+| Voraussetzung beim Betreiber | Node.js ≥ 18 oder Deno ≥ 2, `proc_open` erlaubt | Docker o. ä. |
 | Im App-Paket | rund 14 MB Wasm + Ressourcen (`converter/`) | nichts |
 | SoundFont | holt der Server von einer voreingestellten Adresse | bringt das Image mit |
 | Vorab-Konvertierung, Selbsttest | ja | ja |
@@ -1153,8 +1208,10 @@ veröffentlicht.
 
 #### Was der lokale Weg kostet
 
-- **Eine Node-Laufzeit auf dem Server.** Das offizielle Nextcloud-Docker-Image
-  bringt keine mit; auf verwaltetem Hosting ist sie meist nicht nachrüstbar.
+- **Eine JavaScript-Laufzeit auf dem Server**, Node oder Deno
+  ([E18](#e18-deno-als-zweite-laufzeit-bun-nicht)). Das offizielle
+  Nextcloud-Docker-Image bringt keine mit; auf verwaltetem Hosting ist sie
+  meist nicht nachrüstbar.
 - **Rund 14 MB mehr im App-Paket** (9,3 MB Wasm-Code, 4,8 MB vorgeladene
   Ressourcen: Notenschrift, Textschriften, SMuFL-Metadaten als woff2). Das Paket
   muss sie fertig installiert enthalten – eine Instanz ohne Container hat kein
@@ -2280,6 +2337,40 @@ wird nicht gefunden. Die Suche erscheint überall, auf Files-Seiten mit
 Reihenfolge 25 (Files hat 5), sonst mit 60, hinter Dateien, Kontakten und
 Kalender. Der Treffer öffnet die Datei über `/f/{fileId}` – denselben Einstieg
 wie Files ([E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste)).
+
+### E18: Deno als zweite Laufzeit, Bun nicht
+
+Der lokale Weg läuft unter Node oder unter Deno. Eingetragen wird Deno im
+selben Feld wie Node (`node_path`); die automatische Suche bleibt bei `node`.
+
+**Warum Deno.** Deno kann den Konverter vollständig einschließen –
+Dateisystem, Netz, Prozesse und Umgebung –, und zwar in jeder Version ab 2.
+Node kann das erst ab 25, die Versionen der Distributionen (Debian 12 und
+Ubuntu 24.04: 18, Debian 13: 20, Ubuntu 26.04: 22) lassen das Netz offen oder
+kennen gar kein Berechtigungsmodell
+([S11](#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)).
+`convert.mjs` läuft unter Deno unverändert, mit derselben Dauer; es gibt
+keine Verzweigung nach Laufzeit im Konverter.
+
+**Warum Bun nicht.** Bun läuft den Konverter ebenfalls unverändert, hat aber
+kein Berechtigungsmodell. Es brächte nur eine weitere Laufzeit, die CI tragen
+müsste, ohne dass der Konverter dadurch irgendetwas weniger dürfte.
+`isValidNodePath` lässt den Namen deshalb nicht zu
+([S9](#s9-was-programme-startet-oder-adressen-abruft-stellt-nur-ein-voller-admin-ein)).
+
+**Erkannt an der Antwort, nicht am Namen.** Welche Laufzeit vorliegt, sagt
+`--version` (`v22.21.1` bzw. `deno 2.9.7 …`), nicht der Dateiname: Ein `node`,
+das ein Symlink auf Deno ist, bekäme sonst Node-Flags, die Deno nicht kennt.
+Die Regeln je Version stehen an einer Stelle, `Service\ConverterRuntime`, ein
+Wert ohne I/O; `LocalConverter` fragt die Laufzeit und startet, was er
+zurückbekommt. Deno 1.x wird nicht angenommen (`runtime_version` in der
+Diagnose) – seine Node-Kompatibilität ist schwächer und nicht gemessen.
+
+**Was Deno nicht bekommt.** `--no-config` scheidet aus, obwohl es
+naheläge: Damit ignoriert Deno auch `package.json`, und der Import der
+Engine löst sich nicht mehr auf. `--no-lock` dagegen ist gesetzt: Das
+App-Verzeichnis ist signiert, eine dort angelegte `deno.lock` brächte
+Nextclouds Integritätsprüfung zum Anschlagen.
 
 ## Formatgrundlagen
 

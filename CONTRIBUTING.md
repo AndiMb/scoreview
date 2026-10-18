@@ -57,5 +57,5 @@ in [docs/development.md](docs/development.md).
 
 Warum die App so gebaut ist, wie sie gebaut ist, steht in
 [docs/architecture.md](docs/architecture.md). Wer eine der Entscheidungen
-E1–E17 oder eine der Sicherheitsregeln S1–S10 antasten will, findet dort
+E1–E18 oder eine der Sicherheitsregeln S1–S11 antasten will, findet dort
 ihre Begründung.
