@@ -4,7 +4,7 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.20.1] – 2026-10-18
 
 ### Fixed
 
@@ -1356,6 +1356,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.20.1]: https://github.com/AndiMb/scoreview/compare/v1.20.0...v1.20.1
 [1.20.0]: https://github.com/AndiMb/scoreview/compare/v1.19.0...v1.20.0
 [1.19.0]: https://github.com/AndiMb/scoreview/compare/v1.18.0...v1.19.0
 [1.18.0]: https://github.com/AndiMb/scoreview/compare/v1.17.0...v1.18.0
