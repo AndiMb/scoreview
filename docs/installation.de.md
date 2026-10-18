@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:928dc3056ed6 -->
+<!-- translation-of: installation.md sha256:145a13cb9ef0 -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -280,8 +280,8 @@ SoundFont. Woher es kommt, hängt vom gewählten Weg ab.
 
 **Weg A: von einer Adresse, die voreingestellt ist.** Ohne Sidecar gibt es kein
 Image, aus dem sich ein SoundFont nehmen ließe, und mitliefern lässt es sich
-nicht: Der App Store nimmt nur Archive bis 20 MB, die MuseScore-WebAssembly
-belegt davon den Großteil. Der **Server** holt die Datei deshalb einmalig aus
+nicht: Der App Store nimmt nur Archive bis 30 MiB, und das Paket belegt davon
+schon rund 21 MB. Der **Server** holt die Datei deshalb einmalig aus
 dem Netz und liefert sie danach selbst aus; voreingestellt ist
 `FluidR3Mono_GM.sf3` (~23 MB, MIT-lizenziert, dasselbe SoundFont, das auch
 MuseScore mitbringt) als Release-Asset dieses Projekts.

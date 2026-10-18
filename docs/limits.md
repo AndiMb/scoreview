@@ -869,7 +869,8 @@ for the new piece). **Still open:**
 - **No CJK fonts in the App Store package.** On the local conversion path,
   MuseScore therefore sets Chinese, Japanese and Korean lyrics as replacement
   boxes; everything else is unaffected. The fonts weigh 4.2 MB, and the App
-  Store only accepts archives up to 20 MB. Anyone who needs them places font
+  Store only accepts archives up to 30 MiB, of which the package already
+  takes about 21 MB. Anyone who needs them places font
   files (`.woff2`, `.otf`, `.ttf`, `.ttc`) in a directory **outside the app**
   and registers it:
 

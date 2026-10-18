@@ -131,7 +131,7 @@ jobs:
           fi
 
       # Was hier NICHT mitgeht und warum: Der App Store nimmt Archive nur bis
-      # 20 MB an. `scoreview.js` ist die globale Variante des Browser-Bundles
+      # 30 MiB an, und das Paket liegt schon bei rund 21 MB. `scoreview.js` ist die globale Variante des Browser-Bundles
       # (fuer eine <script>-Einbindung), die niemand benutzt - geladen wird
       # `scoreview.mjs` als Modul (docs/architecture.md E7). Die CJK-Fonts sind
       # 4,2 MB fuer chinesische, japanische und koreanische Liedtexte; der
@@ -317,10 +317,13 @@ jobs:
           tar --create --gzip --file scoreview.tar.gz -C dist scoreview
           GROESSE=$(stat -c%s scoreview.tar.gz)
           echo "Tarball: $((GROESSE / 1048576)) MB ($GROESSE B)"
-          # Der App Store lehnt Archive ueber 20 MB ab - lieber hier auffallen
-          # als nach dem Hochladen.
-          if [ "$GROESSE" -gt 20971520 ]; then
-            echo "Tarball ueber der App-Store-Grenze von 20 MB - Release abgebrochen." >&2
+          # The App Store refuses archives above 30 MiB - better to fail here
+          # than after the upload. Source: MAX_DOWNLOAD_SIZE in
+          # nextcloud/appstore, nextcloudappstore/settings/base.py (raised from
+          # 20 MiB in 2020, commit 0b99dfc; docs/configuration.rst still shows
+          # the old value).
+          if [ "$GROESSE" -gt 31457280 ]; then
+            echo "Tarball ueber der App-Store-Grenze von 30 MiB - Release abgebrochen." >&2
             exit 1
           fi
           tar --list --file scoreview.tar.gz | head -20

@@ -325,16 +325,19 @@ Integritätsprüfung auf jeder Instanz fehlende Dateien.
 
 ### Was nicht mit ins Paket geht
 
-Der App Store nimmt Archive nur **bis 20 MB** an. Ausgeschlossen sind deshalb
-zwei Posten, die zur Laufzeit niemand braucht:
+Der App Store nimmt Archive nur **bis 30 MiB** an (`MAX_DOWNLOAD_SIZE` in
+[nextcloud/appstore](https://github.com/nextcloud/appstore/blob/master/nextcloudappstore/settings/base.py);
+das Beispiel in dessen `docs/configuration.rst` nennt noch die 20 MiB von vor
+2020). Das Paket liegt bei rund 21 MB, die Hälfte davon sind Source-Maps.
+Ausgeschlossen sind zwei Posten, die zur Laufzeit niemand braucht:
 
 | Posten | Größe | Warum entbehrlich |
 |---|---|---|
 | `scoreview.js` der Engine | 0,2 MB | Die globale Variante des Browser-Bundles; der Rückfall im Browser lädt `scoreview.mjs` als Modul ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)), und das geht mit |
 | `@librescore/fonts` | 4,2 MB | Nur für chinesische, japanische und koreanische Liedtexte; nachrüstbar über `cjk_font_dir` (siehe [Grenzwerte](limits.de.md#bekannte-lücken)) |
 
-Das Paket bleibt damit unter den 20 MB. Die Action bricht ab, wenn der
-Tarball die 20 MB überschreitet – lieber dort auffallen als nach dem Hochladen.
+Die Action bricht ab, wenn der Tarball 30 MiB überschreitet – lieber dort
+auffallen als nach dem Hochladen.
 
 ## Veröffentlichung im App Store
 

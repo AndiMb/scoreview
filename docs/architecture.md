@@ -2303,9 +2303,8 @@ Blick eine halbe Partitur.
 **Die PDF-Datei neben der Partitur.** „Als PDF in Dateien speichern“ auf der
 Druckseite schreibt die PDF im Browser und legt sie über
 `POST /api/scores/{fileId}/pdf` neben die Partitur. Warum kein Server-PDF,
-steht oben; warum keine Bibliothek: Das Release-Paket liegt rund 200 KB unter
-der Grenze des App Stores (20 MiB), und eine PDF-Bibliothek im Browser
-(jsPDF mit svg2pdf.js, pdf-lib) wiegt das Doppelte. Gebraucht wird wenig:
+steht oben; warum keine Bibliothek: Eine PDF-Bibliothek im Browser (jsPDF
+mit svg2pdf.js, pdf-lib) wiegt rund 400 KB, und gebraucht wird wenig:
 MuseScore zeichnet alles als Pfade, Polylinien und Polygone mit Matrizen, die
 Engine dazu Glyphen per `<use>` – der Teil von SVG, der sich eins zu eins auf
 PDF-Operatoren abbildet. `svgToPdf.js` übersetzt genau den Dialekt beider

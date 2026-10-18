@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:ea4249212962 -->
+<!-- translation-of: limits.md sha256:8603144d6988 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -875,7 +875,8 @@ Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
 - **Keine CJK-Fonts im App-Store-Paket.** Auf dem lokalen Konvertierungsweg
   setzt MuseScore chinesische, japanische und koreanische Liedtexte deshalb als
   Ersatzkästchen; alles andere ist unberührt. Die Fonts wiegen 4,2 MB, und der
-  App Store nimmt Archive nur bis 20 MB an. Wer sie braucht, legt Fontdateien
+  App Store nimmt Archive nur bis 30 MiB an, von denen das Paket schon rund
+  21 MB belegt. Wer sie braucht, legt Fontdateien
   (`.woff2`, `.otf`, `.ttf`, `.ttc`) in ein Verzeichnis **außerhalb der App**
   und trägt es ein:
 

@@ -279,7 +279,7 @@ a SoundFont for it. Where it comes from depends on the selected path.
 
 **Path A: from a preset address.** Without a sidecar there is no image to take
 a SoundFont from, and it cannot be bundled: the App Store only accepts archives
-up to 20 MB, most of which the MuseScore WebAssembly takes up. The **server**
+up to 30 MiB, and the package already takes about 21 MB. The **server**
 therefore fetches the file from the network once and then delivers it itself;
 the preset is `FluidR3Mono_GM.sf3` (~23 MB, MIT-licensed, the same SoundFont
 that MuseScore ships with) as a release asset of this project.

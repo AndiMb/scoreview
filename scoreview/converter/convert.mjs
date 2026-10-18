@@ -78,7 +78,8 @@ const FONT_ENDUNGEN = /\.(woff2?|otf|ttf|ttc)$/i
  *    Nextclouds Integritaetspruefung eine dauerhafte Warnung.
  * 2. Das Paket `@librescore/fonts`, falls jemand es danebengelegt hat. Im
  *    Auslieferungspaket ist es NICHT enthalten: Es wiegt 4,2 MB, und der App
- *    Store nimmt Archive nur bis 20 MB an.
+ *    Store nimmt Archive nur bis 30 MiB an, von denen das Paket schon rund
+ *    21 MB belegt.
  *
  * @param {?string} fontVerzeichnis
  * @return {Promise<Uint8Array[]>}
