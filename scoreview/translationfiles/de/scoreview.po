@@ -205,8 +205,8 @@ msgid "Only administrators can change the Node.js path, the conversion service a
 msgstr "Nur Administratoren können den Node.js-Pfad, den Konvertierungsdienst und die SoundFont-Quelle ändern."
 
 #: lib/Controller/SettingsController.php
-msgid "The Node.js path must be empty or an absolute path to a program named node or nodejs."
-msgstr "Der Node.js-Pfad muss leer sein oder ein absoluter Pfad zu einem Programm namens node oder nodejs."
+msgid "The path must be empty or an absolute path to a program named node, nodejs or deno."
+msgstr "Der Pfad muss leer sein oder absolut auf ein Programm namens node, nodejs oder deno zeigen."
 
 #: lib/Controller/SettingsController.php
 msgid "Addresses for the conversion service and the SoundFont source must start with http:// or https://."
@@ -227,6 +227,10 @@ msgstr "PHP darf keine Prozesse starten (proc_open ist per disable_functions ges
 #: lib/Service/HealthService.php
 msgid "No Node.js runtime found. Enter its path in the settings."
 msgstr "Keine Node.js-Laufzeit gefunden. Pfad in den Einstellungen eintragen."
+
+#: lib/Service/HealthService.php
+msgid "Deno {version} is too old; Deno 2 or newer is required."
+msgstr "Deno {version} ist zu alt; nötig ist Deno 2 oder neuer."
 
 #: lib/Service/HealthService.php
 msgid "The engine package (scoreview-engine) is missing next to the converter (converter/node_modules)."
@@ -269,12 +273,12 @@ msgid "Leave empty to keep the current secret."
 msgstr "Leer lassen, um das bisherige Secret zu behalten."
 
 #: src/components/AdminSettings.vue
-msgid "Path to node (optional)"
-msgstr "Pfad zu node (optional)"
+msgid "Path to node or deno (optional)"
+msgstr "Pfad zu node oder deno (optional)"
 
 #: src/components/AdminSettings.vue
-msgid "Leave empty to search the usual locations. Node.js 18 or newer is required, and PHP must be allowed to start processes."
-msgstr "Leer lassen, um die üblichen Orte zu durchsuchen. Nötig sind Node.js 18 oder neuer und die Erlaubnis für PHP, Prozesse zu starten."
+msgid "Leave empty to search the usual locations for node. Node.js 18 or newer or Deno 2 or newer is required, and PHP must be allowed to start processes."
+msgstr "Leer lassen, um an den üblichen Orten nach node zu suchen. Nötig ist Node.js 18 oder neuer oder Deno 2 oder neuer, und PHP muss Prozesse starten dürfen."
 
 #: src/components/AdminSettings.vue
 msgid "Convert new/changed scores immediately (instead of on first open)"
@@ -413,6 +417,10 @@ msgid "Conversion"
 msgstr "Konvertierung"
 
 #: src/components/AdminSettings.vue
+msgid "Isolation"
+msgstr "Abschottung"
+
+#: src/components/AdminSettings.vue
 msgid "Fallback"
 msgstr "Rückfall"
 
@@ -449,6 +457,10 @@ msgid "{ready} ready, {pending} pending, {failed} failed"
 msgstr "{ready} fertig, {pending} ausstehend, {failed} fehlgeschlagen"
 
 #: src/components/AdminSettings.vue
+msgid "Deno {version}"
+msgstr "Deno {version}"
+
+#: src/components/AdminSettings.vue
 msgid "Node.js {version}"
 msgstr "Node.js {version}"
 
@@ -459,6 +471,18 @@ msgstr "auf diesem Server, {version}"
 #: src/components/AdminSettings.vue
 msgid "not configured"
 msgstr "nicht konfiguriert"
+
+#: src/components/AdminSettings.vue
+msgid "The converter can only read the score and write its result – no other files, no network, no processes."
+msgstr "Der Konverter kann nur die Partitur lesen und sein Ergebnis schreiben – keine anderen Dateien, kein Netz, keine Prozesse."
+
+#: src/components/AdminSettings.vue
+msgid "The converter can only read the score and write its result, and cannot start processes. This Node.js version cannot block network access; Node.js 25 or newer, or Deno, can."
+msgstr "Der Konverter kann nur die Partitur lesen und sein Ergebnis schreiben und keine Prozesse starten. Den Netzzugriff kann diese Node.js-Version nicht sperren; Node.js 25 oder neuer oder Deno kann das."
+
+#: src/components/AdminSettings.vue
+msgid "This Node.js version cannot isolate the converter. Node.js 20.7 or newer, or Deno, runs it with access to the score only."
+msgstr "Diese Node.js-Version kann den Konverter nicht abschotten. Node.js 20.7 oder neuer oder Deno führt ihn nur mit Zugriff auf die Partitur aus."
 
 #: src/components/AdminSettings.vue
 msgid "notify_push is available: devices get jumps pushed instead of asking every {ms} ms."

@@ -296,6 +296,13 @@ class SettingsControllerTest extends TestCase {
 			'aelteres Debian' => ['/usr/bin/nodejs', true],
 			'versioniert' => ['/usr/bin/node-20', true],
 			'Windows' => ['C:\\Program Files\\nodejs\\node.exe', true],
+			'Deno' => ['/usr/local/bin/deno', true],
+			'Deno im Nutzerverzeichnis' => ['/home/nc/.deno/bin/deno', true],
+			'Deno versioniert' => ['/opt/deno2', true],
+			'Deno unter Windows' => ['C:\\Users\\nc\\.deno\\bin\\deno.exe', true],
+			'Deno relativ' => ['deno', false],
+			// No permission model, so nothing it would add (E18).
+			'Bun' => ['/usr/local/bin/bun', false],
 			'relativ' => ['node', false],
 			'fremdes Programm' => ['/bin/sh', false],
 			'Name nur als Praefix' => ['/tmp/node-evil.sh', false],

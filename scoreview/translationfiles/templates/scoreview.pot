@@ -205,7 +205,7 @@ msgid "Only administrators can change the Node.js path, the conversion service a
 msgstr ""
 
 #: lib/Controller/SettingsController.php
-msgid "The Node.js path must be empty or an absolute path to a program named node or nodejs."
+msgid "The path must be empty or an absolute path to a program named node, nodejs or deno."
 msgstr ""
 
 #: lib/Controller/SettingsController.php
@@ -226,6 +226,10 @@ msgstr ""
 
 #: lib/Service/HealthService.php
 msgid "No Node.js runtime found. Enter its path in the settings."
+msgstr ""
+
+#: lib/Service/HealthService.php
+msgid "Deno {version} is too old; Deno 2 or newer is required."
 msgstr ""
 
 #: lib/Service/HealthService.php
@@ -269,11 +273,11 @@ msgid "Leave empty to keep the current secret."
 msgstr ""
 
 #: src/components/AdminSettings.vue
-msgid "Path to node (optional)"
+msgid "Path to node or deno (optional)"
 msgstr ""
 
 #: src/components/AdminSettings.vue
-msgid "Leave empty to search the usual locations. Node.js 18 or newer is required, and PHP must be allowed to start processes."
+msgid "Leave empty to search the usual locations for node. Node.js 18 or newer or Deno 2 or newer is required, and PHP must be allowed to start processes."
 msgstr ""
 
 #: src/components/AdminSettings.vue
@@ -413,6 +417,10 @@ msgid "Conversion"
 msgstr ""
 
 #: src/components/AdminSettings.vue
+msgid "Isolation"
+msgstr ""
+
+#: src/components/AdminSettings.vue
 msgid "Fallback"
 msgstr ""
 
@@ -449,6 +457,10 @@ msgid "{ready} ready, {pending} pending, {failed} failed"
 msgstr ""
 
 #: src/components/AdminSettings.vue
+msgid "Deno {version}"
+msgstr ""
+
+#: src/components/AdminSettings.vue
 msgid "Node.js {version}"
 msgstr ""
 
@@ -458,6 +470,18 @@ msgstr ""
 
 #: src/components/AdminSettings.vue
 msgid "not configured"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "The converter can only read the score and write its result – no other files, no network, no processes."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "The converter can only read the score and write its result, and cannot start processes. This Node.js version cannot block network access; Node.js 25 or newer, or Deno, can."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "This Node.js version cannot isolate the converter. Node.js 20.7 or newer, or Deno, runs it with access to the score only."
 msgstr ""
 
 #: src/components/AdminSettings.vue

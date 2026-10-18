@@ -12,8 +12,9 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Der zweite Konvertierungsweg: MuseScore 4.7.5 als WebAssembly, ausgefuehrt
- * von der Node-Laufzeit des Servers (siehe docs/architecture.md E3). Kein
- * Container, kein X-Server, kein HTTP - ein Kindprozess je Partitur.
+ * von der Node- oder Deno-Laufzeit des Servers (siehe docs/architecture.md
+ * E3, E18). Kein Container, kein X-Server, kein HTTP - ein Kindprozess je
+ * Partitur, der nur die Partitur und sein Ergebnis sieht (S11).
  *
  * Die eigentliche Arbeit macht `converter/convert.mjs`; diese Klasse startet
  * ihn, bewacht ihn und liest die Artefakte zurueck. Sie kennt bewusst nichts
@@ -103,7 +104,7 @@ class LocalConverter {
 			throw new LocalConverterException('No temporary directory available for the conversion.');
 		}
 
-		$this->run([$msczPath, $outDir]);
+		$this->run([$msczPath, $outDir], read: [$msczPath], write: [$outDir]);
 
 		return $this->readArtifacts($outDir);
 	}
@@ -139,12 +140,16 @@ class LocalConverter {
 	 * 'engine'): the admin page shows it in the reader's language
 	 * (HealthService), while `error` stays the technical text for logs.
 	 *
-	 * @return array{available: bool, procOpen: bool, nodePath: ?string, nodeVersion: ?string, converterInstalled: bool, reason: ?string, error: ?string}
+	 * `runtime` and `isolation` say which runtime was found and how far it
+	 * locks the converter in (ConverterRuntime, S11). Isolation does not
+	 * decide `available`: an old Node converts as before, only the
+	 * diagnostics warn.
+	 *
+	 * @return array{available: bool, procOpen: bool, nodePath: ?string, nodeVersion: ?string, runtime: ?string, isolation: ?string, converterInstalled: bool, reason: ?string, error: ?string}
 	 */
 	public function describe(): array {
 		$procOpen = $this->canStartProcesses();
-		$nodePath = $procOpen ? $this->findNode() : null;
-		$nodeVersion = $nodePath !== null ? $this->nodeVersion($nodePath) : null;
+		$runtime = $procOpen ? $this->findRuntime() : null;
 		$installed = $this->isConverterInstalled();
 
 		$error = null;
@@ -152,9 +157,12 @@ class LocalConverter {
 		if (!$procOpen) {
 			$reason = 'process';
 			$error = 'PHP is not allowed to start processes (proc_open is blocked by disable_functions).';
-		} elseif ($nodePath === null) {
+		} elseif ($runtime === null) {
 			$reason = 'node';
 			$error = 'No Node.js runtime found. Enter its path in the settings.';
+		} elseif (!$runtime->isSupported()) {
+			$reason = 'runtime_version';
+			$error = sprintf('Deno %s is too old; Deno 2 or newer is required.', $runtime->version);
 		} elseif (!$installed) {
 			$reason = 'engine';
 			$error = 'The engine package (scoreview-engine) is missing next to the converter (converter/node_modules).';
@@ -163,8 +171,10 @@ class LocalConverter {
 		return [
 			'available' => $error === null,
 			'procOpen' => $procOpen,
-			'nodePath' => $nodePath,
-			'nodeVersion' => $nodeVersion,
+			'nodePath' => $runtime?->path,
+			'nodeVersion' => $runtime?->version,
+			'runtime' => $runtime?->kind,
+			'isolation' => $runtime?->isolation(),
 			'converterInstalled' => $installed,
 			'reason' => $reason,
 			'error' => $error,
@@ -211,48 +221,121 @@ class LocalConverter {
 		return function_exists('proc_open') && function_exists('proc_get_status');
 	}
 
-	private function findNode(): ?string {
+	/**
+	 * The configured runtime, or the first `node` among the candidates. The
+	 * search stays with node: deno is a deliberate choice of the admin
+	 * (E18), not something to pick up because it happens to be installed.
+	 */
+	private function findRuntime(): ?ConverterRuntime {
 		$configured = trim($this->appConfig->getValueString(Application::APP_ID, 'node_path'));
 		if ($configured !== '') {
-			return $this->nodeVersion($configured) !== null ? $configured : null;
+			return $this->probeRuntime($configured);
 		}
 		foreach (self::NODE_CANDIDATES as $candidate) {
-			if ($this->nodeVersion($candidate) !== null) {
-				return $candidate;
+			$runtime = $this->probeRuntime($candidate);
+			if ($runtime !== null) {
+				return $runtime;
 			}
 		}
 		return null;
 	}
 
-	/** `node --version` als Lebendtest - ein vorhandener Pfad allein sagt nichts. */
-	private function nodeVersion(string $nodePath): ?string {
+	/**
+	 * `--version` als Lebendtest - ein vorhandener Pfad allein sagt nichts.
+	 * Runs outside the sandbox and with the inherited environment: it
+	 * executes no script, and which flags apply is only known afterwards.
+	 */
+	private function probeRuntime(string $path): ?ConverterRuntime {
 		try {
-			$output = $this->execute([$nodePath, '--version'], $this->getConverterDir(), 15);
+			$output = $this->execute([$path, '--version'], $this->getConverterDir(), 15);
 		} catch (LocalConverterException) {
 			return null;
 		}
-		$version = trim($output['stdout']);
-		return ($output['exitCode'] === 0 && !$output['stdoutOverflow'] && str_starts_with($version, 'v')) ? $version : null;
+		if ($output['exitCode'] !== 0 || $output['stdoutOverflow']) {
+			return null;
+		}
+		return ConverterRuntime::fromVersionOutput($path, $output['stdout']);
+	}
+
+	/**
+	 * Each path, plus its resolved form where that differs. An app installed
+	 * behind a symlink (custom apps directory) is otherwise read through a
+	 * path the runtime may check against the link target - and the run fails
+	 * on its own node_modules.
+	 *
+	 * @param string[] $paths
+	 * @return string[]
+	 */
+	private function withRealPaths(array $paths): array {
+		$result = [];
+		foreach ($paths as $path) {
+			$result[] = $path;
+			$real = realpath($path);
+			if (is_string($real) && $real !== $path) {
+				$result[] = $real;
+			}
+		}
+		return array_values(array_unique($result));
+	}
+
+	/**
+	 * The environment of a converter run: the minimum, not PHP-FPM's.
+	 *
+	 * Node cannot withhold environment variables even with --permission, so
+	 * whatever the web server's environment holds would be readable by the
+	 * converter - not passing it on is the one lock that works for every
+	 * runtime (S11). HOME stays unset: nothing in the run may write outside
+	 * its output directory anyway.
+	 *
+	 * @return array<string, string>
+	 */
+	private function converterEnvironment(): array {
+		$env = [
+			'PATH' => getenv('PATH') ?: '/usr/bin:/bin',
+			'LANG' => 'C.UTF-8',
+			// Deno colours its error lines; the escape codes would end up in
+			// the message lastLine() puts into the admin page.
+			'NO_COLOR' => '1',
+			// Deno's update check is done by the runtime, not by the script,
+			// so the missing --allow-net does not cover it.
+			'DENO_NO_UPDATE_CHECK' => '1',
+		];
+		// Only so the tests run on Windows developer machines - Nextcloud
+		// itself does not run there.
+		if (PHP_OS_FAMILY === 'Windows') {
+			foreach (['SYSTEMROOT', 'TEMP', 'TMP'] as $name) {
+				$value = getenv($name);
+				if (is_string($value)) {
+					$env[$name] = $value;
+				}
+			}
+		}
+		return $env;
 	}
 
 	/**
 	 * Startet convert.mjs mit den gegebenen Argumenten und gibt dessen
 	 * stdout zurueck.
 	 *
+	 * $read and $write are what the run needs beyond the converter directory
+	 * (S11): the score to read, the directory to write into.
+	 *
 	 * @param string[] $arguments
+	 * @param string[] $read
+	 * @param string[] $write
 	 * @throws LocalConverterException
 	 */
-	private function run(array $arguments): string {
+	private function run(array $arguments, array $read = [], array $write = []): string {
 		if (!$this->canStartProcesses()) {
 			throw new LocalConverterException(
 				'PHP is not allowed to start processes (proc_open is blocked) - the local conversion path is not possible on this instance.',
 				errorCode: ScoreConversion::ERROR_LOCAL_UNAVAILABLE,
 			);
 		}
-		$node = $this->findNode();
-		if ($node === null) {
+		$runtime = $this->findRuntime();
+		if ($runtime === null || !$runtime->isSupported()) {
 			throw new LocalConverterException(
-				'No working Node.js runtime found (settings, field "Path to node").',
+				'No working Node.js or Deno runtime found (settings, field "Path to node or deno").',
 				errorCode: ScoreConversion::ERROR_LOCAL_UNAVAILABLE,
 			);
 		}
@@ -275,21 +358,27 @@ class LocalConverter {
 		// SVG-Seiten einer grossen Partitur, die als JS-Strings im Heap
 		// liegen. Eine Speichergrenze gehoert, wo gewuenscht, an den Prozess
 		// (ulimit/cgroup des PHP-Dienstes), nicht in diese Zeile.
-		$command = [$node, $this->getConverterDir() . '/convert.mjs'];
+		$options = [];
 		// Zusatzfonts fuer CJK-Liedtexte, falls eingerichtet. Bewusst ein
 		// Verzeichnis AUSSERHALB der App: Das ausgelieferte App-Verzeichnis ist
 		// signiert, dort abgelegte Dateien liessen Nextclouds
 		// Integritaetspruefung dauerhaft Alarm schlagen.
 		$fontDir = trim($this->appConfig->getValueString(Application::APP_ID, 'cjk_font_dir'));
 		if ($fontDir !== '') {
-			$command[] = '--fonts';
-			$command[] = $fontDir;
+			$options = ['--fonts', $fontDir];
+			$read[] = $fontDir;
 		}
 
 		$result = $this->execute(
-			array_merge($command, $arguments),
+			$runtime->command(
+				$this->getConverterDir() . '/convert.mjs',
+				$this->withRealPaths(array_merge([$this->getConverterDir()], $read)),
+				$this->withRealPaths($write),
+				array_merge($options, $arguments),
+			),
 			$this->getConverterDir(),
 			$timeout,
+			$this->converterEnvironment(),
 		);
 
 		if ($result['timedOut']) {
@@ -330,17 +419,21 @@ class LocalConverter {
 	 * gefuehrt, weil PHP keine mitbringt - ohne sie haengt ein blockierter
 	 * MuseScore-Lauf den Cron-Durchgang der Instanz auf.
 	 *
+	 * $env null inherits the PHP process's environment; the converter run
+	 * itself passes converterEnvironment().
+	 *
 	 * @param string[] $command
+	 * @param array<string, string>|null $env
 	 * @return array{stdout: string, stderr: string, exitCode: int, timedOut: bool, stdoutOverflow: bool}
 	 * @throws LocalConverterException
 	 */
-	private function execute(array $command, string $cwd, int $timeoutSeconds): array {
+	private function execute(array $command, string $cwd, int $timeoutSeconds, ?array $env = null): array {
 		$descriptors = [
 			0 => ['pipe', 'r'],
 			1 => ['pipe', 'w'],
 			2 => ['pipe', 'w'],
 		];
-		$process = @proc_open($command, $descriptors, $pipes, $cwd);
+		$process = @proc_open($command, $descriptors, $pipes, $cwd, $env);
 		if (!is_resource($process)) {
 			throw new LocalConverterException('Could not start the converter process: ' . implode(' ', $command));
 		}

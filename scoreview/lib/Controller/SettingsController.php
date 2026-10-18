@@ -324,7 +324,7 @@ class SettingsController extends Controller {
 	private function refuseInvalid(?string $nodePath, ?string $sidecarUrl, ?string $soundFontFetchUrl): ?JSONResponse {
 		if ($nodePath !== null && $nodePath !== $this->stored('node_path') && !self::isValidNodePath($nodePath)) {
 			return new JSONResponse([
-				'error' => $this->l->t('The Node.js path must be empty or an absolute path to a program named node or nodejs.'),
+				'error' => $this->l->t('The path must be empty or an absolute path to a program named node, nodejs or deno.'),
 				'reason' => 'invalid_node_path',
 				'fields' => ['nodePath'],
 			], Http::STATUS_BAD_REQUEST);
@@ -365,6 +365,9 @@ class SettingsController extends Controller {
 	 * dem Konverterordner -, und der nackte Name `node` ohnehin die
 	 * automatische Suche ist. Steuerzeichen haben in einem Pfad nichts
 	 * verloren und landeten sonst im Log und in der Diagnose.
+	 *
+	 * `deno` is the one other name (E18): it can lock the converter in
+	 * completely (S11). Bun cannot, and stays outside this list.
 	 */
 	public static function isValidNodePath(string $path): bool {
 		if ($path === '') {
@@ -375,7 +378,7 @@ class SettingsController extends Controller {
 		}
 		$absolute = str_starts_with($path, '/') || preg_match('#^[A-Za-z]:[\\\\/]#', $path) === 1;
 		$base = basename(str_replace('\\', '/', $path));
-		return $absolute && preg_match('/^(node|nodejs)(-?\d+)?(\.exe)?$/iD', $base) === 1;
+		return $absolute && preg_match('/^(node|nodejs|deno)(-?\d+)?(\.exe)?$/iD', $base) === 1;
 	}
 
 	/**

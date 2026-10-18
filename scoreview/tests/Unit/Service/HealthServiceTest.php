@@ -42,6 +42,7 @@ class HealthServiceTest extends TestCase {
 			'process' => ['process', 'PHP is not allowed to start processes'],
 			'node' => ['node', 'No Node.js runtime found'],
 			'engine' => ['engine', 'The engine package (scoreview-engine) is missing'],
+			'runtime_version' => ['runtime_version', 'Deno {version} is too old'],
 		];
 	}
 

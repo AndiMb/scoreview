@@ -66,9 +66,9 @@
 					v-model="form.nodePath"
 					:disabled="!initial.fullAdmin"
 					class="scoreview-field"
-					:label="t('Path to node (optional)')"
+					:label="t('Path to node or deno (optional)')"
 					placeholder="/usr/bin/node"
-					:helperText="t('Leave empty to search the usual locations. Node.js 18 or newer is required, and PHP must be allowed to start processes.')" />
+					:helperText="t('Leave empty to search the usual locations for node. Node.js 18 or newer or Deno 2 or newer is required, and PHP must be allowed to start processes.')" />
 
 				<NcCheckboxRadioSwitch v-model="form.eagerConversion" type="switch" class="scoreview-field">
 					{{ t('Convert new/changed scores immediately (instead of on first open)') }}
@@ -422,6 +422,12 @@ export default {
 					label: t('Conversion'),
 					...this.backendLine(h),
 				},
+				...(h.backend === 'local' && h.local.available && h.local.isolation
+					? [{
+							label: t('Isolation'),
+							...this.isolationLine(h.local.isolation),
+						}]
+					: []),
 				...(h.clientFallback?.active
 					? [{
 							label: t('Fallback'),
@@ -486,7 +492,11 @@ export default {
 		 */
 		backendLine(h) {
 			if (h.backend === 'local') {
-				const version = h.local.nodeVersion ? t('Node.js {version}', { version: h.local.nodeVersion }) : ''
+				const version = !h.local.nodeVersion
+					? ''
+					: h.local.runtime === 'deno'
+						? t('Deno {version}', { version: h.local.nodeVersion })
+						: t('Node.js {version}', { version: h.local.nodeVersion })
 				return {
 					ok: h.local.available,
 					detail: h.local.available ? t('on this server, {version}', { version }) : (h.local.error || ''),
@@ -495,6 +505,37 @@ export default {
 			return {
 				ok: h.sidecar.reachable,
 				detail: h.sidecar.reachable ? h.sidecar.url : (h.sidecar.error || t('not configured')),
+			}
+		},
+
+		/**
+		 * How far the runtime locks the local converter in (S11). Only a
+		 * statement for the admin: the level never decides whether the
+		 * server converts - an old Node keeps working, so this is a warning
+		 * and not an error.
+		 *
+		 * @param {string} isolation h.local.isolation from the health endpoint
+		 * @return {{ok: boolean, detail: string, type: string}}
+		 */
+		isolationLine(isolation) {
+			if (isolation === 'full') {
+				return {
+					ok: true,
+					type: 'success',
+					detail: t('The converter can only read the score and write its result – no other files, no network, no processes.'),
+				}
+			}
+			if (isolation === 'partial') {
+				return {
+					ok: true,
+					type: 'info',
+					detail: t('The converter can only read the score and write its result, and cannot start processes. This Node.js version cannot block network access; Node.js 25 or newer, or Deno, can.'),
+				}
+			}
+			return {
+				ok: true,
+				type: 'warning',
+				detail: t('This Node.js version cannot isolate the converter. Node.js 20.7 or newer, or Deno, runs it with access to the score only.'),
 			}
 		},
 

@@ -68,6 +68,7 @@ class HealthService {
 		$messages = [
 			'process' => $this->l->t('PHP is not allowed to start processes (proc_open is blocked by disable_functions).'),
 			'node' => $this->l->t('No Node.js runtime found. Enter its path in the settings.'),
+			'runtime_version' => $this->l->t('Deno {version} is too old; Deno 2 or newer is required.', ['version' => (string)($local['nodeVersion'] ?? '')]),
 			'engine' => $this->l->t('The engine package (scoreview-engine) is missing next to the converter (converter/node_modules).'),
 		];
 		if (isset($local['reason'], $messages[$local['reason']])) {

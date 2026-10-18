@@ -144,16 +144,36 @@ class LocalConverterTest extends TestCase {
 		$this->assertSame(0, $ergebnis['exitCode'], 'der Prozess lief trotzdem zu Ende, statt an der vollen Pipe zu haengen');
 	}
 
+	public function testDerKonverterErbtDieUmgebungVonPhpNicht(): void {
+		// Node cannot withhold environment variables even with --permission;
+		// not handing them over is the only lock that works for every
+		// runtime (S11). A real child process reports what it sees.
+		putenv('SCOREVIEW_TEST_SECRET=geheim');
+		try {
+			$umgebung = new \ReflectionMethod(LocalConverter::class, 'converterEnvironment');
+			$ergebnis = $this->ausfuehren(
+				[PHP_BINARY, '-r', 'echo json_encode([getenv("SCOREVIEW_TEST_SECRET"), getenv("NO_COLOR"), getenv("DENO_NO_UPDATE_CHECK")]);'],
+				$umgebung->invoke($this->converter()),
+			);
+		} finally {
+			putenv('SCOREVIEW_TEST_SECRET');
+		}
+
+		$this->assertSame(0, $ergebnis['exitCode'], $ergebnis['stderr']);
+		$this->assertSame([false, '1', '1'], json_decode($ergebnis['stdout'], true));
+	}
+
 	/**
 	 * @param string[] $kommando
+	 * @param array<string, string>|null $umgebung
 	 * @return array{stdout: string, stderr: string, exitCode: int, timedOut: bool, stdoutOverflow: bool}
 	 */
-	private function ausfuehren(array $kommando): array {
+	private function ausfuehren(array $kommando, ?array $umgebung = null): array {
 		// Ueber Reflection wie lastLine(): execute() ist bewusst privat, und
 		// der oeffentliche Weg dorthin verlangt node samt Engine.
 		$methode = new \ReflectionMethod(LocalConverter::class, 'execute');
 		$methode->setAccessible(true);
-		return $methode->invoke($this->converter(), $kommando, sys_get_temp_dir(), 30);
+		return $methode->invoke($this->converter(), $kommando, sys_get_temp_dir(), 30, $umgebung);
 	}
 
 	public function testSelbsttestScheitertLesbarStattZuWerfen(): void {

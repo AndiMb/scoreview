@@ -24,6 +24,14 @@
 		<testsuite name="unit">
 			<directory suffix="Test.php">./Unit</directory>
 		</testsuite>
+		<!--
+			Against a real node/deno (SCOREVIEW_RUNTIME), see
+			Sandbox/SandboxTest.php - a suite of its own so that test:unit
+			stays without runtimes.
+		-->
+		<testsuite name="sandbox">
+			<directory suffix="Test.php">./Sandbox</directory>
+		</testsuite>
 	</testsuites>
 	<source>
 		<include>

@@ -155,41 +155,72 @@ jobs:
   # der Weg EINMAL vollstaendig - mit echtem Engine-Wasm (scoreview-engine),
   # echter Partitur und den Zusagen aus M2/M4/M7 als Pruefung. Genau das
   # faengt ab, was ein Engine-Versionswechsel still kaputtmachen wuerde.
+  #
+  # Run through LocalConverter itself (composer run test:sandbox), not as a
+  # bare `node convert.mjs`: what is checked is the argv the app really
+  # starts, sandbox flags and minimal environment included (S11) - and the
+  # sandbox is checked by trying, with a probe that attempts what a
+  # converter run must not do.
   konverter:
-    name: Lokaler Konverter (scoreview-engine, Node ${{ matrix.node }})
+    name: Lokaler Konverter (scoreview-engine, ${{ matrix.runtime }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # Unter- und Obergrenze der zugesagten Node-Spanne (siehe "engines" in
-        # converter/package.json). Beide Enden bleiben geprueft, weil der
-        # Emscripten-Glue je Version eigene Node-Ansprueche hat - die sollen
-        # hier auffallen und nirgends sonst.
-        node: ['18', '22']
+        # One runtime per sandbox level and flag name (ConverterRuntime):
+        # 18 the lower bound of "engines" in converter/package.json, without
+        # any permission model; 20 with --experimental-permission (Debian 13
+        # ships it); 22 with --permission, network still open; 26 the current
+        # LTS, which also blocks the network; deno the fully isolated
+        # alternative (E18). The Emscripten glue has its own demands per
+        # Node version - they should show up here and nowhere else.
+        include:
+          - { runtime: 'node-18', node: '18' }
+          - { runtime: 'node-20', node: '20' }
+          - { runtime: 'node-22', node: '22' }
+          - { runtime: 'node-26', node: '26' }
+          - { runtime: 'deno-2', node: '22', deno: 'v2.x' }
     defaults:
       run:
-        working-directory: scoreview/converter
+        working-directory: scoreview
     steps:
       - uses: actions/checkout@v7
 
+      # Also for the deno run: node_modules is runtime-independent, and
+      # npm installs it the same way release.yml does.
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: scoreview/converter/package-lock.json
 
+      - uses: denoland/setup-deno@v2
+        if: matrix.deno
+        with:
+          deno-version: ${{ matrix.deno }}
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
       # Kein `npm ci --omit=dev`: das Paket hat ohnehin nur Laufzeit-
       # Abhaengigkeiten, und der Release-Job soll denselben Baum bekommen.
       - run: npm ci
+        working-directory: scoreview/converter
 
-      - name: Selbsttest (echte Konvertierung, prueft M2/M4/M7)
+      - run: composer install --no-interaction --no-progress
+
+      - name: Abschottung und Selbsttest (echte Konvertierung, prueft M2/M4/M7 und S11)
         run: |
-          ERGEBNIS=$(node convert.mjs --selftest 2>/dev/null)
-          echo "$ERGEBNIS"
-          echo "$ERGEBNIS" | node -e '
-            const r = JSON.parse(require("fs").readFileSync(0, "utf8"))
-            if (!r.ok) { console.error("Zusagen verletzt:", r.problems.join("; ")); process.exit(1) }
-          '
+          if [ -n "${{ matrix.deno }}" ]; then
+            RUNTIME=$(command -v deno)
+          else
+            RUNTIME=$(command -v node)
+          fi
+          "$RUNTIME" --version
+          SCOREVIEW_RUNTIME="$RUNTIME" composer run test:sandbox
 
   sidecar:
     name: Sidecar (Python ${{ matrix.python }})
