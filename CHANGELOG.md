@@ -14,6 +14,10 @@ All notable changes to ScoreView. The format follows
   its resolved path, and Node 20's permission model crashes on that pair
   (Node 22 and 24 do not). Each directory is now granted once. Affects the
   Node of Debian 13, among others.
+- **Note heads of “my part” were sometimes not coloured** (intonation, focus
+  on my part, note names and beat counts for my part) in scores that start
+  with a title or text page: the page without staves reported that staves
+  cannot be mapped to parts, and whichever page loaded last decided.
 
 ## [1.20.0] – 2026-10-18
 

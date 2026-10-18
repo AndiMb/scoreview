@@ -1047,7 +1047,13 @@ export default {
 				this.$emit('loaded', { index: this.pageIndex, viewBox: this.viewBox, sizeMm: this.sizeMm })
 				// Erst jetzt steht das SVG - vorher gaebe es keine Notenlinien
 				// zu zaehlen.
-				this.$emit('staffMapping', this.staffMappingPossible)
+				// A page without a single staff (title page, text page) has
+				// nothing to say about the mapping. Its "no" would override
+				// the music pages, and the page that happened to load last
+				// would decide whether "my part" can be marked at all.
+				if (this.staffSystems.length > 0) {
+					this.$emit('staffMapping', this.staffMappingPossible)
+				}
 				// Und erst nach dem naechsten Rendern haengt es im Dokument.
 				this.$nextTick(() => this.indexSegments())
 			} catch (err) {

@@ -733,7 +733,9 @@ ein Signal ohne klare Tonhöhe ist „nicht auswertbar“ statt geschätzt.
 Notenköpfe färben sich nur, wo das SVG `st-`/`vc-` trägt
 ([M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)) und
 sich Notenzeilen den Stimmen zuordnen lassen; sonst bleibt es bei Nadel und
-Problemliste.
+Problemliste. Ob sie sich zuordnen lassen, meldet jede geladene Seite mit
+mindestens einem System – eine Titel- oder Textseite schweigt, sonst
+überstimmte ihr „nein“ die Notenseiten.
 
 **Das Stimmgerät** (`useTuner.js`, `tuner.js`) nimmt dieselbe Kette – Blöcke
 in denselben Worker, Rahmen zurück –, hat aber keine Sollnote: Es faltet auf
