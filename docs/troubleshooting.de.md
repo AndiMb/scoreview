@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:c72454aceb79 -->
+<!-- translation-of: troubleshooting.md sha256:9e6b0f8d0c44 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -332,6 +332,24 @@ glaubt, und scrollt der Spielposition nicht seitlich nach.
 - **Zum Vergrößern der Partitur** zwei Finger auf dem Notenbild oder der
   Zoomregler in der Leiste – dieser Zoom gehört dem Viewer, und die Ansicht
   folgt der Spielposition damit weiter.
+
+## Am Telefon quer bleibt den Noten wenig Höhe
+
+Safaris Leisten, die Kopfzeile von Nextclouds Viewer und die Bedienleiste
+teilen sich die wenige Höhe, die es gibt. Die Bedienleiste fährt während der
+Wiedergabe, im Aufführungsmodus und beim Folgen einer Leitung von selbst zu
+einer dünnen Linie ein; ein Tipp auf die Linie holt sie zurück. Darüber hinaus:
+
+- **Das Systemband nehmen** (Ansicht → Darstellung der Noten). Jedes System ist dort so
+  hoch, wie der Platz erlaubt, die Höhe, die die Leiste abgibt, kommt also
+  direkt den Noten zugute. In der Seitenansicht macht „Breite einpassen“ die
+  Seite breiter, als der Bildschirm hoch ist.
+- **Die Offline-Seite zum Startbildschirm hinzufügen**, für Konzert oder Probe
+  (die Stücke vorher für die Offline-Nutzung sichern). Vom Startbildschirm
+  geöffnet läuft sie ohne Safaris Leisten und ohne die Kopfleiste von
+  Nextcloud. Am iPhone ist das nicht geprüft.
+- Der Rest liegt nicht bei ScoreView, siehe
+  [Grenzen](limits.de.md#mobil).
 
 ## Die Konvertierung kommt nicht voran
 

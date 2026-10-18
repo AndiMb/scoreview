@@ -4,6 +4,19 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- **More height for the score on a phone in landscape** (#15): where the
+  control bar takes 15 % or more of the viewer's height – a phone held
+  sideways, where there is no fullscreen – it retracts to the progress line
+  after 3 s, as it already did in fullscreen. Tap the line to bring it back.
+- The bar now also retracts **in performance mode and while following a
+  leader**, not only during playback, in fullscreen as well.
+- In that situation the viewer offers the **system band** once, as it already
+  did below 600 px width.
+
 ## [1.19.0] – 2026-10-18
 
 ### Added

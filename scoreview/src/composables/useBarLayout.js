@@ -1,13 +1,15 @@
 import { ref, watch } from 'vue'
+import { isTight, shouldCollapse } from '../lib/barCollapse.js'
 import { initialBarFit, nextBarFit } from '../lib/barFit.js'
 
-// Wie lange die Leiste im Vollbild stehen bleibt, bevor sie sich waehrend der
-// Wiedergabe zur Fortschrittslinie zusammenzieht.
+// Wie lange die Leiste stehen bleibt, bevor sie sich zur Fortschrittslinie
+// zusammenzieht.
 const BAR_IDLE_MS = 3000
 
 /**
  * Die Gestalt der Bedienleiste: kompakt oder breit, Werkzeuge auf Abruf,
- * im Vollbild waehrend der Wiedergabe eingefahren.
+ * eingefahren im Vollbild oder auf knappem Platz, solange sie niemand
+ * braucht (wann genau: lib/barCollapse.js).
  *
  * `compact` haengt am gemessenen UEBERLAUF der breiten Leiste
  * (lib/barFit.js), nicht an einer Media Query und nicht an einer
@@ -20,17 +22,26 @@ const BAR_IDLE_MS = 3000
  * @param {() => ?Element} deps.rootEl das Wurzelelement des Viewers
  * @param {() => boolean} deps.isFullscreen
  * @param {() => boolean} deps.isPlaying
+ * @param {() => boolean} deps.isPerformance Auffuehrungsmodus
+ * @param {() => boolean} deps.isFollowing dieses Geraet folgt einer Leitung
+ * @param {() => boolean} deps.isBusy ob gerade in der Leiste bedient wird,
+ *   was keinen Pointer-Event an ihr ausloest (ein offener Aufklapper)
  * @param {() => string} deps.contentKey was in der Leiste steht - aendert es
  *   sich, wird die breite Gestalt neu versucht
  */
-export function useBarLayout({ rootEl, isFullscreen, isPlaying, contentKey }) {
+export function useBarLayout({ rootEl, isFullscreen, isPlaying, isPerformance, isFollowing, isBusy, contentKey }) {
 	const compact = ref(false)
 	const toolsOpen = ref(false)
 	const collapsed = ref(false)
+	// The bar takes a noticeable share of the viewer's height (issue #15).
+	const tight = ref(false)
 	let idleHandle = null
 	let observer = null
 	let fit = { ...initialBarFit(), contentKey: contentKey() }
 	let rootWidth = 0
+	let rootHeight = 0
+	// Measured while the bar stands, kept while it is retracted (isTight).
+	let barHeight = 0
 	let overflowing = false
 
 	function applyFit() {
@@ -48,6 +59,30 @@ export function useBarLayout({ rootEl, isFullscreen, isPlaying, contentKey }) {
 		applyFit()
 	}
 
+	function applyTight() {
+		tight.value = isTight(barHeight, rootHeight, tight.value)
+	}
+
+	/**
+	 * Von ScoreBar.vue: die Hoehe der stehenden Leiste.
+	 *
+	 * @param {number} height
+	 */
+	function reportHeight(height) {
+		barHeight = height
+		applyTight()
+	}
+
+	function wanted() {
+		return shouldCollapse({
+			fullscreen: isFullscreen(),
+			tight: tight.value,
+			playing: isPlaying(),
+			performance: isPerformance(),
+			following: isFollowing(),
+		})
+	}
+
 	function clearIdle() {
 		if (idleHandle) {
 			clearTimeout(idleHandle)
@@ -56,17 +91,25 @@ export function useBarLayout({ rootEl, isFullscreen, isPlaying, contentKey }) {
 	}
 
 	/**
-	 * Die Leiste nach einer Ruhefrist einfahren - aber nur im Vollbild und
-	 * nur waehrend der Wiedergabe. Ausserhalb davon wird bedient, und eine
-	 * Leiste, die dabei verschwindet, waere eine Zumutung.
+	 * Die Leiste nach einer Ruhefrist einfahren - aber nur, wo es Grund
+	 * dafuer gibt und sie niemand braucht (lib/barCollapse.js). Ausserhalb
+	 * davon wird bedient, und eine Leiste, die dabei verschwindet, waere eine
+	 * Zumutung.
 	 */
 	function scheduleCollapse() {
 		clearIdle()
-		if (!isFullscreen() || !isPlaying()) {
+		if (!wanted()) {
 			return
 		}
 		idleHandle = setTimeout(() => {
 			idleHandle = null
+			// An open popover is teleported out of the bar, so tapping in it
+			// never reaches the bar's `activity`. Retracting would unmount it
+			// under the user's finger - try again after another idle period.
+			if (isBusy()) {
+				scheduleCollapse()
+				return
+			}
 			collapsed.value = true
 			toolsOpen.value = false
 		}, BAR_IDLE_MS)
@@ -91,7 +134,9 @@ export function useBarLayout({ rootEl, isFullscreen, isPlaying, contentKey }) {
 		}
 		observer = new ResizeObserver(([entry]) => {
 			rootWidth = entry.contentRect.width
+			rootHeight = entry.contentRect.height
 			applyFit()
+			applyTight()
 		})
 		observer.observe(el)
 	}
@@ -107,16 +152,12 @@ export function useBarLayout({ rootEl, isFullscreen, isPlaying, contentKey }) {
 		clearIdle()
 	}
 
-	// Einfahren waehrend der Wiedergabe - als Watcher statt am Play-Knopf
-	// verdrahtet, damit JEDER Weg, der die Wiedergabe startet
-	// (Tastaturkuerzel, Einzaehler-Ende, Loop-Neustart), automatisch erfasst
-	// ist. Angehalten wird bedient - dann gehoert die Leiste hin.
-	watch(isPlaying, (playing) => (playing ? scheduleCollapse() : show()))
-
-	// Die eingefahrene Leiste gibt es nur im Vollbild: Nur dort ist der
-	// Platz das eigentliche Thema, und nur dort gibt es keine
-	// Nextcloud-Umgebung drumherum, in der ein leerer Streifen irritierte.
-	watch(isFullscreen, (fullscreen) => (fullscreen ? scheduleCollapse() : show()))
+	// Als Watcher statt an den Knoepfen verdrahtet, damit JEDER Weg, der die
+	// Wiedergabe startet (Tastaturkuerzel, Einzaehler-Ende, Loop-Neustart),
+	// den Modus wechselt oder ins Vollbild geht, automatisch erfasst ist.
+	// Faellt der Anlass weg (angehalten, Modus aus), wird bedient - dann
+	// gehoert die Leiste hin.
+	watch(wanted, (yes) => (yes ? scheduleCollapse() : show()))
 
 	// Neuer Inhalt (Auffuehrungsmodus, Leitungsrolle, ...): Die gemerkte
 	// Breite gilt nicht mehr. Der Versuch in breiter Gestalt rendert, und
@@ -127,5 +168,5 @@ export function useBarLayout({ rootEl, isFullscreen, isPlaying, contentKey }) {
 		applyFit()
 	})
 
-	return { compact, toolsOpen, collapsed, show, scheduleCollapse, observe, stop, reportOverflow }
+	return { compact, toolsOpen, collapsed, tight, show, scheduleCollapse, observe, stop, reportOverflow, reportHeight }
 }

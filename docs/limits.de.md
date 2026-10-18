@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:8179341d58ca -->
+<!-- translation-of: limits.md sha256:d04190f09426 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -511,6 +511,16 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   ob ein Pedal in der WebView den Fokus bekommt.
 - **Ein Wechsel des Begleit-Geheimnisses wirkt nach bis zu 3 s**, solange der
   Server den alten Wert noch aus APCu liest.
+- **Ein Telefon quer behält nur einen Teil seiner Höhe für die Noten.** Wo die
+  Bedienleiste 15 % oder mehr der Höhe des Viewers belegt, fährt sie während
+  der Wiedergabe, im Aufführungsmodus und beim Folgen einer Leitung zu einer
+  dünnen Fortschrittslinie ein, wie im Vollbild; ein Tipp auf die Linie holt
+  sie zurück. Was bleibt, gehört nicht ScoreView: Safaris eigene Leisten (eine
+  Webseite kann am iPhone nicht ins Vollbild, und Safari verkleinert seine
+  Leisten nur, wenn die Seite selbst scrollt) und die Kopfzeile von Nextclouds
+  Viewer mit Dateiname und ✕. Der Höhenhaushalt (quer rund 390 px, davon bei
+  stehender Leiste etwa 240 px für die Noten) ist aus dem Code geschätzt,
+  nicht am iPhone gemessen ([Fehlersuche](troubleshooting.de.md#am-telefon-quer-bleibt-den-noten-wenig-höhe)).
 
 ### Offene Prüfungen
 

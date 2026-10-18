@@ -56,7 +56,8 @@
 				:readProgress="readPlaybackPercent"
 				@show="showBar"
 				@activity="scheduleBarCollapse"
-				@overflow="reportBarOverflow">
+				@overflow="reportBarOverflow"
+				@height="reportBarHeight">
 				<template #transport>
 					<NcButton
 						class="scoreview-play"
@@ -1785,6 +1786,10 @@ export default {
 			rootEl: rootElement,
 			isFullscreen: () => zoomApi.isFullscreen.value,
 			isPlaying: () => playback.isPlaying.value,
+			isPerformance: () => performance.active.value,
+			isFollowing: () => follow.following.value,
+			// NcPopover marks its trigger, wherever the popover itself is teleported to.
+			isBusy: () => rootElement()?.querySelector('.scoreview-bar [aria-expanded="true"]') !== null,
 			// Alles, was die Breite der Leiste aendert: Rechte und Modus
 			// bestimmen die Gruppen, Studierbuchstaben und Mikrofon den
 			// Transport. Aendert sich davon etwas, wird breit neu versucht.
@@ -1814,6 +1819,8 @@ export default {
 			observeBarWidth: bar.observe,
 			stopBarLayout: bar.stop,
 			reportBarOverflow: bar.reportOverflow,
+			reportBarHeight: bar.reportHeight,
+			barTight: bar.tight,
 			MODE_TONIC,
 			MODE_VOICE,
 			standalonePage,
@@ -2296,9 +2303,14 @@ export default {
 			return this.myPartIndex !== null && this.staffMappingOk ? [this.myPartIndex] : null
 		},
 
-		/** Auf Handybreite einmal das Systemband anbieten (D9). */
+		/**
+		 * Auf Handybreite einmal das Systemband anbieten (D9) - und ebenso,
+		 * wenn der Platz in der Hoehe knapp ist: Ein Telefon quer ist breiter
+		 * als 600 px, zeigt in der Seitenansicht mit „Breite einpassen" aber
+		 * nur einen Teil eines Systems (issue #15).
+		 */
 		offerBand() {
-			return !this.bandOffered && this.layout === 'pages' && this.viewerWidth > 0 && this.viewerWidth < 600
+			return !this.bandOffered && this.layout === 'pages' && ((this.viewerWidth > 0 && this.viewerWidth < 600) || this.barTight)
 		},
 
 		/**

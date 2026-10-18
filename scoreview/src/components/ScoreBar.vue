@@ -1,8 +1,9 @@
 <template>
 	<!--
-		Eingefahrene Leiste: Im Vollbild zieht sie sich waehrend der
-		Wiedergabe auf eine Fortschrittslinie zusammen (useBarLayout.js) - auf
-		dem Notenstaender zaehlt jede Zeile Noten. Bewusst NICHT ganz
+		Eingefahrene Leiste: Im Vollbild oder auf knappem Platz (Telefon quer)
+		zieht sie sich zusammen, solange sie niemand braucht - waehrend der
+		Wiedergabe, im Aufführungsmodus, beim Folgen (lib/barCollapse.js) -
+		auf dem Notenstaender zaehlt jede Zeile Noten. Bewusst NICHT ganz
 		ausgeblendet mit "Tippen holt sie zurueck": Ein Tipp auf die Partitur
 		springt bereits an die getippte Note (onNoteClick im Viewer), zwei
 		Bedeutungen fuer dieselbe Geste waeren ein Fehler. Die Linie ist
@@ -55,6 +56,7 @@
 	-->
 	<div
 		v-else
+		:ref="setBarEl"
 		class="scoreview-bar"
 		:class="{ 'scoreview-bar--compact': compact }"
 		@pointerdown="$emit('activity')">
@@ -138,8 +140,9 @@ export default {
 	// `show`: die eingefahrene Linie wurde angetippt. `activity`: in der
 	// Leiste wurde bedient - die Ruhefrist bis zum Einfahren beginnt neu.
 	// `overflow`: ob der Transport der BREITEN Leiste ueberlaeuft
-	// (useBarLayout.reportOverflow).
-	emits: ['show', 'activity', 'update:toolsOpen', 'overflow'],
+	// (useBarLayout.reportOverflow). `height`: die Hoehe der stehenden Leiste
+	// (useBarLayout.reportHeight).
+	emits: ['show', 'activity', 'update:toolsOpen', 'overflow', 'height'],
 
 	// Neu gerendert heisst oft: anderer Inhalt (Mikrofonanzeige,
 	// Auffuehrungsmodus, der Versuch in breiter Gestalt). Die Slots rendern
@@ -153,6 +156,7 @@ export default {
 
 	beforeUnmount() {
 		this.setTransportEl(null)
+		this.setBarEl(null)
 	},
 
 	methods: {
@@ -178,6 +182,34 @@ export default {
 			}
 			this.overflowObserver = new ResizeObserver(() => this.reportOverflow())
 			this.overflowObserver.observe(el)
+		},
+
+		/**
+		 * Die Leiste selbst beobachten, solange sie steht: Ihre Hoehe sagt
+		 * useBarLayout, ob der Platz knapp ist. Waehrend sie eingefahren ist,
+		 * meldet sie nichts - die gemerkte Hoehe gilt weiter.
+		 *
+		 * @param {?Element} el
+		 */
+		setBarEl(el) {
+			if (el === this.barEl) {
+				return
+			}
+			this.heightObserver?.disconnect()
+			this.heightObserver = null
+			this.barEl = el
+			if (!el || typeof ResizeObserver === 'undefined') {
+				return
+			}
+			this.heightObserver = new ResizeObserver(([entry]) => {
+				// Opened tools wrap below the transport; that height is
+				// fetched on demand and says nothing about the resting bar.
+				if (this.compact && this.toolsOpen) {
+					return
+				}
+				this.$emit('height', entry.borderBoxSize?.[0]?.blockSize ?? el.offsetHeight)
+			})
+			this.heightObserver.observe(el)
 		},
 
 		/**

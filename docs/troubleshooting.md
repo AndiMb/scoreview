@@ -332,6 +332,23 @@ does not scroll sideways after the playing position.
   control in the bar – that zoom is the viewer's own, and the view follows
   the playing position with it.
 
+## On a phone in landscape the score gets little height
+
+Safari's bars, the header of Nextcloud's viewer and the control bar share the
+little height there is. The control bar retracts to a thin line by itself
+during playback, in performance mode and while following a leader; tap the
+line to bring it back. Beyond that:
+
+- **Use the system band** (View → Layout). Each system there is as tall as the
+  space allows, so the height the bar gives up goes straight to the music. In
+  the page view, “Fit width” makes the page wider than the screen is tall.
+- **Add the offline page to the home screen** for a concert or rehearsal
+  (save the pieces for offline use first). Opened from the home screen, it
+  runs without Safari's bars and without the Nextcloud header. This has not
+  been checked on an iPhone.
+- The rest is not up to ScoreView, see
+  [Limits](limits.md#mobile).
+
 ## The conversion does not make progress
 
 Background jobs are not running. Nextcloud's default mode `ajax` is not

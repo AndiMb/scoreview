@@ -1715,6 +1715,26 @@ in `ScoreViewer.vue`) – der Viewer kann auch in einem schmalen Rahmen stecken.
 Weichen muss dort der Suchlauf, den das Taktfeld daneben ohnehin trägt, und bei
 Studierbuchstaben die Gesamtzahl der Takte.
 
+**Eingefahrene Leiste.** Die Leiste zieht sich nach 3 s Ruhe zu einer
+8-px-Fortschrittslinie zusammen, ein Tipp darauf holt sie zurück
+(`useBarLayout.js`, Regel in `lib/barCollapse.js`). Dafür braucht es einen
+Grund und keinen Bedarf: Grund ist Vollbild **oder knapper Platz** – die
+stehende Leiste belegt mindestens 15 % der Höhe des Viewers (zurück erst unter
+12 %) –, und niemand braucht sie während der Wiedergabe, im Aufführungsmodus
+und beim Folgen einer Leitung. Knapper Platz ist der Ersatz für das Vollbild,
+wo es keins gibt: iPhone und WebView der Android-App, Telefon quer kommt auf
+rund 18 %, hochkant auf 8 %. Ein Anteil statt einer Media Query auf
+Ausrichtung oder Höhe aus demselben Grund wie beim Überlauf: Der Viewer
+steckt in verschiedenen Rahmen. Die Leistenhöhe wird gemessen, solange die
+Leiste steht, und gilt weiter, solange sie eingefahren ist – sonst hieße die
+Linie „nicht knapp“ und holte die Leiste sofort zurück. Ein offener
+Aufklapper der Leiste hält das Einfahren auf: Er hängt außerhalb der Leiste
+im DOM, ein Tipp darin erreicht ihr `activity` nicht, und Einfahren risse
+ihn unter dem Finger weg. **Kein** „Tipp auf die Partitur schaltet die
+Leiste“: Ein Tipp auf die Partitur springt an die Note, zwei Bedeutungen für
+dieselbe Geste wären ein Fehler. Auf knappem Platz bietet der Viewer außerdem
+einmal das Systemband an, wie unter 600 px Breite.
+
 ### E9: Die Leitungsrolle ergänzt die Dateirechte
 
 Chorprobe und Konzert brauchen eine Rolle, die Nextcloud nicht kennt: wer

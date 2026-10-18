@@ -510,6 +510,16 @@ re-measured on real devices and with real input latency.
   whether a pedal gets focus in the WebView.
 - **A change of the companion secret takes effect after up to 3 s**, as long
   as the server still reads the old value from APCu.
+- **A phone in landscape keeps only part of its height for the score.** Where
+  the control bar takes 15 % or more of the viewer's height, it retracts to a
+  thin progress line during playback, in performance mode and while following
+  a leader, as it does in fullscreen; a tap on the line brings it back. What
+  stays is not ScoreView's: Safari's own bars (a web page cannot go fullscreen
+  on the iPhone, and Safari only shrinks its bars when the page itself
+  scrolls) and the header of Nextcloud's viewer with the file name and ✕. The
+  height budget (about 390 px in landscape, roughly 240 px of it for the
+  score with the bar standing) is estimated from the code, not measured on an
+  iPhone ([Troubleshooting](troubleshooting.md#on-a-phone-in-landscape-the-score-gets-little-height)).
 
 ### Open checks
 
