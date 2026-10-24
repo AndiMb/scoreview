@@ -1277,7 +1277,7 @@ msgid "Analysing the recording ({percent}%)…"
 msgstr ""
 
 #: src/components/RecordingPanel.vue
-msgid "{total} notes checked, {problems} off, {na} not evaluable."
+msgid "{total} notes checked: {pitch} off in pitch, {rhythm} off in rhythm, {na} not evaluable."
 msgstr ""
 
 #: src/components/RecordingPanel.vue
@@ -1289,7 +1289,23 @@ msgid "Pitch curve of this note"
 msgstr ""
 
 #: src/components/RecordingPanel.vue
-msgid "No note was off by more than 25 cents."
+msgid "No note was off in pitch or rhythm."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Onsets that could not be heard: {count}. A note tied to the same pitch has no onset of its own."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Onsets on time on average."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Onsets on average {ms} ms late."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Onsets on average {ms} ms early."
 msgstr ""
 
 #: src/components/RecordingPanel.vue
@@ -1309,7 +1325,19 @@ msgid "The microphone could not be started."
 msgstr ""
 
 #: src/components/RecordingPanel.vue
-msgid "Measure {measure}, {cents} cents"
+msgid "Measure {measure}: {issues}"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "{ms} ms early"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "{ms} ms late"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "{ms} ms too short"
 msgstr ""
 
 #: src/components/RecordingPanel.vue src/components/ScorePage.vue src/components/TunerNeedle.vue src/components/TunerPanel.vue

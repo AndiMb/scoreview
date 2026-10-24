@@ -1277,8 +1277,8 @@ msgid "Analysing the recording ({percent}%)…"
 msgstr "Die Aufnahme wird ausgewertet ({percent} %) …"
 
 #: src/components/RecordingPanel.vue
-msgid "{total} notes checked, {problems} off, {na} not evaluable."
-msgstr "{total} Noten geprüft, {problems} daneben, {na} nicht auswertbar."
+msgid "{total} notes checked: {pitch} off in pitch, {rhythm} off in rhythm, {na} not evaluable."
+msgstr "{total} Noten geprüft: {pitch} in der Tonhöhe daneben, {rhythm} im Rhythmus daneben, {na} nicht auswertbar."
 
 #: src/components/RecordingPanel.vue
 msgid "Hide intonation result"
@@ -1289,8 +1289,24 @@ msgid "Pitch curve of this note"
 msgstr "Tonhöhenverlauf dieser Note"
 
 #: src/components/RecordingPanel.vue
-msgid "No note was off by more than 25 cents."
-msgstr "Keine Note lag mehr als 25 Cent daneben."
+msgid "No note was off in pitch or rhythm."
+msgstr "Keine Note lag in Tonhöhe oder Rhythmus daneben."
+
+#: src/components/RecordingPanel.vue
+msgid "Onsets that could not be heard: {count}. A note tied to the same pitch has no onset of its own."
+msgstr "Nicht erkennbare Einsätze: {count}. Eine Note, die an dieselbe Tonhöhe gebunden ist, hat keinen eigenen Einsatz."
+
+#: src/components/RecordingPanel.vue
+msgid "Onsets on time on average."
+msgstr "Einsätze im Mittel pünktlich."
+
+#: src/components/RecordingPanel.vue
+msgid "Onsets on average {ms} ms late."
+msgstr "Einsätze im Mittel {ms} ms zu spät."
+
+#: src/components/RecordingPanel.vue
+msgid "Onsets on average {ms} ms early."
+msgstr "Einsätze im Mittel {ms} ms zu früh."
 
 #: src/components/RecordingPanel.vue
 msgid "The microphone is not available here. In the Nextcloud app it cannot be used; in a browser it may have been blocked for this site."
@@ -1309,8 +1325,20 @@ msgid "The microphone could not be started."
 msgstr "Das Mikrofon ließ sich nicht einschalten."
 
 #: src/components/RecordingPanel.vue
-msgid "Measure {measure}, {cents} cents"
-msgstr "Takt {measure}, {cents} Cent"
+msgid "Measure {measure}: {issues}"
+msgstr "Takt {measure}: {issues}"
+
+#: src/components/RecordingPanel.vue
+msgid "{ms} ms early"
+msgstr "{ms} ms zu früh"
+
+#: src/components/RecordingPanel.vue
+msgid "{ms} ms late"
+msgstr "{ms} ms zu spät"
+
+#: src/components/RecordingPanel.vue
+msgid "{ms} ms too short"
+msgstr "{ms} ms zu kurz"
 
 #: src/components/RecordingPanel.vue src/components/ScorePage.vue src/components/TunerNeedle.vue src/components/TunerPanel.vue
 msgid "{cents} cents"

@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:ecd966b2b5c6 -->
+<!-- translation-of: README.md sha256:9e1806b58ef7 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -106,7 +106,7 @@ SoundFont neu geladen werden.
 **Sich selbst hören.** **Eigene Aufnahmen**, synchron zu Cursor und Begleitung
 abspielbar, hört nur, wer sie gemacht hat. Die **Rückmeldung zur Intonation**
 zeigt beim Singen eine Nadel am Cursor und danach die Stellen, die zu hoch oder
-zu tief waren. Das **Stimmgerät** zeigt den gesungenen Ton mit Oktave, Frequenz
+zu tief, zu früh oder zu spät oder zu kurz waren. Das **Stimmgerät** zeigt den gesungenen Ton mit Oktave, Frequenz
 und Abweichung in Cent, geschrieben nach der Tonart an der aktuellen Stelle.
 Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt zeigt wofür.
 

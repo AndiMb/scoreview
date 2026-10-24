@@ -4,6 +4,20 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Rhythm feedback** after a recording: next to “too sharp/too flat”, the
+  list of problem spots now says when a note came in **early or late** and
+  when it was **cut short** before a rest, in milliseconds. The onset is read
+  from the vowel and only where one can be heard – after silence or a change
+  of pitch; a note tied to the same pitch is reported as not evaluable. The
+  summary adds the average onset (“Onsets on average 35 ms late”), and a
+  note head shows the worst of pitch, onset and end. Thresholds and the
+  detector's offset are measured with synthetic voices; real voices are
+  still to be checked.
+
 ## [1.21.0] – 2026-10-24
 
 ### Added

@@ -533,7 +533,7 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | Zwei Seiten nebeneinander (1.18) | `spreadLayout.js`, `pagingPlan.js` (`nextRowScrollTop`) | `useZoom`, `usePaging`, `useViewerPreferences` | `LayoutControls.vue`, Gitter in `ScoreViewer.vue` |
 | „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js`, `leaderQueue.js`, `followPlayback.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
 | Setliste ([E11](#e11-die-setliste-als-markdown-datei)) | `setlistNav.js`, `setlistEdit.js`, `soundFontCache.js` | `useSetlist` | `SetlistBar.vue`, `SetlistEditor.vue` |
-| Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js` | `useMicrophone`, `useRecorder`, `useIntonation` | `MicIndicator.vue`, `RecordingPanel.vue` |
+| Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js`, `rhythm.js` | `useMicrophone`, `useRecorder`, `useIntonation` | `MicIndicator.vue`, `RecordingPanel.vue` |
 | Schalter der Verwaltung | `featureFlags.js` | – | – |
 
 **Die Zeitregel gilt auch hier.** Was plant oder springt, nimmt die
@@ -765,6 +765,22 @@ sich Notenzeilen den Stimmen zuordnen lassen; sonst bleibt es bei Nadel und
 Problemliste. Ob sie sich zuordnen lassen, meldet jede geladene Seite mit
 mindestens einem System – eine Titel- oder Textseite schweigt, sonst
 überstimmte ihr „nein“ die Notenseiten.
+
+**Rhythmus** (`rhythm.js`) liest aus denselben Rahmen, ohne zweiten Lauf durch
+den Worker, Einsatz und Ende jeder bewerteten Note. Der Einsatz ist der erste
+von drei stimmhaften Rahmen in Folge auf der Sollnote, und nur dort, wo davor
+Stille oder eine andere Tonhöhe lag – ein stimmloser Konsonant zählt nicht,
+der Vokal gehört auf den Schlag; an dieselbe Tonhöhe gebunden ist „nicht
+auswertbar“. Abgezogen wird der gemessene Versatz des Erkenners (nach Stille
+12 ms, nach Tonwechsel 27 ms), bewertet wird absolut gegen die Partitur und in
+Echtzeit, nicht gegen das eigene Mittel und nicht in Partiturzeit: Wer
+gleichmäßig schleppt, soll es sehen, und 60 ms sind bei halbem Tempo so
+hörbar wie bei vollem. Grün ist nie enger als 55 ms, über dem Versatz der
+Aufnahme gegen den Cursor. Das Ende („zu kurz“) gilt nur vor einer Pause,
+„zu lang“ gibt es nicht. Ein Notenkopf zeigt den schlechtesten der drei Werte;
+die Markierungen rechnet `useIntonation` aus den Bewertungen nach, sobald
+Zeilenzuordnung oder Segmente sich ändern, statt sie mit der Auswertung
+festzuschreiben.
 
 **Das Stimmgerät** (`useTuner.js`, `tuner.js`) nimmt dieselbe Kette – Blöcke
 in denselben Worker, Rahmen zurück –, hat aber keine Sollnote: Es faltet auf

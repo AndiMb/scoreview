@@ -191,23 +191,56 @@ export function evaluateRecording(frames, notes, myChannels, options = {}) {
 }
 
 /**
- * Die Problemstellen fuer die Liste „Takt 12, +38 Cent".
+ * The problem spots for the list: "Measure 12, +38 cents", "80 ms late".
+ * One entry per note, with every quantity that is off; its class is the
+ * worst of them (decision D2 in Paket C: the note head shows the worst too).
  *
  * @param {Array<{note:object, medianCents:?number, class:string}>} evaluations
- * @param {function(number): ?number} measureOf Partiturzeit → Taktnummer
- * @return {Array<{measure:?number, cents:number, class:string, onMs:number, index:number}>}
+ * @param {function(number): ?number} measureOf score time → measure number
+ * @param {Array<{onset:?{devMs:?number, class:string}, release:?{shortMs:?number, class:string}}>} [rhythm] from lib/rhythm.js, in the order of `evaluations`
+ * @return {Array<{measure:?number, cents:?number, class:string, onMs:number, index:number, issues:Array<{kind:string, value:number, class:string}>}>}
  */
-export function problemList(evaluations, measureOf) {
-	return evaluations
-		.map((e, index) => ({ e, index }))
-		.filter(({ e }) => e.class === 'yellow' || e.class === 'red')
-		.map(({ e, index }) => ({
+export function problemList(evaluations, measureOf, rhythm = []) {
+	const off = (cls) => cls === 'yellow' || cls === 'red'
+	const result = []
+	evaluations.forEach((e, index) => {
+		const issues = []
+		if (off(e.class)) {
+			issues.push({ kind: 'pitch', value: Math.round(e.medianCents), class: e.class })
+		}
+		const { onset, release } = rhythm[index] ?? {}
+		if (onset && off(onset.class)) {
+			issues.push({ kind: 'onset', value: Math.round(onset.devMs), class: onset.class })
+		}
+		if (release && off(release.class)) {
+			issues.push({ kind: 'release', value: Math.round(release.shortMs), class: release.class })
+		}
+		if (issues.length === 0) {
+			return
+		}
+		result.push({
 			measure: measureOf(e.note.onMs + ONSET_TOLERANCE_MS),
-			cents: Math.round(e.medianCents),
-			class: e.class,
+			cents: off(e.class) ? Math.round(e.medianCents) : null,
+			class: worstClass(...issues.map((i) => i.class)),
 			onMs: e.note.onMs,
 			index,
-		}))
+			issues,
+		})
+	})
+	return result
+}
+
+const CLASS_RANK = { na: 0, green: 1, yellow: 2, red: 3 }
+
+/**
+ * The worst of several classes; "not evaluable" only if nothing else was
+ * evaluated.
+ *
+ * @param {...?string} classes
+ * @return {'green'|'yellow'|'red'|'na'}
+ */
+export function worstClass(...classes) {
+	return classes.reduce((worst, cls) => ((CLASS_RANK[cls] ?? 0) > CLASS_RANK[worst] ? cls : worst), 'na')
 }
 
 /**

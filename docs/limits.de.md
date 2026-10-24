@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:bfc0440511c1 -->
+<!-- translation-of: limits.md sha256:40ca38857925 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -440,6 +440,20 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
 - **Das Einschwingen ist nicht gemessen.** Die Intonation verwirft die
   ersten **100 ms** jeder Note (`skipAttackMs`); ob das für Laienstimmen
   reicht, steht aus.
+- **Der Rhythmus wird am Vokal abgelesen**, und nur dort, wo ein Einsatz zu
+  hören ist: nach Stille oder nach einem Tonhöhenwechsel. Ein stimmloser
+  Konsonant vor dem Vokal zählt nicht mit; das entspricht der Regel, dass der
+  Vokal auf den Schlag gehört. Eine Note, die an dieselbe Tonhöhe gebunden
+  ist, hat keinen eigenen Einsatz und ist „nicht auswertbar“; das Ende einer
+  Note („zu kurz“) wird nur vor einer Pause bewertet, „zu lang“ nie. Gemessen
+  mit synthetischen Tönen liegt der erkannte Einsatz **12 ms nach Stille**
+  (−3 … +22) und **27 ms nach einem Tonhöhenwechsel** (+12 … +37) hinter dem
+  echten; beides wird abgezogen. Was bleibt, ist die Streuung des
+  20-ms-Rasters der Analyse. Ein Einsatz ist bis **60 ms** zu früh oder zu
+  spät grün – nie unter 55 ms, damit der Versatz gegen den Cursor allein
+  keine Note gelb macht – und bis 120 ms gelb. **Mit echten Stimmen noch
+  nicht geprüft**: weiche Einsätze, stimmhafte Konsonanten wie „m“ oder „l“,
+  Handys.
 - **Die Referenzstimmung ist fest: a' = 440 Hz.** Ein Chor, der als Ganzes
   absinkt, wird gegen 440 bewertet, nicht gegen sich selbst. Das Stimmgerät
   nutzt dieselbe Referenz.
@@ -455,7 +469,8 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
 - **Oktaven werden gefaltet.** Ein Tenor, der die Altstimme eine Oktave tiefer
   singt, singt sie richtig; eine Oktave daneben fällt also nicht auf.
 - **Farbige Notenköpfe nur auf dem lokalen Konvertierungsweg**, und nur, wo
-  jede Stimme eine eigene Notenzeile hat. Sonst bleibt es ohne Fehlermeldung
+  jede Stimme eine eigene Notenzeile hat. Ein Kopf zeigt den schlechtesten
+  Wert aus Tonhöhe, Einsatz und Ende; welcher es war, sagt die Liste. Sonst bleibt es ohne Fehlermeldung
   bei der Nadel und der Liste der Problemstellen
   ([M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)).
 - **Bei Wiederholungen zeigt die Färbung den zuletzt bewerteten Durchgang.**

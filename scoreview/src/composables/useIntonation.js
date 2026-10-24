@@ -9,8 +9,10 @@ import {
 	noteMarks,
 	problemList,
 	targetAt,
+	worstClass,
 } from '../lib/intonation.js'
 import { captureToScoreMs, recordingToScoreMs } from '../lib/recordingAlign.js'
+import { evaluateRhythm, medianOnsetMs } from '../lib/rhythm.js'
 import { decodeWav } from '../lib/wavCodec.js'
 
 /**
@@ -113,7 +115,16 @@ export function useIntonation({
 	// Getrennt statt zusammengefuehrt: Die Live-Markierung wechselt mit jedem
 	// Rahmen, die der Auswertung nie - eine gemeinsame Liste zwang jede Seite,
 	// bei jedem Rahmen alle ausgewerteten Noten neu zu faerben.
-	const marks = computed(() => analysis.value?.marks ?? [])
+	//
+	// Computed from the evaluations rather than stored with them: the staff
+	// mapping (`myStaff`) is reported by the first loaded page and the
+	// segments (`events`) by the timeline, and either may arrive after the
+	// analysis. Stored once, the note heads would stay uncoloured whenever
+	// one of them came late.
+	const marks = computed(() => {
+		const evaluated = analysis.value?.markEvaluations
+		return evaluated ? noteMarks(evaluated, notes(), myChannels(), events(), myStaff()) : []
+	})
 
 	function ensureWorker() {
 		if (worker || destroyed) {
@@ -342,13 +353,25 @@ export function useIntonation({
 				return
 			}
 			const imPartitur = frames.map((f) => ({ scoreMs: recordingToScoreMs(recording, f.timeSec), hz: f.hz, clarity: f.clarity }))
-			const evaluations = evaluateRecording(imPartitur, notes(), myChannels(), { tempoFactor: recording.tempoFactor || 1 })
+			const tempo = recording.tempoFactor || 1
+			const evaluations = evaluateRecording(imPartitur, notes(), myChannels(), { tempoFactor: tempo })
+			// Same frames, no second pass through the worker: rhythm is read
+			// from what the pitch analysis already found.
+			const rhythm = evaluateRhythm(imPartitur, evaluations, notes(), myChannels(), { tempoFactor: tempo })
+			const problems = problemList(evaluations, measureOf, rhythm)
 			analysis.value = {
 				recordingId: recording.id,
 				evaluations,
-				problems: problemList(evaluations, measureOf),
+				rhythm,
+				problems,
+				pitchProblems: problems.filter((p) => p.issues.some((i) => i.kind === 'pitch')).length,
+				rhythmProblems: problems.filter((p) => p.issues.some((i) => i.kind !== 'pitch')).length,
 				notEvaluable: evaluations.filter((e) => e.class === 'na').length,
-				marks: noteMarks(evaluations, notes(), myChannels(), events(), myStaff()),
+				onsetsMeasured: rhythm.filter((r) => Number.isFinite(r.onset?.devMs)).length,
+				onsetsNotEvaluable: rhythm.filter((r) => r.onset?.class === 'na').length,
+				medianOnsetMs: medianOnsetMs(rhythm),
+				// The note head shows the worst of pitch, onset and end (D2).
+				markEvaluations: evaluations.map((e, i) => ({ ...e, class: worstClass(e.class, rhythm[i].onset?.class, rhythm[i].release?.class) })),
 			}
 		} catch (err) {
 			if (!analysisGeneration.isCurrent(mine)) {

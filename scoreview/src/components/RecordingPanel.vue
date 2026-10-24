@@ -197,11 +197,15 @@
 			<template v-if="analysis">
 				<div class="scoreview-practice-row">
 					<p class="scoreview-practice-summary">
-						{{ t('{total} notes checked, {problems} off, {na} not evaluable.', {
+						{{ t('{total} notes checked: {pitch} off in pitch, {rhythm} off in rhythm, {na} not evaluable.', {
 							total: analysis.evaluations.length,
-							problems: analysis.problems.length,
+							pitch: analysis.pitchProblems,
+							rhythm: analysis.rhythmProblems,
 							na: analysis.notEvaluable,
 						}) }}
+						<template v-if="onsetSummary">
+							{{ onsetSummary }}
+						</template>
 					</p>
 					<NcButton :aria-label="t('Hide intonation result')" @click="$emit('clearAnalysis')">
 						<template #icon>
@@ -247,7 +251,12 @@
 					</li>
 				</ul>
 				<p v-if="analysis.problems.length === 0" class="scoreview-practice-hint">
-					{{ t('No note was off by more than 25 cents.') }}
+					{{ t('No note was off in pitch or rhythm.') }}
+				</p>
+				<!-- Legato on the same pitch has no onset to hear - say so
+					instead of leaving the reader to wonder why a note is missing. -->
+				<p v-if="analysis.onsetsNotEvaluable > 0" class="scoreview-practice-hint">
+					{{ t('Onsets that could not be heard: {count}. A note tied to the same pitch has no onset of its own.', { count: analysis.onsetsNotEvaluable }) }}
 				</p>
 			</template>
 		</section>
@@ -339,6 +348,24 @@ export default {
 	],
 
 	computed: {
+		/**
+		 * The median onset: the honest answer to "am I dragging?". Below
+		 * 10 ms it is within the frame raster and reads as on time.
+		 */
+		onsetSummary() {
+			const ms = this.analysis?.medianOnsetMs
+			if (ms === null || ms === undefined) {
+				return ''
+			}
+			const r = Math.round(ms)
+			if (Math.abs(r) < 10) {
+				return this.t('Onsets on time on average.')
+			}
+			return r > 0
+				? this.t('Onsets on average {ms} ms late.', { ms: r })
+				: this.t('Onsets on average {ms} ms early.', { ms: -r })
+		},
+
 		micErrorText() {
 			switch (this.micError?.kind) {
 				case 'blocked':
@@ -368,10 +395,23 @@ export default {
 		},
 
 		problemText(problem) {
-			const cents = formatCents(problem.cents)
+			const issues = problem.issues.map((issue) => this.issueText(issue)).join(', ')
 			return problem.measure
-				? this.t('Measure {measure}, {cents} cents', { measure: problem.measure, cents })
-				: this.t('{cents} cents', { cents })
+				? this.t('Measure {measure}: {issues}', { measure: problem.measure, issues })
+				: issues
+		},
+
+		issueText(issue) {
+			switch (issue.kind) {
+				case 'onset':
+					return issue.value < 0
+						? this.t('{ms} ms early', { ms: -issue.value })
+						: this.t('{ms} ms late', { ms: issue.value })
+				case 'release':
+					return this.t('{ms} ms too short', { ms: issue.value })
+				default:
+					return this.t('{cents} cents', { cents: formatCents(issue.value) })
+			}
 		},
 
 		centsToY(cents) {

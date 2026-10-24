@@ -102,7 +102,7 @@ zoom or load the SoundFont again.
 **Hearing yourself.** **Own recordings**, playable in sync with the cursor and
 accompaniment, can only be heard by the person who made them. **Intonation
 feedback** shows a needle at the cursor while you sing and afterwards the spots
-that were too sharp or too flat. The **tuner** shows the note you are singing
+that were too sharp or too flat, came in early or late, or were cut short. The **tuner** shows the note you are singing
 with its octave, frequency and deviation in cents, spelled for the key at the
 current position. The microphone only runs when explicitly requested, and a
 red dot shows what for.

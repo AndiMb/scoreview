@@ -438,6 +438,19 @@ re-measured on real devices and with real input latency.
 - **The attack has not been measured.** Intonation discards the first
   **100 ms** of each note (`skipAttackMs`); whether that is enough for amateur
   voices is still open.
+- **Rhythm is read from the vowel**, and only where an onset can be heard:
+  after silence or after a change of pitch. A voiceless consonant before the
+  vowel does not count, which matches the rule that the vowel belongs on the
+  beat. A note tied to the same pitch has no onset of its own and is “not
+  evaluable”; the end of a note (“too short”) is judged only before a rest,
+  never “too long”. Measured with synthetic tones, the detected onset lags
+  the real one by **12 ms after silence** (−3 … +22) and **27 ms after a
+  change of pitch** (+12 … +37); both are subtracted. What remains is the
+  spread of the 20 ms analysis raster. An onset is green up to **60 ms**
+  early or late – never less than 55 ms, so that the offset against the
+  cursor alone cannot make a note yellow – and yellow up to 120 ms. **Not yet
+  checked with real voices**: soft attacks, voiced consonants such as “m” or
+  “l”, and phones.
 - **The reference pitch is fixed: a' = 440 Hz.** A choir that sinks as a whole
   is judged against 440, not against itself. The tuner uses the same
   reference.
@@ -452,7 +465,8 @@ re-measured on real devices and with real input latency.
 - **Octaves are folded.** A tenor singing the alto part an octave lower sings
   it correctly; an octave off therefore goes unnoticed.
 - **Coloured note heads only on the local conversion path**, and only where
-  each part has its own staff. Otherwise it stays, without an error message,
+  each part has its own staff. A head shows the worst of pitch, onset and
+  end; the list says which it was. Otherwise it stays, without an error message,
   with the needle and the list of problem spots
   ([M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg) (German)).
 - **With repeats, the colouring shows the most recently evaluated pass.** The
