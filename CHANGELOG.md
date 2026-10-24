@@ -4,6 +4,39 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **“My part” in the View group** (#18): a row that names your part and lets
+  you choose another or none, without opening the mixer and also without
+  sound. The mixer says which part is yours above its rows.
+- **Fullscreen where the browser has none** (#20): in the Nextcloud Android
+  app and on the iPhone the fullscreen button now switches to fullscreen
+  inside the page – the score gets the whole view, the control bar retracts
+  during playback, and the back button leaves it. The system bars stay; only
+  the app could hide them.
+
+### Changed
+
+- **100 % in the mixer is the score's own mix** (#17): every part starts at
+  the volume set in MuseScore, and the sliders scale from there. “My part”
+  and the coach keep the balance of the score as well.
+
+### Fixed
+
+- **Parts played at unexpected volumes while every slider showed 100 %**
+  (#17): the mixer sent its volumes only when a slider moved, so untouched
+  parts played at MuseScore's volume and touched ones louder; a mixer closed
+  and opened again also showed 100 % for a part still playing quieter or
+  muted. The mix is now applied as soon as the sound is loaded and survives
+  closing the mixer.
+- **The system band did not scroll inside a system wider than the screen**
+  (#21), so the playhead ran off the right edge. It now turns pages: shortly
+  before the cursor reaches the edge, the band moves on by most of a screen
+  and keeps what was just played on the left. Page Down and a pedal turn
+  pages inside a wide system too.
+
 ## [1.20.1] – 2026-10-18
 
 ### Fixed

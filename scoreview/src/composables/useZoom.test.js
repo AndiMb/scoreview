@@ -45,3 +45,36 @@ describe('useZoom presets', () => {
 		expect(zoom.preset.value).toBe('page')
 	})
 })
+
+// jsdom has no Fullscreen API (document.fullscreenEnabled is undefined) - the
+// same answer as the WebView of the Nextcloud Android app.
+describe('fullscreen inside the page (issue #20)', () => {
+	it('is offered where the browser has no Fullscreen API', () => {
+		const zoom = useZoom({ rootEl: () => null, scrollEl: () => dom(400, 800) })
+		expect(zoom.fullscreenPossible).toBe(false)
+	})
+
+	it('enters with a history entry and "whole page", and leaves with the back button', async () => {
+		const scroll = dom(400, 800)
+		const zoom = useZoom({ rootEl: () => null, scrollEl: () => scroll })
+		zoom.onPageLoaded({ index: 0, viewBox: A4, sizeMm: null })
+		const length = history.length
+		await zoom.toggleFullscreen()
+		expect(zoom.pageFullscreen.value).toBe(true)
+		expect(zoom.isFullscreen.value).toBe(true)
+		expect(zoom.preset.value).toBe('page')
+		expect(history.length).toBe(length + 1)
+		window.dispatchEvent(new PopStateEvent('popstate'))
+		await new Promise((resolve) => setTimeout(resolve))
+		expect(zoom.pageFullscreen.value).toBe(false)
+		expect(zoom.preset.value).toBe('width')
+	})
+
+	it('leaves on Escape', async () => {
+		const zoom = useZoom({ rootEl: () => null, scrollEl: () => dom(400, 800) })
+		await zoom.toggleFullscreen()
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+		await new Promise((resolve) => setTimeout(resolve))
+		expect(zoom.isFullscreen.value).toBe(false)
+	})
+})

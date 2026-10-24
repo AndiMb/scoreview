@@ -23,12 +23,17 @@ const META_TIME_SIGNATURE = 0x58
 const META_KEY_SIGNATURE = 0x59
 const META_END_OF_TRACK = 0x2f
 
+const CC_CHANNEL_VOLUME = 7
+// GM default for CC7 - what a synthesizer plays for a channel the file never
+// sets. Measured: MuseScore writes exactly this value at tick 0 of every part.
+export const DEFAULT_CHANNEL_VOLUME = 100
+
 /**
  * @typedef {{onMs:number, offMs:number, pitch:number, channel:number, track:number, velocity:number}} MidiNote
  * @typedef {{timeMs:number, text:string}} MidiMarker
  * @typedef {{timeMs:number, sf:number, mi:number}} MidiKeySig
  * @typedef {{timeMs:number, n:number, d:number}} MidiTimeSig
- * @typedef {{notes:MidiNote[], markers:MidiMarker[], keySigs:MidiKeySig[], timeSigs:MidiTimeSig[], durationMs:number}} ParsedMidi
+ * @typedef {{notes:MidiNote[], markers:MidiMarker[], keySigs:MidiKeySig[], timeSigs:MidiTimeSig[], channelVolumes:Map<number, number>, durationMs:number}} ParsedMidi
  */
 
 /**
@@ -73,6 +78,8 @@ export function parseMidiNotes(input) {
 	const markers = []
 	const keySigs = []
 	const timeSigs = []
+	const volumeChanges = []
+	const firstNoteTick = new Map()
 	let endTick = 0
 	const decoder = new TextDecoder('utf-8')
 
@@ -84,6 +91,9 @@ export function parseMidiNotes(input) {
 			endTick = Math.max(endTick, event.tick)
 			if (event.type === 'noteOn' && event.velocity > 0) {
 				const key = event.channel * 128 + event.pitch
+				if (!firstNoteTick.has(event.channel) || event.tick < firstNoteTick.get(event.channel)) {
+					firstNoteTick.set(event.channel, event.tick)
+				}
 				if (!open.has(key)) {
 					open.set(key, [])
 				}
@@ -94,6 +104,8 @@ export function parseMidiNotes(input) {
 				if (begin) {
 					notes.push(makeNote(begin, event.tick, trackIndex, toMs))
 				}
+			} else if (event.type === 'controller' && event.controller === CC_CHANNEL_VOLUME) {
+				volumeChanges.push(event)
 			} else if (event.type === 'meta' && event.metaType === META_MARKER) {
 				markers.push({ timeMs: toMs(event.tick), text: decoder.decode(event.data).trim() })
 			} else if (event.type === 'meta' && event.metaType === META_KEY_SIGNATURE && event.data.length >= 2) {
@@ -124,7 +136,33 @@ export function parseMidiNotes(input) {
 	keySigs.sort((a, b) => a.timeMs - b.timeMs)
 	timeSigs.sort((a, b) => a.timeMs - b.timeMs)
 
-	return { notes, markers, keySigs, timeSigs, durationMs: toMs(endTick) }
+	return { notes, markers, keySigs, timeSigs, channelVolumes: channelVolumesAt(volumeChanges, firstNoteTick), durationMs: toMs(endTick) }
+}
+
+/**
+ * The volume each channel starts with: the last CC7 at or before its first
+ * note, the GM default without one. The score's mix in MuseScore's own mixer,
+ * and what "100 %" in ScoreView's mixer stands for (mixState.js).
+ *
+ * Only the start counts: player.js locks CC7 as soon as the mixer applies its
+ * levels, so a later change in the file would not be heard anyway.
+ *
+ * @param {Array<{tick:number, channel:number, value:number}>} changes in track order
+ * @param {Map<number, number>} firstNoteTick channel -> tick
+ * @return {Map<number, number>} channel -> 0..127, for channels that play
+ */
+function channelVolumesAt(changes, firstNoteTick) {
+	const volumes = new Map()
+	for (const [channel, noteTick] of firstNoteTick) {
+		let best = null
+		for (const change of changes) {
+			if (change.channel === channel && change.tick <= noteTick && (best === null || change.tick >= best.tick)) {
+				best = change
+			}
+		}
+		volumes.set(channel, best === null ? DEFAULT_CHANNEL_VOLUME : best.value)
+	}
+	return volumes
 }
 
 function makeNote(begin, endTick, track, toMs) {
@@ -208,6 +246,8 @@ function readTrackEvents(bytes, start, end) {
 			events.push({ tick, type: 'noteOn', channel, pitch: data[0], velocity: data[1] })
 		} else if (kind === 0x80) {
 			events.push({ tick, type: 'noteOff', channel, pitch: data[0], velocity: data[1] })
+		} else if (kind === 0xb0) {
+			events.push({ tick, type: 'controller', channel, controller: data[0], value: data[1] })
 		}
 	}
 	return events

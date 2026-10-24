@@ -108,15 +108,16 @@ function clickTimes(measures, startMs, endMs, durationMs, baseBpm, mode, meters)
  * @param {Array<{partId:string, name:string}>} input.parts Stimmen in Reihenfolge
  * @param {number} input.othersLevel
  * @param {Map<number, number>} [input.programs] Programme ohne Coach
+ * @param {Map<number, number>} [input.baseVolumes] CC7 of the score, see mixState.js
  * @param {object} input.base die uebrigen Eingaben fuer buildExportPlan
  * @return {Array<{partId:string, name:string, plan:ExportPlan}>}
  */
-export function plansForAllParts({ mixerChannels, parts, othersLevel, programs = new Map(), base }) {
+export function plansForAllParts({ mixerChannels, parts, othersLevel, programs = new Map(), baseVolumes = new Map(), base }) {
 	const all = mixerChannels.map((ch) => ch.channel)
 	const result = []
 	for (const part of parts) {
 		const mine = channelsOfPart(mixerChannels, part.partId)
-		const mix = coachMix({ channels: all, myChannels: mine, othersLevel, programs })
+		const mix = coachMix({ channels: all, myChannels: mine, othersLevel, programs, baseVolumes })
 		if (mix === null) {
 			continue
 		}

@@ -173,3 +173,34 @@ describe('parseMidiNotes mit Tempokarte und Randfaellen', () => {
 		expect(() => parseMidiNotes(new Uint8Array(hex('01 02 03 04')))).toThrow()
 	})
 })
+
+describe('channelVolumes', () => {
+	it('reads the CC7 MuseScore writes at the start of every part (m1-test: 100)', () => {
+		expect([...parseMidiNotes(fixture).channelVolumes]).toEqual([[0, 100]])
+	})
+
+	it('takes the last CC7 before the first note and ignores later ones', () => {
+		const bytes = smf(`
+			00 b0 07 50     # channel 0: 80
+			00 b1 07 7f     # channel 1: 127
+			00 b0 07 40     # channel 0 again before its note: 64
+			00 90 3c 64
+			00 91 3e 64
+			83 60 b0 07 10  # after the first note - does not count
+			00 80 3c 00
+			00 81 3e 00
+			00 ff 2f 00
+		`)
+		expect(parseMidiNotes(bytes).channelVolumes).toEqual(new Map([[0, 64], [1, 127]]))
+	})
+
+	it('gives a playing channel without CC7 the GM default and leaves silent channels out', () => {
+		const bytes = smf(`
+			00 b5 07 20     # channel 5 never plays
+			00 92 3c 64
+			83 60 82 3c 00
+			00 ff 2f 00
+		`)
+		expect(parseMidiNotes(bytes).channelVolumes).toEqual(new Map([[2, 100]]))
+	})
+})

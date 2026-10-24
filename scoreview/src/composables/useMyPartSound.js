@@ -1,18 +1,12 @@
 import { computed, watch } from 'vue'
 import { COACH_PROGRAM, coachMix } from '../lib/coachMix.js'
-import { voiceFocusForPart } from '../lib/mixerLayout.js'
 import { channelsOfPart, computePans } from '../lib/panLayout.js'
 
 /**
  * Wie „Meine Stimme" klingt, unabhaengig davon, ob der Mixer offen ist:
  *
- * 1. **Lautstaerke:** Die serverseitig gemerkte Stimme (useMyPart.js) trifft
- *    ein, waehrend der Mixer zu ist - der haelt seinen Zustand nur, solange er
- *    angezeigt wird. Ohne diesen Schritt waere die Stimme nach dem Oeffnen
- *    markiert, klaenge aber wie alle anderen. Bei offenem Mixer stellt er
- *    selbst ein (ScoreMixer.vue beobachtet `myPartId`), sonst liefe hier ein
- *    zweiter Satz Lautstaerken ueber seine Mute-/Solo-Werte. Wie leise die
- *    anderen sind, sagt der Regler „andere Stimmen" (H4).
+ * 1. **Lautstaerke** setzt sie nicht selbst: „Meine Stimme" ist Teil der
+ *    einen Mischung (useMix.js), die auch der Mixer zeigt.
  * 2. **Stereobild:** nach lib/panLayout.js, wenn die Nutzerin es
  *    eingeschaltet hat. Mute und Solo gehen vor, weil sie auf CC7
  *    im Synthesizer wirken, das Panorama erst dahinter - ein Kanal ohne
@@ -27,14 +21,11 @@ import { channelsOfPart, computePans } from '../lib/panLayout.js'
  * @param {() => Array} deps.mixerChannels
  * @param {() => ?string} deps.myPartId
  * @param {() => boolean} deps.stereoMyPart Nutzereinstellung
- * @param {() => boolean} deps.mixerOpen ob ScoreMixer gerade angezeigt wird
- * @param {(volumes: Map<number, number>) => void} deps.applyChannelVolumes
  * @param {(pans: Map<number, number>) => void} deps.applyChannelPans
  * @param {() => boolean} [deps.coach]
- * @param {() => number} [deps.othersLevel] 0..127
  * @param {(change: {channel: number, program: number}) => void} [deps.setProgram]
  */
-export function useMyPartSound({ hasRealPlayer, mixerChannels, myPartId, stereoMyPart, mixerOpen, applyChannelVolumes, applyChannelPans, coach = () => false, othersLevel = () => 40, setProgram = () => {} }) {
+export function useMyPartSound({ hasRealPlayer, mixerChannels, myPartId, stereoMyPart, applyChannelPans, coach = () => false, setProgram = () => {} }) {
 	// Die Kanalnummern als Text: Ein neues, aber gleiches Array (zweiter
 	// resolveMixerChannels()-Lauf) soll nicht erneut anwenden.
 	const channelKey = computed(() => mixerChannels().map((ch) => `${ch.partId}:${ch.channel}`).join(','))
@@ -44,27 +35,8 @@ export function useMyPartSound({ hasRealPlayer, mixerChannels, myPartId, stereoM
 			return null
 		}
 		const channels = mixerChannels().map((ch) => ch.channel)
-		return coachMix({ channels, myChannels: channelsOfPart(mixerChannels(), myPartId()), othersLevel: othersLevel() })
+		return coachMix({ channels, myChannels: channelsOfPart(mixerChannels(), myPartId()) })
 	}
-
-	watch(
-		() => [hasRealPlayer(), channelKey.value, myPartId(), coach(), othersLevel()],
-		([real]) => {
-			if (!real || mixerOpen()) {
-				return
-			}
-			const mix = coachState()
-			if (mix) {
-				applyChannelVolumes(mix.volumes)
-				return
-			}
-			const focus = voiceFocusForPart(mixerChannels(), myPartId(), { quiet: othersLevel() })
-			if (focus) {
-				applyChannelVolumes(focus.volumes)
-			}
-		},
-		{ immediate: true },
-	)
 
 	// Ausgeschaltet heisst Mitte - und die Mitte laesst das Panorama der
 	// Partitur unberuehrt (player.js), wer die Funktion nicht nutzt, merkt

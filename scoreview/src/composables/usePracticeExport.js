@@ -37,6 +37,7 @@ const WORKER_URL = withAppVersion(generateFilePath('scoreview', 'js', 'scoreview
  * @param {() => Array} deps.mixerChannels
  * @param {() => Array<{partId: string, name: string}>} deps.parts
  * @param {() => number} deps.othersLevel
+ * @param {() => ?Map<number, number>} [deps.baseVolumes] CC7 of the score (mixState.js)
  * @return {object}
  */
 export function usePracticeExport(deps) {
@@ -115,6 +116,7 @@ export function usePracticeExport(deps) {
 			mixerChannels: deps.mixerChannels(),
 			parts: deps.parts(),
 			othersLevel: deps.othersLevel(),
+			baseVolumes: deps.baseVolumes?.() ?? new Map(),
 			programs: deps.mix().programs,
 			base: { ...base, metronome: options.metronome ? { mode: options.mode ?? options.everyBeat } : null },
 		})

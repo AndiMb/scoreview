@@ -9,7 +9,14 @@
 		Gerendert werden nur die sichtbaren Systeme und ihre Nachbarn: jede
 		ScorePage traegt das ganze Seiten-SVG (see rendered()).
 	-->
-	<div ref="scroller" class="scoreview-band" @scroll.passive="onScroll">
+	<div
+		ref="scroller"
+		class="scoreview-band"
+		:class="{ 'scoreview-band--paging': paging }"
+		@scroll.passive="onScroll"
+		@scrollend.passive="paging = false"
+		@pointerdown.passive="onGesture"
+		@wheel.passive="onGesture">
 		<p v-if="crops.length === 0" class="scoreview-band-empty">
 			{{ loading ? t('Preparing the system band…') : t('No staves found on these pages.') }}
 		</p>
@@ -44,9 +51,10 @@
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import ScorePage from './ScorePage.vue'
+import { pageForCursor, pageStep, planBandPage } from '../lib/bandPaging.js'
 import { cropsInLoop } from '../lib/loopFocus.js'
 import { BASE_PAGE_WIDTH_PX, parseViewBox } from '../lib/scoreLayout.js'
-import { spanInView } from '../lib/scrollPlan.js'
+import { shouldSuppressAutoScroll, spanInView } from '../lib/scrollPlan.js'
 import { findStaffBands, groupBandsIntoSystems } from '../lib/staffBands.js'
 import { bandWindow, cropIndexAt, cropScale, frameAt, lyricBaselines, lyricBottomsFor, systemCrops } from '../lib/systemBand.js'
 
@@ -131,6 +139,13 @@ export default {
 			type: Boolean,
 			required: true,
 		},
+
+		// A jump - a tapped note, the leader - goes to the cursor even right
+		// after a gesture (useScoreSession.cursorForced).
+		forced: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
 	emits: ['noteClick', 'markerClick', 'indexed', 'cursorVisible'],
@@ -147,6 +162,8 @@ export default {
 			windowFrom: 0,
 			windowTo: 1,
 			loading: false,
+			// The band turns a page itself: no snapping meanwhile, see pageTo().
+			paging: false,
 		}
 	},
 
@@ -178,6 +195,9 @@ export default {
 				const scale = cropScale(crop, vb, this.heightPx)
 				const px = scale.pageWidthPx / vb.width
 				return {
+					// Page units -> px in this frame, for the cursor's position
+					// in the band (cursorSpan).
+					px,
 					frame: { width: `${scale.cropWidthPx}px`, height: `${this.heightPx}px` },
 					shift: { transform: `translate(${-(crop.x - vb.minX) * px}px, ${-(crop.y - vb.minY) * px}px)` },
 					zoom: scale.pageWidthPx / BASE_PAGE_WIDTH_PX,
@@ -194,11 +214,18 @@ export default {
 		},
 
 		// Every note, not only on a new frame: after scrolling away by hand,
-		// the next note brings the band back to the cursor.
+		// a note brings the band back to the cursor - once the hand has rested
+		// a moment, as in the page view, so that looking back is not torn
+		// away. Inside a frame wider than the screen it turns pages
+		// (bandPaging.js, issue #21).
 		cursorRect() {
 			const index = this.cursorCrop
-			if (this.follow && index >= 0 && index !== this.current) {
-				this.goTo(index)
+			if (this.follow && index >= 0 && (this.forced || !shouldSuppressAutoScroll(this.lastGestureAt, Date.now()))) {
+				if (index !== this.current) {
+					this.goTo(index)
+				} else {
+					this.turnPage(index)
+				}
 			}
 			this.reportVisibility()
 		},
@@ -212,6 +239,8 @@ export default {
 		this.viewWidth = 0
 		this.loadGeneration = 0
 		this.scrollPending = 0
+		// Last touch, click or wheel on the band - its own scrolling is none.
+		this.lastGestureAt = null
 		// Last visibility reported (reportVisibility) - an event per change,
 		// not per note.
 		this.cursorShown = true
@@ -232,6 +261,7 @@ export default {
 	beforeUnmount() {
 		this.resize?.disconnect()
 		cancelAnimationFrame(this.scrollPending)
+		clearTimeout(this.pagingTimer)
 		this.loadGeneration++
 	},
 
@@ -287,11 +317,62 @@ export default {
 			el?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' })
 		},
 
+		/**
+		 * The cursor in band coordinates, from the cached frame positions.
+		 *
+		 * @param {number} index frame of the cursor
+		 * @return {?{left: number, width: number}}
+		 */
+		cursorSpan(index) {
+			const rect = this.cursorRect
+			const crop = this.crops[index]
+			const layout = this.layouts[index]
+			if (!rect || !crop || !layout || this.frameLefts.length <= index) {
+				return null
+			}
+			return { left: this.frameLefts[index] + (rect.x - crop.x) * layout.px, width: rect.w * layout.px }
+		},
+
+		/**
+		 * Inside a frame wider than the screen: the next page when the cursor
+		 * nears the right edge.
+		 *
+		 * @param {number} index
+		 */
+		turnPage(index) {
+			const scroller = this.$refs.scroller
+			const span = this.cursorSpan(index)
+			if (!scroller || !span) {
+				return
+			}
+			const left = planBandPage({
+				frameLeft: this.frameLefts[index],
+				frameWidth: this.frameWidths[index],
+				cursorLeft: span.left,
+				cursorWidth: span.width,
+				scrollLeft: scroller.scrollLeft,
+				viewWidth: this.viewWidth,
+				lead: LEAD,
+			})
+			if (left !== null) {
+				this.pageTo(left)
+			}
+		},
+
 		/** To the system that is playing - the button back to it, and switching autoscroll on again. */
 		reveal() {
-			if (this.cursorCrop >= 0) {
-				this.goTo(this.cursorCrop)
+			const index = this.cursorCrop
+			if (index < 0) {
+				return
 			}
+			this.lastGestureAt = null
+			const span = this.cursorSpan(index)
+			if (span && this.frameWidths[index] > this.viewWidth) {
+				this.current = index
+				this.pageTo(pageForCursor({ frameLeft: this.frameLefts[index], frameWidth: this.frameWidths[index], cursorLeft: span.left, viewWidth: this.viewWidth, lead: LEAD }))
+				return
+			}
+			this.goTo(index)
 		},
 
 		/**
@@ -303,9 +384,12 @@ export default {
 			const scroller = this.$refs.scroller
 			let visible = true
 			if (index >= 0 && scroller && this.frameLefts.length > index) {
+				// The cursor itself, not its frame: in a frame wider than the
+				// screen the frame is "on screen" while the cursor is not.
+				const span = this.cursorSpan(index) ?? { left: this.frameLefts[index], width: this.frameWidths[index] }
 				visible = spanInView({
-					start: this.frameLefts[index],
-					size: this.frameWidths[index],
+					start: span.left,
+					size: span.width,
 					viewStart: scroller.scrollLeft,
 					viewSize: this.viewWidth,
 				})
@@ -316,13 +400,57 @@ export default {
 			}
 		},
 
-		/** Pedal, Bild↓ und Wischen: ein System weiter. */
+		/** Pedal, Bild↓ und Wischen: a page on in a wide system, else a system. */
 		next() {
-			this.goTo(this.current + 1)
+			if (!this.step(1)) {
+				this.goTo(this.current + 1)
+			}
 		},
 
 		previous() {
-			this.goTo(this.current - 1)
+			if (!this.step(-1)) {
+				this.goTo(this.current - 1)
+			}
+		},
+
+		/**
+		 * @param {1|-1} direction
+		 * @return {boolean} whether there was a page to turn to
+		 */
+		step(direction) {
+			const scroller = this.$refs.scroller
+			const index = this.current
+			if (!scroller || this.frameLefts.length <= index) {
+				return false
+			}
+			const left = pageStep({ frameLeft: this.frameLefts[index], frameWidth: this.frameWidths[index], scrollLeft: scroller.scrollLeft, viewWidth: this.viewWidth, direction, lead: LEAD })
+			if (left === null) {
+				return false
+			}
+			this.pageTo(left)
+			return true
+		},
+
+		/**
+		 * Glide to a position inside a frame. Snapping is off until the glide
+		 * ends: measured, a turn aimed at 988 px stopped at 745 px - the
+		 * frames' snap points pull every target back that is not a frame's
+		 * start. Manual swipes snap as before.
+		 *
+		 * @param {number} left
+		 */
+		pageTo(left) {
+			this.paging = true
+			clearTimeout(this.pagingTimer)
+			// scrollend is missing in older Safari - do not stay unsnapped.
+			this.pagingTimer = setTimeout(() => {
+				this.paging = false
+			}, 1500)
+			this.$nextTick(() => this.$refs.scroller?.scrollTo({ left, behavior: 'smooth' }))
+		},
+
+		onGesture() {
+			this.lastGestureAt = Date.now()
 		},
 
 		/**
@@ -411,6 +539,10 @@ export default {
 	/* An own scroll container: without this, a pinch on the band enlarged
 	   the whole page in iOS Safari (see .scoreview-viewer, issue #13). */
 	touch-action: pan-x pan-y;
+}
+
+.scoreview-band--paging {
+	scroll-snap-type: none;
 }
 
 .scoreview-band-system {

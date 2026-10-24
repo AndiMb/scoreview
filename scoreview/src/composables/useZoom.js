@@ -1,4 +1,4 @@
-import { computed, ref, shallowRef } from 'vue'
+import { computed, nextTick, ref, shallowRef } from 'vue'
 import {
 	computeActualSizeZoom,
 	computeFitPageZoom,
@@ -51,6 +51,9 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 	// Ein Preset, das auf die Masse der ersten Seite wartet (siehe restore()).
 	let pendingPreset = null
 	const isFullscreen = ref(false)
+	// Fullscreen inside the page, where the browser offers none (issue #20):
+	// the viewer covers its window, and the bar retracts as in fullscreen.
+	const pageFullscreen = ref(false)
 
 	/**
 	 * Ob diese Umgebung Vollbild ueberhaupt anbietet.
@@ -226,6 +229,10 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 	 * Ausfüllen der Höhe.
 	 */
 	async function toggleFullscreen() {
+		if (!fullscreenPossible) {
+			await setPageFullscreen(!pageFullscreen.value)
+			return
+		}
 		try {
 			if (document.fullscreenElement) {
 				await document.exitFullscreen()
@@ -241,8 +248,74 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 	}
 
 	function onFullscreenChange() {
+		fullscreenChanged(document.fullscreenElement === rootEl())
+	}
+
+	/**
+	 * Fullscreen inside the page - for the Nextcloud Android app, whose
+	 * WebView reports no Fullscreen API (`onShowCustomView` missing, see
+	 * docs/limits.md), the iPhone and iframes without the permission. It
+	 * cannot hide the system bars; it gives the score the whole page instead -
+	 * over Nextcloud's own header in Files - and lets the bar retract like
+	 * real fullscreen (barCollapse.js).
+	 *
+	 * The back button leaves it, as it leaves real fullscreen on Android:
+	 * a history entry on the way in, `popstate` on the way out.
+	 *
+	 * @param {boolean} on
+	 */
+	async function setPageFullscreen(on) {
+		if (on === pageFullscreen.value) {
+			return
+		}
+		pageFullscreen.value = on
+		if (on) {
+			history.pushState({ ...history.state, scoreviewFullscreen: true }, '')
+			window.addEventListener('popstate', onPopState)
+			window.addEventListener('keydown', onEscape)
+		} else {
+			window.removeEventListener('popstate', onPopState)
+			window.removeEventListener('keydown', onEscape)
+			if (history.state?.scoreviewFullscreen) {
+				// Left by the button: take the own entry back, so that the next
+				// back press goes where it went before.
+				history.back()
+			}
+		}
+		// The page covers its window only after the next render - measure then.
+		await nextTick()
+		fullscreenChanged(on)
+	}
+
+	function onPopState() {
+		setPageFullscreen(false)
+	}
+
+	/**
+	 * @param {KeyboardEvent} event
+	 */
+	function onEscape(event) {
+		if (event.key === 'Escape') {
+			setPageFullscreen(false)
+		}
+	}
+
+	/** On unmount: no listener and no history entry left behind. */
+	function disposeFullscreen() {
+		if (pageFullscreen.value) {
+			setPageFullscreen(false)
+		}
+	}
+
+	/**
+	 * Both kinds of fullscreen take the same way in and out: "whole page" on
+	 * entering, back to the width on leaving.
+	 *
+	 * @param {boolean} on
+	 */
+	function fullscreenChanged(on) {
 		const wasFollowingWidth = followsWidth.value
-		isFullscreen.value = document.fullscreenElement === rootEl()
+		isFullscreen.value = on
 		if (isFullscreen.value) {
 			followedWidthBeforeFullscreen = wasFollowingWidth
 			applyPreset('page')
@@ -339,6 +412,7 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 		zoom,
 		followsWidth,
 		isFullscreen,
+		pageFullscreen,
 		fullscreenPossible,
 		percent,
 		min: MIN_ZOOM,
@@ -355,6 +429,7 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 		observeViewport,
 		toggleFullscreen,
 		onFullscreenChange,
+		disposeFullscreen,
 		onTouchStart,
 		onTouchMove,
 		onTouchEnd,

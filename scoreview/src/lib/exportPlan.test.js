@@ -89,10 +89,10 @@ describe('plansForAllParts', () => {
 	const parts = [{ partId: 'S', name: 'Sopran' }, { partId: 'A', name: 'Alt' }, { partId: 'X', name: 'Leer' }]
 
 	it('macht je Stimme einen Coach-Plan', () => {
-		const plans = plansForAllParts({ mixerChannels, parts, othersLevel: 30, base: { durationMs: 1000, rate: 0.9 } })
+		const plans = plansForAllParts({ mixerChannels, parts, othersLevel: 30, baseVolumes: new Map([[0, 127], [2, 100], [3, 100]]), base: { durationMs: 1000, rate: 0.9 } })
 		expect(plans.map((p) => p.name)).toEqual(['Sopran', 'Alt'])
 		const alt = plans[1].plan
-		expect(alt.channels.find((c) => c.channel === 2)).toEqual({ channel: 2, volume: 127, pan: 1, program: COACH_PROGRAM })
+		expect(alt.channels.find((c) => c.channel === 2)).toEqual({ channel: 2, volume: 100, pan: 1, program: COACH_PROGRAM })
 		expect(alt.channels.find((c) => c.channel === 0)).toMatchObject({ volume: 30, pan: -1 })
 		expect(alt.rate).toBe(0.9)
 	})

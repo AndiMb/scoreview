@@ -464,8 +464,10 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	}
 
 	/**
-	 * Die Mischung, die gerade klingt - je Kanal Lautstaerke (0..127, Vorgabe
-	 * 127 wie im Mixer), Panorama und Instrument (null = wie im MIDI).
+	 * Die Mischung, die gerade klingt - je Kanal Lautstaerke (0..127),
+	 * Panorama und Instrument (null = wie im MIDI). Every channel has its
+	 * volume as soon as the player exists (useMix.js); the fallback only
+	 * covers a channel the mix does not know.
 	 *
 	 * @return {{volumes: Map<number, number>, pans: Map<number, number>, programs: Map<number, ?number>}}
 	 */

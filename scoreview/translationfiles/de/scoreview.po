@@ -868,6 +868,14 @@ msgstr "Mitverfolgen"
 msgid "Microphone on for: {purpose}. Tap to turn it off."
 msgstr "Mikrofon an für: {purpose}. Antippen schaltet es aus."
 
+#: src/components/MyPartControls.vue src/components/ScoreViewer.vue
+msgid "My part"
+msgstr "Meine Stimme"
+
+#: src/components/MyPartControls.vue src/components/ScoreViewer.vue
+msgid "None"
+msgstr "Keine"
+
 #: src/components/NoteNameControls.vue src/components/PrintToolbar.vue
 msgid "Note names"
 msgstr "Tonnamen"
@@ -1709,14 +1717,6 @@ msgid "New setlist"
 msgstr "Neue Setliste"
 
 #: src/components/ScoreViewer.vue
-msgid "Exit fullscreen"
-msgstr "Vollbild verlassen"
-
-#: src/components/ScoreViewer.vue
-msgid "Fullscreen"
-msgstr "Vollbild"
-
-#: src/components/ScoreViewer.vue
 msgid "The leader has moved on to another piece."
 msgstr "Die Leitung ist zu einem anderen Stück weitergegangen."
 
@@ -1773,12 +1773,32 @@ msgid "Edit setlist"
 msgstr "Setliste bearbeiten"
 
 #: src/components/ScoreViewer.vue
-msgid "Choose your voice first: tap the voice symbol next to your part."
-msgstr "Wähle zuerst deine Stimme: Tippe auf das Stimmsymbol neben deiner Stimme."
+msgid "Choose your part first."
+msgstr "Wähle zuerst deine Stimme."
+
+#: src/components/ScoreViewer.vue
+msgid "My part: {name}"
+msgstr "Meine Stimme: {name}"
+
+#: src/components/ScoreViewer.vue
+msgid "No part chosen"
+msgstr "Keine Stimme gewählt"
 
 #: src/components/ScoreViewer.vue
 msgid "My voice on the right, the others on the left"
 msgstr "Meine Stimme rechts, die anderen links"
+
+#: src/components/ScoreViewer.vue
+msgid "Exit fullscreen"
+msgstr "Vollbild verlassen"
+
+#: src/components/ScoreViewer.vue
+msgid "Fullscreen"
+msgstr "Vollbild"
+
+#: src/components/ScoreViewer.vue
+msgid "Fullscreen (inside the app)"
+msgstr "Vollbild (innerhalb der App)"
 
 #: src/components/ScoreViewer.vue
 msgid "Only in the page view."

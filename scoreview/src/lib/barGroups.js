@@ -13,6 +13,8 @@
  *   (lib/interactionPolicy.js) - im Auffuehrungsmodus bleibt so nur Zoom
  * @property {boolean} hasRealPlayer ob Ton da ist (Mixer, Anfangston-Modus)
  * @property {boolean} canFocusMyPart ob „nur meine Zeile" etwas bewirken kann
+ * @property {boolean} [hasParts] whether the score names parts to choose
+ *   "my part" from - with or without sound (issue #18)
  * @property {boolean} [canCoach] ob es eine eigene Stimme gibt - der Coach
  *   braucht nur ihre Kanaele, keine Zuordnung der Notenzeilen
  * @property {boolean} recordingEnabled Aufnahme von der Administration an
@@ -66,6 +68,7 @@ export function barGroups(ctx) {
 			zoom: can('zoom'),
 			layout: settings,
 			appearance: settings,
+			partChoice: ctx.hasParts === true && settings,
 			myPart: ctx.canFocusMyPart && settings,
 			// Without a submenu, like the switch above: it is flipped while
 			// reading, not set up once (issue #12).

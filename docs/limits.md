@@ -163,8 +163,14 @@ are listed under
 Nextcloud Android app, instance via `adb reverse` as `http://localhost:8134`:
 AudioWorklet and WebAssembly run, the sound is audible, `navigator.wakeLock` is
 granted. What is switched off there is the **Fullscreen API**
-(`document.fullscreenEnabled === false`) – the fullscreen button therefore only
-appears where fullscreen is possible. Other devices, other Android versions and
+(`document.fullscreenEnabled === false`): the app's WebView does not implement
+`onShowCustomView`, and without it no page can go fullscreen – checked in the
+source of the Nextcloud Android app 35.0.1, where the other Direct Editing
+editors (Text, Collabora, ONLYOFFICE, Whiteboard) have no fullscreen either.
+The fullscreen button therefore switches to fullscreen *inside the page*
+there: the score gets the whole view and the control bar retracts during
+playback, also upright. Android's status and navigation bars stay; only the app
+could hide them. Other devices, other Android versions and
 the iOS app have not been checked; the bridge is written for both platforms but
 only verified on Android.
 
@@ -523,6 +529,11 @@ re-measured on real devices and with real input latency.
   them, and retracted to its 8 px line the score's area grows from 132 to
   183 px. On an iPhone this has not been measured
   ([Troubleshooting](troubleshooting.md#on-a-phone-in-landscape-the-score-gets-little-height)).
+  The fullscreen button, where the browser offers no fullscreen as on the
+  iPhone, switches to fullscreen inside the page: the viewer then also covers
+  Nextcloud's header and footer, and the bar retracts upright as well.
+  Checked in a Chromium with the Fullscreen API switched off (390 × 700 px:
+  the viewer grows from 600 to 700 px); not on an iPhone.
 
 ### Open checks
 

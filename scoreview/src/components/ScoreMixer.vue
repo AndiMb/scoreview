@@ -5,8 +5,8 @@
 			<input
 				type="range"
 				min="0"
-				max="127"
-				:value="groupVolume(group)"
+				max="100"
+				:value="groupLevel(group)"
 				:disabled="groupMuted(group)"
 				:aria-label="t('Volume: {name}', { name: group.name || group.partId })"
 				@input="onVolumeInput(group, $event)">
@@ -14,7 +14,7 @@
 				class="scoreview-mixer-toggle"
 				:pressed="groupMuted(group)"
 				:aria-label="t('Mute: {name}', { name: group.name || group.partId })"
-				@click="toggleMute(group)">
+				@click="$emit('mute', group.channels)">
 				<template #icon>
 					<VolumeOff :size="20" />
 				</template>
@@ -23,17 +23,17 @@
 				class="scoreview-mixer-toggle"
 				:pressed="groupSolo(group)"
 				:aria-label="t('Solo: {name}', { name: group.name || group.partId })"
-				@click="toggleSolo(group)">
+				@click="$emit('solo', group.channels)">
 				<template #icon>
 					<Headphones :size="20" />
 				</template>
 			</NcButton>
 			<NcButton
 				class="scoreview-mixer-toggle"
-				:pressed="focusedGroupKey === group.key"
+				:pressed="mix.focusKey === group.key"
 				:aria-label="t('My voice: {name}', { name: group.name || group.partId })"
 				:title="t('Boost this voice, keep the others audible but quiet')"
-				@click="toggleFocus(group)">
+				@click="$emit('focus', group)">
 				<template #icon>
 					<AccountVoice :size="20" />
 				</template>
@@ -45,7 +45,7 @@
 				:options="presetList"
 				label="name"
 				:clearable="false"
-				@update:modelValue="(preset) => onProgramChange(group.channels[0], preset.program)" />
+				@update:modelValue="(preset) => $emit('program', { channel: group.channels[0], program: preset.program })" />
 		</div>
 	</div>
 </template>
@@ -57,22 +57,19 @@ import NcSelect from '@nextcloud/vue/components/NcSelect'
 import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
 import Headphones from 'vue-material-design-icons/Headphones.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
-import { computeEffectiveVolumes, computeVoiceFocusVolumes, resolveMixerGroups, voiceFocusForPart } from '../lib/mixerLayout.js'
+import { resolveMixerGroups } from '../lib/mixerLayout.js'
 
 /**
- * UI + Zustand für Lautstärke/Mute/Solo/Instrument pro Kanal, Stimmgruppen
- * + "meine Stimme"-Preset. Die eigentliche
- * Solo/Mute/Fokus-Auflösung ist rein und lebt in mixerLayout.js - diese
- * Komponente hält nur den UI-Zustand (je MIDI-Kanal, siehe `states`) und
- * ruft player.js über die vom Elternteil (ScoreViewer.vue) durchgereichten
- * Callbacks an.
+ * Volume, mute, solo, instrument and "my part" per voice group - as a view.
+ * The state lives in useMix.js for as long as the player does, so closing and
+ * opening this panel changes nothing that is heard; the panel says what it
+ * would like changed, the viewer decides (issue #17).
  *
- * Zustand bleibt bewusst pro rohem MIDI-Kanal (`states`), nicht pro Gruppe:
- * eine Gruppe kann mehrere Kanäle bündeln (Divisi, siehe
- * resolveMixerGroups()), Lautstärke/Mute/Solo sind aber pro Kanal an
- * player.js zu melden. Die Bedienzeile selbst zeigt/ändert nur den ersten
- * Kanal einer Gruppe stellvertretend und wendet Änderungen auf alle
- * Mitglieder gleich an.
+ * A group can bundle several channels (divisi, see resolveMixerGroups()).
+ * A row shows its first channel and changes all members alike.
+ *
+ * The slider runs from 0 to 100 % of the score's own mix (mixState.js) -
+ * 100 % is what MuseScore's mixer set, not the synthesizer's maximum.
  */
 export default {
 	name: 'ScoreMixer',
@@ -93,68 +90,18 @@ export default {
 			default: () => [],
 		},
 
-		// „Meine Stimme" aus dem Viewer (useMyPart.js, serverseitig gemerkt).
-		// Der Mixer zeigt sie an und stellt die Lautstaerken danach ein - auch
-		// wenn sie nicht hier gewaehlt wurde, sondern beim Oeffnen geladen.
-		myPartId: {
-			type: [String, Number],
-			default: null,
-		},
-
-		// Wie laut die uebrigen Stimmen bei „Meine Stimme" sind - der Regler
-		// „andere Stimmen" (H4), damit Mixer und geschlossener Viewer
-		// (useMyPartSound.js) dasselbe hoeren lassen.
-		othersLevel: {
-			type: Number,
-			default: 40,
+		// useMix.js state: {channels: {[channel]: {level, muted, solo, program}}, focusKey}
+		mix: {
+			type: Object,
+			required: true,
 		},
 	},
 
-	emits: ['volumesChanged', 'programChanged', 'focusChanged'],
-
-	data() {
-		// Mit gemerkter Stimme beginnt der Mixer schon im Fokus - dieselben
-		// Werte, die der Viewer beim Laden bereits an den Player gegeben hat.
-		const focus = voiceFocusForPart(this.channels, this.myPartId, { quiet: this.othersLevel })
-		return {
-			// channel -> { volume, muted, solo, program }
-			//
-			// program aus dem Kanal, nicht pauschal 0: MuseScore hat fuer jede
-			// Stimme bereits ein Instrument gewaehlt (bei SATB 52 = Choir
-			// Aahs). Mit festem 0 zeigte das Auswahlfeld immer "Acoustic Grand
-			// Piano" an, obwohl etwas anderes klang.
-			states: Object.fromEntries(this.channels.map((ch) => [
-				ch.channel,
-				{ volume: focus?.volumes.get(ch.channel) ?? 127, muted: false, solo: false, program: ch.program ?? 0 },
-			])),
-
-			// key der Gruppe mit aktivem "meine Stimme"-Preset, oder null.
-			focusedGroupKey: focus?.key ?? null,
-		}
-	},
+	emits: ['level', 'mute', 'solo', 'focus', 'program'],
 
 	computed: {
 		groups() {
 			return resolveMixerGroups(this.channels)
-		},
-	},
-
-	watch: {
-		/**
-		 * Die Stimme kam von aussen (gemerkte Wahl, die erst nach dem Oeffnen
-		 * des Mixers eintraf). Eine Wahl aus diesem Mixer selbst kommt hier
-		 * ebenfalls vorbei - dann ist sie schon eingestellt, und es passiert
-		 * nichts.
-		 *
-		 * @param {?string} partId
-		 */
-		myPartId(partId) {
-			const focus = voiceFocusForPart(this.channels, partId, { quiet: this.othersLevel })
-			if ((focus?.key ?? null) === this.focusedGroupKey) {
-				return
-			}
-			this.applyFocus(focus)
-			this.emitVolumes()
 		},
 	},
 
@@ -163,86 +110,28 @@ export default {
 			return translate('scoreview', text, vars)
 		},
 
-		emitVolumes() {
-			const channelStates = this.channels.map((ch) => ({ channel: ch.channel, ...this.states[ch.channel] }))
-			this.$emit('volumesChanged', computeEffectiveVolumes(channelStates))
+		channelMix(group) {
+			return this.mix.channels[group.channels[0]] ?? { level: 1, muted: false, solo: false, program: 0 }
 		},
 
-		groupVolume(group) {
-			return this.states[group.channels[0]].volume
+		groupLevel(group) {
+			return Math.round(this.channelMix(group).level * 100)
 		},
 
 		groupMuted(group) {
-			return this.states[group.channels[0]].muted
+			return this.channelMix(group).muted
 		},
 
 		groupSolo(group) {
-			return this.states[group.channels[0]].solo
+			return this.channelMix(group).solo
 		},
 
 		onVolumeInput(group, event) {
-			const volume = Number(event.target.value)
-			for (const channel of group.channels) {
-				this.states[channel].volume = volume
-			}
-			this.emitVolumes()
-		},
-
-		toggleMute(group) {
-			const muted = !this.groupMuted(group)
-			for (const channel of group.channels) {
-				this.states[channel].muted = muted
-			}
-			this.emitVolumes()
-		},
-
-		toggleSolo(group) {
-			const solo = !this.groupSolo(group)
-			for (const channel of group.channels) {
-				this.states[channel].solo = solo
-			}
-			this.emitVolumes()
-		},
-
-		// "Meine Stimme"-Preset: anders als Solo werden die übrigen
-		// Kanäle nur gedämpft, nicht stumm geschaltet (siehe mixerLayout.js
-		// computeVoiceFocusVolumes) - der Probenfall ist "meine Stimme klar
-		// heraushören", nicht "die anderen ausblenden".
-		toggleFocus(group) {
-			// Eine Zeile ohne Stimmen-ID (Rueckfall in resolveMixerGroups) laesst
-			// sich trotzdem hervorheben, nur nicht als „Meine Stimme" merken.
-			const focus = this.focusedGroupKey === group.key
-				? null
-				: (voiceFocusForPart(this.channels, group.partId, { quiet: this.othersLevel })
-					?? { key: group.key, volumes: computeVoiceFocusVolumes(this.channels.map((ch) => ch.channel), group.channels, { quiet: this.othersLevel }) })
-			this.applyFocus(focus)
-			this.emitVolumes()
-			// "Meine Stimme" ist nicht nur eine Lautstaerkefrage: Wer seine
-			// Stimme heraushoert, will sie auch im Notenbild wiederfinden.
-			// Deshalb geht die Wahl nach oben, statt hier zu enden - die
-			// Markierung im Notenbild haengt an derselben Entscheidung
-			// (ScoreViewer.vue, myPartId).
-			this.$emit('focusChanged', this.focusedGroupKey === null ? null : (group.partId ?? null))
-		},
-
-		/**
-		 * @param {?{key:string, volumes:Map<number, number>}} focus aus
-		 *   voiceFocusForPart(), null = kein Fokus (alle wieder voll)
-		 */
-		applyFocus(focus) {
-			this.focusedGroupKey = focus?.key ?? null
-			for (const ch of this.channels) {
-				this.states[ch.channel].volume = focus?.volumes.get(ch.channel) ?? 127
-			}
-		},
-
-		onProgramChange(channel, program) {
-			this.states[channel].program = program
-			this.$emit('programChanged', { channel, program })
+			this.$emit('level', { channels: group.channels, level: Number(event.target.value) / 100 })
 		},
 
 		// NcSelect (vue-select) bekommt hier bewusst das volle Preset-Objekt aus
-		// presetList statt nur states[channel].program als modelValue: mehrere
+		// presetList statt nur die Programmnummer als modelValue: mehrere
 		// GM-Presets teilen sich denselben program-Wert über verschiedene Banks
 		// hinweg (z.B. mehrere Bank-Varianten von Programm 52), ein reiner
 		// Zahlen-modelValue mit :reduce="preset => preset.program" lässt sich
@@ -252,7 +141,7 @@ export default {
 		// ohnehin keine Bank-Auswahl), die Anzeige braucht trotzdem ein
 		// eindeutiges Objekt.
 		selectedPreset(channel) {
-			const program = this.states[channel].program
+			const program = this.mix.channels[channel]?.program
 			return this.presetList.find((preset) => preset.program === program) ?? null
 		},
 	},

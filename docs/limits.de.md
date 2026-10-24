@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:8603144d6988 -->
+<!-- translation-of: limits.md sha256:bfc0440511c1 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -161,8 +161,14 @@ Liedtext-Ansicht; ihre Grenzen stehen unter
 Nextcloud-Android-App, Instanz über `adb reverse` als `http://localhost:8134`:
 AudioWorklet und WebAssembly laufen, der Ton ist hörbar, `navigator.wakeLock`
 wird erteilt. Abgeschaltet ist dort die **Vollbild-API**
-(`document.fullscreenEnabled === false`) – der Vollbildknopf erscheint deshalb
-nur, wo Vollbild möglich ist. Andere Geräte, andere Android-Versionen und die
+(`document.fullscreenEnabled === false`): Die WebView der App setzt kein
+`onShowCustomView` um, und ohne das kann keine Seite ins Vollbild – geprüft im
+Quelltext der Nextcloud-Android-App 35.0.1, in der auch die übrigen
+Direct-Editing-Editoren (Text, Collabora, ONLYOFFICE, Whiteboard) kein Vollbild
+haben. Der Vollbildknopf schaltet dort deshalb ein Vollbild *innerhalb der
+Seite*: Die Noten bekommen die ganze Ansicht, und die Bedienleiste fährt
+während der Wiedergabe ein, auch hochkant. Androids Status- und
+Navigationsleiste bleiben; ausblenden könnte sie nur die App. Andere Geräte, andere Android-Versionen und die
 iOS-App sind ungeprüft; die Brücke ist für beide Plattformen geschrieben, aber
 nur auf Android nachgemessen.
 
@@ -524,6 +530,11 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   bekommt 240 px, die stehende Leiste belegt 59 davon, und zur 8-px-Linie
   eingefahren wächst die Notenfläche von 132 auf 183 px. Am iPhone ist das
   nicht gemessen ([Fehlersuche](troubleshooting.de.md#am-telefon-quer-bleibt-den-noten-wenig-höhe)).
+  Der Vollbildknopf schaltet dort, wo der Browser kein Vollbild anbietet wie
+  am iPhone, ein Vollbild innerhalb der Seite: Der Viewer bedeckt dann auch
+  Nextclouds Kopf- und Fußzeile, und die Leiste fährt auch hochkant ein.
+  Geprüft in einem Chromium mit abgeschalteter Vollbild-API (390 × 700 px:
+  Der Viewer wächst von 600 auf 700 px); nicht am iPhone.
 
 ### Offene Prüfungen
 

@@ -7,6 +7,7 @@ function ctx(overrides = {}) {
 		can: () => true,
 		hasRealPlayer: true,
 		canFocusMyPart: true,
+		hasParts: true,
 		canCoach: true,
 		recordingEnabled: true,
 		intonationEnabled: false,
@@ -41,9 +42,16 @@ describe('barGroups', () => {
 	it('ordnet alle Werkzeuge ihrer Gruppe zu', () => {
 		expect(barGroups(ctx())).toEqual([
 			{ id: 'practice', items: ['loop', 'tempo', 'metronome', 'toneMode', 'mixer', 'coach', 'transpose', 'practice', 'export'] },
-			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'print', 'pin'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'partChoice', 'myPart', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'print', 'pin'] },
 			{ id: 'rehearsal', items: ['rehearsal', 'newSetlist'] },
 		])
+	})
+
+	it('offers choosing "my part" without sound, but not in performance mode (issue #18)', () => {
+		expect(barGroups(ctx({ hasRealPlayer: false }))[1].items).toContain('partChoice')
+		expect(barGroups(ctx({ hasParts: false }))[1].items).not.toContain('partChoice')
+		const performance = barGroups(ctx({ can: (a) => allowed(a, { performance: true }) }))
+		expect(performance.find((g) => g.id === 'view').items).not.toContain('partChoice')
 	})
 
 	it('offers printing only online and in the browser', () => {
@@ -58,7 +66,7 @@ describe('barGroups', () => {
 		const can = (action) => allowed(action, { offline: true })
 		expect(barGroups(ctx({ can, offline: true }))).toEqual([
 			{ id: 'practice', items: ['loop', 'tempo', 'metronome', 'toneMode', 'mixer', 'coach', 'transpose'] },
-			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'myPart', 'autoScroll', 'noteNames', 'noteText'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'partChoice', 'myPart', 'autoScroll', 'noteNames', 'noteText'] },
 		])
 	})
 
@@ -97,7 +105,7 @@ describe('barGroups', () => {
 		}))
 		expect(groups).toEqual([
 			{ id: 'practice', items: ['loop', 'tempo', 'metronome'] },
-			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'print', 'pin'] },
+			{ id: 'view', items: ['zoom', 'layout', 'appearance', 'partChoice', 'autoScroll', 'noteNames', 'noteText', 'annotations', 'print', 'pin'] },
 			{ id: 'rehearsal', items: ['rehearsal'] },
 		])
 	})

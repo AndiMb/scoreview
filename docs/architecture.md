@@ -521,7 +521,7 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | Funktion | Reine Logik (`src/lib/`) | Composable | Komponente |
 |---|---|---|---|
 | Anfangston der eigenen Stimme oder Grundton | `midiNotes.js`, `scoreFacts.js`, `startTone.js` | `useStartTone`, `useScoreFacts` | `ScoreStartTone.vue` |
-| „Meine Stimme“ je Partitur, eigene Stimme im Stereobild | `panLayout.js` | `useMyPart`, `useMyPartSound` | im Mixer |
+| „Meine Stimme“ je Partitur, eigene Stimme im Stereobild | `mixState.js`, `panLayout.js` | `useMyPart`, `useMix`, `useMyPartSound` | `MyPartControls.vue`, im Mixer |
 | Speed-Trainer im Loop | `speedTrainer.js` | `useSpeedTrainer` | `ScoreSpeedTrainer.vue` |
 | Helle Noten auf dunklem Grund | `noteTheme.js` | `useViewerPreferences` | Aufklapper „Darstellung“ |
 | Aufführungsmodus, Blättern per Taste/Pedal | `interactionPolicy.js`, `pagingPlan.js`, `keyMap.js` | `usePerformanceMode`, `usePaging`, `useWakeLock` | `ScoreLockButton.vue` |
@@ -608,8 +608,15 @@ gewöhnliche `ScorePage` mit einem Ausschnitt (`crop`) ihrer Seite, die Grenzen
 kommen aus den Notenlinien (`staffBands.js`), Liedtext darunter zählt zum
 System. Cursor, Stempel, Notizen, Loop und Tonnamen liegen in Prozent der
 Seite und funktionieren deshalb unverändert. Gerendert werden nur das
-sichtbare System und seine Nachbarn. `Bild↓`/`Bild↑` und ein Pedal gehen ein
-System weiter. Wer den Viewer zum ersten Mal unter 600 px Breite mit Seiten
+sichtbare System und seine Nachbarn. Am Handy ist ein System leicht zwei bis
+fünf Bildschirme breit; darin blättert das Band **seitenweise** statt zu
+gleiten (`bandPaging.js`): Erreicht der Cursor 85 % der Breite, springt es so
+weit, dass er bei 15 % steht – das zuletzt Gelesene bleibt links stehen, das
+Bild steht bis zum nächsten Sprung still, und es kostet kein Scrollen je
+Note. Während des eigenen Sprungs ist das Einrasten an den Systemanfängen
+aus; gemessen hielt `scroll-snap` sonst einen Sprung auf 988 px bei 745 px
+an. `Bild↓`/`Bild↑` und ein Pedal blättern in einem breiten System erst
+seitenweise, dann ein System weiter. Wer den Viewer zum ersten Mal unter 600 px Breite mit Seiten
 öffnet, bekommt das Band einmal angeboten; die Antwort merkt sich die App.
 
 **Zwei Seiten nebeneinander.** Keine vierte Darstellung, sondern eine
@@ -656,7 +663,8 @@ danach die Controller und Programmwechsel aus dem MIDI bis zur Zielstelle
 nach. MuseScore schreibt Lautstärke (CC7) und Panorama (CC10) an den Anfang
 jeder Spur. Ohne Gegenmaßnahme waren Mute, Solo, „Meine Stimme“, das Stereobild
 und ein im Mixer gewähltes Instrument nach dem ersten Suchlauf wieder weg.
-`player.js` sperrt deshalb, was die Nutzerin einstellt:
+`player.js` sperrt deshalb, was die Nutzerin einstellt (die Lautstärke jedes
+Kanals schon beim Laden, siehe „Die Mischung“ unten):
 
 - **Controller** über `lockController(ch, cc, true)`: Ein gesperrter
   Controller übersteht den Reset und ignoriert die Werte aus dem MIDI. Gesetzt
@@ -678,6 +686,27 @@ Ein zweites Merkmal desselben Suchlaufs: Er wirkt **asynchron**. Nach
 Position braucht – das Abhören einer Aufnahme setzt seinen Anker genau dann –,
 wartet darauf. Der stumme Platzhalter (`silentClock.js`) springt sofort und
 kennt das Ereignis nicht.
+
+**Die Mischung.** Lautstärke, Mute, Solo, Instrument und „Meine Stimme“ sind
+ein Zustand (`lib/mixState.js`), den `useMix.js` für die Lebensdauer des
+Players hält; der Mixer zeigt ihn nur an. Angewendet wird er, sobald der
+Player steht – nicht erst, wenn ein Regler sich bewegt. **100 % ist die
+Mischung der Partitur:** Ein Pegel ist ein Faktor auf den CC7-Wert, mit dem
+die Stimme in `score.mid` beginnt (`midiNotes.js`, `channelVolumes`), also
+auf die Einstellung in MuseScores eigenem Mixer. Gemessen schreibt MuseScore
+dort für jede Stimme 100, nicht 127; mit absoluten Werten spielte eine nie
+berührte Stimme mit 100 und eine einmal bewegte mit 127, alle Regler auf
+„voll“. Lauter als die Partitur gibt es nicht – über 100 lägen nur 2 dB.
+„Meine Stimme“ lässt die eigene Stimme bei 100 % und setzt die übrigen auf
+den Regler „andere Stimmen“, ebenfalls relativ; Coach und die Tracks je
+Stimme rechnen mit derselben Funktion.
+
+Gewählt wird „Meine Stimme“ an zwei Stellen, die denselben Zustand setzen
+(`useMyPart.js`): über das Stimmensymbol im Mixer und über die Zeile „Meine
+Stimme“ in der Gruppe Ansicht (`MyPartControls.vue`). Die Zeile braucht
+keinen Ton, denn Hervorhebung, Tonnamen, Zählzeiten und Druck benutzen die
+Wahl auch ohne; ihre Stimmen kommen aus `meta.parts`, nicht aus den
+Mixerkanälen.
 
 Der Anfangston klingt auf einem freien Kanal – dem ersten, der keiner Spur
 gehört, nie Kanal 9 (Schlagzeug) – als Klavier und durch dieselbe
@@ -1675,12 +1704,18 @@ noch `audioWorklet`):
 |---|---|---|
 | AudioWorklet, WebAssembly, Ton | laufen, Ton hörbar | keine |
 | `navigator.wakeLock` | Sperre wird erteilt | keine |
-| Vollbild-API | `document.fullscreenEnabled === false` | Der Vollbildknopf erscheint nur, wo Vollbild möglich ist (`useZoom.js`) |
+| Vollbild-API | `document.fullscreenEnabled === false` | Der Vollbildknopf schaltet ein Vollbild innerhalb der Seite (`useZoom.js`) |
 
 Der Vollbildknopf hängt dabei an der **Fähigkeit des Browsers**, nicht am
 Einstieg: Der Viewer soll nicht danach verzweigen, wie seine Seite ausgeliefert
 wurde. Dieselbe Regel deckt ein iframe mit entsprechender Permissions-Policy
-gleich mit ab.
+und das iPhone gleich mit ab. Ohne Vollbild-API legt sich der Viewer per
+`position: fixed` über sein Fenster, auch über Nextclouds Kopfzeile, und gilt
+für Zoom („ganze Seite“) und Leiste als Vollbild; die Zurück-Taste verlässt
+es über einen eigenen Verlaufseintrag. Die Systemleisten bleiben: Die
+Android-App setzt in ihrem WebChromeClient kein `onShowCustomView` um, und
+ihre JS-Brücke (`DirectEditingMobileInterface`) kennt nur `close`, `share`,
+`loaded` und `reload` – geprüft im Quelltext von 35.0.1.
 
 **Die Leiste.** Draußen steht, was während des Singens gebraucht wird: der
 Transport (Play, Suchlauf, Zeit, Taktfeld, Studierbuchstaben, Anfangston,
@@ -1723,8 +1758,9 @@ Studierbuchstaben die Gesamtzahl der Takte.
 Grund und keinen Bedarf: Grund ist Vollbild **oder knapper Platz** – die
 stehende Leiste belegt mindestens 15 % der Höhe des Viewers (zurück erst unter
 12 %) –, und niemand braucht sie während der Wiedergabe, im Aufführungsmodus
-und beim Folgen einer Leitung. Knapper Platz ist der Ersatz für das Vollbild,
-wo es keins gibt: iPhone und WebView der Android-App. Gemessen in Files mit
+und beim Folgen einer Leitung. Knapper Platz greift auch ohne Knopfdruck, wo
+es kein echtes Vollbild gibt: iPhone und WebView der Android-App; dort
+schaltet der Vollbildknopf außerdem das Vollbild innerhalb der Seite. Gemessen in Files mit
 emuliertem Telefon: Die 59-px-Leiste belegt quer 25 % des Viewers, hochkant
 10 %. Ein Anteil statt einer Media Query auf
 Ausrichtung oder Höhe aus demselben Grund wie beim Überlauf: Der Viewer

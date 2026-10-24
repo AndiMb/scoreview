@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeEffectiveVolumes, computeVoiceFocusVolumes, resolveMixerChannels, resolveMixerGroups, voiceFocusForPart } from './mixerLayout.js'
+import { resolveMixerChannels, resolveMixerGroups } from './mixerLayout.js'
 
 describe('resolveMixerChannels', () => {
 	// tracks[].name ist bei MuseScore 4 fuer jede Stimme "MS Basic" (Name der
@@ -89,73 +89,5 @@ describe('resolveMixerGroups', () => {
 			{ channel: 1, instrumentId: 'alto', name: 'Alto', partId: '2', program: 52 },
 		]
 		expect(resolveMixerGroups(channels).map((g) => g.channels)).toEqual([[0], [1]])
-	})
-})
-
-describe('computeEffectiveVolumes', () => {
-	it('ohne Solo: nur die eigene Mute-Einstellung zählt', () => {
-		const states = [
-			{ channel: 0, volume: 100, muted: false, solo: false },
-			{ channel: 1, volume: 80, muted: true, solo: false },
-		]
-		const result = computeEffectiveVolumes(states)
-		expect(result.get(0)).toBe(100)
-		expect(result.get(1)).toBe(0)
-	})
-
-	it('mit mindestens einem Solo: nur nicht gemutete Solo-Kanäle sind hörbar', () => {
-		const states = [
-			{ channel: 0, volume: 100, muted: false, solo: true },
-			{ channel: 1, volume: 90, muted: false, solo: false },
-			{ channel: 2, volume: 80, muted: true, solo: true },
-		]
-		const result = computeEffectiveVolumes(states)
-		expect(result.get(0)).toBe(100)
-		expect(result.get(1)).toBe(0)
-		// Solo UND gemutet -> weiterhin stumm (Mute gewinnt).
-		expect(result.get(2)).toBe(0)
-	})
-
-	it('liefert eine leere Map für eine leere Kanalliste', () => {
-		expect(computeEffectiveVolumes([]).size).toBe(0)
-	})
-})
-
-describe('computeVoiceFocusVolumes', () => {
-	it('hebt die eigenen Kanäle an und dämpft die übrigen, statt sie stumm zu schalten', () => {
-		const result = computeVoiceFocusVolumes([0, 1, 2, 3], [0, 1])
-		expect(result.get(0)).toBe(127)
-		expect(result.get(1)).toBe(127)
-		expect(result.get(2)).toBe(40)
-		expect(result.get(3)).toBe(40)
-	})
-
-	it('erlaubt eigene loud/quiet-Werte', () => {
-		const result = computeVoiceFocusVolumes([0, 1], [0], { loud: 100, quiet: 20 })
-		expect(result.get(0)).toBe(100)
-		expect(result.get(1)).toBe(20)
-	})
-})
-
-describe('voiceFocusForPart', () => {
-	const channels = [
-		{ channel: 0, partId: '1', name: 'S' },
-		{ channel: 2, partId: '2', name: 'A' },
-		{ channel: 3, partId: '2', name: 'A' },
-	]
-
-	it('hebt die Kanaele der gemerkten Stimme an und daempft die uebrigen', () => {
-		const focus = voiceFocusForPart(channels, '2')
-		expect(focus.key).toBe('2')
-		expect([...focus.volumes]).toEqual([[0, 40], [2, 127], [3, 127]])
-	})
-
-	it('vergleicht die Stimmen-ID als Text (Server liefert Text, meta.json Zahlen)', () => {
-		expect(voiceFocusForPart(channels, 1)?.key).toBe('1')
-	})
-
-	it('liefert null ohne Stimme oder fuer eine Stimme, die es nicht mehr gibt', () => {
-		expect(voiceFocusForPart(channels, null)).toBeNull()
-		expect(voiceFocusForPart(channels, '9')).toBeNull()
 	})
 })

@@ -7,7 +7,11 @@
 		damit alles Gefaerbte in einem Rutsch um - ohne dass eine einzige Seite
 		neu rendern muss.
 	-->
-	<div ref="root" class="scoreview-viewer" :style="highlightStyle">
+	<div
+		ref="root"
+		class="scoreview-viewer"
+		:class="{ 'scoreview-viewer--page-fullscreen': pageFullscreen }"
+		:style="highlightStyle">
 		<!--
 			Die Setliste steht ueber allem, auch ueber „Wird konvertiert…" und
 			einem Fehler: Im Konzert muss es auch an einem Stueck vorbei
@@ -483,6 +487,21 @@
 									</template>
 								</ToolRow>
 								<!--
+									Without sound too: the highlight, note names,
+									beat counts and the print page use the choice
+									as well (issue #18).
+								-->
+								<ToolRow
+									v-if="has(group, 'partChoice')"
+									:pressed="showMyPart"
+									:label="t('My part')"
+									:value="myPartLabel"
+									@click="showMyPart = !showMyPart; close()">
+									<template #icon>
+										<AccountVoice :size="20" />
+									</template>
+								</ToolRow>
+								<!--
 									„Nur meine Zeile" erscheint nur, wenn eine
 									Stimme als „meine" gewaehlt ist UND sich die
 									Notenzeilen den Stimmen zuordnen lassen - sonst
@@ -644,17 +663,18 @@
 						(CSS unten) - auf 360 px traegt der Transport keinen
 						weiteren Knopf (docs/architecture.md, Telefonbreite).
 
-						Ein Knopf, der nichts tut, ist schlimmer als keiner: In der
-						WebView der mobilen Nextcloud-App ist die Vollbild-API
-						abgeschaltet (gemessen: document.fullscreenEnabled = false),
-						und dort ist die Ansicht ohnehin schon Vollbild.
+						Always there: where the browser has no Fullscreen API -
+						measured in the WebView of the Nextcloud Android app,
+						document.fullscreenEnabled = false - it switches to
+						fullscreen inside the page (useZoom.js, issue #20). The
+						title says so, so that the system bars that stay are not
+						taken for a fault.
 					-->
 					<NcButton
-						v-if="fullscreenPossible"
 						class="scoreview-fullscreen"
 						:pressed="isFullscreen"
-						:aria-label="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
-						:title="isFullscreen ? t('Exit fullscreen') : t('Fullscreen')"
+						:aria-label="fullscreenLabel"
+						:title="fullscreenLabel"
 						@click="toggleFullscreen">
 						<template #icon>
 							<FullscreenExit v-if="isFullscreen" :size="20" />
@@ -798,6 +818,7 @@
 						:cursorElid="currentElid"
 						:needle="intonationNeedle"
 						:follow="followCursor"
+						:forced="cursorForced"
 						@noteClick="onNoteClick"
 						@markerClick="onMarkerClick"
 						@indexed="onPageIndexed"
@@ -852,7 +873,7 @@
 					nichts, wenn sie zu sind, und bleiben erreichbar, wo immer man
 					gerade liest.
 				-->
-				<div v-if="showMixerPanel || showAnnotations || showRehearsal || showPractice || showTuner || armedStamp || setlistEditorMode" class="scoreview-panels">
+				<div v-if="showMixerPanel || showMyPartPanel || showAnnotations || showRehearsal || showPractice || showTuner || armedStamp || setlistEditorMode" class="scoreview-panels">
 					<!--
 						Ein Stempel wartet auf den Tipp ins Notenbild. Das
 						Notizen-Panel ist dafuer zu - es laege sonst ueber den Noten,
@@ -883,25 +904,36 @@
 							@saved="onSetlistSaved"
 							@cancel="setlistEditorMode = null" />
 					</ScorePanel>
-					<ScorePanel v-if="showMixerPanel" :title="t('Mixer')" @close="showMixer = false">
+					<ScorePanel v-if="showMyPartPanel" :title="t('My part')" @close="showMyPart = false">
 						<!--
 							Der Anfangston kam ohne gewaehlte Stimme hierher:
-							Er raet nicht, sondern sagt, wo man sie waehlt.
+							Er raet nicht, sondern sagt, was fehlt.
 						-->
 						<NcNoteCard v-if="startToneNeedsPart" type="info">
-							{{ t('Choose your voice first: tap the voice symbol next to your part.') }}
+							{{ t('Choose your part first.') }}
 						</NcNoteCard>
+						<MyPartControls
+							:parts="scoreParts"
+							:partId="myPartId"
+							@update:partId="onMyPartChanged" />
+					</ScorePanel>
+					<ScorePanel v-if="showMixerPanel" :title="t('Mixer')" @close="showMixer = false">
+						<!-- What the pressed voice symbol stands for, in words. -->
+						<p class="scoreview-mixer-mypart">
+							{{ myPartId !== null ? t('My part: {name}', { name: myPartLabel }) : t('No part chosen') }}
+						</p>
 						<NcCheckboxRadioSwitch v-model="stereoMyPart" type="switch">
 							{{ t('My voice on the right, the others on the left') }}
 						</NcCheckboxRadioSwitch>
 						<ScoreMixer
 							:channels="mixerChannels"
 							:presetList="presetList"
-							:myPartId="myPartId"
-							:othersLevel="practice.othersLevel"
-							@volumesChanged="onVolumesChanged"
-							@programChanged="onProgramChanged"
-							@focusChanged="onMyPartChanged" />
+							:mix="mixState"
+							@level="({ channels, level }) => mixSetLevel(channels, level)"
+							@mute="mixToggleMute"
+							@solo="mixToggleSolo"
+							@focus="onMixerFocus"
+							@program="mixChangeProgram" />
 					</ScorePanel>
 					<ScorePanel v-if="showAnnotations" :title="t('Notes')" @close="showAnnotations = false">
 						<ScoreAnnotations
@@ -1016,6 +1048,7 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcPopover from '@nextcloud/vue/components/NcPopover'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import AccountGroup from 'vue-material-design-icons/AccountGroup.vue'
+import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
 import Alphabetical from 'vue-material-design-icons/Alphabetical.vue'
 import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
 import Close from 'vue-material-design-icons/Close.vue'
@@ -1050,6 +1083,7 @@ import LiveValue from './LiveValue.vue'
 import LoopSaveForm from './LoopSaveForm.vue'
 import LyricsView from './LyricsView.vue'
 import MicIndicator from './MicIndicator.vue'
+import MyPartControls from './MyPartControls.vue'
 import NoteNameControls from './NoteNameControls.vue'
 import PinControls from './PinControls.vue'
 import PracticeExportControls from './PracticeExportControls.vue'
@@ -1085,6 +1119,7 @@ import { useMeasureNavigation } from '../composables/useMeasureNavigation.js'
 import { useMediaSession } from '../composables/useMediaSession.js'
 import { useMetronome } from '../composables/useMetronome.js'
 import { useMicrophone } from '../composables/useMicrophone.js'
+import { useMix } from '../composables/useMix.js'
 import { useMyPart } from '../composables/useMyPart.js'
 import { useMyPartSound } from '../composables/useMyPartSound.js'
 import { useOffline } from '../composables/useOffline.js'
@@ -1159,6 +1194,8 @@ export default {
 		LiveValue,
 		MicIndicator,
 		Microphone,
+		MyPartControls,
+		AccountVoice,
 		RecordingPanel,
 		ScorePage,
 		ScorePanel,
@@ -1432,17 +1469,21 @@ export default {
 		const showMixer = ref(false)
 		const showMixerPanel = computed(() => playback.hasRealPlayer.value && showMixer.value && playback.mixerChannels.value.length > 0)
 
+		// „Meine Stimme" as a card of its own (issue #18): reachable without
+		// sound, unlike the mixer. Both set the one choice (useMyPart.js) - two
+		// places to make it, one state, so they cannot disagree.
+		const showMyPart = ref(false)
+		const showMyPartPanel = computed(() => showMyPart.value && session.scoreParts.value.length > 0)
+
 		/**
 		 * Die Stimmauswahl oeffnen - wenn der Anfangston oder die Intonation
-		 * keine Stimme fand. Sie steckt im Mixer („Meine Stimme" je Zeile);
-		 * eine zweite Auswahl fuer dieselbe Aussage waere eine Fehlerquelle
-		 * (siehe `focusMyPart` in data()).
+		 * keine Stimme fand.
 		 */
 		function openVoiceSelection() {
-			if (!performance.can('mixer')) {
+			if (!performance.can('settings')) {
 				return
 			}
-			showMixer.value = true
+			showMyPart.value = true
 		}
 
 		const paging = usePaging({
@@ -1626,11 +1667,18 @@ export default {
 			mixerChannels: () => playback.mixerChannels.value,
 			myPartId: () => myPart.myPartId.value,
 			stereoMyPart: () => preferences.stereoMyPart.value,
-			mixerOpen: () => showMixerPanel.value,
-			applyChannelVolumes: playback.applyChannelVolumes,
 			applyChannelPans: playback.applyChannelPans,
 			coach: () => myPart.practice.value.coach,
+			setProgram: playback.setProgram,
+		})
+
+		const mix = useMix({
+			hasRealPlayer: () => playback.hasRealPlayer.value,
+			mixerChannels: playback.mixerChannels,
+			baseVolumes: () => scoreFacts.parsed.value?.channelVolumes ?? null,
+			myPartId: () => myPart.myPartId.value,
 			othersLevel: () => myPart.practice.value.othersLevel,
+			applyChannelVolumes: playback.applyChannelVolumes,
 			setProgram: playback.setProgram,
 		})
 
@@ -1729,6 +1777,7 @@ export default {
 			mixerChannels: () => playback.mixerChannels.value,
 			parts: () => session.scoreParts.value.map((p) => ({ partId: String(p.id), name: p.name })),
 			othersLevel: () => myPart.practice.value.othersLevel,
+			baseVolumes: () => scoreFacts.parsed.value?.channelVolumes ?? null,
 		})
 
 		// Die Sollwerte der Intonation klingen, wie gespielt wird: Wer einen
@@ -1807,6 +1856,8 @@ export default {
 			scroll,
 			showMixer,
 			showMixerPanel,
+			showMyPart,
+			showMyPartPanel,
 			openVoiceSelection,
 			staffMappingOk,
 			myPartIndex,
@@ -1850,7 +1901,9 @@ export default {
 			doublePage: preferences.doublePage,
 			zoomFollowsWidth: zoomApi.followsWidth,
 			isFullscreen: zoomApi.isFullscreen,
+			pageFullscreen: zoomApi.pageFullscreen,
 			fullscreenPossible: zoomApi.fullscreenPossible,
+			disposeFullscreen: zoomApi.disposeFullscreen,
 			zoomPercent: zoomApi.percent,
 			minZoom: zoomApi.min,
 			maxZoom: zoomApi.max,
@@ -1938,8 +1991,12 @@ export default {
 			togglePlay: playback.toggle,
 			onSeekInput: playback.onSeekInput,
 			onTempoBpmInput: playback.onTempoBpmInput,
-			onVolumesChanged: playback.applyChannelVolumes,
-			onProgramChanged: playback.setProgram,
+			mixState: mix.state,
+			mixSetLevel: mix.setLevel,
+			mixToggleMute: mix.toggleMute,
+			mixToggleSolo: mix.toggleSolo,
+			mixToggleFocus: mix.toggleFocus,
+			mixChangeProgram: mix.changeProgram,
 			resetPlayback: playback.reset,
 			myPartId: myPart.myPartId,
 			loadMyPart: myPart.load,
@@ -2187,6 +2244,22 @@ export default {
 		 * Pruefung stuende dort ein Schalter, der bei einem Klavierauszug oder
 		 * einer Partitur mit ausgeblendeten leeren Zeilen wirkungslos bliebe.
 		 */
+		fullscreenLabel() {
+			if (this.isFullscreen) {
+				return this.t('Exit fullscreen')
+			}
+			return this.fullscreenPossible ? this.t('Fullscreen') : this.t('Fullscreen (inside the app)')
+		},
+
+		/** The name of "my part" in the bar and the mixer. */
+		myPartLabel() {
+			if (this.myPartId === null) {
+				return this.t('None')
+			}
+			const part = this.scoreParts.find((p) => String(p.id) === String(this.myPartId))
+			return part?.name || String(this.myPartId)
+		},
+
 		canFocusMyPart() {
 			return this.myPartIndex !== null && this.staffMappingOk
 		},
@@ -2202,6 +2275,7 @@ export default {
 				can: this.can,
 				hasRealPlayer: this.hasRealPlayer,
 				canFocusMyPart: this.canFocusMyPart,
+				hasParts: this.scoreParts.length > 0,
 				canCoach: this.myPartIndex !== null,
 				recordingEnabled: this.recordingEnabled,
 				intonationEnabled: this.intonationEnabled,
@@ -2574,6 +2648,7 @@ export default {
 		this.cleanupSession()
 		this.turnMicOff()
 		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
+		this.disposeFullscreen()
 		this.$el.removeEventListener('keydown', this.onKeydown)
 		this.stopBarLayout()
 		this.mediaSession.dispose()
@@ -2648,6 +2723,19 @@ export default {
 		 *
 		 * @param {?string} partId Stimme aus meta.parts, null = keine
 		 */
+		/**
+		 * The voice symbol in the mixer - a part to remember, or a row
+		 * without a part that only the mix knows (useMix.toggleFocus).
+		 *
+		 * @param {{key: string, partId: ?string, channels: number[]}} group
+		 */
+		onMixerFocus(group) {
+			const partId = this.mixToggleFocus(group)
+			if (partId !== undefined) {
+				this.onMyPartChanged(partId)
+			}
+		},
+
 		onMyPartChanged(partId) {
 			this.saveMyPart(partId)
 			if (partId === null) {
@@ -2661,6 +2749,7 @@ export default {
 		 */
 		onPerformanceEnter() {
 			this.showMixer = false
+			this.showMyPart = false
 			this.showAnnotations = false
 			this.disarmStamp()
 			this.showRehearsal = false
@@ -2861,6 +2950,7 @@ export default {
 			this.resetConversion()
 			this.resetPlayback()
 			this.showMixer = false
+			this.showMyPart = false
 			this.resetAutoScroll()
 			this.focusMyPart = false
 			this.staffMappingOk = false
@@ -3256,6 +3346,21 @@ export default {
 	 * every own scroll container below rather than trusting the ancestor
 	 * intersection to cross them. */
 	touch-action: pan-x pan-y;
+}
+
+/* Fullscreen inside the page (useZoom.js, issue #20): above Nextcloud's
+ * header and the Files viewer's modal, the whole window. dvh, not vh: on
+ * phones vh counts the browser's bars as if they were gone. */
+.scoreview-viewer--page-fullscreen {
+	position: fixed;
+	inset: 0;
+	z-index: 10000;
+	height: 100dvh;
+}
+
+.scoreview-mixer-mypart {
+	margin: 0 0 4px;
+	font-weight: bold;
 }
 
 /*

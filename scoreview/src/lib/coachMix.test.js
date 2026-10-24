@@ -6,7 +6,7 @@ const programs = new Map([[0, 52], [1, 52], [2, 53], [3, 52]])
 
 describe('coachMix', () => {
 	it('hebt die eigene Stimme als Klavier rechts hervor', () => {
-		const mix = coachMix({ channels: [0, 1, 2, 3], myChannels: [2], programs })
+		const mix = coachMix({ channels: [0, 1, 2, 3], myChannels: [2], programs, baseVolumes: new Map([[0, 127], [2, 127]]) })
 		expect(mix.volumes.get(2)).toBe(127)
 		expect(mix.volumes.get(0)).toBe(DEFAULT_OTHERS_LEVEL)
 		expect(mix.pans.get(2)).toBe(PAN_MINE)
@@ -18,9 +18,14 @@ describe('coachMix', () => {
 
 	it('behandelt eine Stimme mit zwei Kanaelen (divisi) als eine', () => {
 		const mix = coachMix({ channels: [0, 1, 2], myChannels: [0, 1], programs })
-		expect(mix.volumes.get(0)).toBe(127)
-		expect(mix.volumes.get(1)).toBe(127)
-		expect(mix.volumes.get(2)).toBe(DEFAULT_OTHERS_LEVEL)
+		expect(mix.volumes.get(0)).toBe(100)
+		expect(mix.volumes.get(1)).toBe(100)
+		expect(mix.volumes.get(2)).toBe(31)
+	})
+
+	it("keeps the score's balance: the levels are relative to its CC7", () => {
+		const mix = coachMix({ channels: [0, 1], myChannels: [0], othersLevel: 127, baseVolumes: new Map([[0, 90], [1, 60]]) })
+		expect([...mix.volumes]).toEqual([[0, 90], [1, 60]])
 	})
 
 	it('nimmt den Regler fuer die uebrigen', () => {
