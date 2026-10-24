@@ -453,11 +453,21 @@ re-measured on real devices and with real input latency.
   yellow up to 120 ms. A long voiceless consonant placed well before the beat
   counts as early.
 - **Measured with a real voice** (bass, desktop with headphones, accompaniment
-  at full tempo, 79 s): all 126 judged onsets were green, median +1 ms (10 %
-  earlier than −26 ms, 10 % later than +27 ms); 41 notes had no onset to
+  at full tempo, 79 s): 128 of 129 judged onsets were green, median +1 ms (10 %
+  earlier than −26 ms, 10 % later than +27 ms); 38 notes had no onset to
   judge. On the same machine the recording lagged the score by **+5 ms**,
-  measured with the metronome through the loudspeaker. **Not yet checked**:
-  deliberately misplaced notes, other voices, slower tempo, phones.
+  measured with the metronome through the loudspeaker.
+- **Misplaced onsets, simulated on that take**: whole phrases of the
+  recording moved inside their rests, every third one left as it was. Moved
+  150 ms early, 82 % of the notes were flagged (every phrase start); moved
+  150 ms late, 62 % (13 of 17 phrase starts); moved 80 ms, 85 % and 72 %,
+  the rest just inside green. The untouched phrases stayed green, and every
+  final note cut short by 60 % was flagged. A note sung later than its own
+  length minus some 100 ms is **not evaluable**, not late: the voice is then
+  already in the next note's time, and pitch alone does not tell which note
+  it is. In that piece (detached crotchets at ♩ = 180, about 316 ms) this applies
+  from about 250 ms late. **Not yet checked**: a singer missing on purpose,
+  other voices, slower tempo, phones.
 - **Wait mode is for learning notes, not rhythm.** Playback stops 30 ms
   before each note of your part that lasts at least 200 ms and goes on once
   the microphone has heard the note for 60 ms (±50 cents, any octave).

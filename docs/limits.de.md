@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:71159dfd562e -->
+<!-- translation-of: limits.md sha256:ecc68a1b8dd3 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -456,12 +456,23 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   macht – und bis 120 ms gelb. Ein langer stimmloser Konsonant deutlich vor
   dem Schlag zählt als zu früh.
 - **Gemessen mit einer echten Stimme** (Bass, Arbeitsplatz mit Kopfhörern,
-  Begleitung in vollem Tempo, 79 s): Alle 126 bewerteten Einsätze waren grün,
-  Median +1 ms (10 % früher als −26 ms, 10 % später als +27 ms); bei 41 Noten
-  gab es keinen Einsatz zu bewerten. Auf demselben Rechner lag die Aufnahme
-  **+5 ms** hinter der Partitur, gemessen mit dem Metronom über den
-  Lautsprecher. **Noch nicht geprüft**: absichtlich verschobene Noten,
-  andere Stimmlagen, langsameres Tempo, Handys.
+  Begleitung in vollem Tempo, 79 s): 128 von 129 bewerteten Einsätzen waren
+  grün, Median +1 ms (10 % früher als −26 ms, 10 % später als +27 ms); bei
+  38 Noten gab es keinen Einsatz zu bewerten. Auf demselben Rechner lag die
+  Aufnahme **+5 ms** hinter der Partitur, gemessen mit dem Metronom über den
+  Lautsprecher.
+- **Verschobene Einsätze, an dieser Aufnahme nachgestellt**: ganze Phrasen
+  der Aufnahme innerhalb ihrer Pausen verschoben, jede dritte unverändert
+  gelassen. Um 150 ms zu früh wurden 82 % der Noten markiert (jeder
+  Phrasenanfang), um 150 ms zu spät 62 % (13 von 17 Phrasenanfängen), um
+  80 ms 85 % und 72 %, der Rest knapp im Grünen. Die unveränderten Phrasen
+  blieben grün, und jede um 60 % gekürzte Schlussnote wurde markiert. Eine
+  Note, die später kommt als ihre eigene Länge minus etwa 100 ms, ist **nicht
+  auswertbar**, nicht zu spät: Die Stimme liegt dann schon in der Zeit der
+  nächsten Note, und an der Tonhöhe allein ist nicht zu erkennen, welche
+  gemeint ist. In diesem Stück (abgesetzte Viertel bei ♩ = 180, etwa 316 ms) gilt das
+  ab etwa 250 ms zu spät. **Noch nicht geprüft**: absichtlich daneben
+  singen, andere Stimmlagen, langsameres Tempo, Handys.
 - **Der Warte-Modus ist zum Töne-Lernen, nicht für den Rhythmus.** Die
   Wiedergabe hält 30 ms vor jeder Note der eigenen Stimme an, die mindestens
   200 ms dauert, und läuft weiter, sobald das Mikrofon den Ton 60 ms lang

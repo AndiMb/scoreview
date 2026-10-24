@@ -782,7 +782,13 @@ mindestens einem System – eine Titel- oder Textseite schweigt, sonst
 den Worker, Einsatz und Ende jeder bewerteten Note. Gefunden wird der Einsatz
 über die Tonhöhe – drei stimmhafte Rahmen in Folge auf der Sollnote, nur dort,
 wo davor Stille oder eine andere Tonhöhe lag; an dieselbe Tonhöhe gebunden ist
-„nicht auswertbar“. Gemessen wird er dann am **Beginn der Silbe**: nach
+„nicht auswertbar“. Gesucht wird ab 250 ms vor dem Schlag (höchstens bis zur
+Mitte zur vorigen Note) bis kurz vor das Ende der Note, höchstens 250 ms
+danach: Ein später Einsatz muss noch 60 ms der Note übrig lassen, weil die
+stabile Tonhöhe erst nach der Silbe kommt; nur bis zur Notenmitte gesucht,
+war ein kurzer, 150 ms später Ton „nicht auswertbar“ statt zu spät. Weiter
+geht es nicht, denn dahinter liegt die Stimme in der Zeit der nächsten Note.
+Gemessen wird er dann am **Beginn der Silbe**: nach
 Stille zurück bis dahin, wo der Pegel zuletzt 15 dB unter dem der Note lag
 (Pegelverlauf im 5-ms-Raster, `levelEnvelope`, vom Worker mitgerechnet), nach
 einer anderen Note zurück, solange die Stimme sie nicht mehr hält. An der

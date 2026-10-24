@@ -117,6 +117,25 @@ describe('C1 with synthetic voices', () => {
 		expect(rhythm[3].onset.class).toBe('green')
 	})
 
+	it('a short note sung 200 ms late is late, not "not evaluable"', () => {
+		// Detached crotchets at 180 bpm: the onset lies behind half the note
+		// (160 ms), where the search used to end. A real voice reaches that
+		// point already ~150 ms late - its stable pitch comes ~40 ms after the
+		// syllable; this synthetic one has it at once.
+		const notes = [
+			{ onMs: 500, offMs: 820, pitch: 64, channel: 1 },
+			{ onMs: 1200, offMs: 1520, pitch: 67, channel: 1 },
+			{ onMs: 1900, offMs: 2220, pitch: 65, channel: 1 },
+		]
+		const sung = notes.map((n) => (n.onMs === 1200 ? { ...n, onMs: 1400, offMs: 1720 } : n))
+		const { rhythm } = rhythmOf(sung, notes)
+		expect(rhythm[0].onset.class).toBe('green')
+		expect(rhythm[1].onset.class).toBe('red')
+		expect(rhythm[1].onset.devMs).toBeGreaterThan(180)
+		expect(rhythm[1].onset.devMs).toBeLessThan(220)
+		expect(rhythm[2].onset.class).toBe('green')
+	})
+
 	it('a legato change of pitch is an onset; a tie to the same pitch is not evaluable', () => {
 		const notes = [
 			{ onMs: 500, offMs: 1300, pitch: 64, channel: 1 },

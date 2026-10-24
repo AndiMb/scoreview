@@ -66,6 +66,8 @@ export const DEFAULT_RHYTHM_THRESHOLDS = {
 const RUN_FRAMES = 3
 /** How far the onset is searched before and after the note, real ms. */
 const SEARCH_MS = 250
+/** A late onset must leave this much of the note to be found in it, real ms. */
+const LATE_MARGIN_MS = 60
 /** A target farther away than this is a different note, not an off-pitch one. */
 const MATCH_CENTS = 150
 /** Shorter notes are too short for a run of three frames. */
@@ -266,7 +268,15 @@ export function findOnset(frames, note, prev, options = {}) {
 	if (prev) {
 		fromMs = Math.max(fromMs, (prev.onMs + note.onMs) / 2)
 	}
-	const toMs = note.onMs + Math.min(SEARCH_MS * tempoFactor, (note.offMs - note.onMs) / 2)
+	// Late onsets are searched up to shortly before the note's end, not only
+	// through its first half: the stable pitch comes ~40 ms after the syllable
+	// and needs RUN_FRAMES more, so with half the note a crotchet at 180 bpm sung
+	// 150 ms late was "not evaluable" instead of late (measured on a real
+	// take with phrases shifted: 8 % found, now 62 %, no added false alarms).
+	// Farther than the note itself it cannot go - there the voice is already
+	// in the next note's time, and pitch alone does not tell which one it is.
+	const noteMs = note.offMs - note.onMs
+	const toMs = note.onMs + Math.min(SEARCH_MS * tempoFactor, Math.max(noteMs / 2, noteMs - LATE_MARGIN_MS * tempoFactor))
 	if (frames.length === 0 || frames[0].scoreMs > fromMs || frames[frames.length - 1].scoreMs < toMs) {
 		return null
 	}
