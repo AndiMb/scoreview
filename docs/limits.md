@@ -438,19 +438,26 @@ re-measured on real devices and with real input latency.
 - **The attack has not been measured.** Intonation discards the first
   **100 ms** of each note (`skipAttackMs`); whether that is enough for amateur
   voices is still open.
-- **Rhythm is read from the vowel**, and only where an onset can be heard:
-  after silence or after a change of pitch. A voiceless consonant before the
-  vowel does not count, which matches the rule that the vowel belongs on the
-  beat. A note tied to the same pitch has no onset of its own and is “not
-  evaluable”; the end of a note (“too short”) is judged only before a rest,
-  never “too long”. Measured with synthetic tones, the detected onset lags
-  the real one by **12 ms after silence** (−3 … +22) and **27 ms after a
-  change of pitch** (+12 … +37); both are subtracted. What remains is the
-  spread of the 20 ms analysis raster. An onset is green up to **60 ms**
-  early or late – never less than 55 ms, so that the offset against the
-  cursor alone cannot make a note yellow – and yellow up to 120 ms. **Not yet
-  checked with real voices**: soft attacks, voiced consonants such as “m” or
-  “l”, and phones.
+- **The onset is where the syllable begins**, and it is judged only where
+  one can be heard: after silence or after a change of pitch. After silence
+  it is where the level rose, a consonant included; after another note it is
+  where the voice left that note, a glide included. A note tied to the same
+  pitch has no onset of its own and is “not evaluable”; the end of a note
+  (“too short”) is judged only before a rest, never “too long”. Judged from
+  the stable pitch instead, a real voice read some 40 ms late, because the
+  pitch settles only after the syllable has begun. Measured with synthetic
+  tones, the detected onset lies −2 … +8 ms from the real one after silence
+  and +7 … +17 ms after a change of pitch; 3 and 10 ms are subtracted. An
+  onset is green up to **60 ms** early or late – never less than 55 ms, so
+  that the offset against the cursor alone cannot make a note yellow – and
+  yellow up to 120 ms. A long voiceless consonant placed well before the beat
+  counts as early.
+- **Measured with a real voice** (bass, desktop with headphones, accompaniment
+  at full tempo, 79 s): all 126 judged onsets were green, median +1 ms (10 %
+  earlier than −26 ms, 10 % later than +27 ms); 41 notes had no onset to
+  judge. On the same machine the recording lagged the score by **+5 ms**,
+  measured with the metronome through the loudspeaker. **Not yet checked**:
+  deliberately misplaced notes, other voices, slower tempo, phones.
 - **Wait mode is for learning notes, not rhythm.** Playback stops 30 ms
   before each note of your part that lasts at least 200 ms and goes on once
   the microphone has heard the note for 60 ms (±50 cents, any octave).

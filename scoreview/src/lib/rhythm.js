@@ -3,15 +3,16 @@
 // (lib/pitchDetect.js), same time axis (lib/recordingAlign.js); the
 // evaluations it attaches to come from lib/intonation.js.
 //
-// **The onset is the vowel.** A frame counts once it is periodic, so a
-// voiceless "s", "t" or "k" before the vowel does not count. In a choir that
-// is the right reference: the vowel belongs on the beat, the consonant
-// before it.
+// **The onset is where the syllable begins.** Found from the pitch - a run
+// of frames on the target note - and then traced back: after silence to
+// where the level rose (consonant included), after another note to where
+// the voice left it (the glide included). Measured with a real voice, the
+// pitch is stable only some 40 ms after the syllable began, and judged from
+// there a third of all onsets of a well-timed take read as late.
 //
-// **Only where an onset can be seen.** An onset is the first frame of a run
-// on the target note that follows silence or a different pitch. Two notes of
-// the same pitch sung legato have no such moment - that is reported as "not
-// evaluable", never as a guess.
+// **Only where an onset can be seen.** The run must follow silence or a
+// different pitch. Two notes of the same pitch sung legato have no such
+// moment - that is reported as "not evaluable", never as a guess.
 //
 // **Absolute, in real time.** The deviation is measured against the score,
 // not against the singer's own average (a singer who drags consistently is
@@ -26,11 +27,26 @@ import { CLARITY_THRESHOLD } from './pitchDetect.js'
 
 /**
  * Delay of the detected onset behind the real one, in real ms. Measured with
- * synthetic tones (64 ms YIN window, 20 ms hop, run of 3 frames): after
- * silence median +12 ms (−3 … +22, +22 with a 150 ms swell), after a pitch
- * change median +27 ms (+12 … +37). The end is detected without offset.
+ * synthetic tones: after silence −2 ms for a hard attack and +8 ms for a
+ * swell of 50-150 ms; after another note +7 ms for a hard change and +17 ms
+ * for a 60 ms glide. Without the level envelope the onset after silence is
+ * the stable pitch itself, measured at +12 ms (`pitchOnly`). The end is
+ * detected without offset.
  */
-export const ONSET_BIAS_MS = { silence: 12, change: 27 }
+export const ONSET_BIAS_MS = { silence: 3, change: 10, pitchOnly: 12 }
+
+/** Raster of the level envelope, in real ms. */
+export const LEVEL_HOP_MS = 5
+/** Window of the level envelope: 16 ms at 16 kHz. */
+const LEVEL_WINDOW = 256
+/** The syllable begins where the level was last this far below the note's. */
+const SYLLABLE_DROP_DB = 15
+/** How far back from the stable pitch the start of a syllable or glide may lie, real ms. */
+const MAX_LEAD_IN_MS = 200
+/** Still on the previous note, for the start of a glide. */
+const PREVIOUS_NOTE_CENTS = 50
+/** How far back the previous note must have sounded for a change rather than silence, real ms. */
+const CHANGE_LOOKBACK_MS = 80
 
 /**
  * Lower bound for "green" at the onset: above the largest measured offset of
@@ -89,6 +105,103 @@ export function frameState(frame, pitch, otherPitches, clarityThreshold = CLARIT
 }
 
 /**
+ * The level of a recording in dB, in a LEVEL_HOP_MS raster - for the start of
+ * a syllable, which the 20 ms pitch frames resolve too coarsely and which
+ * they do not see before the voice turns periodic.
+ *
+ * @param {Float32Array} samples
+ * @param {number} sampleRate
+ * @return {{db: Float32Array, hopSec: number, firstSec: number}} firstSec = centre of the first window
+ */
+export function levelEnvelope(samples, sampleRate) {
+	const hop = Math.round((sampleRate * LEVEL_HOP_MS) / 1000)
+	const window = Math.round((LEVEL_WINDOW * sampleRate) / 16000)
+	const count = Math.max(0, Math.floor((samples.length - window) / hop) + 1)
+	const db = new Float32Array(count)
+	for (let i = 0; i < count; i++) {
+		let sum = 0
+		for (let k = i * hop, end = k + window; k < end; k++) {
+			sum += samples[k] * samples[k]
+		}
+		db[i] = 10 * Math.log10(sum / window + 1e-12)
+	}
+	return { db, hopSec: hop / sampleRate, firstSec: window / 2 / sampleRate }
+}
+
+/**
+ * Back from the stable pitch to where the level rose: the start of the
+ * syllable after silence.
+ *
+ * @param {{db: Float32Array, t0Ms: number, stepMs: number}} level in score time
+ * @param {number} runMs score time of the first stable frame
+ * @param {number} notBeforeMs
+ * @param {number} tempoFactor
+ * @return {number} score time
+ */
+function syllableStart(level, runMs, notBeforeMs, tempoFactor) {
+	const at = (j) => level.t0Ms + j * level.stepMs
+	const i = Math.max(0, Math.min(level.db.length - 1, Math.round((runMs - level.t0Ms) / level.stepMs)))
+	const span = Math.max(1, Math.round((30 * tempoFactor) / level.stepMs))
+	let top = -Infinity
+	for (let k = i; k < Math.min(level.db.length, i + span); k++) {
+		top = Math.max(top, level.db[k])
+	}
+	const earliest = Math.max(notBeforeMs, runMs - MAX_LEAD_IN_MS * tempoFactor)
+	let j = i
+	while (j > 0 && level.db[j - 1] > top - SYLLABLE_DROP_DB && at(j - 1) >= earliest) {
+		j--
+	}
+	return at(j)
+}
+
+/**
+ * Back from the stable pitch while the voice is no longer on the previous
+ * note: the start of the glide after another note.
+ *
+ * @param {Array} frames
+ * @param {number} i index of the first stable frame
+ * @param {Array<number>} previous pitches of the previous chord
+ * @param {number} notBeforeMs
+ * @param {number} tempoFactor
+ * @return {number} score time
+ */
+function glideStart(frames, i, previous, notBeforeMs, tempoFactor) {
+	const earliest = Math.max(notBeforeMs, frames[i].scoreMs - MAX_LEAD_IN_MS * tempoFactor)
+	const onPrevious = (f) => previous.some((p) => Math.abs(foldOctave(centsOff(f.hz, p))) <= PREVIOUS_NOTE_CENTS)
+	// Frames in the middle of the change are often just below the clarity
+	// threshold - two pitches in one window - but still carry one: they
+	// belong to the glide, only an unvoiced frame ends it.
+	let j = i
+	while (j > 0 && frames[j - 1].scoreMs >= earliest && frames[j - 1].hz && !onPrevious(frames[j - 1])) {
+		j--
+	}
+	return frames[j].scoreMs
+}
+
+/**
+ * Whether the run at `i` follows another note rather than silence: the
+ * previous note sounded, voiced, within CHANGE_LOOKBACK_MS before it. A
+ * single unclear frame at the change is no silence.
+ *
+ * @param {Array} frames
+ * @param {number} i
+ * @param {Array<number>} previous
+ * @param {number} tempoFactor
+ * @param {number} clarityThreshold
+ * @return {boolean}
+ */
+function followsNote(frames, i, previous, tempoFactor, clarityThreshold) {
+	const earliest = frames[i].scoreMs - CHANGE_LOOKBACK_MS * tempoFactor
+	for (let j = i - 1; j >= 0 && frames[j].scoreMs >= earliest; j--) {
+		const f = frames[j]
+		if (f.hz && f.clarity >= clarityThreshold && previous.some((p) => Math.abs(foldOctave(centsOff(f.hz, p))) <= MATCH_CENTS)) {
+			return true
+		}
+	}
+	return false
+}
+
+/**
  * Three-level class for an onset deviation.
  *
  * @param {?number} devMs
@@ -134,6 +247,7 @@ export function classifyRelease(shortMs, noteMs, thresholds = DEFAULT_RHYTHM_THR
  * @param {{onMs:number, offMs:number, pitch:number}} note
  * @param {?{onMs:number, offMs:number, pitches:Array<number>}} prev previous chord of my part
  * @param {object} [options]
+ * @param {{db: Float32Array, t0Ms: number, stepMs: number}} [options.level] level envelope in score time; without it the onset after silence stays at the stable pitch
  * @param {number} [options.tempoFactor] score ms per real ms during the recording
  * @param {number} [options.clarityThreshold]
  * @param {{green:number, yellow:number}} [options.thresholds]
@@ -144,6 +258,7 @@ export function findOnset(frames, note, prev, options = {}) {
 		tempoFactor = 1,
 		clarityThreshold = CLARITY_THRESHOLD,
 		thresholds = DEFAULT_RHYTHM_THRESHOLDS.onset,
+		level = null,
 	} = options
 	const na = (reason) => ({ devMs: null, class: 'na', reason, scoreMs: null, index: null })
 	const noteRealMs = (note.offMs - note.onMs) / tempoFactor
@@ -179,9 +294,16 @@ export function findOnset(frames, note, prev, options = {}) {
 			// the window - in neither case is there an onset to measure.
 			break
 		}
-		const context = before === 'silent' ? 'silence' : 'change'
-		const devMs = (frames[i].scoreMs - note.onMs) / tempoFactor - ONSET_BIAS_MS[context]
-		return { devMs, class: classifyOnset(devMs, thresholds), reason: null, scoreMs: frames[i].scoreMs, index: i }
+		const context = before === 'other' || followsNote(frames, i, others, tempoFactor, clarityThreshold) ? 'change' : 'silence'
+		let startMs = frames[i].scoreMs
+		if (context === 'change') {
+			startMs = glideStart(frames, i, others, fromMs, tempoFactor)
+		} else if (level) {
+			startMs = syllableStart(level, frames[i].scoreMs, fromMs, tempoFactor)
+		}
+		const bias = context === 'silence' && !level ? ONSET_BIAS_MS.pitchOnly : ONSET_BIAS_MS[context]
+		const devMs = (startMs - note.onMs) / tempoFactor - bias
+		return { devMs, class: classifyOnset(devMs, thresholds), reason: null, context, scoreMs: startMs, index: i }
 	}
 	const samePitch = prev && prev.pitches.includes(note.pitch) && (note.onMs - prev.offMs) / tempoFactor < MIN_REST_MS
 	return na(samePitch ? 'samePitch' : 'none')

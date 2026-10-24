@@ -7,6 +7,7 @@ import {
 	classifyRelease,
 	evaluateRhythm,
 	frameState,
+	levelEnvelope,
 	medianOnsetMs,
 	MIN_ONSET_TOLERANCE_MS,
 } from './rhythm.js'
@@ -173,6 +174,67 @@ describe('C1 with synthetic voices', () => {
 		const notes = [{ onMs: 500, offMs: 1500, pitch: 64, channel: 1 }]
 		const evaluations = evaluateRecording(f, notes, [1])
 		expect(evaluateRhythm(f, evaluations, notes, [1])[0].onset).toBeNull()
+	})
+})
+
+describe('C1: onset at the start of the syllable', () => {
+	/**
+	 * A sung note that begins with `consonantMs` of loud noise before the
+	 * voice turns periodic - a "z" or a breathy attack.
+	 *
+	 * @param {number} onMs start of the syllable
+	 * @param {number} consonantMs
+	 * @param {number} pitch
+	 * @return {Float32Array}
+	 */
+	function syllable(onMs, consonantMs, pitch) {
+		const out = new Float32Array(2 * RATE)
+		let seed = 3
+		const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1
+		let phase = 0
+		const a = Math.round((onMs / 1000) * RATE)
+		const v = a + Math.round((consonantMs / 1000) * RATE)
+		for (let i = a; i < v; i++) {
+			out[i] = 0.2 * rnd()
+		}
+		for (let i = v; i < a + RATE; i++) {
+			phase += (2 * Math.PI * hzOf(pitch)) / RATE
+			for (let k = 1; k <= 5; k++) {
+				out[i] += (0.25 / k) * Math.sin(k * phase)
+			}
+		}
+		return out
+	}
+
+	const withLevel = (samples) => {
+		const lv = levelEnvelope(samples, RATE)
+		return { db: lv.db, t0Ms: lv.firstSec * 1000, stepMs: lv.hopSec * 1000 }
+	}
+
+	it('counts a loud consonant before the vowel as part of the onset', () => {
+		const samples = syllable(500, 60, 57)
+		const f = frames(samples)
+		const notes = [{ onMs: 500, offMs: 1400, pitch: 57, channel: 1 }]
+		const evaluations = evaluateRecording(f, notes, [1])
+		const [withSyllable] = evaluateRhythm(f, evaluations, notes, [1], { level: withLevel(samples) })
+		const [pitchOnly] = evaluateRhythm(f, evaluations, notes, [1])
+		expect(withSyllable.onset.context).toBe('silence')
+		expect(Math.abs(withSyllable.onset.devMs)).toBeLessThan(15)
+		// Judged from the stable pitch alone, the same note reads ~60 ms late.
+		expect(pitchOnly.onset.devMs).toBeGreaterThan(40)
+	})
+
+	it('a hard change of pitch is a change even with an unclear frame in between', () => {
+		const notes = [
+			{ onMs: 300, offMs: 900, pitch: 61, channel: 1 },
+			{ onMs: 900, offMs: 1600, pitch: 64, channel: 1 },
+		]
+		const samples = voice([{ onMs: 300, offMs: 900, pitch: 61 }, { onMs: 900, offMs: 1600, pitch: 64 }], 2000)
+		const f = frames(samples)
+		const evaluations = evaluateRecording(f, notes, [1])
+		const [, second] = evaluateRhythm(f, evaluations, notes, [1], { level: withLevel(samples) })
+		expect(second.onset.context).toBe('change')
+		expect(Math.abs(second.onset.devMs)).toBeLessThan(25)
 	})
 })
 

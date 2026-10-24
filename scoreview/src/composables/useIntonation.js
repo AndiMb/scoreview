@@ -149,7 +149,7 @@ export function useIntonation({
 					progress.value = message.done
 				}
 			} else if (message.type === 'analysis') {
-				waiting.get(message.id)?.(message.frames)
+				waiting.get(message.id)?.({ frames: message.frames, level: message.level })
 				waiting.delete(message.id)
 			}
 		}
@@ -357,22 +357,26 @@ export function useIntonation({
 			}
 			const { samples, sampleRate } = decodeWav(bytes)
 			const id = ++requestId
-			const frames = await new Promise((resolve) => {
+			const result = await new Promise((resolve) => {
 				waiting.set(id, resolve)
 				w.postMessage({ type: 'analyze', id, samples, sampleRate }, [samples.buffer])
 			})
 			// Inzwischen ein anderes Stueck (Setliste) oder eine andere
 			// Aufnahme: Das Ergebnis gehoert zu Noten, die nicht mehr da sind,
 			// und wuerde auf die neuen gefaerbt.
-			if (!analysisGeneration.isCurrent(mine) || frames === null) {
+			if (!analysisGeneration.isCurrent(mine) || result === null) {
 				return
 			}
+			const { frames, level } = result
 			const imPartitur = frames.map((f) => ({ scoreMs: recordingToScoreMs(recording, f.timeSec), hz: f.hz, clarity: f.clarity }))
 			const tempo = recording.tempoFactor || 1
 			const evaluations = evaluateRecording(imPartitur, notes(), myChannels(), { tempoFactor: tempo })
 			// Same frames, no second pass through the worker: rhythm is read
 			// from what the pitch analysis already found.
-			const rhythm = evaluateRhythm(imPartitur, evaluations, notes(), myChannels(), { tempoFactor: tempo })
+			const rhythm = evaluateRhythm(imPartitur, evaluations, notes(), myChannels(), {
+				tempoFactor: tempo,
+				level: level && { db: level.db, t0Ms: recordingToScoreMs(recording, level.firstSec), stepMs: level.hopSec * 1000 * tempo },
+			})
 			const problems = problemList(evaluations, measureOf, rhythm)
 			analysis.value = {
 				recordingId: recording.id,

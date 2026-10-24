@@ -8,9 +8,12 @@
 // - `live`: Bloecke aus dem Aufnahme-Worklet, zurueck kommen die Rahmen mit
 //   Kontextzeit (useIntonation.js, Live-Nadel).
 // - `analyze`: eine ganze gespeicherte Aufnahme, in Stuecken mit
-//   Fortschritt (jedes Mal neu berechnet, nichts gespeichert).
+//   Fortschritt (jedes Mal neu berechnet, nichts gespeichert). With the
+//   frames comes the level envelope for the start of a syllable
+//   (lib/rhythm.js) - computed here because it also runs over every sample.
 
 import { createPitchStream, FRAME_SIZE, HOP_SIZE, trackPitch } from '../lib/pitchDetect.js'
+import { levelEnvelope } from '../lib/rhythm.js'
 
 let stream = createPitchStream()
 
@@ -40,6 +43,7 @@ self.onmessage = (event) => {
 			}
 			self.postMessage({ type: 'progress', id, done: Math.min(1, (first + ANALYZE_CHUNK_FRAMES) / hopsTotal) })
 		}
-		self.postMessage({ type: 'analysis', id, frames })
+		const level = levelEnvelope(samples, sampleRate)
+		self.postMessage({ type: 'analysis', id, frames, level }, [level.db.buffer])
 	}
 }

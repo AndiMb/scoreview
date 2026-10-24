@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:b9a8f094787c -->
+<!-- translation-of: limits.md sha256:71159dfd562e -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -440,20 +440,28 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
 - **Das Einschwingen ist nicht gemessen.** Die Intonation verwirft die
   ersten **100 ms** jeder Note (`skipAttackMs`); ob das für Laienstimmen
   reicht, steht aus.
-- **Der Rhythmus wird am Vokal abgelesen**, und nur dort, wo ein Einsatz zu
-  hören ist: nach Stille oder nach einem Tonhöhenwechsel. Ein stimmloser
-  Konsonant vor dem Vokal zählt nicht mit; das entspricht der Regel, dass der
-  Vokal auf den Schlag gehört. Eine Note, die an dieselbe Tonhöhe gebunden
-  ist, hat keinen eigenen Einsatz und ist „nicht auswertbar“; das Ende einer
-  Note („zu kurz“) wird nur vor einer Pause bewertet, „zu lang“ nie. Gemessen
-  mit synthetischen Tönen liegt der erkannte Einsatz **12 ms nach Stille**
-  (−3 … +22) und **27 ms nach einem Tonhöhenwechsel** (+12 … +37) hinter dem
-  echten; beides wird abgezogen. Was bleibt, ist die Streuung des
-  20-ms-Rasters der Analyse. Ein Einsatz ist bis **60 ms** zu früh oder zu
-  spät grün – nie unter 55 ms, damit der Versatz gegen den Cursor allein
-  keine Note gelb macht – und bis 120 ms gelb. **Mit echten Stimmen noch
-  nicht geprüft**: weiche Einsätze, stimmhafte Konsonanten wie „m“ oder „l“,
-  Handys.
+- **Der Einsatz ist der Beginn der Silbe**, bewertet nur dort, wo einer zu
+  hören ist: nach Stille oder nach einem Tonhöhenwechsel. Nach Stille ist es
+  die Stelle, an der der Pegel anstieg, einen Konsonanten eingeschlossen;
+  nach einer anderen Note die Stelle, an der die Stimme sie verließ, ein
+  Gleiten eingeschlossen. Eine Note, die an dieselbe Tonhöhe gebunden ist, hat
+  keinen eigenen Einsatz und ist „nicht auswertbar“; das Ende einer Note („zu
+  kurz“) wird nur vor einer Pause bewertet, „zu lang“ nie. An der stabilen
+  Tonhöhe gemessen lag eine echte Stimme etwa 40 ms zu spät, weil sich die
+  Tonhöhe erst einschwingt, wenn die Silbe schon begonnen hat. Gemessen mit
+  synthetischen Tönen liegt der erkannte Einsatz nach Stille −2 … +8 ms und
+  nach einem Tonhöhenwechsel +7 … +17 ms neben dem echten; abgezogen werden
+  3 und 10 ms. Ein Einsatz ist bis **60 ms** zu früh oder zu spät grün – nie
+  unter 55 ms, damit der Versatz gegen den Cursor allein keine Note gelb
+  macht – und bis 120 ms gelb. Ein langer stimmloser Konsonant deutlich vor
+  dem Schlag zählt als zu früh.
+- **Gemessen mit einer echten Stimme** (Bass, Arbeitsplatz mit Kopfhörern,
+  Begleitung in vollem Tempo, 79 s): Alle 126 bewerteten Einsätze waren grün,
+  Median +1 ms (10 % früher als −26 ms, 10 % später als +27 ms); bei 41 Noten
+  gab es keinen Einsatz zu bewerten. Auf demselben Rechner lag die Aufnahme
+  **+5 ms** hinter der Partitur, gemessen mit dem Metronom über den
+  Lautsprecher. **Noch nicht geprüft**: absichtlich verschobene Noten,
+  andere Stimmlagen, langsameres Tempo, Handys.
 - **Der Warte-Modus ist zum Töne-Lernen, nicht für den Rhythmus.** Die
   Wiedergabe hält 30 ms vor jeder Note der eigenen Stimme an, die mindestens
   200 ms dauert, und läuft weiter, sobald das Mikrofon den Ton 60 ms lang

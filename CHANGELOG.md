@@ -10,13 +10,13 @@ All notable changes to ScoreView. The format follows
 
 - **Rhythm feedback** after a recording: next to “too sharp/too flat”, the
   list of problem spots now says when a note came in **early or late** and
-  when it was **cut short** before a rest, in milliseconds. The onset is read
-  from the vowel and only where one can be heard – after silence or a change
-  of pitch; a note tied to the same pitch is reported as not evaluable. The
-  summary adds the average onset (“Onsets on average 35 ms late”), and a
-  note head shows the worst of pitch, onset and end. Thresholds and the
-  detector's offset are measured with synthetic voices; real voices are
-  still to be checked.
+  when it was **cut short** before a rest, in milliseconds. The onset is the
+  start of the syllable, consonant or glide included, and is judged only
+  where one can be heard – after silence or a change of pitch; a note tied to
+  the same pitch is reported as not evaluable. The summary adds the average
+  onset (“Onsets on average 35 ms late”), and a note head shows the worst of
+  pitch, onset and end. Checked with a real voice on the desktop: a
+  well-timed take came out green throughout.
 - **Wait mode** for learning notes (“Wait for my note” under Intonation):
   playback stops just before each note of your part and goes on once you sing
   it – any octave, ±50 cents. While waiting, the accompaniment that was
