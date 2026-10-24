@@ -1492,7 +1492,7 @@ msgstr ""
 msgid "Not evaluable"
 msgstr ""
 
-#: src/components/ScorePanel.vue src/components/StandaloneFrame.vue
+#: src/components/ScorePanel.vue src/components/ScoreViewer.vue
 msgid "Close"
 msgstr ""
 

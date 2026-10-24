@@ -1724,9 +1724,18 @@ Nextcloud unter `/apps/<app>/js/` ohnehin ohne Anmeldung ausliefert. Der Preis
 ist benannt: rund 14 MB sind ohne Konto abholbar.
 
 **Sie hat keinen Wirt.** In den übrigen Einstiegen stellt der Wirt das
-Schließkreuz – Nextclouds Viewer-App bzw. das `NcModal`. `ScoreViewer.vue` hat
-dafür weder Knopf noch Ereignis, es gäbe also keinen Weg hinaus. Deshalb eine
-schmale Kopfzeile mit Dateiname und ✕ in `StandaloneFrame.vue`. Der Rahmen
+Schließkreuz – Nextclouds Viewer-App bzw. das `NcModal`. Hier setzt
+`StandaloneFrame.vue` deshalb `closable`, und `ScoreViewer.vue` zeigt das ✕
+selbst und meldet `close`. Was Schließen heißt (Brücke oder Historie),
+entscheidet weiter der Rahmen. Das ✕ steht in der Leiste neben Vollbild, in
+der kompakten Leiste also hinter „Mehr“. Ohne Leiste (Fehleranzeige) schwebt es
+über der Meldung. Eine eigene Kopfzeile gibt es nicht: Sie und die Leiste
+belegten am Telefon quer zusammen etwa ein Drittel der Höhe, während Nextcloud
+Text auf derselben Seite direkt unter der Statusleiste beginnt. Unter Android
+schließt die Zurück-Geste mit einem Tipp, deshalb sind die zwei Tipps
+über „Mehr“ hingenommen. Den Aufführungsmodus sperrt das ✕ nicht, denn er
+sperrt die Arbeit an der Partitur, nicht das Verlassen. Den Dateinamen
+behält nur der Seitentitel. Der Rahmen
 räumt zwei Eigenheiten des `base`-Renderers weg, beide am Gerät gemessen: Der
 Montageknoten ist ein Flex-Eintrag und wuchs ohne `min-inline-size: 0` auf die
 natürliche Breite der Partitur (924 px in einem 412 px breiten Bild), und die
@@ -1792,8 +1801,9 @@ Container für die Abfragen unten ist (`container-type: inline-size`) und damit
 für Flexbox keine Eigenbreite hat: Er würde zusammengedrückt, nie umgebrochen.
 
 **Telefonbreite.** Die kompakte Leiste muss auf 360 px in eine Zeile passen:
-Play, Taktfeld, Anfangston, Schloss und „Mehr“. Vollbild steht deshalb dort
-vorn im aufgeklappten Werkzeugstreifen statt im Transport. Entschieden wird an
+Play, Taktfeld, Anfangston, Schloss und „Mehr“. Vollbild (und auf der
+eigenständigen Seite das ✕) steht deshalb dort vorn im aufgeklappten
+Werkzeugstreifen statt im Transport. Entschieden wird an
 der Breite des Streifens, nicht des Fensters (`@container (max-width: 400px)`
 in `ScoreViewer.vue`) – der Viewer kann auch in einem schmalen Rahmen stecken.
 Weichen muss dort der Suchlauf, den das Taktfeld daneben ohnehin trägt, und bei

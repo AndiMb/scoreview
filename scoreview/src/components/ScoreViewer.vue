@@ -38,14 +38,32 @@
 		<NcNoteCard v-if="setlistError" type="error" class="scoreview-hint">
 			{{ setlistError }}
 		</NcNoteCard>
-		<ScoreStatus
+		<div
 			v-if="state === 'converting' || state === 'loading' || state === 'error'"
-			:state="state"
-			:clientProgress="clientProgress"
-			:longWait="longWait"
-			:errorText="errorText"
-			:errorCode="errorCode"
-			:errorMessage="errorMessage" />
+			class="scoreview-status-host">
+			<ScoreStatus
+				:state="state"
+				:clientProgress="clientProgress"
+				:longWait="longWait"
+				:errorText="errorText"
+				:errorCode="errorCode"
+				:errorMessage="errorMessage" />
+			<!--
+				Without a bar the way out floats above the status: it costs no
+				height, and the status keeps its top padding free for it.
+			-->
+			<NcButton
+				v-if="closable"
+				class="scoreview-close scoreview-close--status"
+				variant="tertiary"
+				:aria-label="t('Close')"
+				:title="t('Close')"
+				@click="$emit('close')">
+				<template #icon>
+					<Close :size="20" />
+				</template>
+			</NcButton>
+		</div>
 		<template v-else>
 			<!--
 				Die Leiste: Wie sie steht (eingefahren, kompakt, Werkzeuge auf
@@ -681,6 +699,27 @@
 							<Fullscreen v-else :size="20" />
 						</template>
 					</NcButton>
+					<!--
+						Only where the host has no cross of its own - the page of
+						the mobile apps (StandaloneFrame.vue). There it replaces a
+						header row of its own: in landscape that row and the bar
+						took a third of the phone's height. Next to fullscreen and,
+						like it, behind "More" on the compact bar: the transport
+						carries nothing more at 360 px, and Android's back gesture
+						leaves in one tap anyway. Not locked in performance mode -
+						it locks working on the score, not leaving the page.
+					-->
+					<NcButton
+						v-if="closable"
+						class="scoreview-close"
+						variant="tertiary"
+						:aria-label="t('Close')"
+						:title="t('Close')"
+						@click="$emit('close')">
+						<template #icon>
+							<Close :size="20" />
+						</template>
+					</NcButton>
 				</template>
 			</ScoreBar>
 			<div class="scoreview-body">
@@ -1294,6 +1333,14 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		// The host can close but shows no cross of its own (the page of the
+		// mobile apps): the viewer then shows one and fires `close`. How to
+		// close - app bridge or history - stays the host's business.
+		closable: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
 	/**
@@ -1307,7 +1354,7 @@ export default {
 	 * Fuer die beiden anderen Einstiege folgenlos - ein Ereignis, das niemand
 	 * abhoert, kostet nichts.
 	 */
-	emits: ['ready', 'pieceChange'],
+	emits: ['ready', 'pieceChange', 'close'],
 
 	/**
 	 * Die Bereiche des Viewers als Composables, hier verdrahtet.
@@ -3558,8 +3605,19 @@ export default {
  * Griff nach „Mehr", nicht der letzte hinter drei Gruppen. Auf breiter
  * Leiste steht es als letzter Knopf, dort, wo es immer stand.
  */
-.scoreview-bar--compact .scoreview-fullscreen {
+.scoreview-bar--compact .scoreview-fullscreen,
+.scoreview-bar--compact .scoreview-close {
 	order: -1;
+}
+
+.scoreview-status-host {
+	position: relative;
+}
+
+.scoreview-close--status {
+	position: absolute;
+	inset-block-start: 4px;
+	inset-inline-end: 8px;
 }
 
 .scoreview-body {

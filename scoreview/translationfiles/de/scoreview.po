@@ -1492,7 +1492,7 @@ msgstr "Pause"
 msgid "Not evaluable"
 msgstr "Nicht auswertbar"
 
-#: src/components/ScorePanel.vue src/components/StandaloneFrame.vue
+#: src/components/ScorePanel.vue src/components/ScoreViewer.vue
 msgid "Close"
 msgstr "Schließen"
 

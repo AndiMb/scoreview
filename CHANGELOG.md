@@ -24,6 +24,15 @@ All notable changes to ScoreView. The format follows
   Metronome, speed trainer, recording and following a leader cannot run at
   the same time.
 
+### Changed
+
+- **More room for the score in the mobile apps.** The page the Nextcloud apps
+  open no longer has a header row of its own with file name and ✕. The ✕ now
+  sits in the control bar next to fullscreen (behind “More” on a phone), and
+  the score starts right below the bar – in landscape that row and the bar
+  took about a third of the height. Android's back gesture still closes in
+  one tap.
+
 ## [1.21.1] – 2026-10-24
 
 ### Fixed
