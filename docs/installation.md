@@ -256,9 +256,9 @@ files remain untouched; then
 
 Conversions run as a background job. Nextcloud's default mode `ajax` is not
 reliable enough for this: jobs visibly stay at `pending` if no page request
-triggers them. The viewer points to this cause after two minutes and gives up
-after half an hour – so without a running cron, a score cannot be opened at
-all.
+triggers them. After two minutes the viewer says that the first opening can
+take a while and points to cron; after half an hour it gives up – so without a
+running cron, a score cannot be opened at all.
 
 ```sh
 occ background:cron
@@ -268,6 +268,78 @@ This requires a real cron on the server that calls `cron.php` regularly
 (Nextcloud default: every 5 minutes). The status diagnostics on the
 administration page check this as well and report when the last run was too
 long ago.
+
+### Optional: open new scores without waiting for cron
+
+Opening a score that has no conversion yet only *queues* the conversion, and
+cron picks it up on its next run. With the usual 5-minute cron, the first
+opening of a new score therefore waits:
+
+| Conversion path | Without a worker | With a worker |
+|---|---|---|
+| Local | 0–5 min until the next cron run, plus the conversion | about 1 s, plus the conversion |
+| Sidecar | usually one more cron run for the result, so about 5–10 min | about 1 s, plus the conversion; the sidecar is asked every few seconds |
+
+The conversion itself takes about a second on the local path and 6 s per page
+on the sidecar path (see [Limits](limits.md#measured-values)). A score that
+was uploaded after ScoreView was installed is usually converted already,
+because the upload queues it as well. The wait hits existing files, and every
+score once more after an update that changes the cached format.
+
+Nextcloud's `occ background-job:worker` removes the wait. Given job classes, it
+runs only those and checks for new ones every second; cron keeps running all
+other jobs. Try it by hand first (adjust the path to your installation):
+
+```sh
+sudo -u www-data php /var/www/nextcloud/occ background-job:worker \
+  --stop_after=2m \
+  'OCA\ScoreView\BackgroundJob\ConvertScoreJob' \
+  'OCA\ScoreView\BackgroundJob\PollConversionJob' \
+  'OCA\ScoreView\BackgroundJob\RegisterMimetypeJob'
+```
+
+`RegisterMimetypeJob` is optional: it corrects the type of freshly uploaded
+`.mscz` files, which otherwise only offer “Download” until the next cron run.
+
+To run it permanently, use a systemd unit such as
+`/etc/systemd/system/scoreview-worker.service`. systemd reads a backslash as
+the start of an escape sequence, so the class names need it doubled there:
+
+```ini
+[Unit]
+Description=ScoreView conversion worker
+After=network.target
+
+[Service]
+User=www-data
+ExecStart=/usr/bin/php /var/www/nextcloud/occ background-job:worker --stop_after=1h 'OCA\\ScoreView\\BackgroundJob\\ConvertScoreJob' 'OCA\\ScoreView\\BackgroundJob\\PollConversionJob' 'OCA\\ScoreView\\BackgroundJob\\RegisterMimetypeJob'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+systemctl daemon-reload
+systemctl enable --now scoreview-worker
+```
+
+With the official Docker image, which has no systemd, run the same command in
+a second container from the same image, with the same volumes and network as
+the Nextcloud container, as user `www-data` and with `--restart always`.
+
+Two things to know when running it:
+
+- **The worker keeps the code it loaded.** After an update of ScoreView, the
+  new code takes effect when the worker restarts – with `--stop_after=1h` and
+  `Restart=always` at most one hour later. `systemctl restart
+  scoreview-worker` makes it immediate.
+- **The worker does not check for maintenance mode.** Stop the unit before a
+  Nextcloud upgrade and start it again afterwards.
+
+The worker does not replace cron: Nextcloud's other background jobs, and
+ScoreView's cleanup, still need it.
 
 ## SoundFont
 

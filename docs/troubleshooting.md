@@ -349,6 +349,18 @@ line to bring it back. Beyond that:
 - The rest is not up to ScoreView, see
   [Limits](limits.md#mobile).
 
+## A score takes minutes to open the first time
+
+It opens in the end, only late, and the next time it opens at once. That is no
+fault: opening a score without a conversion queues the conversion, and cron
+runs it on its next pass – with the usual 5-minute cron up to 5 minutes later,
+on the sidecar path usually one pass more. Meanwhile, after two minutes, the
+viewer says that the first opening can take a while.
+
+A dedicated background job worker for ScoreView's jobs removes the wait; see
+[Installation, step 5](installation.md#optional-open-new-scores-without-waiting-for-cron).
+If the score never opens, see the next section.
+
 ## The conversion does not make progress
 
 Background jobs are not running. Nextcloud's default mode `ajax` is not
@@ -362,11 +374,12 @@ The status diagnostics report this case explicitly (“no run in the last
 15 minutes”). See
 [Installation, step 5](installation.md#5-make-sure-background-jobs-run).
 
-**How to recognise it in the viewer.** After two minutes a notice pointing to exactly
-this cause appears below the loading spinner; after half an hour
-the viewer gives up with “The conversion was never finished”. Both are a
-statement about the *instance*, not about the score – opening a different file
-does not help.
+**How to recognise it in the viewer.** After two minutes a notice pointing to
+cron appears below the loading spinner; after half an hour the viewer gives up
+with “The conversion was never finished”. Both are a statement about the
+*instance*, not about the score – opening a different file does not help. The
+notice alone proves nothing: with a working 5-minute cron it can appear as
+well (see the previous section). The status diagnostics tell the two apart.
 
 The same applies to a run that died along the way (a killed
 cron pass, out of memory, container restart). The record then

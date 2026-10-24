@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:145a13cb9ef0 -->
+<!-- translation-of: installation.md sha256:b62cb16a21ae -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -257,9 +257,9 @@ Mimetype bereits eingetragen war, bleibt der Bestand unberührt; dann hilft
 
 Konvertierungen laufen als Background-Job. Nextclouds Default-Modus `ajax`
 reicht dafür nicht zuverlässig: Jobs bleiben sichtbar auf `pending` stehen, wenn
-kein Seitenaufruf sie anstößt. Der Viewer weist nach zwei Minuten auf diese
-Ursache hin und gibt nach einer halben Stunde auf – eine Partitur lässt sich
-ohne laufenden Cron also gar nicht öffnen.
+kein Seitenaufruf sie anstößt. Nach zwei Minuten sagt der Viewer, dass das
+erste Öffnen dauern kann, und verweist auf Cron; nach einer halben Stunde gibt
+er auf – eine Partitur lässt sich ohne laufenden Cron also gar nicht öffnen.
 
 ```sh
 occ background:cron
@@ -269,6 +269,83 @@ Dazu muss auf dem Server ein echter Cron laufen, der `cron.php` regelmäßig
 aufruft (Nextcloud-Standard: alle 5 Minuten). Die Betriebsdiagnose auf der
 Verwaltungsseite prüft das mit und meldet, wenn der letzte Lauf zu lange her
 ist.
+
+### Optional: neue Partituren öffnen, ohne auf Cron zu warten
+
+Wer eine Partitur ohne fertige Konvertierung öffnet, stellt die Konvertierung
+nur in die *Warteschlange*; Cron holt sie beim nächsten Lauf ab. Mit dem
+üblichen 5-Minuten-Cron wartet das erste Öffnen einer neuen Partitur deshalb:
+
+| Konvertierungsweg | Ohne Worker | Mit Worker |
+|---|---|---|
+| Lokal | 0–5 min bis zum nächsten Cron-Lauf, plus die Konvertierung | etwa 1 s, plus die Konvertierung |
+| Sidecar | meist ein weiterer Cron-Lauf für das Ergebnis, also etwa 5–10 min | etwa 1 s, plus die Konvertierung; der Sidecar wird alle paar Sekunden gefragt |
+
+Die Konvertierung selbst dauert auf dem lokalen Weg etwa eine Sekunde, auf dem
+Sidecar-Weg 6 s pro Seite (siehe [Grenzen](limits.de.md#gemessene-werte)). Eine
+Partitur, die nach der Installation von ScoreView hochgeladen wurde, ist meist
+schon konvertiert, weil auch das Hochladen sie einreiht. Die Wartezeit trifft
+vorhandene Dateien, und jede Partitur noch einmal nach einem Update, das das
+Format des Caches ändert.
+
+Nextclouds `occ background-job:worker` beseitigt die Wartezeit. Mit
+Job-Klassen als Argumenten führt er nur diese aus und sieht jede Sekunde nach
+neuen; Cron führt alle anderen Jobs weiter aus. Zuerst von Hand ausprobieren
+(Pfad an die eigene Installation anpassen):
+
+```sh
+sudo -u www-data php /var/www/nextcloud/occ background-job:worker \
+  --stop_after=2m \
+  'OCA\ScoreView\BackgroundJob\ConvertScoreJob' \
+  'OCA\ScoreView\BackgroundJob\PollConversionJob' \
+  'OCA\ScoreView\BackgroundJob\RegisterMimetypeJob'
+```
+
+`RegisterMimetypeJob` ist optional: Er korrigiert den Typ frisch hochgeladener
+`.mscz`-Dateien, die sonst bis zum nächsten Cron-Lauf nur „Herunterladen“
+anbieten.
+
+Dauerhaft läuft er als systemd-Unit, etwa
+`/etc/systemd/system/scoreview-worker.service`. systemd liest einen Backslash
+als Beginn einer Escape-Sequenz, deshalb steht er in den Klassennamen dort
+doppelt:
+
+```ini
+[Unit]
+Description=ScoreView conversion worker
+After=network.target
+
+[Service]
+User=www-data
+ExecStart=/usr/bin/php /var/www/nextcloud/occ background-job:worker --stop_after=1h 'OCA\\ScoreView\\BackgroundJob\\ConvertScoreJob' 'OCA\\ScoreView\\BackgroundJob\\PollConversionJob' 'OCA\\ScoreView\\BackgroundJob\\RegisterMimetypeJob'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```sh
+systemctl daemon-reload
+systemctl enable --now scoreview-worker
+```
+
+Mit dem offiziellen Docker-Image, das kein systemd hat, läuft derselbe Befehl
+in einem zweiten Container aus demselben Image, mit denselben Volumes und
+demselben Netz wie der Nextcloud-Container, als Nutzer `www-data` und mit
+`--restart always`.
+
+Zwei Dinge für den Betrieb:
+
+- **Der Worker behält den Code, den er geladen hat.** Nach einem Update von
+  ScoreView wirkt der neue Code, sobald der Worker neu startet – mit
+  `--stop_after=1h` und `Restart=always` spätestens eine Stunde später.
+  `systemctl restart scoreview-worker` macht es sofort.
+- **Der Worker prüft den Wartungsmodus nicht.** Die Unit vor einem
+  Nextcloud-Upgrade stoppen und danach wieder starten.
+
+Der Worker ersetzt Cron nicht: Nextclouds übrige Background-Jobs und das
+Aufräumen von ScoreView brauchen ihn weiterhin.
 
 ## SoundFont
 

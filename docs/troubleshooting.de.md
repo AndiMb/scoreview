@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:9e6b0f8d0c44 -->
+<!-- translation-of: troubleshooting.md sha256:4198d8997a02 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -351,6 +351,20 @@ einer dünnen Linie ein; ein Tipp auf die Linie holt sie zurück. Darüber hinau
 - Der Rest liegt nicht bei ScoreView, siehe
   [Grenzen](limits.de.md#mobil).
 
+## Eine Partitur braucht beim ersten Öffnen Minuten
+
+Sie geht am Ende auf, nur spät, und beim nächsten Mal sofort. Das ist kein
+Fehler: Wer eine Partitur ohne Konvertierung öffnet, reiht die Konvertierung
+ein, und Cron führt sie beim nächsten Durchgang aus – mit dem üblichen
+5-Minuten-Cron bis zu 5 Minuten später, auf dem Sidecar-Weg meist einen
+Durchgang mehr. Nach zwei Minuten sagt der Viewer währenddessen, dass das erste
+Öffnen dauern kann.
+
+Ein eigener Background-Job-Worker für die Jobs von ScoreView beseitigt die
+Wartezeit; siehe
+[Installation, Schritt 5](installation.de.md#optional-neue-partituren-öffnen-ohne-auf-cron-zu-warten).
+Geht die Partitur nie auf, siehe den nächsten Abschnitt.
+
 ## Die Konvertierung kommt nicht voran
 
 Background-Jobs laufen nicht. Nextclouds Default-Modus `ajax` reicht nicht
@@ -365,10 +379,12 @@ Die Betriebsdiagnose meldet diesen Fall ausdrücklich („kein Lauf in den letzt
 [Installation, Schritt 5](installation.de.md#5-background-jobs-sicherstellen).
 
 **Woran es im Viewer zu erkennen ist.** Nach zwei Minuten erscheint unter dem
-Ladekreisel ein Hinweis auf genau diese Ursache, nach einer halben Stunde bricht
-der Viewer mit „Die Konvertierung wurde nie abgeschlossen" ab. Beides ist eine
-Aussage über die *Instanz*, nicht über die Partitur – eine andere Datei zu
-öffnen hilft nicht.
+Ladekreisel ein Hinweis auf Cron, nach einer halben Stunde bricht der Viewer mit
+„Die Konvertierung wurde nie abgeschlossen" ab. Beides ist eine Aussage über die
+*Instanz*, nicht über die Partitur – eine andere Datei zu öffnen hilft nicht.
+Der Hinweis allein beweist nichts: Bei funktionierendem 5-Minuten-Cron kann er
+ebenso erscheinen (siehe den vorigen Abschnitt). Die Betriebsdiagnose
+unterscheidet beides.
 
 Dasselbe gilt für einen Lauf, der unterwegs gestorben ist (abgewürgter
 Cron-Durchgang, Speichermangel, Neustart des Containers). Der Datensatz bleibt
