@@ -12,6 +12,7 @@ import { generateFilePath } from '@nextcloud/router'
 import { Sequencer, WorkletSynthesizer } from 'spessasynth_lib'
 import { withAppVersion } from './assetVersion.js'
 import { createAudioIdle } from './audioIdle.js'
+import { audioSession } from './audioSession.js'
 import { pickToneChannel } from './startTone.js'
 
 // spessasynth_lib's AudioWorklet-Prozessor läuft in einem eigenen
@@ -127,7 +128,12 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	const idle = createAudioIdle({
 		isPlaying: () => !sequencer.paused || tone !== null,
 		suspend: () => context.suspend(),
-		resume: () => context.resume(),
+		// Every sound on this context wakes it here - play, start tone,
+		// count-in, listening back, the microphone's hold (issue #23).
+		resume: () => {
+			audioSession.forPlayback()
+			return context.resume()
+		},
 	})
 
 	// Bewusst die ROHE Zeit der Audiouhr, ohne Latenzausgleich: Sie ist die
