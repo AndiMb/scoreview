@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:ecc68a1b8dd3 -->
+<!-- translation-of: limits.md sha256:7cf35204e849 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -471,8 +471,17 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   auswertbar**, nicht zu spät: Die Stimme liegt dann schon in der Zeit der
   nächsten Note, und an der Tonhöhe allein ist nicht zu erkennen, welche
   gemeint ist. In diesem Stück (abgesetzte Viertel bei ♩ = 180, etwa 316 ms) gilt das
-  ab etwa 250 ms zu spät. **Noch nicht geprüft**: absichtlich daneben
-  singen, andere Stimmlagen, langsameres Tempo, Handys.
+  ab etwa 250 ms zu spät.
+- **Langsameres Tempo, geprüft mit der eigenen Wiedergabe als Mikrofon**
+  (Arbeitsplatz, die Bassstimme solo, im Browser zurückgeführt, 40 s
+  Partitur; Klavier- und Fagottklang): Bei 100 %, 70 % und 50 % Tempo lag der
+  Median der Einsätze innerhalb von 2 ms (−55 … −57 ms mit Klavier – die
+  Ausgabelatenz, die die App abzieht und die eine Rückführung nicht hat) und
+  wanderte von der ersten zur zweiten Hälfte nicht. Die Umrechnung zwischen
+  Echtzeit und Partiturzeit stimmt; wie eine Stimme ihre Einsätze bei
+  langsamerem Tempo setzt, ist eine andere Frage. **Noch nicht geprüft**:
+  absichtlich daneben singen, andere Stimmlagen, eine Stimme bei langsamerem
+  Tempo, Handys.
 - **Der Warte-Modus ist zum Töne-Lernen, nicht für den Rhythmus.** Die
   Wiedergabe hält 30 ms vor jeder Note der eigenen Stimme an, die mindestens
   200 ms dauert, und läuft weiter, sobald das Mikrofon den Ton 60 ms lang

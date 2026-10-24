@@ -466,8 +466,16 @@ re-measured on real devices and with real input latency.
   length minus some 100 ms is **not evaluable**, not late: the voice is then
   already in the next note's time, and pitch alone does not tell which note
   it is. In that piece (detached crotchets at ♩ = 180, about 316 ms) this applies
-  from about 250 ms late. **Not yet checked**: a singer missing on purpose,
-  other voices, slower tempo, phones.
+  from about 250 ms late.
+- **Slower tempo, checked with the app's own playback as the microphone**
+  (desktop, the bass part solo, fed back inside the browser, 40 s of score;
+  piano and bassoon sound): at 100 %, 70 % and 50 % tempo the median onset
+  stayed within 2 ms (−55 … −57 ms with piano, the output latency the app
+  subtracts and a loop-back does not have) and did not drift from the first
+  half to the second. The conversion between real time and score time holds;
+  how a voice places its onsets at a slower tempo is a different question.
+  **Not yet checked**: a singer missing on purpose, other voices, a voice at a
+  slower tempo, phones.
 - **Wait mode is for learning notes, not rhythm.** Playback stops 30 ms
   before each note of your part that lasts at least 200 ms and goes on once
   the microphone has heard the note for 60 ms (±50 cents, any octave).
