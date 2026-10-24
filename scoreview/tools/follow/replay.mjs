@@ -272,16 +272,39 @@ export function caseMetrics(kase, replay) {
  * @param {number} [options.visibleRows]
  * @return {{replay: import('../../src/lib/followMetrics.js').ReplayFrame[], metrics: object}}
  */
-export function followCase(kase, { anchored = false, visibleRows = 2, ...options } = {}) {
+export function followCase(kase, options = {}) {
 	const { samples, sampleRate, truth } = kase.performance
 	const fftSize = fftSizeFor(sampleRate)
 	const frames = featureFrames(samples, sampleRate, { fftSize })
-	const follower = createScoreFollower(kase.reference, { windowMs: (fftSize / sampleRate) * 1000, ...options })
-	const start = truth.find((t) => t.scoreMs !== null)
+	return followFrames(frames, kase.reference, truth, {
+		measureStartsMs: kase.piece.measureStartsMs,
+		rows: kase.piece.slices,
+		windowMs: (fftSize / sampleRate) * 1000,
+		...options,
+	})
+}
+
+/**
+ * Run the score follower over feature frames - a synthetic case or a real
+ * recording (tools/follow/recording.mjs) - with the turn policy on `rows`.
+ *
+ * @param {Array<{atMs:number, c36:?Float32Array, levelDb:number}>} frames
+ * @param {import('../../src/lib/followRef.js').FollowReference} reference
+ * @param {Array<{atMs:number, scoreMs:?number}>} truth
+ * @param {object} options options of lib/scoreFollower.js, plus:
+ * @param {number[]} options.measureStartsMs
+ * @param {Array<{fromMs:number, toMs:number}>} options.rows sections the turn policy shows
+ * @param {boolean} [options.anchored] start at an anchor where the truth begins
+ *   (a bar entered by hand) instead of searching from cold
+ * @param {number} [options.visibleRows]
+ * @return {{replay: import('../../src/lib/followMetrics.js').ReplayFrame[], metrics: object}}
+ */
+export function followFrames(frames, reference, truth, { measureStartsMs, rows, anchored = false, visibleRows = 2, ...options }) {
+	const follower = createScoreFollower(reference, options)
+	const start = truth.find((t) => t.scoreMs !== null) ?? { atMs: 0, scoreMs: 0 }
 	if (anchored) {
 		follower.anchor(start.scoreMs, start.atMs)
 	}
-	const rows = kase.piece.slices
 	let first = rowAt(rows, start.scoreMs)
 	const replay = frames.map((frame) => {
 		const state = follower.step(frame, frame.atMs)
@@ -301,5 +324,5 @@ export function followCase(kase, { anchored = false, visibleRows = 2, ...options
 			slice: first,
 		}
 	})
-	return { replay, metrics: followMetrics(replay, { measureStartsMs: kase.piece.measureStartsMs, slices: rows, visibleRows }) }
+	return { replay, metrics: followMetrics(replay, { measureStartsMs, slices: rows, visibleRows }) }
 }
