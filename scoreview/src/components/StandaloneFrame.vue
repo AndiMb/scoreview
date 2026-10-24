@@ -7,51 +7,32 @@
 	Nextclouds Direct Editing: Die App oeffnet die Seite des registrierten
 	Editors in einer Vollbild-WebView (siehe DirectEditing\ScoreDirectEditor).
 
-	Die Kopfzeile ist dabei keine Kosmetik. In den beiden anderen Einstiegen
-	stellt der Wirt das Schliesskreuz - Nextclouds Viewer-App bzw. das NcModal
-	mit `closeButtonOutside` -, und ScoreViewer.vue hat dafuer weder Knopf noch
-	Ereignis. Ohne eigene Kopfzeile gaebe es hier keinen Weg hinaus.
+	In the other two entries the host provides the closing cross - Nextcloud's
+	Viewer app or the NcModal with `closeButtonOutside`. Here there is no host,
+	so the viewer shows the cross itself (`closable`) and this frame only
+	decides what closing means. No header row of its own: in landscape it and
+	the bar took a third of the phone's height, while Nextcloud Text on the
+	same page starts right below the status bar. The file name is not lost -
+	the app's loading screen shows it, and the page title keeps it.
 -->
 <template>
 	<div class="scoreview-standalone">
-		<header class="scoreview-standalone-bar">
-			<!-- Der Dateiname: Material aus der Partitur, nicht uebersetzt (E4). -->
-			<h1 class="scoreview-standalone-name" :title="name">
-				{{ name }}
-			</h1>
-			<NcButton
-				v-if="schliessbar"
-				variant="tertiary"
-				:aria-label="t('Close')"
-				:title="t('Close')"
-				@click="schliessen">
-				<template #icon>
-					<Close :size="20" />
-				</template>
-			</NcButton>
-		</header>
-
-		<div class="scoreview-standalone-body">
-			<ScoreViewer :fileid="fileid" @ready="melde" />
-		</div>
+		<ScoreViewer
+			:fileid="fileid"
+			:closable="schliessbar"
+			@ready="melde"
+			@close="schliessen" />
 	</div>
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
-import NcButton from '@nextcloud/vue/components/NcButton'
-import Close from 'vue-material-design-icons/Close.vue'
 import ScoreViewer from './ScoreViewer.vue'
 import { createBridge } from '../lib/mobileBridge.js'
-
-const t = (text, vars) => translate('scoreview', text, vars)
 
 export default {
 	name: 'StandaloneFrame',
 
 	components: {
-		Close,
-		NcButton,
 		ScoreViewer,
 	},
 
@@ -61,7 +42,7 @@ export default {
 			required: true,
 		},
 
-		/** Der Dateiname fuer die Kopfzeile. */
+		/** The file name - only the page title shows it (see above). */
 		name: {
 			type: String,
 			default: '',
@@ -85,14 +66,15 @@ export default {
 	},
 
 	mounted() {
+		if (this.name) {
+			document.title = this.name
+		}
 		// Die App zeigt ihren eigenen Ladezustand, solange der Viewer noch
 		// pollt oder konvertiert.
 		this.bruecke.loading()
 	},
 
 	methods: {
-		t,
-
 		/**
 		 * Der Ladebildschirm der App verschwindet erst, wenn hier wirklich
 		 * etwas steht - Notenbild oder Fehlermeldung. Vorzeitig gerufen laege er
@@ -176,35 +158,9 @@ export default {
 	background-color: var(--color-main-background);
 }
 
-.scoreview-standalone-bar {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding-inline: 12px;
-	padding-block: 4px;
-	border-block-end: 1px solid var(--color-border);
-	flex: 0 0 auto;
-}
-
-.scoreview-standalone-name {
+.scoreview-standalone > :deep(.scoreview-viewer) {
 	flex: 1 1 auto;
 	min-inline-size: 0;
-	margin: 0;
-	font-size: 1rem;
-	font-weight: bold;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-}
-
-.scoreview-standalone-body {
-	display: flex;
-	flex: 1 1 auto;
 	min-block-size: 0;
-}
-
-.scoreview-standalone-body > :deep(.scoreview-viewer) {
-	flex: 1 1 auto;
-	min-inline-size: 0;
 }
 </style>
