@@ -25,7 +25,7 @@ describe('rendererText', () => {
 describe('conversionProgressText', () => {
 	it('bleibt serverseitig leer, bis die Frist verstrichen ist', () => {
 		expect(conversionProgressText(null, false, t)).toBe('')
-		expect(conversionProgressText(null, true, t)).toMatch(/^This is taking longer than usual\./)
+		expect(conversionProgressText(null, true, t)).toMatch(/^The first opening can take a few minutes/)
 	})
 
 	it('nennt die Stufe der Konvertierung im Browser', () => {

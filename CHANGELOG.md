@@ -24,6 +24,27 @@ All notable changes to ScoreView. The format follows
   Metronome, speed trainer, recording and following a leader cannot run at
   the same time.
 
+## [1.21.1] – 2026-10-24
+
+### Fixed
+
+- **No sound on the iPhone with the ring/silent switch set to silent** (#23),
+  although Safari showed its speaker icon. Safari treated ScoreView's sound
+  as ambient audio, which iOS mutes in silent mode. ScoreView now declares it
+  as media playback, as music and video apps do, and as playback with
+  recording while the microphone is on. Other apps' audio pauses when
+  ScoreView starts to sound; reading a score alone leaves it playing. Older
+  iOS versions (before 16.4) and other browsers are unchanged.
+
+### Changed
+
+- **The notice after two minutes of converting** no longer suggests a fault
+  only: with a 5-minute cron the first opening of a score can take that long.
+  It now says so and still points to cron if it never finishes (#22).
+- **Documentation:** a dedicated background job worker for ScoreView's jobs
+  opens new scores within seconds instead of at the next cron run –
+  installation step 5 and troubleshooting (#22).
+
 ## [1.21.0] – 2026-10-24
 
 ### Added

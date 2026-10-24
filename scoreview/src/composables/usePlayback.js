@@ -2,6 +2,7 @@ import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import { computed, ref, shallowRef } from 'vue'
 import { createDropoutCounter, createFrameRateMeter } from '../lib/audioHealth.js'
+import { audioSession } from '../lib/audioSession.js'
 import { resolveMixerChannels } from '../lib/mixerLayout.js'
 import {
 	createLatencySmoother,
@@ -643,6 +644,10 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		// hat kein destroy(), daher der Guard.
 		clock.value?.destroy?.()
 		clock.value = null
+		// Nothing of this score sounds any more: the tab gets the browser's
+		// default back (lib/audioSession.js). The next score sets it again
+		// with its first sound.
+		audioSession.reset()
 	}
 
 	function reset() {

@@ -2,6 +2,7 @@ import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref, shallowRef, watch } from 'vue'
+import { createAudioContext } from '../lib/audioSession.js'
 import { createGeneration } from '../lib/generation.js'
 import { captureToScoreMs, playbackSchedule, tempoAfterListening } from '../lib/recordingAlign.js'
 import { encodeWav, WAV_SAMPLE_RATE } from '../lib/wavCodec.js'
@@ -372,7 +373,7 @@ export function useRecorder({
 	}
 
 	function playbackContext() {
-		return audioContext() ?? (ownContext = ownContext ?? new AudioContext())
+		return audioContext() ?? (ownContext = ownContext ?? createAudioContext())
 	}
 
 	async function decode(key, bytes) {

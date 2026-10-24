@@ -1,6 +1,7 @@
 import { generateFilePath } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue'
 import { withAppVersion } from '../lib/assetVersion.js'
+import { audioSession } from '../lib/audioSession.js'
 import { classifyMicError, mayUseCapturePath, MIC_CONSTRAINTS } from '../lib/micAccess.js'
 import { inputLatencyMs } from '../lib/recordingAlign.js'
 
@@ -57,6 +58,9 @@ export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 	// Releases the hold on the shared playback context - a resting context
 	// delivers no blocks, and intonation and recording would stand still.
 	let releaseAudio = null
+	// Gives the session type back to playback once the tracks stopped
+	// (lib/audioSession.js, issue #23).
+	let releaseSession = null
 	// Wer gerade die Strecke aufbaut - ein zweiter Aufruf waehrend der
 	// Rueckfrage des Browsers wartet darauf, statt ein zweites Mal zu fragen.
 	let starting = null
@@ -161,7 +165,18 @@ export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 			err.name = 'NotSupportedError'
 			throw err
 		}
-		const neu = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS)
+		// Before the request, as the Audio Session spec orders it for capture:
+		// on iOS the type decides how the input is routed.
+		releaseSession?.()
+		releaseSession = audioSession.forCapture()
+		let neu
+		try {
+			neu = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS)
+		} catch (err) {
+			releaseSession()
+			releaseSession = null
+			throw err
+		}
 		stream = neu
 		context = audioContext() ?? (ownContext = ownContext ?? new AudioContext())
 		if (context !== ownContext) {
@@ -229,6 +244,8 @@ export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 		source = null
 		stream?.getTracks().forEach((track) => track.stop())
 		stream = null
+		releaseSession?.()
+		releaseSession = null
 		blockListeners.clear()
 		releaseAudio?.()
 		releaseAudio = null

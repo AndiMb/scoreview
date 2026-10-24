@@ -2293,8 +2293,8 @@ msgid "Unknown – converted by an earlier version of the app."
 msgstr "Unbekannt – von einer früheren Fassung der App konvertiert."
 
 #: src/lib/viewerTexts.js
-msgid "This is taking longer than usual. If it never finishes, check that background job processing (cron) is running on this server."
-msgstr "Das dauert länger als gewöhnlich. Falls es gar nicht fertig wird, prüfe, ob die Hintergrundverarbeitung (Cron) dieses Servers läuft."
+msgid "The first opening can take a few minutes on this server. If it never finishes, the administrator should check that background jobs (cron) run."
+msgstr "Das erste Öffnen kann auf diesem Server einige Minuten dauern. Wird es nie fertig, sollte die Administration prüfen, ob Hintergrundaufgaben (Cron) laufen."
 
 #: src/lib/viewerTexts.js
 msgid "Loading score…"

@@ -23,6 +23,8 @@
 // 8/8. The render worker (workers/renderWorker.js) mixes the same three
 // into a practice track.
 
+import { audioSession, createAudioContext } from './audioSession.js'
+
 /** Silence after which the metronome's own context rests. */
 const OWN_REST_MS = 3000
 
@@ -68,7 +70,7 @@ export function createMetronomeClick(getSharedContext = null) {
 			return shared
 		}
 		if (!ownContext) {
-			ownContext = new AudioContext()
+			ownContext = createAudioContext()
 		}
 		return ownContext
 	}
@@ -104,6 +106,7 @@ export function createMetronomeClick(getSharedContext = null) {
 		// (useMetronome), but a click on a resting context would only sound
 		// once something else woke it - late, together with the next ones.
 		if (ctx.state === 'suspended') {
+			audioSession.forPlayback()
 			ctx.resume().catch(() => {})
 		}
 		const startAt = Math.max(ctx.currentTime, at)

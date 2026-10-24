@@ -64,7 +64,7 @@ export function rendererText(backend, t) {
 export function conversionProgressText(progress, longWait, t) {
 	if (!progress) {
 		return longWait
-			? t('This is taking longer than usual. If it never finishes, check that background job processing (cron) is running on this server.')
+			? t('The first opening can take a few minutes on this server. If it never finishes, the administrator should check that background jobs (cron) run.')
 			: ''
 	}
 	const phases = {

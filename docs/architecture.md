@@ -730,6 +730,17 @@ Ob das Mikrofon geht, zeigt allein der Fehler von `getUserMedia`
 ab; ändert sie das, geht es ohne Zutun. Bis dahin führt der Knopf „Im Browser
 öffnen“ dorthin, wo es geht.
 
+**Der Typ der Audio-Sitzung** (`navigator.audioSession`, `audioSession.js`)
+ist eine Angabe pro Seite, nicht pro Kontext. Mit dem Standard `'auto'`
+behandelt Safari Web Audio als Umgebungsklang, und iOS schaltet ihn mit dem
+Stummschalter stumm. Vor jedem Klang (`createAudioContext()`, das `resume` in
+`player.js`, der eigene Kontext des Metronoms) steht deshalb `'playback'`, um
+`getUserMedia` herum `'play-and-record'`. Solange jemand aufnimmt, behält der
+zweite Typ Vorrang. Mit dem Abbau des Players fällt die Sitzung auf `'auto'`
+zurück. Gesetzt wird der Typ erst beim ersten Klang, nicht beim Öffnen, denn
+`'playback'` hält die Musik anderer Apps an. Wo die Schnittstelle fehlt
+(Chrome, iOS < 16.4), ändert sich nichts.
+
 **Der Aufnahmeweg ist strukturell getrennt ([S7](#s7-der-aufnahmeweg-ist-strukturell-getrennt)).** Blöcke aus dem Worklet
 bekommen nur Aufnahme, Intonation und Stimmgerät (`mayUseCapturePath`); das
 Stimmgerät liest sie und schreibt nichts. Ein
