@@ -24,6 +24,8 @@ All notable changes to ScoreView. The format follows
   Metronome, speed trainer, recording and following a leader cannot run at
   the same time.
 
+## [1.21.2] – 2026-10-24
+
 ### Changed
 
 - **More room for the score in the mobile apps.** The page the Nextcloud apps
