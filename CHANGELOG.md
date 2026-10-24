@@ -4,6 +4,17 @@ All notable changes to ScoreView. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.21.2] – 2026-10-24
+
+### Changed
+
+- **More room for the score in the mobile apps.** The page the Nextcloud apps
+  open no longer has a header row of its own with file name and ✕. The ✕ now
+  sits in the control bar next to fullscreen (behind “More” on a phone), and
+  the score starts right below the bar – in landscape that row and the bar
+  took about a third of the height. Android's back gesture still closes in
+  one tap.
+
 ## [1.21.1] – 2026-10-24
 
 ### Fixed
