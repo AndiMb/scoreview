@@ -533,7 +533,7 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | Zwei Seiten nebeneinander (1.18) | `spreadLayout.js`, `pagingPlan.js` (`nextRowScrollTop`) | `useZoom`, `usePaging`, `useViewerPreferences` | `LayoutControls.vue`, Gitter in `ScoreViewer.vue` |
 | „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js`, `leaderQueue.js`, `followPlayback.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
 | Setliste ([E11](#e11-die-setliste-als-markdown-datei)) | `setlistNav.js`, `setlistEdit.js`, `soundFontCache.js` | `useSetlist` | `SetlistBar.vue`, `SetlistEditor.vue` |
-| Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js`, `rhythm.js` | `useMicrophone`, `useRecorder`, `useIntonation` | `MicIndicator.vue`, `RecordingPanel.vue` |
+| Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js`, `rhythm.js`, `waitMode.js` | `useMicrophone`, `useRecorder`, `useIntonation`, `useWaitMode` | `MicIndicator.vue`, `RecordingPanel.vue` |
 | Schalter der Verwaltung | `featureFlags.js` | – | – |
 
 **Die Zeitregel gilt auch hier.** Was plant oder springt, nimmt die
@@ -699,7 +699,8 @@ berührte Stimme mit 100 und eine einmal bewegte mit 127, alle Regler auf
 „voll“. Lauter als die Partitur gibt es nicht – über 100 lägen nur 2 dB.
 „Meine Stimme“ lässt die eigene Stimme bei 100 % und setzt die übrigen auf
 den Regler „andere Stimmen“, ebenfalls relativ; Coach und die Tracks je
-Stimme rechnen mit derselben Funktion.
+Stimme rechnen mit derselben Funktion. Der Warte-Modus schaltet die eigene
+Stimme stumm, ohne ihren Pegel zu vergessen.
 
 Gewählt wird „Meine Stimme“ an zwei Stellen, die denselben Zustand setzen
 (`useMyPart.js`): über das Stimmensymbol im Mixer und über die Zeile „Meine
@@ -781,6 +782,25 @@ Aufnahme gegen den Cursor. Das Ende („zu kurz“) gilt nur vor einer Pause,
 die Markierungen rechnet `useIntonation` aus den Bewertungen nach, sobald
 Zeilenzuordnung oder Segmente sich ändern, statt sie mit der Auswertung
 festzuschreiben.
+
+**Der Warte-Modus** (`waitMode.js`, `useWaitMode.js`) hält die Wiedergabe vor
+jeder Note der eigenen Stimme an, die mindestens 200 ms dauert, und lässt sie
+weiterlaufen, sobald drei Rahmen in Folge auf ihr liegen (±50 Cent, Oktave
+gefaltet, im Divisi jede Note des Akkords). Er hört über die Rahmen der
+Live-Intonation (`useIntonation.onFrames`), keine zweite Analyse am selben
+Mikrofon, und die Nadel bleibt an. Angehalten wird 30 ms **vor** dem
+Einsatz, über einen Zeitgeber auf der Uhr des Sequencers, damit die Note-ons
+der Begleitung an dieser Stelle erst mit der Sängerin einsetzen. Singt sie
+den Ton schon, wenn die Note kommt, wird nicht angehalten. Während des
+Wartens klingt die Begleitung, die beim Anhalten spielte, als Haltechord
+weiter (`player.holdChord`): spessasynth schaltet beim Pausieren alle Noten
+ab und schlägt sie bei `play()` neu an; der Player schlägt sie deshalb selbst
+an und löst sie in `play()` vor dem Sequencer, wer auch immer auf „Abspielen“
+drückt. Die eigene Stimme ist für den ganzen Modus stumm – über einen
+Lautsprecher hörte das Mikrofon sonst die App singen. Metronom, Speed-Trainer,
+Aufnahme und „Folgt mir“ schließen ihn aus (die letzte Einschaltung gewinnt,
+verdrahtet in `ScoreViewer`); eine Aufnahme ließe sich mit seinen Pausen ohnehin
+nicht linear auf die Partitur legen (`recordingAlign.js`).
 
 **Das Stimmgerät** (`useTuner.js`, `tuner.js`) nimmt dieselbe Kette – Blöcke
 in denselben Worker, Rahmen zurück –, hat aber keine Sollnote: Es faltet auf

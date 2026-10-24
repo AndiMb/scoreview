@@ -99,6 +99,9 @@ export function useIntonation({
 	let liveMarksKey = null
 	let requestId = 0
 	const waiting = new Map()
+	// Wait mode (useWaitMode.js) listens to the same live frames instead of
+	// running a second analysis on the same microphone.
+	const frameListeners = new Set()
 	// Zwei getrennte Zaehler: Eine laufende Auswertung und ein wartendes
 	// Einschalten der Live-Nadel veralten unabhaengig voneinander - das
 	// Abschalten der Nadel darf keine Auswertung verwerfen.
@@ -250,6 +253,17 @@ export function useIntonation({
 		microphone.release('intonation')
 	}
 
+	/**
+	 * Receive every batch of live frames, `{contextTimeSec, hz, clarity}`.
+	 *
+	 * @param {function(Array<object>): void} cb
+	 * @return {function(): void} unsubscribe
+	 */
+	function onFrames(cb) {
+		frameListeners.add(cb)
+		return () => frameListeners.delete(cb)
+	}
+
 	function toggleLive() {
 		if (live.value || startingLive) {
 			stopLive()
@@ -262,6 +276,7 @@ export function useIntonation({
 		if (!live.value || !liveContext || frames.length === 0) {
 			return
 		}
+		frameListeners.forEach((cb) => cb(frames))
 		const frame = frames[frames.length - 1]
 		const scoreMs = isPlaying()
 			? captureToScoreMs({
@@ -461,6 +476,7 @@ export function useIntonation({
 		startLive,
 		stopLive,
 		toggleLive,
+		onFrames,
 		analyze,
 		clearAnalysis,
 		reset,

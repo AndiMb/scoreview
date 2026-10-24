@@ -188,6 +188,25 @@
 			<p v-if="live" class="scoreview-practice-hint">
 				{{ t('Use headphones. From a loudspeaker the accompaniment reaches the microphone, and the notes cannot be evaluated.') }}
 			</p>
+			<!-- Wait mode (C2): for learning notes, and the panel says so -
+				otherwise its stops would read as a judgement on the rhythm. -->
+			<NcCheckboxRadioSwitch
+				:modelValue="waitMode"
+				type="switch"
+				class="scoreview-wait-mode"
+				:disabled="waitBlocked && !waitMode"
+				@update:modelValue="$emit('toggleWaitMode')">
+				{{ t('Wait for my note') }}
+			</NcCheckboxRadioSwitch>
+			<p v-if="waitMode && waiting" class="scoreview-practice-hint scoreview-wait-waiting" role="status">
+				{{ t('Waiting for your note…') }}
+			</p>
+			<p v-else-if="waitMode" class="scoreview-practice-hint">
+				{{ t('For learning notes: playback stops before each of your notes until you sing it. Rhythm does not count here, and your own part stays silent.') }}
+			</p>
+			<p v-else-if="waitBlocked" class="scoreview-practice-hint">
+				{{ t('Not available while recording or following a leader.') }}
+			</p>
 			<p v-if="analyzing" class="scoreview-practice-hint">
 				{{ t('Analysing the recording ({percent}%)…', { percent: Math.round(progress * 100) }) }}
 			</p>
@@ -326,6 +345,9 @@ export default {
 		analyzing: { type: Boolean, default: false },
 		progress: { type: Number, default: 0 },
 		intonationError: { type: String, default: '' },
+		waitMode: { type: Boolean, default: false },
+		waiting: { type: Boolean, default: false },
+		waitBlocked: { type: Boolean, default: false },
 	},
 
 	emits: [
@@ -343,6 +365,7 @@ export default {
 		'delete',
 		'analyze',
 		'toggleLive',
+		'toggleWaitMode',
 		'clearAnalysis',
 		'jump',
 	],

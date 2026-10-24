@@ -17,6 +17,12 @@ All notable changes to ScoreView. The format follows
   note head shows the worst of pitch, onset and end. Thresholds and the
   detector's offset are measured with synthetic voices; real voices are
   still to be checked.
+- **Wait mode** for learning notes (“Wait for my note” under Intonation):
+  playback stops just before each note of your part and goes on once you sing
+  it – any octave, ±50 cents. While waiting, the accompaniment that was
+  playing keeps sounding, and your own part stays silent for the whole mode.
+  Metronome, speed trainer, recording and following a leader cannot run at
+  the same time.
 
 ## [1.21.0] – 2026-10-24
 

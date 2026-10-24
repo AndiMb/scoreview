@@ -122,10 +122,12 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	})
 	// Der gerade klingende Anfangston: {channel, pitch, timer} oder null.
 	let tone = null
+	// The chord held while wait mode waits for a note (holdChord()).
+	let held = []
 	// The context rests while nothing sounds and nobody holds it
 	// (lib/audioIdle.js) - a sounding start tone counts as playing.
 	const idle = createAudioIdle({
-		isPlaying: () => !sequencer.paused || tone !== null,
+		isPlaying: () => !sequencer.paused || tone !== null || held.length > 0,
 		suspend: () => context.suspend(),
 		resume: () => context.resume(),
 	})
@@ -213,6 +215,9 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		// einen Klick ausgelöst (ScoreViewer.vue), erfüllt diese Bedingung
 		// also garantiert.
 		await idle.wake()
+		// Before the sequencer, whoever pressed play: it strikes the paused
+		// notes again, and a release after that would cut exactly those.
+		releaseChord()
 		sequencer.play()
 		announceWake()
 	}
@@ -396,6 +401,42 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	}
 
 	/**
+	 * Hold the accompaniment while playback is paused - for wait mode (C2),
+	 * which stops before a note of my part and lets the singer search for it
+	 * against the harmony instead of in silence.
+	 *
+	 * Measured in spessasynth_core: pause() switches every note off, and
+	 * play() strikes the notes that were sounding again
+	 * (`retriggerPausedNotes`). Holding is therefore done here, on the same
+	 * channels and with their instruments and mixer volumes, and released
+	 * before play() - which then strikes them anew, as it would anyway.
+	 *
+	 * @param {Array<{channel:number, pitch:number, velocity:number}>} notes as the synthesizer plays them (untransposed)
+	 */
+	function holdChord(notes) {
+		releaseChord()
+		if (!notes?.length) {
+			return
+		}
+		// Not awaited: a releaseChord() arriving meanwhile would find nothing
+		// to release and leave the chord hanging. The messages queue in the
+		// worklet's port in order, and the microphone keeps the context
+		// awake in wait mode anyway.
+		idle.wake().catch(() => {})
+		for (const n of notes) {
+			synth.noteOn(n.channel, n.pitch, n.velocity)
+		}
+		held = notes
+	}
+
+	function releaseChord() {
+		for (const n of held) {
+			synth.noteOff(n.channel, n.pitch)
+		}
+		held = []
+	}
+
+	/**
 	 * Das Instrument eines Kanals aus dem Mixer - verriegelt wie die
 	 * Controller in setController(), aus demselben Grund: Der Reset beim
 	 * Suchlauf setzt auch das Programm zurueck (resetChannelInternal endet
@@ -441,6 +482,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		idle.destroy()
 		wakeListeners.clear()
 		stopTone()
+		releaseChord()
 		sequencer.pause()
 		synth.disconnect()
 		panners.forEach((panner) => panner.disconnect())
@@ -478,6 +520,8 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		applyChannelPans,
 		canPlayTone,
 		startTone,
+		holdChord,
+		releaseChord,
 		stopTone,
 		setProgram,
 		getPresetList,

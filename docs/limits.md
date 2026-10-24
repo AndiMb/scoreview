@@ -451,6 +451,17 @@ re-measured on real devices and with real input latency.
   cursor alone cannot make a note yellow – and yellow up to 120 ms. **Not yet
   checked with real voices**: soft attacks, voiced consonants such as “m” or
   “l”, and phones.
+- **Wait mode is for learning notes, not rhythm.** Playback stops 30 ms
+  before each note of your part that lasts at least 200 ms and goes on once
+  the microphone has heard the note for 60 ms (±50 cents, any octave).
+  Measured in Chromium with a file as the microphone: the stop came 6 … 10 ms
+  after its planned moment, never after the onset, and playback went on
+  89 ms after the first matching frame; it never went on with a wrong note.
+  While waiting, the accompaniment that was playing is held. When playback
+  goes on, those notes are struck again – a short new attack, not a seamless
+  continuation. Your own part is silent for the whole mode; a change to its
+  volume in the mixer meanwhile is undone when the mode ends. **Not yet
+  checked with a real voice, nor on a phone.**
 - **The reference pitch is fixed: a' = 440 Hz.** A choir that sinks as a whole
   is judged against 440, not against itself. The tuner uses the same
   reference.

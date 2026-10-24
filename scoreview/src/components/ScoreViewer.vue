@@ -973,11 +973,14 @@
 							:micError="micError"
 							:browserUrl="browserUrl"
 							:live="intonationLive"
-							:needPart="intonationNeedPart"
+							:needPart="intonationNeedPart || waitModeNeedPart"
 							:analysis="intonationAnalysis"
 							:analyzing="intonationAnalyzing"
 							:progress="intonationProgress"
 							:intonationError="intonationError"
+							:waitMode="waitModeActive"
+							:waiting="waitModeWaiting"
+							:waitBlocked="recordPhase !== 'idle' || followFollowing"
 							@start="startRecording()"
 							@stop="stopRecording"
 							@replace="answerRecordReplace"
@@ -988,6 +991,7 @@
 							@delete="removeRecording"
 							@analyze="onAnalyzeRecording"
 							@toggleLive="onToggleLiveIntonation"
+							@toggleWaitMode="onToggleWaitMode"
 							@clearAnalysis="clearIntonationAnalysis"
 							@jump="onPracticeJump" />
 					</ScorePanel>
@@ -1135,6 +1139,7 @@ import { useSpeedTrainer } from '../composables/useSpeedTrainer.js'
 import { useStartTone } from '../composables/useStartTone.js'
 import { useTuner } from '../composables/useTuner.js'
 import { useViewerPreferences } from '../composables/useViewerPreferences.js'
+import { useWaitMode } from '../composables/useWaitMode.js'
 import { useWakeLock } from '../composables/useWakeLock.js'
 import { useZoom } from '../composables/useZoom.js'
 import nodeText from '../directives/nodeText.js'
@@ -1803,6 +1808,33 @@ export default {
 			loadAudio: recorder.loadAudio,
 		})
 
+		// Wait mode (C2). My part is silent for the whole mode; its level stays
+		// in the mix (useMix.js) and comes back when the mode ends.
+		const waitMode = useWaitMode({
+			clock: () => clock.value,
+			tempoFactor: () => playback.tempo.value,
+			targets: () => transposedNotes.value,
+			// Untransposed: the synthesizer shifts what it plays itself (setTranspose).
+			synthNotes: () => scoreFacts.parsed.value?.notes ?? null,
+			myChannels,
+			intonation,
+			setMineMuted: (muted) => mix.silence(muted ? myChannels() : null),
+		})
+		// F-C2.2: no metronome, speed trainer, recording or following a leader
+		// alongside. Whatever is switched on last wins.
+		watch(waitMode.active, (on) => {
+			if (on) {
+				metronome.enabled.value = false
+				if (speedTrainer.active.value) {
+					speedTrainer.stop()
+				}
+			}
+		})
+		watch(() => metronome.enabled.value, (on) => on && waitMode.stop())
+		watch(() => speedTrainer.active.value, (on) => on && waitMode.stop())
+		watch(() => recorder.phase.value, (phase) => (phase === 'starting' || phase === 'recording') && waitMode.stop())
+		watch(() => follow.following.value, (following) => following && waitMode.stop())
+
 		session.connect({
 			applyMetadata: playback.applyMetadata,
 			loadAnnotations: annotations.load,
@@ -2084,6 +2116,11 @@ export default {
 			analyzeRecording: intonation.analyze,
 			clearIntonationAnalysis: intonation.clearAnalysis,
 			resetIntonation: intonation.reset,
+			waitModeActive: waitMode.active,
+			waitModeWaiting: waitMode.waiting,
+			waitModeNeedPart: waitMode.needPart,
+			toggleWaitMode: waitMode.toggle,
+			resetWaitMode: waitMode.reset,
 			destroyIntonation: intonation.destroy,
 			followActive: follow.active,
 			followMine: follow.mine,
@@ -2643,6 +2680,7 @@ export default {
 		// Dieselbe Reihenfolge wie in reset(): Aufnahme und Intonation vor dem
 		// Abbau der Wiedergabe, solange deren Kontext noch lebt.
 		this.destroyRecorder()
+		this.resetWaitMode()
 		this.destroyIntonation()
 		this.practiceExport.cancel()
 		this.cleanupSession()
@@ -2827,6 +2865,14 @@ export default {
 			}
 		},
 
+		async onToggleWaitMode() {
+			await this.ensureIntonationMidi()
+			await this.toggleWaitMode()
+			if (this.waitModeNeedPart) {
+				this.openVoiceSelection()
+			}
+		},
+
 		async onAnalyzeRecording(recording) {
 			await this.ensureIntonationMidi()
 			await this.analyzeRecording(recording === 'pending' ? { id: 'pending', ...this.recordPending.meta } : recording)
@@ -2938,6 +2984,7 @@ export default {
 			// Vor dem Abbau der Wiedergabe: Eine laufende Aufnahme wird noch
 			// abgeschlossen und gespeichert, solange ihr Kontext lebt.
 			this.resetRecorder()
+			this.resetWaitMode()
 			this.resetIntonation()
 			// A practice-track export belongs to the piece it was started on.
 			this.practiceExport.cancel()

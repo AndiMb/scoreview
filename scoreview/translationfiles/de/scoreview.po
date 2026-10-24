@@ -1273,6 +1273,22 @@ msgid "Use headphones. From a loudspeaker the accompaniment reaches the micropho
 msgstr "Nimm Kopfhörer. Aus dem Lautsprecher gelangt die Begleitung ins Mikrofon, und die Noten lassen sich nicht auswerten."
 
 #: src/components/RecordingPanel.vue
+msgid "Wait for my note"
+msgstr "Auf meinen Ton warten"
+
+#: src/components/RecordingPanel.vue
+msgid "Waiting for your note…"
+msgstr "Wartet auf deinen Ton …"
+
+#: src/components/RecordingPanel.vue
+msgid "For learning notes: playback stops before each of your notes until you sing it. Rhythm does not count here, and your own part stays silent."
+msgstr "Zum Töne-Lernen: Die Wiedergabe hält vor jeder deiner Noten an, bis du sie singst. Der Rhythmus zählt hier nicht, und deine eigene Stimme bleibt stumm."
+
+#: src/components/RecordingPanel.vue
+msgid "Not available while recording or following a leader."
+msgstr "Nicht verfügbar während einer Aufnahme oder wenn du einer Leitung folgst."
+
+#: src/components/RecordingPanel.vue
 msgid "Analysing the recording ({percent}%)…"
 msgstr "Die Aufnahme wird ausgewertet ({percent} %) …"
 

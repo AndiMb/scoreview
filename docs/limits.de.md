@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:40ca38857925 -->
+<!-- translation-of: limits.md sha256:b9a8f094787c -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -454,6 +454,18 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   keine Note gelb macht – und bis 120 ms gelb. **Mit echten Stimmen noch
   nicht geprüft**: weiche Einsätze, stimmhafte Konsonanten wie „m“ oder „l“,
   Handys.
+- **Der Warte-Modus ist zum Töne-Lernen, nicht für den Rhythmus.** Die
+  Wiedergabe hält 30 ms vor jeder Note der eigenen Stimme an, die mindestens
+  200 ms dauert, und läuft weiter, sobald das Mikrofon den Ton 60 ms lang
+  gehört hat (±50 Cent, in jeder Oktave). Gemessen in Chromium mit einer
+  Datei als Mikrofon: Der Halt kam 6 … 10 ms nach dem geplanten Moment, nie
+  nach dem Einsatz, und die Wiedergabe lief 89 ms nach dem ersten passenden
+  Rahmen weiter; mit einem falschen Ton ging es nie weiter. Beim Warten klingt
+  die Begleitung, die gerade spielte, weiter. Geht es weiter, werden diese
+  Noten neu angeschlagen – ein kurzer neuer Einsatz, kein nahtloses
+  Weiterklingen. Die eigene Stimme ist für den ganzen Modus stumm; wer
+  währenddessen ihre Lautstärke im Mixer ändert, bekommt beim Beenden die
+  alte zurück. **Mit einer echten Stimme und am Handy noch nicht geprüft.**
 - **Die Referenzstimmung ist fest: a' = 440 Hz.** Ein Chor, der als Ganzes
   absinkt, wird gegen 440 bewertet, nicht gegen sich selbst. Das Stimmgerät
   nutzt dieselbe Referenz.
