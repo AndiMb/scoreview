@@ -1,0 +1,14 @@
+/*
+ * Popovers no taller than the room on screen (F5 in the band design; a phone
+ * held sideways has 340 px). NcPopover passes `autoBoundaryMaxSize` on to
+ * floating-vue, which bounds `.v-popper__inner` - but NcPopover also sets that
+ * box to overflow: hidden and puts a wrapper of its own between it and the
+ * content, which passes no height on. This hands the bound down; the content
+ * then sets `max-block-size: inherit; overflow-y: auto` and scrolls itself.
+ *
+ * Unscoped on purpose: the popper hangs on <body>. Bound into each component
+ * that uses it (`popoverBaseClass="scoreview-bounded-popper"`).
+ */
+.scoreview-bounded-popper .v-popper__inner > div {
+	max-height: inherit;
+}

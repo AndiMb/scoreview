@@ -154,7 +154,11 @@
 						Telefonbreite keinen Platz fuer eine zweite Reihe hat; und nur,
 						wenn die Partitur welche traegt.
 					-->
-					<NcPopover v-if="rehearsalMarks.length > 0 && can('seek')" v-model:shown="marksOpen">
+					<NcPopover
+						v-if="rehearsalMarks.length > 0 && can('seek')"
+						v-model:shown="marksOpen"
+						popoverBaseClass="scoreview-bounded-popper"
+						:autoBoundaryMaxSize="true">
 						<template #trigger>
 							<NcButton
 								class="scoreview-marks-button"
@@ -492,12 +496,9 @@
 							<template #default="{ openPage, close }">
 								<ZoomControls
 									v-if="has(group, 'zoom')"
-									:zoom="zoom"
-									:percent="zoomPercent"
-									:min="minZoom"
-									:max="maxZoom"
-									@input="onZoomInput"
-									@preset="applyZoomPreset" />
+									v-bind="zoomView"
+									@input="onZoomControlInput"
+									@preset="onZoomControlPreset" />
 								<ToolRow
 									v-if="has(group, 'appearance')"
 									page
@@ -791,6 +792,7 @@
 				<div
 					ref="scroll"
 					class="scoreview-scroll"
+					:class="{ 'scoreview-scroll--band': activeLayout === 'band' }"
 					@pointerdown.passive="onScrollGestureStart"
 					@pointerup.passive="onScrollGestureEnd"
 					@pointercancel.passive="onScrollGestureEnd"
@@ -887,6 +889,11 @@
 						:needle="intonationNeedle"
 						:follow="followCursor"
 						:forced="cursorForced"
+						:zoom="bandZoomValue"
+						@touchstart.passive="bandZoom.onTouchStart"
+						@touchmove.passive="bandZoom.onTouchMove"
+						@touchend.passive="bandZoom.onTouchEnd"
+						@touchcancel.passive="bandZoom.onTouchEnd"
 						@noteClick="onNoteClick"
 						@markerClick="onMarkerClick"
 						@indexed="onPageIndexed"
@@ -1184,6 +1191,7 @@ import TunerPanel from './TunerPanel.vue'
 import ZoomControls from './ZoomControls.vue'
 import { useAnnotations } from '../composables/useAnnotations.js'
 import { useAutoScroll } from '../composables/useAutoScroll.js'
+import { useBandZoom } from '../composables/useBandZoom.js'
 import { useBarLayout } from '../composables/useBarLayout.js'
 import { useConversionStatus } from '../composables/useConversionStatus.js'
 import { useFollowSession } from '../composables/useFollowSession.js'
@@ -1440,6 +1448,9 @@ export default {
 		const bindSpread = (rule) => {
 			spreadNow = rule
 		}
+		// The system band's own zoom (D in the band design): a factor on its
+		// default size, not a page width.
+		const bandZoom = useBandZoom()
 		const zoomApi = useZoom({
 			rootEl: rootElement,
 			scrollEl: scrollElement,
@@ -2047,6 +2058,9 @@ export default {
 			loadSetlistOffers: setlist.loadOffers,
 			acceptSetlistOffer: setlist.acceptOffer,
 			zoom: zoomApi.zoom,
+			bandZoom,
+			bandZoomValue: bandZoom.zoom,
+			bandZoomPercent: bandZoom.percent,
 			zoomPreset: zoomApi.preset,
 			pagesWidthPx,
 			bindSpread,
@@ -2368,6 +2382,16 @@ export default {
 		// jump or one of the leader even when not (useScoreSession.cursorForced).
 		followCursor() {
 			return this.autoScroll || this.cursorForced
+		},
+
+		/**
+		 * What the zoom controls show: the band has a zoom of its own, a
+		 * factor on its default size, with that one preset (useBandZoom).
+		 */
+		zoomView() {
+			return this.activeLayout === 'band'
+				? { zoom: this.bandZoomValue, percent: this.bandZoomPercent, min: this.bandZoom.min, max: this.bandZoom.max, presets: ['default'] }
+				: { zoom: this.zoom, percent: this.zoomPercent, min: this.minZoom, max: this.maxZoom, presets: ['width', 'page', 'actual'] }
 		},
 
 		showBackToCursor() {
@@ -2822,6 +2846,7 @@ export default {
 		this.resetWaitMode()
 		this.destroyIntonation()
 		this.practiceExport.cancel()
+		this.bandZoom.stop()
 		this.cleanupSession()
 		this.turnMicOff()
 		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
@@ -3266,11 +3291,11 @@ export default {
 				nextMeasure: () => this.jumpRelativeMeasure(1),
 				previousMeasure: () => this.jumpRelativeMeasure(-1),
 				toggleLoop: () => this.onToggleLoop(),
-				zoomIn: () => this.zoomBy(this.zoomStep),
-				zoomOut: () => this.zoomBy(1 / this.zoomStep),
+				zoomIn: () => (this.activeLayout === 'band' ? this.bandZoom.zoomIn() : this.zoomBy(this.zoomStep)),
+				zoomOut: () => (this.activeLayout === 'band' ? this.bandZoom.zoomOut() : this.zoomBy(1 / this.zoomStep)),
 				// Zurück zur Seitenbreite - und wieder der Fenstergröße
-				// folgend, wie beim Öffnen.
-				zoomWidth: () => this.applyZoomPreset('width'),
+				// folgend, wie beim Öffnen. Im Band: zur Standardgröße.
+				zoomWidth: () => (this.activeLayout === 'band' ? this.bandZoom.reset() : this.applyZoomPreset('width')),
 				// Im Systemband blaettert das Pedal ein System weiter (H8).
 				pageDown: () => (this.activeLayout === 'band' ? this.$refs.band?.next() : this.pageBy(1)),
 				pageUp: () => (this.activeLayout === 'band' ? this.$refs.band?.previous() : this.pageBy(-1)),
@@ -3482,7 +3507,38 @@ export default {
 			if (!event.ctrlKey) {
 				this.noteManualScroll()
 			}
+			if (event.ctrlKey && this.activeLayout === 'band') {
+				event.preventDefault()
+				if (event.deltaY < 0) {
+					this.bandZoom.zoomIn()
+				} else {
+					this.bandZoom.zoomOut()
+				}
+				return
+			}
 			this.onWheel(event)
+		},
+
+		/**
+		 * The zoom slider: the band's own zoom there, the page zoom elsewhere.
+		 *
+		 * @param {Event} event the slider's input event
+		 */
+		onZoomControlInput(event) {
+			if (this.activeLayout === 'band') {
+				this.bandZoom.set(Number(event.target.value))
+			} else {
+				this.onZoomInput(event)
+			}
+		},
+
+		/** @param {string} preset 'default' in the band, a page fit elsewhere */
+		onZoomControlPreset(preset) {
+			if (preset === 'default') {
+				this.bandZoom.reset()
+			} else {
+				this.applyZoomPreset(preset)
+			}
 		},
 
 		/**
@@ -3512,6 +3568,8 @@ export default {
 </script>
 
 <style scoped src="./scoreviewPopover.css"></style>
+
+<style src="./boundedPopover.css"></style>
 
 <style scoped>
 /*
@@ -3672,6 +3730,10 @@ export default {
 	flex-wrap: wrap;
 	gap: 4px;
 	max-width: 280px;
+	/* As tall as the room on screen (boundedPopover.css). */
+	box-sizing: border-box;
+	max-block-size: inherit;
+	overflow-y: auto;
 }
 
 .scoreview-armed {
@@ -3735,6 +3797,26 @@ export default {
 	padding: 12px;
 	/* See .scoreview-viewer - also covers the lyrics view, which scrolls here. */
 	touch-action: pan-x pan-y;
+}
+
+/*
+ * The band fills what the hints above it leave (F2): it scrolls by itself,
+ * and with `height: 100%` below a hint its lowest staves fell off the screen.
+ */
+.scoreview-scroll--band {
+	display: flex;
+	flex-direction: column;
+	overflow-y: hidden;
+}
+
+.scoreview-scroll--band > .scoreview-hint {
+	flex: 0 0 auto;
+}
+
+.scoreview-scroll--band > .scoreview-band {
+	flex: 1 1 0;
+	height: auto;
+	min-height: 0;
 }
 
 /*

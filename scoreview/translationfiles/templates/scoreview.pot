@@ -2204,6 +2204,10 @@ msgstr ""
 msgid "Actual size"
 msgstr ""
 
+#: src/components/ZoomControls.vue
+msgid "Default size"
+msgstr ""
+
 #: src/composables/useAnnotations.js
 msgid "Too many changes in a short time. Please wait a moment and try again."
 msgstr ""

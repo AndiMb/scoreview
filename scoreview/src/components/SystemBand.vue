@@ -20,9 +20,12 @@
 		<p v-if="crops.length === 0" class="scoreview-band-empty">
 			{{ loading ? t('Preparing the system band…') : t('No staves found on these pages.') }}
 		</p>
+		<!-- Keyed by the page too: a new picture (variant, piece, version)
+			brings new pages under the same indices, and a ScorePage keeps the
+			SVG it loaded first - it has to be built anew, as in the page view. -->
 		<div
 			v-for="(crop, i) in crops"
-			:key="crop.index"
+			:key="`${loadedUrls[crop.page]}#${crop.index}`"
 			class="scoreview-band-system"
 			:style="layouts[i].frame">
 			<div
@@ -31,7 +34,7 @@
 				:style="layouts[i].shift">
 				<ScorePage
 					v-bind="pageProps"
-					:svgUrl="pageUrls[crop.page]"
+					:svgUrl="loadedUrls[crop.page]"
 					:pageIndex="crop.page"
 					:zoom="layouts[i].zoom"
 					:systemRects="systemRectsByPage[crop.page] ?? NO_RECTS"
@@ -56,7 +59,7 @@ import { cropsInLoop } from '../lib/loopFocus.js'
 import { BASE_PAGE_WIDTH_PX, parseViewBox } from '../lib/scoreLayout.js'
 import { shouldSuppressAutoScroll, spanInView } from '../lib/scrollPlan.js'
 import { findStaffBands, groupBandsIntoSystems } from '../lib/staffBands.js'
-import { bandWindow, cropIndexAt, cropScale, frameAt, lyricBaselines, lyricBottomsFor, systemCrops } from '../lib/systemBand.js'
+import { bandAnchor, bandScale, bandWindow, cropIndexAt, frameAt, lyricBaselines, lyricBottomsFor, scrollForAnchor, systemCrops } from '../lib/systemBand.js'
 
 /**
  * Vorlauf beim Mitscrollen: das System steht nicht ganz am Rand. Er steckt
@@ -146,6 +149,12 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		// The band's own zoom, a factor on bandScale (useBandZoom.js).
+		zoom: {
+			type: Number,
+			default: 1,
+		},
 	},
 
 	emits: ['noteClick', 'markerClick', 'indexed', 'cursorVisible'],
@@ -154,6 +163,10 @@ export default {
 		return {
 			// Every system of every page; `crops` narrows it to the loop.
 			allCrops: [],
+			// The page URLs the crops were cut from - set together with them,
+			// so that the frames never show one picture under the crops of
+			// another while the next one loads (pageUrls changes first).
+			loadedUrls: [],
 			viewBoxes: [],
 			heightPx: 300,
 			current: 0,
@@ -182,7 +195,9 @@ export default {
 		/** The frame showing the cursor, or -1. */
 		cursorCrop() {
 			const rect = this.cursorRect
-			if (!rect || this.crops.length === 0) {
+			// While a new picture loads, the cursor already belongs to it and
+			// the crops still to the old one.
+			if (!rect || this.crops.length === 0 || this.loading) {
 				return -1
 			}
 			return cropIndexAt(this.crops, rect.page, rect.y + rect.h / 2)
@@ -192,13 +207,13 @@ export default {
 		layouts() {
 			return this.crops.map((crop) => {
 				const vb = this.viewBoxes[crop.page]
-				const scale = cropScale(crop, vb, this.heightPx)
+				const scale = bandScale(crop, vb, this.heightPx, { zoom: this.zoom })
 				const px = scale.pageWidthPx / vb.width
 				return {
 					// Page units -> px in this frame, for the cursor's position
 					// in the band (cursorSpan).
 					px,
-					frame: { width: `${scale.cropWidthPx}px`, height: `${this.heightPx}px` },
+					frame: { width: `${scale.cropWidthPx}px`, height: `${scale.cropHeightPx}px` },
 					shift: { transform: `translate(${-(crop.x - vb.minX) * px}px, ${-(crop.y - vb.minY) * px}px)` },
 					zoom: scale.pageWidthPx / BASE_PAGE_WIDTH_PX,
 				}
@@ -211,6 +226,12 @@ export default {
 		// after a load.
 		crops() {
 			this.$nextTick(() => this.measureFrames())
+		},
+
+		// Runs before the frames are laid out anew: the anchor still reads
+		// the old positions.
+		zoom() {
+			this.relayout()
 		},
 
 		// Every note, not only on a new frame: after scrolling away by hand,
@@ -251,9 +272,9 @@ export default {
 
 	mounted() {
 		this.resize = new ResizeObserver(() => {
-			this.heightPx = Math.max(120, this.$refs.scroller?.clientHeight ?? 300)
-			// The frame widths follow the height - measure after they changed.
-			this.$nextTick(() => this.measureFrames())
+			this.relayout(() => {
+				this.heightPx = Math.max(120, this.$refs.scroller?.clientHeight ?? 300)
+			})
 		})
 		this.resize.observe(this.$refs.scroller)
 	},
@@ -277,8 +298,9 @@ export default {
 				return
 			}
 			this.loading = true
+			const urls = [...this.pageUrls]
 			try {
-				const texts = await Promise.all(this.pageUrls.map((url) => axios.get(url, { responseType: 'text' }).then((r) => r.data)))
+				const texts = await Promise.all(urls.map((url) => axios.get(url, { responseType: 'text' }).then((r) => r.data)))
 				if (generation !== this.loadGeneration) {
 					return
 				}
@@ -291,8 +313,15 @@ export default {
 				for (const p of pages) {
 					this.viewBoxes[p.page] = p.viewBox
 				}
+				this.loadedUrls = urls
 				this.allCrops = systemCrops(pages)
-				this.$nextTick(() => this.measureFrames())
+				this.$nextTick(() => {
+					this.measureFrames()
+					// The old scroll position means nothing in the new picture.
+					if (this.follow) {
+						this.reveal()
+					}
+				})
 			} catch (err) {
 				if (generation !== this.loadGeneration) {
 					return
@@ -308,13 +337,23 @@ export default {
 		},
 
 		/**
+		 * To a system: its start under the lead, its top at the top - a
+		 * system zoomed taller than the band starts with its first staff.
+		 *
 		 * @param {number} index
+		 * @param {ScrollBehavior} [behavior]
 		 */
-		goTo(index) {
+		goTo(index, behavior = 'smooth') {
 			const target = Math.max(0, Math.min(this.crops.length - 1, index))
 			this.current = target
-			const el = this.$refs.scroller?.children[target]
-			el?.scrollIntoView({ inline: 'start', block: 'nearest', behavior: 'smooth' })
+			if (this.frameLefts.length > target) {
+				// The spot scroll-padding (LEAD) snaps a frame to. Not
+				// scrollIntoView: that also scrolls the viewer around the band
+				// to the frame's top, past the hints above it.
+				this.pageTo(Math.max(0, this.frameLefts[target] - this.viewWidth * LEAD), { top: 0, behavior })
+				return
+			}
+			this.$refs.scroller?.children[target]?.scrollIntoView({ inline: 'start', block: 'nearest', behavior })
 		},
 
 		/**
@@ -361,18 +400,67 @@ export default {
 
 		/** To the system that is playing - the button back to it, and switching autoscroll on again. */
 		reveal() {
+			this.lastGestureAt = null
+			this.showCursor('smooth')
+		},
+
+		/**
+		 * @param {ScrollBehavior} behavior
+		 */
+		showCursor(behavior) {
 			const index = this.cursorCrop
 			if (index < 0) {
 				return
 			}
-			this.lastGestureAt = null
 			const span = this.cursorSpan(index)
 			if (span && this.frameWidths[index] > this.viewWidth) {
 				this.current = index
-				this.pageTo(pageForCursor({ frameLeft: this.frameLefts[index], frameWidth: this.frameWidths[index], cursorLeft: span.left, viewWidth: this.viewWidth, lead: LEAD }))
+				this.pageTo(pageForCursor({ frameLeft: this.frameLefts[index], frameWidth: this.frameWidths[index], cursorLeft: span.left, viewWidth: this.viewWidth, lead: LEAD }), { behavior })
 				return
 			}
-			this.goTo(index)
+			this.goTo(index, behavior)
+		},
+
+		/**
+		 * The frames change size - a new band height (the bar retracts on a
+		 * phone held sideways, a hint comes or goes, the phone turns) or a
+		 * new zoom. Every position in px then points elsewhere, so the band
+		 * keeps its place: on the cursor while it follows the playing, else
+		 * on the spot that was at its left edge.
+		 *
+		 * @param {() => void} [change] applied after the old positions are read
+		 */
+		relayout(change) {
+			const scroller = this.$refs.scroller
+			const frames = this.frames()
+			const anchor = scroller && frames.length > 0
+				? {
+						band: bandAnchor(frames, scroller.scrollLeft),
+						top: scroller.scrollHeight > 0 ? scroller.scrollTop / scroller.scrollHeight : 0,
+						cursor: this.follow && this.cursorCrop >= 0 && this.cursorShown,
+					}
+				: null
+			change?.()
+			this.$nextTick(() => {
+				this.measureFrames()
+				const after = this.$refs.scroller
+				if (!anchor || !after) {
+					return
+				}
+				if (anchor.cursor) {
+					this.showCursor('instant')
+					return
+				}
+				const left = scrollForAnchor(this.frames(), anchor.band)
+				if (left !== null) {
+					this.pageTo(left, { top: anchor.top * after.scrollHeight, behavior: 'instant' })
+				}
+			})
+		},
+
+		/** @return {Array<{left:number, width:number}>} the cached frame positions */
+		frames() {
+			return this.frameLefts.map((left, i) => ({ left, width: this.frameWidths[i] }))
 		},
 
 		/**
@@ -438,15 +526,18 @@ export default {
 		 * start. Manual swipes snap as before.
 		 *
 		 * @param {number} left
+		 * @param {{top?: number, behavior?: ScrollBehavior}} [options] `top`
+		 *   only when given - turning a page within a system keeps the height
 		 */
-		pageTo(left) {
+		pageTo(left, { top, behavior = 'smooth' } = {}) {
 			this.paging = true
 			clearTimeout(this.pagingTimer)
 			// scrollend is missing in older Safari - do not stay unsnapped.
 			this.pagingTimer = setTimeout(() => {
 				this.paging = false
 			}, 1500)
-			this.$nextTick(() => this.$refs.scroller?.scrollTo({ left, behavior: 'smooth' }))
+			const to = top === undefined ? { left, behavior } : { left, top, behavior }
+			this.$nextTick(() => this.$refs.scroller?.scrollTo(to))
 		},
 
 		onGesture() {
@@ -485,8 +576,7 @@ export default {
 			if (!scroller || this.frameLefts.length === 0) {
 				return
 			}
-			const frames = this.frameLefts.map((left, i) => ({ left, width: this.frameWidths[i] }))
-			const range = bandWindow(frames, scroller.scrollLeft, this.viewWidth)
+			const range = bandWindow(this.frames(), scroller.scrollLeft, this.viewWidth)
 			if (range && (range.from !== this.windowFrom || range.to !== this.windowTo)) {
 				this.windowFrom = range.from
 				this.windowTo = range.to
@@ -530,8 +620,11 @@ export default {
 	display: flex;
 	gap: 12px;
 	height: 100%;
+	/* A system shorter than the band stands at its top; one zoomed taller
+	   scrolls up and down within the band (useBandZoom). */
+	align-items: flex-start;
 	overflow-x: auto;
-	overflow-y: hidden;
+	overflow-y: auto;
 	scroll-snap-type: x proximity;
 	scroll-padding-inline-start: 8%;
 	padding: 0 8px;

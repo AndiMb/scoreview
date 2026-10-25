@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bandWindow, cropIndexAt, cropScale, frameAt, lyricBaselines, lyricBottomsFor, systemCrops } from './systemBand.js'
+import { bandAnchor, bandScale, bandWindow, cropIndexAt, frameAt, lyricBaselines, lyricBottomsFor, MAX_SPACE_PX, scrollForAnchor, systemCrops } from './systemBand.js'
 
 // Eine Seite 0..10000 x 0..14000 mit zwei Systemen; Linienabstand 25
 const viewBox = { minX: 0, minY: 0, width: 10000, height: 14000 }
@@ -61,10 +61,63 @@ describe('cropIndexAt', () => {
 	})
 })
 
-describe('cropScale', () => {
-	it('fuellt die Hoehe', () => {
+describe('bandScale', () => {
+	it('fills the height when the staves stay below the bound', () => {
+		// 1000 units in 400 px: 0.4 px per unit, staff space 25 -> 10 px
+		const crop = { h: 1000, w: 8000, space: 25 }
+		expect(bandScale(crop, viewBox, 400)).toEqual({ pageWidthPx: 4000, cropWidthPx: 3200, cropHeightPx: 400 })
+	})
+
+	it('bounds the staff space - a one-staff part held upright', () => {
+		// 18 spaces of 25 units in 600 px would be 33 px a space
+		const crop = { h: 450, w: 8000, space: 25 }
+		const s = bandScale(crop, viewBox, 600)
+		expect(s.cropHeightPx).toBeCloseTo(18 * MAX_SPACE_PX)
+		expect(s.cropWidthPx / crop.w * crop.space).toBeCloseTo(MAX_SPACE_PX)
+	})
+
+	it('multiplies by the zoom, beyond the height too', () => {
+		const crop = { h: 1000, w: 8000, space: 25 }
+		expect(bandScale(crop, viewBox, 400, { zoom: 2 }).cropHeightPx).toBe(800)
+		expect(bandScale(crop, viewBox, 400, { zoom: 0.5 }).cropHeightPx).toBe(200)
+	})
+
+	it('only fills the height without a staff space', () => {
 		const crop = { h: 1000, w: 8000 }
-		expect(cropScale(crop, viewBox, 400)).toEqual({ pageWidthPx: 4000, cropWidthPx: 3200 })
+		expect(bandScale(crop, viewBox, 400).cropHeightPx).toBe(400)
+	})
+
+	it('systemCrops gives the staff space along', () => {
+		const [c] = systemCrops([page1])
+		expect(c.space).toBe(25)
+	})
+})
+
+describe('bandAnchor and scrollForAnchor', () => {
+	const frames = [{ left: 8, width: 1000 }, { left: 1020, width: 600 }, { left: 1632, width: 900 }]
+	const scaled = frames.map((f, i) => ({ left: 8 + i * 12 + frames.slice(0, i).reduce((a, g) => a + g.width * 1.33, 0), width: f.width * 1.33 }))
+
+	it('keeps the same spot inside a frame when the frames grow', () => {
+		const anchor = bandAnchor(frames, 1020 + 300)
+		expect(anchor).toEqual({ index: 1, fraction: 0.5, gapPx: 0 })
+		expect(scrollForAnchor(scaled, anchor)).toBeCloseTo(scaled[1].left + 0.5 * scaled[1].width)
+	})
+
+	it('is exact on the round trip, in a frame and in a gap', () => {
+		for (const x of [0, 8, 500, 1008, 1014, 1020, 1700, 2532]) {
+			expect(scrollForAnchor(frames, bandAnchor(frames, x))).toBeCloseTo(x)
+		}
+	})
+
+	it('keeps a gap in px - it does not scale', () => {
+		const anchor = bandAnchor(frames, 1008 + 6)
+		expect(anchor).toEqual({ index: 0, fraction: 1, gapPx: 6 })
+		expect(scrollForAnchor(scaled, anchor)).toBeCloseTo(8 + 1330 + 6)
+	})
+
+	it('has nothing to say without frames or with a frame gone', () => {
+		expect(bandAnchor([], 100)).toBeNull()
+		expect(scrollForAnchor(frames.slice(0, 1), { index: 2, fraction: 0, gapPx: 0 })).toBeNull()
 	})
 })
 

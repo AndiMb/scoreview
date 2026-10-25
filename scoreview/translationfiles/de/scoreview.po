@@ -2204,6 +2204,10 @@ msgstr "Ganze Seite einpassen"
 msgid "Actual size"
 msgstr "Originalgröße"
 
+#: src/components/ZoomControls.vue
+msgid "Default size"
+msgstr "Standardgröße"
+
 #: src/composables/useAnnotations.js
 msgid "Too many changes in a short time. Please wait a moment and try again."
 msgstr "Zu viele Änderungen in kurzer Zeit. Bitte einen Moment warten und es erneut versuchen."

@@ -24,7 +24,11 @@
 				<ChevronLeft :size="20" />
 			</template>
 		</NcButton>
-		<NcPopover v-model:shown="listOpen" class="scoreview-setlist-popover">
+		<NcPopover
+			v-model:shown="listOpen"
+			class="scoreview-setlist-popover"
+			popoverBaseClass="scoreview-bounded-popper"
+			:autoBoundaryMaxSize="true">
 			<template #trigger>
 				<NcButton
 					class="scoreview-setlist-title"
@@ -122,7 +126,7 @@
 		-->
 		<template v-else>
 			<span class="scoreview-setlist-text">{{ t('This score is in {n} setlists.', { n: offers.length }) }}</span>
-			<NcPopover>
+			<NcPopover popoverBaseClass="scoreview-bounded-popper" :autoBoundaryMaxSize="true">
 				<template #trigger>
 					<NcButton variant="primary" class="scoreview-setlist-accept">
 						{{ t('Choose setlist') }}
@@ -245,6 +249,8 @@ export default {
 }
 </script>
 
+<style src="./boundedPopover.css"></style>
+
 <style scoped>
 .scoreview-setlist-bar {
 	display: flex;
@@ -280,7 +286,9 @@ export default {
 }
 
 .scoreview-setlist-list {
-	max-height: 60vh;
+	/* As tall as the room on screen (boundedPopover.css). */
+	box-sizing: border-box;
+	max-height: inherit;
 	max-width: min(90vw, 420px);
 	overflow-y: auto;
 	padding: 8px;

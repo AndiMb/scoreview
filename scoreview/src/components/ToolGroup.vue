@@ -10,7 +10,15 @@
 		Wie ScoreBar nur Gestalt: Was in der Gruppe steht und was es tut,
 		verdrahtet der Viewer ueber die Slots.
 	-->
-	<NcPopover v-model:shown="shown" popupRole="dialog">
+	<!-- autoBoundaryMaxSize (floating-vue, passed through to its Dropdown):
+		the popover is at most as tall as the room below or above its button,
+		and the group scrolls inside - a phone held sideways has 340 px, the
+		View group needs 600 (F5). -->
+	<NcPopover
+		v-model:shown="shown"
+		popupRole="dialog"
+		popoverBaseClass="scoreview-bounded-popper"
+		:autoBoundaryMaxSize="true">
 		<template #trigger>
 			<NcButton :aria-label="label" :title="label">
 				<template #icon>
@@ -42,8 +50,9 @@
 							{{ pageTitle }}
 						</h3>
 					</div>
-					<!-- Hohe Unterseiten (Loop mit Tempotrainer) scrollen in
-						sich, statt den Aufklapper aus dem Bild zu schieben. -->
+					<!-- Tall pages (loop with speed trainer) scroll with the
+						group, see .scoreview-group - a second scroll area
+						inside it is hard to work by touch. -->
 					<div class="scoreview-group-page">
 						<slot :name="'page-' + page" :close="close" />
 					</div>
@@ -129,9 +138,15 @@ export default {
 
 <style scoped src="./scoreviewPopover.css"></style>
 
+<style src="./boundedPopover.css"></style>
+
 <style scoped>
 .scoreview-group {
 	gap: 4px;
+	/* The group scrolls, not the popover (boundedPopover.css). */
+	box-sizing: border-box;
+	max-block-size: inherit;
+	overflow-y: auto;
 }
 
 .scoreview-group-icon {
@@ -151,6 +166,11 @@ export default {
 }
 
 .scoreview-group-head {
+	/* The way back stays in reach while the page scrolls under it. */
+	position: sticky;
+	inset-block-start: 0;
+	z-index: 1;
+	background: var(--color-main-background);
 	display: flex;
 	align-items: center;
 	gap: 4px;
@@ -171,7 +191,5 @@ export default {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	max-block-size: min(70vh, 520px);
-	overflow-y: auto;
 }
 </style>

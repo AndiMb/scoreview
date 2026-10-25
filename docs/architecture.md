@@ -616,8 +616,12 @@ Medientasten. Wer am Handy während der Wiedergabe sperrt, bekommt **einmal je
 Gerät** den Hinweis auf den Übe-Track: Den spielt jeder Player mit Steuerung
 auf dem Sperrbildschirm.
 
-**Systemband.** Die Systeme stehen nebeneinander, jedes so hoch wie der Platz –
-am Handy quer gehalten füllt ein System den Bildschirm. Nichts wird neu gesetzt
+**Systemband.** Die Systeme stehen nebeneinander, jedes so hoch wie der Platz,
+aber mit höchstens 12 px Linienabstand (`bandScale` in `systemBand.js`) – am
+Handy quer gehalten füllt ein System den Bildschirm, hochkant wird ein
+einzeiliger Auszug nicht zur 130-px-Notenzeile mit drei Noten je Bildschirm.
+Der Maßstab gilt je System, nicht einer fürs ganze Band: Sonst bestimmte ein
+einziges hohes System (Titel, viele Strophen) die Größe aller. Nichts wird neu gesetzt
 ([E2](#e2-musescore-svg-statt-neusatz-im-browser)): Jedes System ist eine
 gewöhnliche `ScorePage` mit einem Ausschnitt (`crop`) ihrer Seite, die Grenzen
 kommen aus den Notenlinien (`staffBands.js`), Liedtext darunter zählt zum
@@ -633,6 +637,25 @@ aus; gemessen hielt `scroll-snap` sonst einen Sprung auf 988 px bei 745 px
 an. `Bild↓`/`Bild↑` und ein Pedal blättern in einem breiten System erst
 seitenweise, dann ein System weiter. Wer den Viewer zum ersten Mal unter 600 px Breite mit Seiten
 öffnet, bekommt das Band einmal angeboten; die Antwort merkt sich die App.
+
+Das Band hat einen **eigenen Zoom** (`useBandZoom`, 50–300 % auf die
+Standardgröße, Knöpfe, `+`/`-`/`0`, zwei Finger), getrennt vom Seitenzoom: Der
+ist eine an die Fensterbreite gekoppelte Seitenbreite und bedeutet im Band
+nichts, ein gemeinsamer Wert spränge bei jedem Wechsel. Gemerkt wird er je
+Gerät, wie Seitenformat und Latenz. Ein größer gezoomtes System schiebt man im
+Band senkrecht, ein kleineres steht oben. Ändert sich die Größe der Rahmen –
+Zoom, Drehen, ein Hinweis darüber, die quer beim Abspielen einfahrende Leiste
+(gemessen: Bandhöhe 157 → 208 px) –, behält das Band seine Stelle
+(`bandAnchor`): auf dem Cursor, solange es folgt, sonst auf der Stelle am linken
+Rand; ein absolutes `scrollLeft` zeigte danach woanders hin. Hinweise stehen
+über dem Band, das Band füllt den Rest.
+
+Die Rahmen sind nach Seiten-URL **und** Index geschlüsselt, und die URLs gelten
+erst zusammen mit den daraus geschnittenen Ausschnitten (`loadedUrls`): Eine
+`ScorePage` behält das SVG, das sie zuerst geladen hat. Gemessen lagen nach
+einem Wechsel der Darstellungsvariante sonst die neuen Ausschnitte und der neue
+Cursor über dem alten Seitenbild; dasselbe gälte für alles, was neue
+`pageUrls` unter denselben Indizes bringt.
 
 **Zwei Seiten nebeneinander.** Keine vierte Darstellung, sondern eine
 Eigenschaft der Seitenansicht: Sie gilt, sobald die Notenfläche mindestens
