@@ -48,18 +48,21 @@ class ConverterRuntimeTest extends TestCase {
 		$argv = $runtime->command('/app/convert.mjs', ['/app', '/tmp/in.mscz'], ['/tmp/out'], ['/tmp/in.mscz', '/tmp/out']);
 		$this->assertSame('/usr/bin/x', $argv[0]);
 		$this->assertSame(['/app/convert.mjs', '/tmp/in.mscz', '/tmp/out'], array_slice($argv, -3), 'script and arguments come last, unchanged');
+		$isDeno = $flag === 'run';
 		if ($flag === null) {
-			$this->assertSame(['/usr/bin/x', '/app/convert.mjs', '/tmp/in.mscz', '/tmp/out'], $argv, 'without a usable permission model the run stays as it was');
+			$this->assertSame(['/usr/bin/x', '--liftoff-only', '/app/convert.mjs', '/tmp/in.mscz', '/tmp/out'], $argv, 'without a usable permission model the run stays as it was');
 		} else {
-			$this->assertSame($flag, $argv[1]);
+			$this->assertSame($flag, $argv[$isDeno ? 1 : 2]);
 		}
+		// Node waits at exit for its optimisation of the engine (ConverterRuntime::NODE_WASM_FLAG); Deno does not.
+		$this->assertSame(!$isDeno, in_array('--liftoff-only', $argv, true));
 	}
 
 	public function testNodeBekommtEinFlagJePfad(): void {
 		$runtime = ConverterRuntime::fromVersionOutput('/usr/bin/node', 'v22.21.1');
 
 		$this->assertSame([
-			'/usr/bin/node', '--permission',
+			'/usr/bin/node', '--liftoff-only', '--permission',
 			'--allow-fs-read=/app', '--allow-fs-read=/tmp/in.mscz', '--allow-fs-read=/fonts,cjk',
 			'--allow-fs-write=/tmp/out',
 			'/app/convert.mjs', '--selftest',
@@ -72,7 +75,7 @@ class ConverterRuntimeTest extends TestCase {
 		$runtime = ConverterRuntime::fromVersionOutput('/usr/bin/node', 'v20.19.2');
 
 		$this->assertSame([
-			'/usr/bin/node', '--experimental-permission',
+			'/usr/bin/node', '--liftoff-only', '--experimental-permission',
 			'--allow-fs-read=/app', '--allow-fs-read=/',
 			'--allow-fs-write=/tmp/out',
 			'/app/convert.mjs', '/tmp/out/',

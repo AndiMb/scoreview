@@ -80,6 +80,17 @@ final class ConverterRuntime {
 	}
 
 	/**
+	 * Wasm in V8's baseline compiler only. Without it, Node optimises the
+	 * engine's 9.5 MB module in the background and waits for that work when
+	 * the process ends: measured with Node 20.19 in the test container, a
+	 * conversion whose engine calls were done after 3.5 s took 23-29 s in
+	 * total, with the flag 3.2-4.0 s on scores of 1-5 pages - every run is a
+	 * fresh process that converts once, so the optimised code never pays
+	 * off. Deno 2.9 does not wait (4.3 s either way) and gets no flag.
+	 */
+	private const NODE_WASM_FLAG = '--liftoff-only';
+
+	/**
 	 * The argv for running $script with read access to $read and write
 	 * access to $write - and nothing else the runtime can withhold.
 	 *
@@ -110,7 +121,7 @@ final class ConverterRuntime {
 			);
 		}
 		if ($this->isolation() === self::ISOLATION_NONE) {
-			return array_merge([$this->path, $script], $args);
+			return array_merge([$this->path, self::NODE_WASM_FLAG, $script], $args);
 		}
 		// Renamed when it became stable in 22.13 and 23.5; the old name is
 		// what 20.x and the early 22/23 releases know.
@@ -118,7 +129,7 @@ final class ConverterRuntime {
 			|| ($this->major === 23 && $this->minor >= 5)
 			|| ($this->major === 22 && $this->minor >= 13);
 		return array_merge(
-			[$this->path, $stable ? '--permission' : '--experimental-permission'],
+			[$this->path, self::NODE_WASM_FLAG, $stable ? '--permission' : '--experimental-permission'],
 			// One flag per path, never a comma list (see isolation()).
 			array_map(static fn (string $p) => '--allow-fs-read=' . $p, $read),
 			array_map(static fn (string $p) => '--allow-fs-write=' . $p, $write),
