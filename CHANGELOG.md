@@ -6,6 +6,34 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.25.0] – 2026-10-25
+
+### Added
+
+- **Zoom in the system band**: the zoom buttons, `+`/`-`/`0` and two fingers
+  now work in the band too, from 50 to 300 % of a default size, kept per
+  device. A system zoomed taller than the band scrolls up and down in it.
+
+### Changed
+
+- In the system band a staff is at most 48 px tall at the default size. A
+  one-staff part held upright filled the whole height before – a staff of
+  130 px with three notes to a screen.
+
+### Fixed
+
+- After switching to a part, phone pages, concert pitch or transposed notes,
+  the system band kept showing the previous picture under the new systems and
+  cursor: staves were cut off and the cursor ran out of view.
+- A hint above the system band (such as the offer of phone pages) pushed its
+  lowest staves off the screen.
+- When the bar retracts on a phone held sideways, or the band otherwise
+  changes size, the band keeps its place instead of jumping elsewhere.
+- On a phone held sideways, the Practice and View groups were taller than the
+  screen and some of their entries – among them Layout – could not be
+  reached. The groups, the setlist and the rehearsal marks now scroll within
+  the room on screen.
+
 ## [1.24.0] – 2026-10-25
 
 ### Added
@@ -1502,6 +1530,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.25.0]: https://github.com/AndiMb/scoreview/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/AndiMb/scoreview/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/AndiMb/scoreview/compare/v1.21.2...v1.23.0
 [1.20.1]: https://github.com/AndiMb/scoreview/compare/v1.20.0...v1.20.1
