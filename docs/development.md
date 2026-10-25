@@ -81,13 +81,15 @@ Aus `sidecar/`:
 
 ```sh
 python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-.venv/bin/python -m pytest   # Parser-Unit-Tests, ohne MuseScore/Xvfb/Container
+.venv/bin/python -m pytest   # Parser-, API- und Engine-Aufruf-Tests, ohne MuseScore/Node/Xvfb/Container
 ```
 
-Das Image neu bauen und den Container ersetzen:
+Das Image neu bauen und den Container ersetzen – aus der Repo-Wurzel, denn das
+Image nimmt `scoreview/converter` als zweiten Renderer mit; auch eine Änderung
+am Konverter verlangt also einen Neubau:
 
 ```sh
-docker build -t scoreview-musescore-cli sidecar/
+docker build -f sidecar/Dockerfile -t scoreview-musescore-cli .
 docker rm -f scoreview-sidecar
 docker run -d --name scoreview-sidecar --network scoreview-net \
   -e SCOREVIEW_SIDECAR_SECRET="<secret>" \

@@ -151,9 +151,9 @@ result and differ only in what the server needs for them:
 | | **Local** (default) | **Sidecar** |
 |---|---|---|
 | Requires | Node.js ≥ 18 on the Nextcloud server | a Docker host |
-| MuseScore | MuseScore 4.7.5 as WebAssembly, in the app package | real MuseScore 4 in the container |
+| MuseScore | MuseScore 4.7.5 as WebAssembly, in the app package | the same engine (default) or real MuseScore 4, in the container |
 | Setup | nothing | start the container, enter address and secret |
-| Lyrics view, note names, coloured noteheads | yes | no |
+| Lyrics view, note names, coloured noteheads, parts | yes | yes with the engine, no with MuseScore itself |
 | Recommended if | you run no containers | you run some anyway |
 
 The local path is the default because it is the only one that is ready right
@@ -195,7 +195,7 @@ addresses (`allow_local_remote_servers`, see the
 [guide](docs/installation.md#path-b-sidecar)):
 
 ```sh
-docker build -t scoreview-musescore-cli sidecar/
+docker build -f sidecar/Dockerfile -t scoreview-musescore-cli .
 docker network create scoreview-net
 docker network connect scoreview-net <nextcloud-container>
 docker run -d --name scoreview-sidecar --network scoreview-net \
@@ -241,9 +241,10 @@ translation is described in [docs/translating.md](docs/translating.md).
 ScoreView is licensed under AGPL-3.0-or-later, see [LICENSE](LICENSE).
 
 - The engraving and conversion work is done by **MuseScore Studio** (GPL-3.0) –
-  in the sidecar as a pinned AppImage, on the local path through the
-  [scoreview-engine](https://github.com/AndiMb/scoreview-engine), MuseScore's
-  engraving compiled Qt-free to WebAssembly.
+  through the [scoreview-engine](https://github.com/AndiMb/scoreview-engine),
+  MuseScore's engraving compiled Qt-free to WebAssembly – locally, in the
+  browser and in the sidecar – or, if chosen, in the sidecar as a pinned
+  AppImage.
 - The **SoundFont** for playback is `FluidR3Mono_GM` (MIT) by default, the same
   one that ships with MuseScore. With the sidecar it comes from its MuseScore
   installation (MuseScore General by S. Christian Collins, MIT); otherwise the

@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:a2f320d25fb8 -->
+<!-- translation-of: limits.md sha256:8b640f1926ac -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -10,7 +10,9 @@ geschätzt; wo etwas Hochrechnung ist, steht es dabei.
 ## Gemessene Werte
 
 Drei Partituren, gemessen auf einer gewöhnlichen Arbeitsmaschine – beide
-Konvertierungswege in derselben Sitzung, damit die Spalten vergleichbar sind:
+Konvertierungswege in derselben Sitzung, damit die Spalten vergleichbar sind.
+„Sidecar“ ist hier der Sidecar, der mit MuseScore selbst konvertiert; mit der
+Engine konvertiert er wie der lokale Weg (siehe unten):
 
 | Partitur | Seiten | Takte | `.mscz` | Sidecar | lokal | SVG gesamt (Sidecar / lokal) | größte Seite | MIDI | Cache (Sidecar / lokal) |
 |---|---|---|---|---|---|---|---|---|---|
@@ -26,13 +28,17 @@ Umriss erneut – je nach Notendichte 35–70 % der Dateigröße.
 
 Daraus abgeleitet:
 
-- **Konvertierungsdauer über den Sidecar ≈ 6 s pro Seite + 2 s Grundlast**
+- **Konvertierungsdauer über den Sidecar mit MuseScore ≈ 6 s pro Seite + 2 s Grundlast**
   (lineare Regression über die drei Messpunkte). Die App wartet auf dem
   Sidecar-Weg fest höchstens 300 s ab dem Einreichen (`ConvertScoreJob`),
   rechnerisch rund 50 Seiten; `MSCORE_TIMEOUT_SECONDS` des Sidecars (Vorgabe
   600 s) liegt darüber und greift nur, wenn er kleiner gesetzt ist. Wer sehr
   große Partituren erwartet, rechnet mit `Seitenzahl × 6 s + Puffer` hoch. Die
   Zahl hängt spürbar von der CPU ab – Größenordnung, keine Garantie.
+- **Der Sidecar mit der Engine konvertiert wie der lokale Weg.** Gemessen auf
+  der Testinstanz gegen die API des Sidecars, an `parts-test.mscz` (3 Seiten,
+  fünf Notenzeilen): 1,4–2,5 s mit der Engine, 30–32 s mit MuseScore selbst –
+  dieselbe Partitur im selben Container.
 - **Lokal sind rund 0,45 s davon Grundlast** – Prozessstart plus Instanziierung
   des Wasm-Moduls. Die eigentliche Konvertierung dauert 0,4–0,8 s, also
   etwa 0,1 s pro Seite. Der lokale Weg gewinnt vor allem, weil er keine
@@ -148,8 +154,8 @@ zusätzlich ein 28-seitiger Chorsatz gemessen.
 (`measureFacts`, lokaler Weg und Rückfall im Browser ab `v4.7.5-engine.5`)
 klickt das Metronom die dirigierten Schläge: 6/8 und 9/8 in punktierten
 Vierteln mit drei Unterteilungen, ein Auftakt mit so vielen Schlägen, wie in
-seine Länge passen, gezählt wie die Taktart es täte. Ohne sie – Sidecar-Weg,
-eine Konvertierung von vor 1.17 – kommen die Schläge aus den
+seine Länge passen, gezählt wie die Taktart es täte. Ohne sie – der Sidecar,
+der mit MuseScore selbst konvertiert, eine Konvertierung von vor 1.17 – kommen die Schläge aus den
 Taktart-Ereignissen des MIDI, die MuseScore je Wechsel schreibt, einen
 Auftakt aber als eigene Taktart seiner Länge; und wo auch die fehlen, aus
 der Taktdauer und dem Viertel-Tempo. Der Einzähler zählt immer Schläge, keine
@@ -228,23 +234,28 @@ er trägt Bravura und Leland, und jede weitere Schrift würde das
 Auslieferungspaket vergrößern. Gezeichnet wird deshalb mit Bravura. Betroffen
 sind nur die Glyphenformen: Der Stilwert bleibt „Emmentaler“, also greifen die
 Satzregeln, die daran hängen, genauso wie in MuseScore – Seitenaufteilung und
-Abstände stimmen. Der Sidecar hat die Originalschrift.
+Abstände stimmen. Der Sidecar hat die Originalschrift, wenn er mit MuseScore
+selbst konvertiert; mit der Engine zeichnet er wie der lokale Weg.
 
-**Zwei Bildformate zeigt nur der Sidecar.** In die Partitur eingebettete
-Bilder setzen beide Wege ins Notenbild. Der lokale Weg reicht sie unverändert
+**Zwei Bildformate zeigt nur MuseScore selbst auf dem Sidecar.** In die
+Partitur eingebettete Bilder setzen beide Wege ins Notenbild. Die Engine – auf
+dem lokalen Weg wie auf dem Sidecar – reicht sie unverändert
 ins SVG durch und kennt dafür PNG, JPEG, GIF und BMP – die vier Formate, die
 ein Browser selbst anzeigt. Die beiden übrigen, die MuseScore annimmt, bleiben
 dort leer: ein SVG als Bild (dafür bräuchte die Qt-freie Engine einen eigenen
-SVG-Renderer) und TIFF (das kein Browser dekodiert). Der Sidecar rastert ein
-SVG-Bild mit; was er mit TIFF macht, hängt an den Bild-Plugins seines
-AppImage und ist ungeprüft. Wirkung: an dieser Stelle bleibt im lokalen Weg
-eine Lücke, der Rest der Seite ist unberührt.
+SVG-Renderer) und TIFF (das kein Browser dekodiert). MuseScore selbst rastert
+ein SVG-Bild mit; was es mit TIFF macht, hängt an den Bild-Plugins seines
+AppImage und ist ungeprüft. Wirkung: Mit der Engine bleibt an dieser Stelle
+eine Lücke, der Rest der Seite ist unberührt. Ein Sidecar lässt sich für
+solche Partituren auf MuseScore umstellen – allerdings für alle, nicht je
+Partitur.
 
-**Keine Hervorhebung der Notenköpfe auf dem Sidecar-Weg.** Der klingende
-Notenkopf wird nur eingefärbt, wo das SVG die Kennungen aus
+**Keine Hervorhebung der Notenköpfe, wenn der Sidecar mit MuseScore selbst
+konvertiert.** Der klingende Notenkopf wird nur eingefärbt, wo das SVG die
+Kennungen aus
 [M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)
-trägt – das tut der lokale Konvertierungsweg, nicht der Sidecar mit seinem
-Stock-AppImage. Dort bleibt es beim Band, ohne Fehlermeldung: Die Einstellung
+trägt – die schreibt die Engine, auf dem lokalen Weg wie auf dem Sidecar;
+Stock-MuseScore schreibt sie nicht. Dort bleibt es beim Band, ohne Fehlermeldung: Die Einstellung
 „klingende Noten einfärben" ist dann zwar wählbar, fällt aber still auf das Band
 zurück. Wirkung: dieselbe Bedienung, weniger Führung im Notenbild. Dasselbe
 gilt für die farbigen Notenköpfe der Intonation (siehe
@@ -522,7 +533,8 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   wie alles, was das Mikrofon braucht.
 - **Oktaven werden gefaltet.** Ein Tenor, der die Altstimme eine Oktave tiefer
   singt, singt sie richtig; eine Oktave daneben fällt also nicht auf.
-- **Farbige Notenköpfe nur auf dem lokalen Konvertierungsweg**, und nur, wo
+- **Farbige Notenköpfe nur, wo die Engine konvertiert** (lokal, auf dem
+  Sidecar mit der Engine, im Browser), und nur, wo
   jede Stimme eine eigene Notenzeile hat. Ein Kopf zeigt den schlechtesten
   Wert aus Tonhöhe, Einsatz und Ende; welcher es war, sagt die Liste. Sonst bleibt es ohne Fehlermeldung
   bei der Nadel und der Liste der Problemstellen
@@ -559,7 +571,7 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
 
 ### Partiturfakten und Stempel
 
-- **Auf dem Sidecar-Weg kein Dur/Moll beim Grundton.** Stock-MuseScore schreibt
+- **Mit MuseScore selbst auf dem Sidecar kein Dur/Moll beim Grundton.** Stock-MuseScore schreibt
   keine Tonarten in `meta.json`, und im MIDI ist das Moll-Byte immer 0
   ([M11](architecture.md#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen)).
   Der Anfangston „Grundton“ spielt dort die Dur-Tonika der Vorzeichnung –
@@ -571,8 +583,8 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
 - **Stimmstempel stehen über dem System, wenn sich Zeilen und Stimmen nicht
   zuordnen lassen** – etwa sechs Stimmen auf fünf Notenzeilen. Der Stempel ist
   dann da, aber nicht an der Zeile seiner Stimme.
-- **Auf dem Sidecar-Weg keine Liedtext-Ansicht und keine Tonnamen.** Beides
-  braucht Listen, die nur die Engine schreibt; siehe
+- **Mit MuseScore selbst auf dem Sidecar keine Liedtext-Ansicht und keine
+  Tonnamen.** Beides braucht Listen, die nur die Engine schreibt; siehe
   [Darstellungen](#darstellungen).
 
 ### Mobil
@@ -667,16 +679,17 @@ mehrere Minuten ist nicht gemessen.
 
 - **Liedtext-Ansicht und Tonnamen nur mit den Daten der Engine.** Sie brauchen
   `lyricSyllables` bzw. `noteSpellings`, und die schreibt nur die Engine – auf
-  dem lokalen Konvertierungsweg und beim Rückfall im Browser. Auf dem
-  Sidecar-Weg sind beide nicht wählbar und sagen warum; eine Neukonvertierung
+  dem lokalen Konvertierungsweg, auf dem Sidecar mit der Engine und beim
+  Rückfall im Browser. Mit MuseScore selbst auf dem Sidecar sind beide nicht
+  wählbar und sagen warum; eine Neukonvertierung
   dort ändert daran nichts
   ([E15](architecture.md#e15-fähigkeiten-statt-weg)). Das Systemband geht auf
   beiden Wegen.
 - **Ein Cache-Eintrag unter `CURRENT_FORMAT_VERSION` 5** wird beim nächsten
   Öffnen neu konvertiert und bekommt dabei die Listen.
 - **Zählzeiten brauchen ebenfalls die Engine**: die Taktart je Takt und einen
-  Tick je Akkord (`measureFacts`, `noteSpellings[].tick`). Auf dem
-  Sidecar-Weg sagt die Einstellung, warum es sie nicht gibt. Die Zahlen folgen
+  Tick je Akkord (`measureFacts`, `noteSpellings[].tick`). Mit MuseScore
+  selbst auf dem Sidecar sagt die Einstellung, warum es sie nicht gibt. Die Zahlen folgen
   einer Stimme (der ersten) und stehen in einer Reihe über der Notenzeile:
   „1 2 3 4“ auf den Schlägen, „+“ auf den Hälften dazwischen in einfachen
   Taktarten, jedes Achtel nummeriert in zusammengesetzten; Triolen,
@@ -888,8 +901,9 @@ Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
 Eine Stimme für sich, Seiten in Handygröße, klingende Notation und Noten,
 die mit dem Klang mittransponiert werden – jeweils von MuseScore selbst
 gesetzt, bei Bedarf ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)).
-Verfügbar auf dem lokalen Konvertierungsweg und im Rückfall im Browser; der
-Sidecar setzt keine, dort bleibt die Wahl ausgegraut und nennt den Grund.
+Verfügbar auf dem lokalen Konvertierungsweg, auf dem Sidecar mit der Engine
+und im Rückfall im Browser; ein Sidecar, der mit MuseScore selbst konvertiert,
+setzt keine, dort bleibt die Wahl ausgegraut und nennt den Grund.
 
 Gemessen auf der Testinstanz (Node 20.19, die eigene Testpartitur
 `parts-test.mscz`, 24 Takte, fünf Notenzeilen):
@@ -905,7 +919,8 @@ Gemessen auf der Testinstanz (Node 20.19, die eigene Testpartitur
 - **Je Lauf 3–4 s auf dem Server**, gemessen über die Variantenroute samt
   Anfrage (auf der langsamen Testinstanz rund 6 s, davon 1,5 s deren
   Anfragezeit). Eine schon gesetzte Variante antwortet wie jedes andere
-  gecachte Artefakt. Unter Deno 2.9: 4,3 s.
+  gecachte Artefakt. Unter Deno 2.9: 4,3 s. Über den Sidecar mit der Engine
+  (Node 22 im Image): 3,9 s über die Variantenroute, also dasselbe.
 - **Speicher**: Eine erzeugte Stimme braucht weniger als die
   Grundkonvertierung – 122–124 gegenüber 174–190 MB Prozessspeicher bei
   vier- und fünfseitigen Chorsätzen.
@@ -978,23 +993,29 @@ Beides ist MuseScores Satz des Rahmens auf kleinem Papier.
 - **Keine Steuerung auf dem Sperrbildschirm für die Wiedergabe im Viewer.**
   Web Audio bekommt sie nicht ([Sperrbildschirm](#sperrbildschirm)); dafür gibt
   es den Übe-Track.
-- **Kein transponiertes Notenbild auf dem Sidecar-Weg.** Dort wird nur der
-  Klang transponiert; die Noten und die Tonnamen bleiben, wie sie geschrieben
-  sind. Auf dem lokalen Weg und im Browser können die Noten mitgehen
+- **Kein transponiertes Notenbild, wenn der Sidecar mit MuseScore selbst
+  konvertiert.** Dort wird nur der Klang transponiert; die Noten und die
+  Tonnamen bleiben, wie sie geschrieben sind. Mit der Engine – lokal, auf dem
+  Sidecar, im Browser – können die Noten mitgehen
   ([Darstellungsvarianten](#darstellungsvarianten)).
 - **Kein Stift-/Freihand-Layer.** Notizen sind Text an einem musikalischen Anker.
   Freie Striche wären eine zweite Datenart, deren Anker ein Pfad statt eines
   Punktes sein müsste – und die anders als Text ein Neurendern der Partitur
   nicht übersteht, weil ein Strich an Pixeln hängt und nicht an einem Takt.
-- **Keine Stimmenauszüge auf dem Sidecar-Weg.** Dort nimmt „Nur meine Zeile"
-  die übrigen Stimmen optisch zurück, und die Seite behält ihr Layout samt der
-  Leerräume, wo die anderen Zeilen stehen. Auf dem lokalen Weg und im Browser
-  wird eine Stimme für sich gesetzt
+- **Keine Stimmenauszüge, wenn der Sidecar mit MuseScore selbst
+  konvertiert.** Dort nimmt „Nur meine Zeile" die übrigen Stimmen optisch
+  zurück, und die Seite behält ihr Layout samt der Leerräume, wo die anderen
+  Zeilen stehen. Mit der Engine wird eine Stimme für sich gesetzt
   ([Darstellungsvarianten](#darstellungsvarianten)).
-- **Kein Sandboxing des MuseScore-Prozesses über den Container hinaus.** Der
+- **Kein Sandboxing von MuseScore selbst über den Container hinaus.** Der
   Container läuft non-root mit Speicher- und PID-Limit; eine
   Netzwerk-Isolation nur für den Konvertierungs-Subprozess bräuchte eine eigene
-  Sandbox-Schicht. Siehe [Sicherheit](../sidecar/README.md#sicherheit).
+  Sandbox-Schicht. Die Engine im selben Container ist weiter eingesperrt, wie
+  auf dem lokalen Weg mit Node 22: Jeder Lauf liest nur seine Partitur und
+  schreibt nur seine Ausgabe, startet keine Prozesse und sieht nichts von der
+  Umgebung des Containers – das Netz bleibt offen, wie in der Tabelle unter
+  [Abschottung des lokalen Konverters](#abschottung-des-lokalen-konverters).
+  Siehe [Sicherheit](../sidecar/README.md#sicherheit).
 - **Nur Deutsch und Englisch.** Eine weitere Sprache ist das Hinzufügen einer
   Datei, keine Umstellung ([E4](architecture.md#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung)).
 - **Keine Verpackung als AppAPI/ExApp.** Der Sidecar läuft als eigener
@@ -1016,7 +1037,9 @@ Beides ist MuseScores Satz des Rahmens auf kleinem Papier.
 
   Außerhalb der App, weil das ausgelieferte App-Verzeichnis **signiert** ist –
   jede zusätzliche Datei darin lässt Nextclouds Integritätsprüfung dauerhaft
-  Alarm schlagen. Auf dem Sidecar-Weg gibt es diese Möglichkeit nicht: Sein
-  Image bringt nur DejaVu und FreeFont mit (nachgesehen: 19 Fontdateien, keine
-  CJK-Schrift), und es gibt keine Einstellung, ihm Fonts nachzureichen – dort
-  hilft nur ein eigenes Image.
+  Alarm schlagen. Der Sidecar braucht nichts davon, wenn er mit der Engine
+  konvertiert: Sein Image kennt keine Größengrenze und bringt die Schriften
+  mit, die das App-Paket weglässt (nachgesehen: beide laden unter dem
+  Berechtigungsmodell). MuseScore selbst im selben Image hat nur DejaVu und
+  FreeFont (19 Fontdateien, keine CJK-Schrift), und es gibt keine Einstellung,
+  ihm Fonts nachzureichen.

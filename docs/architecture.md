@@ -12,7 +12,7 @@ ScoreView besteht aus diesen Teilen:
 |---|---|---|
 | Nextcloud-App | `scoreview/lib/` (PHP) | Konvertierung anstoßen, Ergebnis cachen, Artefakte ausliefern, Notizen, Leitungen, „Folgt mir“, Setlisten und Aufnahmen verwalten, Übe-Tracks in Files ablegen, die Offline-Seite ausliefern |
 | Viewer | `scoreview/src/` (Vue 3) | Notenseiten anzeigen, MIDI im Browser synthetisieren, Cursor führen, Mikrofon auswerten, Übe-Tracks rendern, Partituren für die Offline-Seite vormerken |
-| Sidecar | `sidecar/` (Python + MuseScore 4) | `.mscz` übersetzen – im eigenen Container |
+| Sidecar | `sidecar/` (Python, darin die scoreview-engine unter Node und MuseScore 4 als AppImage) | `.mscz` übersetzen – im eigenen Container, mit einem der beiden Renderer |
 | Lokaler Konverter | `scoreview/converter/` (Node + scoreview-engine: MuseScore als WebAssembly) | dasselbe, ohne Container |
 
 Konvertiert wird über **einen von zwei Wegen**, wahlweise über den Sidecar oder
@@ -37,11 +37,12 @@ greift nur, wo sonst gar nichts liefe.
    v
 Konvertierung - einer von zwei Wegen, gleiche Artefakte (E3)
    |
-   |  Sidecar: ein mscore-Aufruf --score-media
-   |     -> svgs[] · midi · sposXML · mposXML · metadata
-   |     (pngs/pdf/mxml werden verworfen)
    |  Lokal:   ein node-Prozess mit der scoreview-engine (MuseScore als Wasm)
    |     -> saveSvg() · saveMidi() · savePositions() · metadata()
+   |  Sidecar mit Renderer engine: derselbe node-Prozess, im Container
+   |  Sidecar mit Renderer musescore: ein mscore-Aufruf --score-media
+   |     -> svgs[] · midi · sposXML · mposXML · metadata
+   |     (pngs/pdf/mxml werden verworfen)
    v
 IAppData-Cache  scoreview/<fileId>/<etag>/
    |     page-1.svg … page-N.svg · score.mid · timing.json · measures.json · meta.json
@@ -1200,6 +1201,12 @@ ist. Die Wahl ist eine einzelne Admin-Einstellung (`conversion_backend`,
 Voreinstellung `local`) und wird an genau einer Stelle im Code ausgewertet
 (`ConvertScoreJob`).
 
+Der Sidecar hat seinerseits **zwei Renderer**: die Engine des lokalen Wegs oder
+MuseScore selbst (`sidecar_renderer`, Voreinstellung `engine`, siehe
+[Zwei Renderer im Sidecar](#zwei-renderer-im-sidecar)). Auch das ist keine
+dritte Wahl neben den beiden Wegen, sondern eine Eigenschaft des Sidecar-Wegs;
+die App nennt den Renderer bei jedem Auftrag.
+
 Welcher Weg gelaufen ist, wird beim Ablegen der Artefakte **aufgezeichnet**
 (Spalte `backend`) und im Viewer angezeigt. Das ist kein Aufweichen der
 Trennung, sondern ihr Preis: Weil man dem Ergebnis nicht ansieht, woher es
@@ -1209,18 +1216,20 @@ zu beantworten.
 
 | | Lokal (Voreinstellung) | Sidecar |
 |---|---|---|
-| MuseScore | MuseScore 4.7.5 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) | echtes MuseScore 4 aus gepinntem AppImage |
-| Läuft als | abgeschotteter Kindprozess der Node- oder Deno-Laufzeit des Servers ([S11](#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)) | eigener Container, HTTP-API |
+| MuseScore | MuseScore 4.7.5 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) | wählbar: dieselbe Engine (Voreinstellung) oder echtes MuseScore 4 aus gepinntem AppImage |
+| Läuft als | abgeschotteter Kindprozess der Node- oder Deno-Laufzeit des Servers ([S11](#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)) | eigener Container, HTTP-API; die Engine darin als abgeschotteter Kindprozess von Node 22 |
 | Voraussetzung beim Betreiber | Node.js ≥ 18 oder Deno ≥ 2, `proc_open` erlaubt | Docker o. ä. |
 | Im App-Paket | rund 14 MB Wasm + Ressourcen (`converter/`) | nichts |
 | SoundFont | holt der Server von einer voreingestellten Adresse | bringt das Image mit |
 | Vorab-Konvertierung, Selbsttest | ja | ja |
 
-**Warum es den Sidecar weiterhin gibt.** Er bringt echtes, aktuelles MuseScore 4
-mit: eine Abhängigkeit, die ein Versionswechsel aktualisiert, und keine, die
-jemand bauen und pflegen muss. Wo ohnehin Container laufen, ist das der
-robustere Weg – und der einzige, dessen MuseScore-Version sich ohne einen
-eigenen Build nachziehen lässt.
+**Warum es den Sidecar weiterhin gibt.** Er konvertiert dort, wo der
+Nextcloud-Server selbst keine JavaScript-Laufzeit hat oder keine Prozesse
+starten darf – etwa im offiziellen Nextcloud-Image –, aber ein Container
+daneben laufen kann. Die Konvertierung liegt dann in einem eigenen Container
+mit Speicher- und PID-Grenze statt im Webserver-Prozess, und das Image kennt
+keine Größengrenze: Es bringt die CJK-Schriften mit, die das App-Paket
+weglässt. Und er kann auf Wunsch echtes MuseScore 4 fahren (siehe unten).
 
 **Warum es den lokalen Weg gibt.** Der Sidecar setzt voraus, dass der Betreiber
 einen zweiten Container betreiben kann. Das schließt Instanzen ohne Docker aus –
@@ -1278,14 +1287,16 @@ Hintergrundpfad ist vorhanden (M9), `metadata.tracks` führt die Stimmen samt
 Metronomspur (M6). In `meta.json` ist `parts[].instrumentName` lokal *gefüllt*
 und beim Sidecar `null` – ein Unterschied, den der Viewer nicht liest.
 
-**Ein Unterschied bleibt (M10):** Auf dem lokalen Weg tragen die SVG-Elemente
-ihre Segment-, Notenzeilen- und Stimmenkennung, auf dem Sidecar-Weg nicht – die
+Der Vergleich in diesem Abschnitt gilt dem Sidecar mit **MuseScore als
+Renderer**; mit der Engine liefert er Byte für Byte, was der lokale Weg
+liefert.
+
+**Ein Unterschied bleibt (M10):** Mit der Engine tragen die SVG-Elemente
+ihre Segment-, Notenzeilen- und Stimmenkennung, mit MuseScore selbst nicht – die
 schreibt der SVG-Writer der Engine, und MuseScore selbst kennt sie nicht. Der
 Viewer erkennt das Fehlen beim Aufbau seines Index und bleibt dann beim
 Cursor-Band; es gibt keinen Schalter und keine Einstellung dafür. Wer die
-Hervorhebung auch im Container will, müsste dort die Engine statt MuseScore
-konvertieren lassen – und gäbe damit das beste Argument des Sidecars auf,
-nämlich echtes, per Versionswechsel aktualisierbares MuseScore.
+Hervorhebung im Container will, lässt den Sidecar mit der Engine konvertieren.
 
 **Und einer in `meta.json`:** Tonarten mit Dur/Moll und Studierbuchstaben
 (`keySigs`, `rehearsalMarks`), Liedtextsilben und die Schreibweise je Notenkopf
@@ -1384,12 +1395,65 @@ keine Umverdrahtung, sondern eine neue Vertrauensgrenze, denn der Server
 lieferte dann an alle Leser einer Datei aus, was ein einzelner Browser erzeugt
 hat. Statt diese Grenze einzuziehen, entfällt auf diesem Weg der Cache.
 
+#### Zwei Renderer im Sidecar
+
+Das Image trägt beide: das AppImage wie bisher und daneben Node 22 mit
+`scoreview/converter` – nicht einer Kopie, sondern genau dem Verzeichnis des
+App-Pakets, per `npm ci` gegen dessen Lockfile installiert. Deshalb wird es aus
+der Wurzel des Repositorys gebaut. Mit der Engine liefert der Sidecar, was der
+lokale Weg liefert, bis hin zu den Kennungen (M10), den Listen in `meta.json`
+und den Darstellungsvarianten
+([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)).
+
+**Warum die Engine die Voreinstellung ist.** Nur mit ihr geht alles, was die
+App kann; MuseScore selbst bringt dagegen zwei Dinge, die die Qt-freie Engine
+nicht hat – die Originalnotenschrift alter Partituren und gerasterte
+SVG-Bilder ([Grenzwerte](limits.de.md#bekannte-lücken)). Wem die wichtiger
+sind, stellt um; es ist eine Abwägung je Instanz, nicht je Partitur.
+
+**Warum die App den Renderer nennt und nicht der Sidecar.** Die App muss
+wissen, ob es Varianten gibt (`ConversionBackend::supportsVariants()`), und
+zwar bei jeder Statusabfrage, ohne den Sidecar zu fragen. Eine Einstellung im
+Container müsste sie erst erfragen und zwischenspeichern – eine zweite Wahrheit,
+die auseinanderlaufen kann. Der Sidecar hat für Anfragen ohne Angabe nur eine
+Voreinstellung (`SCOREVIEW_SIDECAR_RENDERER`); der Status eines Auftrags nennt,
+was tatsächlich lief.
+
+**Ein Image von vor der Wahl** übergeht das Feld und konvertiert mit
+MuseScore. Damit ein Update daran nichts kaputt macht, schreibt
+`Version000100Date20261025200000` für jede Instanz mit eingetragener
+`sidecar_url` `musescore` fest – dieselbe Regel wie beim Wechsel der
+Voreinstellung auf den lokalen Weg. Wer danach auf die Engine stellt, ohne neu
+zu bauen, erfährt es an zwei Stellen: Der Selbsttest vergleicht den
+gemeldeten Renderer mit dem gewählten, und eine Variante scheitert mit
+`variant_unsupported`, weil `POST /variant` fehlt (404).
+
+**Varianten über den Sidecar** setzt die App wie lokal in der Anfrage
+des Browsers: `ConvertScoreJob::convertVariant()` schickt Partitur und die
+Grundartefakte `timing.json`/`measures.json` an `POST /variant`, der Sidecar
+antwortet nach dem Lauf, und die Artefakte kommen über dieselbe Route wie bei
+der Grundkonvertierung. Gemessen 3,9 s je Variante – so viel wie lokal. Ein
+belegter Sidecar (`sidecar_busy`) oder ein nicht erreichbarer gelten bei
+Varianten als vorübergehend: Die Zeile darf nach einer Minute neu laufen statt
+nach einer Stunde (`VariantService::RETRY_TRANSIENT_AFTER_SECONDS`).
+
+**Abschottung.** Die Engine läuft im Container wie auf dem lokalen Weg mit
+`--permission` und denselben Freigaben
+([S11](#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)),
+dazu mit beschnittener Umgebung: Das Berechtigungsmodell sperrt
+Umgebungsvariablen nicht, und die des Containers tragen das Secret.
+
 #### Welchen Weg wählen
 
-Wo Container laufen, der Sidecar – eine Abhängigkeit weniger, die im Repo
-gepflegt werden muss. Wo keine laufen, der lokale Weg. Umstellen heißt: die
-Einstellung ändern; bereits konvertierte Partituren bleiben im Cache gültig,
-weil die Artefakte dieselben sind.
+Wo der Nextcloud-Server eine JavaScript-Laufzeit hat und Prozesse starten
+darf, der lokale Weg – es gibt nichts einzurichten. Wo nicht, aber Container
+laufen, der Sidecar mit der Engine. MuseScore selbst, wo alte Partituren mit
+ihrer Originalschrift oder SVG-Bilder wichtiger sind als Notenkopffärbung,
+Liedtext-Ansicht und Varianten. Umstellen heißt: die Einstellung ändern;
+bereits konvertierte Partituren bleiben im Cache gültig. Was ein Wechsel von
+MuseScore auf die Engine an Kennungen und Listen bringt, bekommt eine
+Partitur erst mit ihrer nächsten Konvertierung – „Neu konvertieren“ im Viewer
+oder eine neue Fassung der Datei.
 
 Wege, den Sidecar bereitzustellen, stehen in
 [`../sidecar/README.md`](../sidecar/README.md#bereitstellung); die Einrichtung
@@ -2382,8 +2446,8 @@ das Band zurückfällt, sagen die neuen Darstellungen, warum sie nicht gehen
 Wege schreiben); sie hat zu viel Text (die Engine lässt die Liste über 20 000
 Silben ganz weg, statt sie abzuschneiden); oder die Seiten wurden ohne die
 nötigen Daten gesetzt – „eine Neukonvertierung auf diesem Server kann sie
-nicht ergänzen“. Der letzte Text gilt auf Sidecar-Instanzen, nennt aber keinen
-Weg. Nicht verfügbare Optionen sind in der Auswahl ausgegraut und nennen den
+nicht ergänzen“. Der letzte Text gilt, wo der Sidecar mit MuseScore selbst
+konvertiert, nennt aber keinen Weg. Nicht verfügbare Optionen sind in der Auswahl ausgegraut und nennen den
 Grund; ist die gewählte Darstellung bei einer Partitur nicht verfügbar, zeigt
 der Viewer die Seiten mit einer Hinweisleiste, und die Wahl bleibt
 gespeichert.
@@ -2431,7 +2495,7 @@ dritte Kopie wäre die gewesen, die abweicht.
 
 **Kein Server-PDF.** Keiner der beiden Konvertierungswege kann eines schreiben
 ([E3](#e3-zwei-konvertierungswege-hinter-einer-api): die Engine hat kein Qt,
-der Sidecar schriebe es nur auf einem Weg). Der Druckdialog des Browsers macht
+der Sidecar schriebe es nur mit MuseScore als Renderer). Der Druckdialog des Browsers macht
 es: „Als PDF speichern“ hält die SVG-Pfade als Vektoren (gemessen, siehe
 [Grenzwerte](limits.de.md#drucken)). Was die Seite deshalb bewusst **nicht**
 tut: drucken, bevor jedes Blatt geladen ist – der Knopf bleibt gesperrt, bis
@@ -2604,13 +2668,15 @@ auf „nur meine Stimme“ wäre das zu lang. Gemessen sind 3–4 s je Lauf
 für dieselbe Variante ergeben einen Lauf: Der eindeutige Index ist die Sperre,
 die zweite Anfrage bekommt `pending` und fragt nach.
 
-**Wo es Varianten gibt.** Auf dem lokalen Weg und im Browser-Rückfall – der
-fährt dieselbe Engine und erzeugt Varianten im Tab (höchstens drei,
-`useClientConversion.runVariant()`). Der Sidecar setzt keine: Sein
-Stock-MuseScore schreibt weder die Kennungen aus M10 noch `baseElid` und
-`staffMap`, und die Kommandozeile liefert Auszüge nur als PDF. Der Status
-meldet das als Fähigkeit (`variants.supported`), der Viewer graut die Wahl
-mit Grund aus und dunkelt wie bisher ab.
+**Wo es Varianten gibt.** Überall, wo die Engine konvertiert: auf dem lokalen
+Weg, auf dem Sidecar mit der Engine (`POST /variant`, siehe
+[Zwei Renderer im Sidecar](#zwei-renderer-im-sidecar)) und im Browser-Rückfall –
+der erzeugt Varianten im Tab (höchstens drei,
+`useClientConversion.runVariant()`). Ein Sidecar, der mit MuseScore selbst
+konvertiert, setzt keine: Stock-MuseScore schreibt weder die Kennungen aus M10
+noch `baseElid` und `staffMap`, und die Kommandozeile liefert Auszüge nur als
+PDF. Der Status meldet das als Fähigkeit (`variants.supported`), der Viewer
+graut die Wahl mit Grund aus und dunkelt wie bisher ab.
 
 **Was gemerkt wird.** Fassung, „klingend“ und „Noten mittransponieren“ je
 Person und Partitur bei den Übe-Einstellungen – wer im Tenor singt, will den
@@ -2639,7 +2705,9 @@ Sache der Datei; das Handyformat blendet leere Notenzeilen von sich aus aus.
 Eigenschaften des MuseScore-Exports, auf denen die Umsetzung aufbaut. Alle gegen
 das gebaute Image bzw. die Engine gemessen, nicht angenommen. Die Kennungen
 `M1`…`M13` sind im Code referenziert; M5 ist entfallen und bleibt frei,
-damit die übrigen Verweise gelten.
+damit die übrigen Verweise gelten. „Sidecar“ heißt in diesen Abschnitten: der
+Sidecar mit MuseScore selbst als Renderer; mit der Engine gilt, was hier für
+die Engine steht.
 
 ### M1: `--score-media` liefert alles in einem Aufruf
 
@@ -2667,8 +2735,8 @@ und wird durch SVG ersetzt, MusicXML braucht der Viewer nicht.
 Stock-MuseScore nicht kennt: `keySigs`, `rehearsalMarks`, `lyricSyllables`
 und `noteSpellings`
 ([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall), Form im
-[Artefaktschema](#artefaktschema)). Das `metadata` des Sidecars hat keines
-davon.
+[Artefaktschema](#artefaktschema)). Das `metadata` von MuseScore selbst
+(Sidecar mit Renderer `musescore`) hat keines davon.
 
 ### M3: stdout ist nicht sauber
 
@@ -2769,7 +2837,7 @@ Im gesamten Dokument steht kein einziges `id="…"`-Attribut. Adressierbar ist n
 über `class` (`Note`, `BarLine`, `StaffLines`, `Clef`, …) – eine Kategorie, kein
 Bezug zu einer einzelnen Note. Eine Hervorhebung des klingenden Notenkopfs ist
 damit nicht möglich; es bleibt beim Overlay. **Das gilt weiterhin für den
-Sidecar-Weg**; was die Engine daran ändert, steht in
+Sidecar mit MuseScore als Renderer**; was die Engine daran ändert, steht in
 [M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg).
 
 Für die Overlay-Umsetzung wichtig: Das allererste Element im Dokument ist ein
@@ -2867,7 +2935,7 @@ Studierbuchstaben A/B/C, eine Wiederholung) auf beiden Wegen:
 - **Im SVG stehen `RehearsalMark` und `KeySig` ohne `seg-`**, und den Text
   eines Studierbuchstabens gibt es dort nur als Glyphenpfad. Auslesen ließe er
   sich nur über eine Glyphenerkennung – deshalb die Felder in `meta.json`.
-- **`meta.json` des Sidecars hat weder `keySigs` noch `rehearsalMarks`.**
+- **`meta.json` von MuseScore selbst hat weder `keySigs` noch `rehearsalMarks`.**
 - **Das MIDI trägt Taktarten als `FF 58`**, je Wechsel und ausgerollt wie die
   Marker (gemessen an `timesig-test.mscz` und `keys-marks-test.mscz` mit
   der Engine, deren MIDI dem des Sidecars byteweise gleicht): 4/4 bei Tick 0,
@@ -2897,8 +2965,8 @@ mit drei Strophen, Schluss „A-men“) auf beiden Wegen:
 Aus den übrigen Artefakten lässt sich damit **kein Liedtext rekonstruieren** –
 weder Wörter noch die Zuordnung Silbe ↔ Strophe ↔ Stimme. Deshalb schreibt die
 Engine `lyricSyllables`
-([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)); auf dem
-Sidecar-Weg gibt es die Liedtext-Ansicht nicht
+([E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)); mit MuseScore
+selbst auf dem Sidecar gibt es die Liedtext-Ansicht nicht
 ([E15](#e15-fähigkeiten-statt-weg)). Das Timing rollt die Wiederholung
 korrekt aus (28 Ereignisse = 3 × 8 + 4,
 [M7](#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht)); daraus folgt, welche
@@ -2936,8 +3004,10 @@ Ein Abschnittsumbruch beginnt die **angezeigte** Taktnummer wieder bei 1
 
 ## Artefaktschema
 
-`timing.json` und `measures.json` haben dieselbe Form (ein gemeinsamer Parser im
-Sidecar erzeugt beide aus `sposXML` bzw. `mposXML`):
+`timing.json` und `measures.json` haben dieselbe Form (mit MuseScore als Renderer
+erzeugt ein gemeinsamer Parser im Sidecar beide aus `sposXML` bzw. `mposXML`,
+die Engine schreibt sie über `converter/lib/artifacts.mjs` gleich in dieser
+Form):
 
 ```json
 {
@@ -2980,7 +3050,7 @@ für Tonarten und Studierbuchstaben:
 - `measure` ist die **notierte** Taktnummer, 1-basiert, `tick` notiert und
   nicht ausgerollt. Ohne Mehrtaktpausen ist das dieselbe Zählung wie in
   `measures.json`; mit ihnen nicht, siehe E12.
-- Fehlen die Felder (Sidecar, Konvertierung mit einer älteren Engine), ist das
+- Fehlen die Felder (Sidecar mit MuseScore, Konvertierung mit einer älteren Engine), ist das
   kein Fehler – der Viewer nimmt dann das MIDI.
 
 Dann zwei für Liedtext und Schreibweisen (ab `v4.7.5-engine.4`):
@@ -3028,7 +3098,7 @@ Und eines für die Taktart je Takt (ab `v4.7.5-engine.5`), dazu je
 - `tick` am Segment liegt auf derselben Skala: Wo im Takt ein Akkord steht,
   ist `tick − measureFacts[i].tick`, exakt und ohne Umweg über Zeit und Tempo.
   Darauf bauen Metronom-Schläge nach Taktart und Zählzeiten auf.
-- Fehlt das Feld (Sidecar, ältere Engine), schätzt der Viewer die Schläge aus
+- Fehlt das Feld (Sidecar mit MuseScore, ältere Engine), schätzt der Viewer die Schläge aus
   der Taktdauer und liest Taktartwechsel aus dem MIDI
   ([M11](#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen)).
 

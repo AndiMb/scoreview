@@ -305,10 +305,12 @@ The selection names the reason:
 
 - **“This score has no lyrics.”** – that is how it is.
 - **“These pages were set without the data this view needs.”**
-  The score was converted via the sidecar; stock MuseScore does not deliver
-  lyric syllables and spellings
-  ([E15](architecture.md#e15-fähigkeiten-statt-weg) (German)). A reconversion on
-  the same instance does not change that, only the local conversion path does.
+  The score was converted by a sidecar that converts with MuseScore itself;
+  stock MuseScore does not deliver lyric syllables and spellings
+  ([E15](architecture.md#e15-fähigkeiten-statt-weg) (German)). A reconversion
+  changes that only once the sidecar converts with the engine (see
+  [The sidecar cannot convert with the engine](#the-sidecar-cannot-convert-with-the-engine))
+  or the instance uses the local conversion path.
 - **“This score has too much text for the lyrics view.”** More than
   20,000 syllables.
 - **If the lyrics view shows “This part has no lyrics.”**, your
@@ -319,15 +321,29 @@ If the chosen display is not available for a score, the
 viewer shows the pages with a notice and keeps the choice for the next
 score.
 
+## The sidecar cannot convert with the engine
+
+The self-test reports *“The sidecar image cannot convert with "engine" – it
+predates that choice”*, or variants fail with *“The sidecar image engraves no
+display variants yet”*. The running image was built before ScoreView 1.24 and
+only has MuseScore. Rebuild it from the root of the repository and replace the
+container ([Updating](installation.md#updating)); until then, set the sidecar
+to **MuseScore itself** in the settings. An update keeps existing sidecar
+installations on MuseScore for exactly this reason.
+
 ## Parts, phone pages or concert pitch cannot be selected
 
 Under **View → Layout**, “Edition” and “Page format” name the reason when they
 are greyed out:
 
 - **“This server engraves no parts or phone pages …”** – the instance converts
-  via the sidecar, whose stock MuseScore cannot engrave them
+  via a sidecar set to MuseScore itself, and stock MuseScore cannot engrave them
   ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild) (German)).
-  Only the local conversion path (or the browser fallback) does.
+  The engine does – on the local path, on the sidecar once it is switched to
+  the engine, and in the browser fallback.
+- **A variant fails with “The conversion service is busy”** – both conversion
+  slots of the sidecar were taken for 20 s. The server tries again a minute
+  later; choosing the variant again is enough.
 - **“Concert pitch” is missing** – no instrument in this score transposes, so
   there is nothing to show differently.
 - **A stored part is missing from the list** – the score was converted before

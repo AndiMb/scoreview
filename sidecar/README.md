@@ -1,25 +1,40 @@
 # MuseScore-Sidecar
 
-Der Konvertierungsdienst hinter ScoreView: ein Docker-Image mit einer gepinnten
-MuseScore-Studio-Version, die als extrahiertes AppImage headless unter
-`xvfb-run` läuft, und einer kleinen HTTP-API davor (Paket `scoreview_sidecar`,
-gestartet über `wsgi.py` mit gunicorn).
+Der Konvertierungsdienst hinter ScoreView: ein Docker-Image mit **zwei
+Renderern** und einer kleinen HTTP-API davor (Paket `scoreview_sidecar`,
+gestartet über `wsgi.py` mit gunicorn):
+
+- **`engine`** (Voreinstellung) – die scoreview-engine unter Node 22, also
+  derselbe Konverter, den die App auf dem lokalen Weg fährt
+  (`scoreview/converter`, unverändert ins Image kopiert). Liefert alles, was
+  der lokale Weg liefert: Kennungen der Notenköpfe im SVG
+  ([M10](../docs/architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)),
+  Tonarten samt Dur/Moll, Taktarten, Liedtextsilben und Schreibweisen in den
+  Metadaten ([E12](../docs/architecture.md#e12-partiturfakten-aus-der-engine-mit-midi-rückfall),
+  [E15](../docs/architecture.md#e15-fähigkeiten-statt-weg)) und die
+  Darstellungsvarianten ([E19](../docs/architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)).
+- **`musescore`** – eine gepinnte MuseScore-Studio-Version als extrahiertes
+  AppImage, headless unter `xvfb-run`. Behält die Originalnotenschrift alter
+  Partituren und rastert SVG-Bilder, liefert aber nichts von dem oben.
+
+Welcher Renderer läuft, entscheidet die App je Auftrag (Einstellung
+`sidecar_renderer`); der Sidecar nimmt nur für Anfragen ohne Angabe seine
+eigene Voreinstellung.
 
 Er läuft als eigener Container neben Nextcloud und ist **nicht** Teil des
 App-Pakets. Er ist einer von zwei Konvertierungswegen – der andere kommt ohne
 Container aus und liegt im App-Paket. Beide erzeugen dieselben Artefakte; wann
 welcher die bessere Wahl ist, steht unter
 [E3](../docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
-Was nur der Weg ohne Container zusätzlich liefert – Kennungen der Notenköpfe im
-SVG, Tonarten samt Dur/Moll und Studierbuchstaben in den Metadaten – und wie der
-Viewer ohne diese Angaben auskommt, steht in
-[M10](../docs/architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)
-und [E12](../docs/architecture.md#e12-partiturfakten-aus-der-engine-mit-midi-rückfall).
 
 ## Build und Start
 
+Gebaut wird **aus dem Wurzelverzeichnis des Repositorys**, weil das Image den
+Konverter der App (`scoreview/converter`) braucht;
+`sidecar/Dockerfile.dockerignore` hält den Kontext auf das, was kopiert wird.
+
 ```sh
-docker build -t scoreview-musescore-cli sidecar/
+docker build -f sidecar/Dockerfile -t scoreview-musescore-cli .
 
 docker run -d --name scoreview-sidecar --network scoreview-net \
   -e SCOREVIEW_SIDECAR_SECRET=<zufälliges-secret> \
@@ -53,7 +68,8 @@ Alle Variablen außer dem Secret sind optional.
 | Variable | Default | Bedeutung |
 |---|---|---|
 | `SCOREVIEW_SIDECAR_SECRET` | – | **Pflicht.** Shared Secret, Header `X-ScoreView-Secret` |
-| `MSCORE_TIMEOUT_SECONDS` | `600` | Harter Timeout-Guard pro Konvertierung |
+| `SCOREVIEW_SIDECAR_RENDERER` | `engine` | Renderer für Anfragen ohne eigene Angabe (`engine` oder `musescore`); die App nennt ihn bei jedem Auftrag selbst. Ein anderer Wert lässt den Container nicht starten |
+| `MSCORE_TIMEOUT_SECONDS` | `600` | Harter Timeout-Guard pro Konvertierung, für beide Renderer |
 | `SCOREVIEW_MAX_UPLOAD_BYTES` | `209715200` | Upload-Limit (200 MB); größere Requests werden mit `413` abgelehnt, bevor MuseScore startet |
 | `SCOREVIEW_JOB_TTL_SECONDS` | `600` | Wie lange die Dateien eines fertigen Jobs abrufbar bleiben |
 | `SCOREVIEW_MAX_CONCURRENT` | `2` | Gleichzeitig laufende Konvertierungen (der Selbsttest zählt mit) |
@@ -86,11 +102,20 @@ deshalb eine Betreiberentscheidung. Wer es – oder ein beliebiges anderes SF2/S
 
 ## Sicherheit
 
-Der Container lässt eine große C++/Qt-Codebasis (`mscore4portable`) auf
-beliebige, nicht vertrauenswürdige `.mscz`-Uploads los. Deshalb:
+Der Container lässt eine große C++-Codebasis – MuseScore als AppImage oder als
+WebAssembly – auf beliebige, nicht vertrauenswürdige `.mscz`-Uploads los.
+Deshalb:
 
 - Der Konvertierungsprozess läuft **nicht als root** (eigener
   `scoreview`-Nutzer im Image).
+- **Die Engine ist zusätzlich eingesperrt**, wie auf dem lokalen Weg
+  ([S11](../docs/architecture.md#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)):
+  Node läuft mit `--permission`, liest nur den Konverter, die Partitur und
+  gegebenenfalls die Grundartefakte, schreibt nur in das Ausgabeverzeichnis
+  des Auftrags und darf keine Prozesse starten. Ihre Umgebung ist auf `PATH`,
+  `LANG` und `HOME` beschnitten – das Berechtigungsmodell sperrt
+  Umgebungsvariablen nicht, und die des Containers tragen das Secret. Das Netz
+  bleibt wie bei Node 22 auf dem lokalen Weg offen.
 - `--memory` und `--pids-limit` sind für den Produktivbetrieb empfohlen.
 - Alle Endpunkte außer `/health` verlangen das Shared Secret.
 - Wer den Dienst über eine Maschinengrenze hinweg betreibt, braucht TLS davor
@@ -109,15 +134,17 @@ Asynchrone Job-API; ein Container läuft dauerhaft. Alle Endpunkte außer
 
 ### Konvertierung
 
-- **`POST /convert`** – Multipart-Feld `file` = `.mscz`. Antwortet
-  `202 {"jobId": "..."}`; die Konvertierung läuft im Hintergrund.
+- **`POST /convert`** – Multipart-Feld `file` = `.mscz`, optional `renderer`
+  (`engine` oder `musescore`, sonst `SCOREVIEW_SIDECAR_RENDERER`; ein anderer
+  Wert ist `400`). Antwortet `202 {"jobId": "...", "renderer": "..."}`; die
+  Konvertierung läuft im Hintergrund.
   Warten schon `SCOREVIEW_MAX_QUEUED` Aufträge, antwortet er stattdessen
   `503` mit `Retry-After` und speichert nichts. Bewusst 5xx und nicht 429:
   Die App wertet das als Infrastrukturfehler und lässt den Browser
   konvertieren, statt die Partitur als abgelehnt zu markieren.
 - **`GET /convert/{jobId}`** –
-  `{"status": "pending"|"processing"|"ready"|"error", ...}`. Bei `ready`
-  zusätzlich `files`:
+  `{"status": "pending"|"processing"|"ready"|"error", "renderer": "...", ...}`.
+  `renderer` nennt, was tatsächlich lief. Bei `ready` zusätzlich `files`:
 
   ```json
   {
@@ -129,8 +156,23 @@ Asynchrone Job-API; ein Container läuft dauerhaft. Alle Endpunkte außer
   }
   ```
 
-  Bei `error` zusätzlich `error` (Freitext aus der fehlgeschlagenen
-  `mscore4portable`-Ausgabe).
+  Bei `error` zusätzlich `error` (Freitext: die Ausgabe von
+  `mscore4portable` bzw. die Meldungszeile der Engine).
+- **`POST /variant`** – eine Darstellungsvariante
+  ([E19](../docs/architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)),
+  **synchron** gesetzt, immer mit der Engine. Multipart: `file` (die
+  `.mscz`), `timing` und `measures` (`timing.json`/`measures.json` der
+  Grundkonvertierung, gegen die der Konverter die Variante prüft) und das
+  Feld `key` (Variantenschlüssel `src~fmt~pitch~tr`). Antwortet `200` wie
+  `GET /convert/{jobId}` für einen fertigen Auftrag, zusätzlich `engine` (der
+  Release-Tag der Engine im Image); `files` hat **kein** `midi` – eine
+  Variante spielt das der Grundkonvertierung. Eine Variante, die der
+  Konverter nicht setzen kann oder die eine Invariante bricht, ist
+  `200` mit `status: "error"`: ein Ergebnis, kein Ausfall. Ist binnen 20 s kein
+  Konvertierungsplatz frei, `503` mit `Retry-After`. Synchron, weil die App
+  eine Variante in der Anfrage des Browsers setzt (3–4 s); eine Warteschlange
+  brächte nur das Pollen dazu. Variantenaufträge belegen deshalb auch keinen
+  Warteplatz.
 - **`GET /convert/{jobId}/artifact/{name}`** – **eine** Auslieferungsroute für
   alle Artefakte. Gültige Namen sind eine Allowlist, kein Dateipfad:
 
@@ -142,7 +184,8 @@ Asynchrone Job-API; ein Container läuft dauerhaft. Alle Endpunkte außer
   | `measures` | `measures.json`, aus `mposXML` geparst (Taktnavigation) |
   | `meta` | `meta.json`, MuseScores `metadata` unverändert (Titel, Takte, `tracks[]`/`parts[]`) |
 
-Fehlerpfade: unbekannte `jobId` → 404, fehlendes `file`-Feld → 400,
+Fehlerpfade: unbekannte `jobId` → 404, fehlendes `file`-Feld oder
+unbekannter `renderer` → 400, `midi` einer Variante → 404,
 fehlendes oder falsches Secret → 401 – auch auf den Artefakt-Endpunkten. Die
 Existenz eines Jobs wird erst **nach** der Secret-Prüfung offengelegt; volle
 Warteschlange → 503. Eine
@@ -151,7 +194,13 @@ defekte `.mscz` landet sichtbar auf `status: error`, statt zu hängen.
 ### Diagnose
 
 - **`GET /health`** – ohne Auth, liefert `ok`.
-- **`GET /selftest`** – konvertiert die mitgelieferte Minipartitur
+- **`GET /selftest?renderer=engine|musescore`** – prüft den genannten
+  Renderer (ohne Angabe die Voreinstellung); die Antwort nennt ihn als
+  `renderer`. Mit der Engine ist es der Selbsttest des Konverters selbst
+  (`convert.mjs --selftest`, derselbe wie auf dem lokalen Weg): fünf
+  mitgelieferte Partituren, geprüft auf M2/M4/M7, M10, Partiturfakten,
+  Liedtext, Taktarten und Darstellungsvarianten. Mit MuseScore konvertiert er
+  die mitgelieferte Minipartitur
   (`selftest-score.mscz`, Kopie von `testdata/repeat-test.mscz`) und prüft das
   Ergebnis auf die Zusagen, auf denen die App aufbaut: alle erwarteten
   `--score-media`-Schlüssel vorhanden, mindestens eine SVG-Seite, Timing-Events
@@ -162,9 +211,12 @@ defekte `.mscz` landet sichtbar auf `status: error`, statt zu hängen.
 
   Antwortet `{"ok": true|false, "error": …, "details": {…}}` und **auch im
   Negativfall mit HTTP 200**: Ein 5xx wäre von „Sidecar nicht erreichbar" nicht
-  zu unterscheiden. `details.musescoreVersion` kommt aus einer zur Bauzeit
-  gesetzten Umgebungsvariable, nicht aus `mscore4portable --version` – der
-  Aufruf braucht einen X-Server und mischt Qt-Rauschen in die Ausgabe.
+  zu unterscheiden. `details.musescoreVersion` kommt bei MuseScore aus einer
+  zur Bauzeit gesetzten Umgebungsvariable, nicht aus
+  `mscore4portable --version` – der Aufruf braucht einen X-Server und mischt
+  Qt-Rauschen in die Ausgabe; bei der Engine ist es ihr Release-Tag. Ein Image
+  von vor der Renderer-Wahl übergeht den Parameter und nennt keinen
+  `renderer`; die App meldet das als zu altes Image.
 
   Er belegt einen Konvertierungsplatz wie jeder Auftrag; wird binnen 60 s
   keiner frei, meldet er `ok: false` mit diesem Grund.
@@ -313,6 +365,14 @@ docker run --rm --entrypoint /usr/local/bin/entrypoint.sh \
   scoreview-musescore-cli /data/stueck.mscz --score-media > stueck.media.json
 ```
 
+Die Engine lässt sich ebenso von Hand aufrufen – derselbe Aufruf wie auf dem
+lokalen Weg, Ergebnis als Dateien im Ausgabeverzeichnis:
+
+```sh
+docker run --rm --entrypoint node -v <hostdir>:/data scoreview-musescore-cli \
+  --liftoff-only /opt/scoreview-converter/convert.mjs /data/stueck.mscz /data/out
+```
+
 **Windows/Git-Bash-Falle:** Git Bashs automatische Pfad-Umwandlung verstümmelt
 `/data/…`-Argumente; mit `MSYS_NO_PATHCONV=1` vor `docker run` umgehen.
 Dateinamen mit Nicht-ASCII-Zeichen können beim Hochladen über `curl -F` in Git
@@ -326,14 +386,19 @@ python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 .venv/bin/python -m pytest
 ```
 
-Parser- und API-Unit-Tests, ohne MuseScore, Xvfb oder Container.
+Parser- und API-Unit-Tests, ohne MuseScore, Node, Xvfb oder Container. Wie die
+Engine aufgerufen wird – Berechtigungen, Umgebung, Varianten –, prüft
+`tests/test_engine.py` gegen einen ersetzten Aufruf; dass sie im Image
+tatsächlich läuft, zeigt `GET /selftest?renderer=engine`.
 
 ## Docker-Compose-Skizze
 
 ```yaml
 services:
   scoreview-sidecar:
-    build: ./sidecar
+    build:
+      context: .                      # Wurzel des Repositorys, siehe Build und Start
+      dockerfile: sidecar/Dockerfile
     networks: [scoreview-net]
     environment:
       SCOREVIEW_SIDECAR_SECRET: ${SCOREVIEW_SIDECAR_SECRET}

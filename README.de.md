@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:c5cb0a04b868 -->
+<!-- translation-of: README.md sha256:ed21be210312 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -155,9 +155,9 @@ Ergebnis liefern und sich nur darin unterscheiden, was der Server dafür braucht
 | | **Lokal** (Voreinstellung) | **Sidecar** |
 |---|---|---|
 | Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
-| MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
+| MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | dieselbe Engine (Voreinstellung) oder echtes MuseScore 4, im Container |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
-| Liedtext-Ansicht, Tonnamen, eingefärbte Notenköpfe | ja | nein |
+| Liedtext-Ansicht, Tonnamen, eingefärbte Notenköpfe, Stimmenauszüge | ja | ja mit der Engine, nein mit MuseScore selbst |
 | Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
 
 Der lokale Weg ist voreingestellt, weil er der einzige ist, der nach
@@ -198,7 +198,7 @@ Zugriff auf lokale Adressen (`allow_local_remote_servers`, siehe
 [Anleitung](docs/installation.de.md#weg-b-sidecar)):
 
 ```sh
-docker build -t scoreview-musescore-cli sidecar/
+docker build -f sidecar/Dockerfile -t scoreview-musescore-cli .
 docker network create scoreview-net
 docker network connect scoreview-net <nextcloud-container>
 docker run -d --name scoreview-sidecar --network scoreview-net \
@@ -244,9 +244,9 @@ beiträgt, steht englisch in [docs/translating.md](docs/translating.md).
 ScoreView steht unter AGPL-3.0-or-later, siehe [LICENSE](LICENSE).
 
 - Die Notensatz- und Konvertierungsarbeit macht **MuseScore Studio** (GPL-3.0) –
-  im Sidecar als gepinntes AppImage, auf dem lokalen Weg über die
-  [scoreview-engine](https://github.com/AndiMb/scoreview-engine), MuseScores
-  Notensatz Qt-frei nach WebAssembly übersetzt.
+  über die [scoreview-engine](https://github.com/AndiMb/scoreview-engine),
+  MuseScores Notensatz Qt-frei nach WebAssembly übersetzt – lokal, im Browser
+  und im Sidecar – oder, wenn so gewählt, im Sidecar als gepinntes AppImage.
 - Das **SoundFont** für die Wiedergabe ist voreingestellt `FluidR3Mono_GM`
   (MIT), dasselbe, das MuseScore mitbringt. Mit Sidecar stammt es aus dessen
   MuseScore-Installation (MuseScore General von S. Christian Collins, MIT),

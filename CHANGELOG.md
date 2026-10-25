@@ -6,6 +6,32 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **The sidecar converts with the scoreview-engine as well**, and an
+  administrator chooses which: the engine (the default for new
+  installations) or MuseScore itself. With the engine, a sidecar delivers
+  everything the local path does – coloured note heads, lyrics view, note
+  names, beat numbers, major/minor for the key note, and parts, phone pages,
+  concert pitch and transposed notes, engraved in 3–4 s as on the local path.
+  A base conversion takes 1.4–2.5 s instead of 30–32 s for a three-page
+  score. The image also carries the CJK fonts the app package leaves out, so
+  Chinese, Japanese and Korean lyrics come out as text. MuseScore itself
+  stays selectable for the original music font of old scores and SVG images
+  in a score. The choice is under Settings → Administration → ScoreView, or
+  `occ config:app:set scoreview sidecar_renderer --value=engine|musescore`;
+  the self-test checks the selected one.
+
+### Changed
+
+- **The sidecar image is built from the repository root**:
+  `docker build -f sidecar/Dockerfile -t scoreview-musescore-cli .` – the
+  image now contains the app's converter. An installation that already runs a
+  sidecar keeps MuseScore after the update, because its image has no engine
+  yet; rebuild the image and switch afterwards.
+- A display variant that failed because the conversion service was busy or
+  unreachable may be tried again after a minute instead of an hour.
+
 ## [1.23.0] – 2026-10-25
 
 ### Added

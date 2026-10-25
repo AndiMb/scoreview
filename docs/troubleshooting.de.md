@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:751f60451210 -->
+<!-- translation-of: troubleshooting.md sha256:5ef091cf7c97 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -306,10 +306,12 @@ Die Auswahl nennt den Grund:
 
 - **„Diese Partitur hat keinen Liedtext.“** – so ist es.
 - **„Diese Seiten wurden ohne die Daten gesetzt, die diese Ansicht braucht.“**
-  Die Partitur wurde über den Sidecar konvertiert; Stock-MuseScore liefert
-  Liedtextsilben und Schreibweisen nicht
-  ([E15](architecture.md#e15-fähigkeiten-statt-weg)). Eine Neukonvertierung auf
-  derselben Instanz ändert daran nichts, nur der lokale Konvertierungsweg.
+  Die Partitur wurde von einem Sidecar konvertiert, der mit MuseScore selbst
+  konvertiert; Stock-MuseScore liefert Liedtextsilben und Schreibweisen nicht
+  ([E15](architecture.md#e15-fähigkeiten-statt-weg)). Eine Neukonvertierung
+  ändert daran erst etwas, wenn der Sidecar mit der Engine konvertiert (siehe
+  [Der Sidecar kann nicht mit der Engine konvertieren](#der-sidecar-kann-nicht-mit-der-engine-konvertieren))
+  oder die Instanz den lokalen Konvertierungsweg nutzt.
 - **„Diese Partitur hat zu viel Text für die Liedtext-Ansicht.“** Mehr als
   20 000 Silben.
 - **Zeigt die Liedtext-Ansicht „Diese Stimme hat keinen Liedtext.“**, ist die
@@ -320,15 +322,31 @@ Ist die gewählte Darstellung bei einer Partitur nicht verfügbar, zeigt der
 Viewer die Seiten mit einem Hinweis und behält die Wahl für die nächste
 Partitur.
 
+## Der Sidecar kann nicht mit der Engine konvertieren
+
+Der Selbsttest meldet *„The sidecar image cannot convert with "engine" – it
+predates that choice“*, oder Varianten scheitern mit *„The sidecar image
+engraves no display variants yet“*. Das laufende Image wurde vor ScoreView 1.24
+gebaut und hat nur MuseScore. Es aus dem Wurzelverzeichnis des Repositorys neu
+bauen und den Container ersetzen ([Aktualisieren](installation.de.md#aktualisieren));
+bis dahin den Sidecar in den Einstellungen auf **MuseScore selbst** stellen.
+Genau deshalb lässt ein Update bestehende Sidecar-Installationen bei MuseScore.
+
 ## Stimmen, Handyseiten oder „klingend“ sind nicht wählbar
 
 Unter **Ansicht → Darstellung der Noten** nennen „Fassung“ und „Seitenformat“ den Grund, wenn
 sie ausgegraut sind:
 
 - **„Dieser Server setzt keine Stimmen und keine Handyseiten …“** – die Instanz
-  konvertiert über den Sidecar, dessen Stock-MuseScore sie nicht setzen kann
+  konvertiert über einen Sidecar, der auf MuseScore selbst steht, und
+  Stock-MuseScore kann sie nicht setzen
   ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)).
-  Nur der lokale Konvertierungsweg (oder der Rückfall im Browser) kann das.
+  Die Engine kann es – auf dem lokalen Weg, auf dem Sidecar, sobald er auf die
+  Engine umgestellt ist, und im Rückfall im Browser.
+- **Eine Variante scheitert mit „Der Konvertierungsdienst ist ausgelastet“** –
+  beide Konvertierungsplätze des Sidecars waren 20 s lang belegt. Der Server
+  versucht es nach einer Minute erneut; die Variante noch einmal zu wählen
+  genügt.
 - **„Klingend notiert“ fehlt** – kein Instrument dieser Partitur transponiert,
   es gäbe nichts anders zu zeigen.
 - **Ein gespeicherter Auszug fehlt in der Liste** – die Partitur wurde vor

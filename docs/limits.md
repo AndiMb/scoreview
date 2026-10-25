@@ -11,7 +11,9 @@ as E1 or M2 point to the design decisions and format notes in
 ## Measured values
 
 Three scores, measured on an ordinary workstation – both conversion paths in
-the same session, so the columns are comparable:
+the same session, so the columns are comparable. “Sidecar” here is the sidecar
+converting with MuseScore itself; with the engine it converts like the local
+path (see below):
 
 | Score | Pages | Measures | `.mscz` | Sidecar | local | SVG total (sidecar / local) | largest page | MIDI | Cache (sidecar / local) |
 |---|---|---|---|---|---|---|---|---|---|
@@ -27,7 +29,7 @@ every outline again – 35–70 % of the file size, depending on note density.
 
 Derived from this:
 
-- **Conversion time via the sidecar ≈ 6 s per page + 2 s base load**
+- **Conversion time via the sidecar with MuseScore ≈ 6 s per page + 2 s base load**
   (linear regression over the three data points). On the sidecar path the app
   waits a fixed maximum of 300 s from submission (`ConvertScoreJob`), which
   works out to about 50 pages; the sidecar's `MSCORE_TIMEOUT_SECONDS` (default
@@ -35,6 +37,10 @@ Derived from this:
   expecting very large scores should extrapolate with
   `page count × 6 s + buffer`. The figure depends noticeably on the CPU – an
   order of magnitude, not a guarantee.
+- **The sidecar with the engine converts like the local path.** Measured on
+  the test instance against the sidecar's API, on `parts-test.mscz` (3 pages,
+  five staves): 1.4–2.5 s with the engine, 30–32 s with MuseScore itself, the
+  same score in the same container.
 - **Locally, about 0.45 s of that is base load** – process start plus
   instantiation of the Wasm module. The actual conversion takes 0.4–0.8 s,
   i.e. about 0.1 s per page. The local path wins mainly because it does not
@@ -150,8 +156,8 @@ browser, a 28-page choral piece was measured as well.
 measure (`measureFacts`, local path and browser fallback since
 `v4.7.5-engine.5`) the metronome clicks the conducted beats: 6/8 and 9/8 in
 dotted quarters with three subdivisions, a pickup with as many beats as fit
-its length, counted as the signature would. Without it – sidecar path, a
-conversion from before 1.17 – the beats come from the MIDI's time signature
+its length, counted as the signature would. Without it – the sidecar
+converting with MuseScore itself, a conversion from before 1.17 – the beats come from the MIDI's time signature
 events, which MuseScore writes per change but with a pickup as a signature of
 its own length, and where even those are missing, from the measure's length
 and the quarter-note tempo. The count-in always counts beats, not
@@ -230,23 +236,28 @@ carries Bravura and Leland, and every additional font would enlarge the
 distribution package. Drawing is therefore done with Bravura. Only the glyph
 shapes are affected: the style value remains “Emmentaler”, so the engraving
 rules tied to it apply just as in MuseScore – page breaks and spacing are
-correct. The sidecar has the original font.
+correct. The sidecar has the original font when it converts with MuseScore
+itself; with the engine it draws like the local path.
 
-**Two image formats are shown only by the sidecar.** Both paths place images
-embedded in the score into the notation. The local path passes them through
+**Two image formats are shown only by MuseScore itself on the sidecar.** Both
+paths place images embedded in the score into the notation. The engine – on
+the local path and on the sidecar alike – passes them through
 unchanged into the SVG and supports PNG, JPEG, GIF and BMP for this – the four
 formats a browser displays by itself. The other two that MuseScore accepts
 stay blank there: an SVG as an image (the Qt-free engine would need its own
-SVG renderer for that) and TIFF (which no browser decodes). The sidecar
+SVG renderer for that) and TIFF (which no browser decodes). MuseScore itself
 rasterises an SVG image along with the page; what it does with TIFF depends on
-the image plugins of its AppImage and has not been checked. Effect: on the
-local path a gap remains at that spot; the rest of the page is unaffected.
+the image plugins of its AppImage and has not been checked. Effect: with the
+engine a gap remains at that spot; the rest of the page is unaffected. A
+sidecar can be switched to MuseScore for such scores – for all of them,
+though, not per score.
 
-**No note-head highlighting on the sidecar path.** The sounding note head is
-only coloured where the SVG carries the identifiers from
+**No note-head highlighting when the sidecar converts with MuseScore
+itself.** The sounding note head is only coloured where the SVG carries the
+identifiers from
 [M10](architecture.md#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)
-– the local conversion path does that, the sidecar with its stock AppImage
-does not. There it falls back to the band, without an error message: the setting
+– the engine writes them, on the local path and on the sidecar; stock
+MuseScore does not. There it falls back to the band, without an error message: the setting
 “Colour the sounding notes” can still be selected but silently falls back to
 the band. Effect: the same controls, less guidance in the notation. The same
 applies to the coloured note heads of intonation (see
@@ -513,7 +524,8 @@ re-measured on real devices and with real input latency.
   the Android app, like everything that needs the microphone.
 - **Octaves are folded.** A tenor singing the alto part an octave lower sings
   it correctly; an octave off therefore goes unnoticed.
-- **Coloured note heads only on the local conversion path**, and only where
+- **Coloured note heads only where the engine converts** (locally, on the
+  sidecar with the engine, in the browser), and only where
   each part has its own staff. A head shows the worst of pitch, onset and
   end; the list says which it was. Otherwise it stays, without an error message,
   with the needle and the list of problem spots
@@ -550,7 +562,7 @@ re-measured on real devices and with real input latency.
 
 ### Score facts and stamps
 
-- **On the sidecar path, no major/minor for the key note.** Stock MuseScore
+- **With MuseScore itself on the sidecar, no major/minor for the key note.** Stock MuseScore
   writes no key signatures into `meta.json`, and in the MIDI the minor byte is
   always 0
   ([M11](architecture.md#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen) (German)).
@@ -565,8 +577,8 @@ re-measured on real devices and with real input latency.
 - **Part stamps sit above the system when staves and parts cannot be
   matched** – for instance six parts on five staves. The stamp is then there,
   but not at the staff of its part.
-- **On the sidecar path, no lyrics view and no note names.** Both need lists
-  that only the engine writes; see [Views](#views).
+- **With MuseScore itself on the sidecar, no lyrics view and no note names.**
+  Both need lists that only the engine writes; see [Views](#views).
 
 ### Mobile
 
@@ -660,15 +672,16 @@ plays with controls. A lock lasting several minutes has not been measured.
 
 - **Lyrics view and note names only with the engine's data.** They need
   `lyricSyllables` or `noteSpellings`, and only the engine writes those – on
-  the local conversion path and in the browser fallback. On the sidecar path
-  neither can be selected, and both say why; a reconversion there does not change
+  the local conversion path, on the sidecar with the engine and in the
+  browser fallback. With MuseScore itself on the sidecar neither can be
+  selected, and both say why; a reconversion there does not change
   that ([E15](architecture.md#e15-fähigkeiten-statt-weg) (German)). The system band
   works on both paths.
 - **A cache entry below `CURRENT_FORMAT_VERSION` 5** is reconverted the next
   time it is opened and gets the lists in the process.
 - **Beat numbers need the engine as well**: the time signature per measure
-  and a tick per chord (`measureFacts`, `noteSpellings[].tick`). On the
-  sidecar path the setting says why it is unavailable. The numbers follow
+  and a tick per chord (`measureFacts`, `noteSpellings[].tick`). With
+  MuseScore itself on the sidecar the setting says why it is unavailable. The numbers follow
   one voice (the first) and sit in a row above the staff: “1 2 3 4” on the
   beats, “+” on the halves between them in simple metres, every eighth
   numbered in compound metres; triplets, sixteenths and anything else off
@@ -879,8 +892,9 @@ for the new piece). **Still open:**
 A part on its own, pages the size of a phone screen, concert pitch, and notes
 transposed along with the sound – each engraved by MuseScore itself, on
 demand ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild) (German)).
-Available on the local conversion path and in the browser fallback; the
-sidecar engraves none, and there the choices stay greyed out with the reason.
+Available on the local conversion path, on the sidecar with the engine, and
+in the browser fallback; a sidecar that converts with MuseScore itself engraves
+none, and there the choices stay greyed out with the reason.
 
 Measured on the test instance (Node 20.19, the own test score
 `parts-test.mscz`, 24 measures, five staves):
@@ -896,7 +910,8 @@ Measured on the test instance (Node 20.19, the own test score
 - **Per run 3–4 s on the server**, measured through the variant route
   including the request (about 6 s on the slow test instance, of which 1.5 s
   is that instance's request time). A variant already made answers like any
-  cached artifact. Under Deno 2.9: 4.3 s.
+  cached artifact. Under Deno 2.9: 4.3 s. Via the sidecar with the engine
+  (Node 22 in the image): 3.9 s through the variant route, the same.
 - **Memory**: a generated part needs less than the base conversion – 122–124
   against 174–190 MB of process memory on 4- and 5-page choral pieces.
 - **Phone pages take about 2.3 times as many pages** as A4 (7 instead of 3);
@@ -963,21 +978,26 @@ frame on a small page.
 - **No lock-screen controls for playback in the viewer.** Web Audio does not
   get them ([Lock screen](#lock-screen)); the practice track exists for
   that.
-- **No transposed notation on the sidecar path.** There it is only the sound
-  that is transposed; the notes and the note names stay as written. On the
-  local path and in the browser the notes can follow
-  ([Display variants](#display-variants)).
+- **No transposed notation when the sidecar converts with MuseScore itself.**
+  There it is only the sound that is transposed; the notes and the note names
+  stay as written. With the engine – locally, on the sidecar, in the browser –
+  the notes can follow ([Display variants](#display-variants)).
 - **No pen/freehand layer.** Notes are text at a musical anchor. Free strokes
   would be a second kind of data whose anchor would have to be a path instead
   of a point – and which, unlike text, would not survive a re-rendering of the
   score, because a stroke is tied to pixels and not to a measure.
-- **No parts on the sidecar path.** There “Show only my part” visually dims
-  the other parts, and the page keeps its layout, including the empty space
-  where the other staves are. On the local path and in the browser a part is
-  engraved on its own ([Display variants](#display-variants)).
-- **No sandboxing of the MuseScore process beyond the container.** The
-  container runs non-root with memory and PID limits; network isolation just
-  for the conversion subprocess would need a sandbox layer of its own. See
+- **No parts when the sidecar converts with MuseScore itself.** There “Show
+  only my part” visually dims the other parts, and the page keeps its layout,
+  including the empty space where the other staves are. With the engine a part
+  is engraved on its own ([Display variants](#display-variants)).
+- **No sandboxing of MuseScore itself beyond the container.** The container
+  runs non-root with memory and PID limits; network isolation just for the
+  conversion subprocess would need a sandbox layer of its own. The engine in
+  the same container is locked in further, like on the local path with Node
+  22: each run reads only its score and writes only its output, starts no
+  processes and sees none of the container's environment – the network stays
+  open, as in the table under
+  [Isolation of the local converter](#isolation-of-the-local-converter). See
   [Security](../sidecar/README.md#sicherheit).
 - **Only German and English.** Another language means adding a file, not
   reworking anything ([E4](architecture.md#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung)).
@@ -1000,7 +1020,8 @@ frame on a small page.
 
   Outside the app, because the delivered app directory is **signed** – any
   additional file in it makes Nextcloud's integrity check raise an alarm
-  permanently. On the sidecar path this option does not exist: its image only
-  ships DejaVu and FreeFont (checked: 19 font files, no CJK font), and there is
-  no setting to supply it with fonts afterwards – the only remedy there is a
-  custom image.
+  permanently. The sidecar needs none of this when it converts with the
+  engine: its image has no size limit and carries the fonts the app package
+  leaves out (checked: both load under the permission model). MuseScore itself
+  in the same image only has DejaVu and FreeFont (19 font files, no CJK font),
+  and there is no setting to supply it with fonts afterwards.

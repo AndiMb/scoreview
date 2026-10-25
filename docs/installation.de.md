@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:106f1aad438b -->
+<!-- translation-of: installation.md sha256:50f708a098d4 -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -10,11 +10,12 @@ es **zwei zur Wahl**, und sie liefern dasselbe Ergebnis
 | | **Weg A: Lokal** (Voreinstellung) | **Weg B: Sidecar** |
 |---|---|---|
 | Braucht | Node.js ≥ 18 oder Deno ≥ 2 auf dem Nextcloud-Server | einen Docker-Host |
-| MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | echtes MuseScore 4 im Container |
+| MuseScore | MuseScore 4.7.5 als WebAssembly (scoreview-engine), im App-Paket | im Container, wählbar: dieselbe scoreview-engine (Voreinstellung) oder echtes MuseScore 4 |
 | SoundFont | holt der Server selbst, Adresse voreingestellt | bringt der Container mit |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
-| Notenköpfe einfärben, Liedtext-Ansicht, Tonnamen | ja | nein – Stock-MuseScore liefert die Daten nicht ([E15](architecture.md#e15-fähigkeiten-statt-weg)) |
-| Stimmenauszüge, Handyseiten, klingend, transponierte Noten | ja, bei Bedarf gesetzt ([Darstellungsvarianten](limits.de.md#darstellungsvarianten)) | nein ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)) |
+| Notenköpfe einfärben, Liedtext-Ansicht, Tonnamen | ja | ja mit der Engine; nein mit MuseScore selbst – Stock-MuseScore liefert die Daten nicht ([E15](architecture.md#e15-fähigkeiten-statt-weg)) |
+| Stimmenauszüge, Handyseiten, klingend, transponierte Noten | ja, bei Bedarf gesetzt ([Darstellungsvarianten](limits.de.md#darstellungsvarianten)) | ja mit der Engine; nein mit MuseScore selbst ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)) |
+| Chinesische, japanische, koreanische Liedtexte | nur mit selbst ergänzten Schriften ([Grenzwerte](limits.de.md#bekannte-lücken)) | ja mit der Engine (das Image bringt die Schriften mit) |
 | Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
 
 **Weg A ist voreingestellt und braucht keine Einstellung.** Wo eine
@@ -96,10 +97,13 @@ kann.
 
 ## 1b. Weg B: Sidecar starten
 
-Das Image bauen (enthält eine gepinnte MuseScore-Studio-Version):
+Das Image aus dem Wurzelverzeichnis des Repositorys bauen. Es enthält eine
+gepinnte MuseScore-Studio-Version und als zweiten Renderer den Konverter der
+App (`scoreview/converter`) samt Node.js – deshalb braucht der Bau das ganze
+Repository, nicht nur `sidecar/`:
 
 ```sh
-docker build -t scoreview-musescore-cli sidecar/
+docker build -f sidecar/Dockerfile -t scoreview-musescore-cli .
 ```
 
 Ein gemeinsames Netz anlegen, damit Nextcloud den Sidecar unter seinem
@@ -184,6 +188,25 @@ occ config:app:set scoreview sidecar_url --value="http://scoreview-sidecar:8765"
 occ config:app:set scoreview sidecar_secret --value="<secret>" --sensitive
 ```
 
+Darunter wählen, womit der Sidecar konvertiert:
+
+- **scoreview-engine** (Voreinstellung) – derselbe Konverter wie auf dem
+  lokalen Weg, also alles, was der lokale Weg bietet: eingefärbte Notenköpfe,
+  Liedtext-Ansicht, Tonnamen, Stimmenauszüge und Handyseiten, klingende und
+  transponierte Noten.
+- **MuseScore selbst** – behält die Originalnotenschrift von Partituren aus
+  MuseScore 1 bis 3 und zeichnet in die Partitur eingebettete SVG-Bilder, aber
+  ohne die Funktionen oben ([Grenzwerte](limits.de.md#bekannte-lücken)).
+
+```sh
+occ config:app:set scoreview sidecar_renderer --value=engine      # oder musescore
+```
+
+Eine Installation, die schon vor ScoreView 1.24 einen Sidecar betrieben hat,
+bleibt nach dem Update bei **MuseScore**: Ihr Image hat die Engine noch nicht.
+Das Image neu bauen (siehe [Aktualisieren](#aktualisieren)) und danach
+umstellen.
+
 Nextcloud blockiert ausgehende Anfragen an lokale und interne Hostnamen
 (SSRF-Schutz). Ohne die folgende Einstellung schlägt jeder Sidecar-Aufruf mit
 „violates local access rules" fehl – dieselbe Einstellung brauchen auch
@@ -200,7 +223,8 @@ occ config:system:set allow_local_remote_servers --value=true --type=boolean
 Auf der Verwaltungsseite prüft ein Knopf den Zustand und ein zweiter, **„Konvertierung selbst
 testen“**, startet den Selbsttest: eine echte Konvertierung der mitgelieferten Minipartitur über
 den gewählten Weg, samt Prüfung aller Zusagen, auf denen die App aufbaut. Nach
-jedem Wechsel der MuseScore-Version einmal auslösen.
+jedem Wechsel der MuseScore-Version einmal auslösen. Beim Sidecar prüft er den
+gewählten Renderer; ist das Image für die Engine zu alt, sagt er das.
 
 ## 4. Mimetype (in der Regel nichts zu tun)
 
@@ -581,7 +605,7 @@ Der Sidecar dagegen wird getrennt aktualisiert – neu bauen, alten Container
 entfernen, neuen mit denselben Parametern starten:
 
 ```sh
-docker build -t scoreview-musescore-cli sidecar/
+docker build -f sidecar/Dockerfile -t scoreview-musescore-cli .
 docker rm -f scoreview-sidecar
 docker run -d --name scoreview-sidecar --network scoreview-net \
   -e SCOREVIEW_SIDECAR_SECRET="<secret>" \
@@ -590,6 +614,8 @@ docker run -d --name scoreview-sidecar --network scoreview-net \
 ```
 
 Nach einem Wechsel der MuseScore-Version im Image den **Selbsttest** auslösen,
-bevor das Image produktiv geht. Bereits konvertierte Partituren bleiben gültig;
+bevor das Image produktiv geht. Ein Image, das vor ScoreView 1.24 gebaut wurde,
+kann nicht mit der Engine konvertieren; nach dem Neubau in den Einstellungen die
+Engine wählen (siehe [Weg B](#weg-b-sidecar)). Bereits konvertierte Partituren bleiben gültig;
 ein Wechsel des Cache-Formats invalidiert sie automatisch (siehe
 [Architektur](architecture.md#konvertierung-und-cache)).

@@ -33,7 +33,7 @@ eine Referenz.
 |---|---|
 | `scoreview/` | Die Nextcloud-App (PHP in `lib/`, Vue 3 in `src/`) |
 | `scoreview/converter/` | Lokaler Konvertierungsweg: Node + MuseScore als WebAssembly (scoreview-engine) |
-| `sidecar/` | Docker-Container mit MuseScore 4 + Flask-HTTP-API (Paket `scoreview_sidecar`, hinter gunicorn) |
+| `sidecar/` | Docker-Container mit zwei Renderern – scoreview-engine (Kopie von `scoreview/converter` unter Node 22) und MuseScore 4 als AppImage – hinter einer Flask-HTTP-API (Paket `scoreview_sidecar`, gunicorn) |
 | `docs/` | Die gepflegte Dokumentation |
 
 Konvertiert wird über **einen von zwei Wegen** – Sidecar oder lokal –, die
@@ -119,7 +119,10 @@ Der lokale Konvertierungsweg ist die Voreinstellung und braucht in
 `scoreview-nc` eine Node-Laufzeit (`apt-get install -y nodejs`, das Image
 bringt keine mit) – ohne die läuft dort gar nichts, auch wenn nichts
 umgestellt wurde. Auf den Sidecar wechselt
-`occ config:app:set scoreview conversion_backend --value sidecar`.
+`occ config:app:set scoreview conversion_backend --value sidecar`;
+womit er dort konvertiert, stellt `sidecar_renderer` (`engine` oder
+`musescore`). Beide Wege samt Varianten prüft
+`spike/abnahme/h/sidecar-renderer.mjs` und stellt danach zurück.
 Aufsetzen wie in `docs/installation.md`; die Besonderheiten der lokalen
 Testinstanz stehen in `docs/development.md#testumgebung`.
 
@@ -129,8 +132,10 @@ Testinstanz stehen in `docs/development.md#testumgebung`.
   Ebenso die Übersetzungen: `scoreview/l10n/` entsteht erst beim Build aus
   `translationfiles/`. Nach einer Änderung an einer `.po`, auch nach einem
   neuen `$l->t()` in PHP, also `npm run build` oder kurz `npm run l10n:build`.
-- **Sidecar braucht Neubau *und* neuen Container**:
-  `docker build -t scoreview-musescore-cli sidecar/`, dann
+- **Sidecar braucht Neubau *und* neuen Container** – gebaut aus der
+  Repo-Wurzel, weil das Image `scoreview/converter` mitnimmt; auch eine
+  Änderung am Konverter verlangt deshalb einen Neubau:
+  `docker build -f sidecar/Dockerfile -t scoreview-musescore-cli .`, dann
   `docker rm -f scoreview-sidecar` und das `docker run` aus
   `sidecar/README.md`. **`--network scoreview-net` nicht vergessen** – ohne
   das Flag startet der Container fehlerfrei, ist aber von Nextcloud aus
