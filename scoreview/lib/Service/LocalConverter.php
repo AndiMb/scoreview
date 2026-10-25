@@ -110,6 +110,28 @@ class LocalConverter {
 	}
 
 	/**
+	 * A display variant (docs/architecture.md E19). $baseDir holds the base
+	 * conversion's timing.json and measures.json: the converter checks the
+	 * variant against them and fails rather than return one that breaks an
+	 * invariant. Read only, like the score (S11).
+	 *
+	 * @return array{pages: string[], timing: string, measures: string, meta: string}
+	 * @throws LocalConverterException
+	 */
+	public function convertVariant(string $msczPath, string $key, string $baseDir): array {
+		$outDir = $this->tempManager->getTemporaryFolder('scoreview-variant');
+		if ($outDir === false) {
+			throw new LocalConverterException('No temporary directory available for the conversion.');
+		}
+
+		$this->run(['--variant', $key, '--base', $baseDir, $msczPath, $outDir], read: [$msczPath, $baseDir], write: [$outDir]);
+
+		$artifacts = $this->readArtifacts($outDir, withMidi: false);
+		unset($artifacts['midi']);
+		return $artifacts;
+	}
+
+	/**
 	 * Gegenstueck zu SidecarClient::runSelfTest(): eine echte Konvertierung
 	 * der mitgelieferten Minipartitur, geprueft auf die Zusagen aus M2/M4/M7.
 	 * Antwortform absichtlich identisch, damit die Admin-Seite fuer beide
@@ -557,7 +579,7 @@ class LocalConverter {
 	 * @return array{pages: string[], midi: string, timing: string, measures: string, meta: string}
 	 * @throws LocalConverterException
 	 */
-	private function readArtifacts(string $outDir): array {
+	private function readArtifacts(string $outDir, bool $withMidi = true): array {
 		$pages = [];
 		// Nach Nummer durchzaehlen statt eine Verzeichnisauflistung zu
 		// sortieren: `page-10.svg` stuende dort vor `page-2.svg`, und eine
@@ -579,7 +601,7 @@ class LocalConverter {
 
 		return [
 			'pages' => $pages,
-			'midi' => $this->readFile($outDir . '/score.mid'),
+			'midi' => $withMidi ? $this->readFile($outDir . '/score.mid') : '',
 			'timing' => $this->readFile($outDir . '/timing.json'),
 			'measures' => $this->readFile($outDir . '/measures.json'),
 			'meta' => $this->readFile($outDir . '/meta.json'),

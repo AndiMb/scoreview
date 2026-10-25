@@ -12,6 +12,7 @@ use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\LocalConverterException;
 use OCA\ScoreView\Service\SidecarBusyException;
 use OCA\ScoreView\Service\SidecarClient;
+use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\File;
@@ -83,6 +84,7 @@ class ConvertScoreJobTest extends TestCase {
 			$this->appConfig,
 			$this->tempManager,
 			$this->createMock(LoggerInterface::class),
+			$this->createMock(VariantService::class),
 		);
 		$method = new \ReflectionMethod($job, 'run');
 		$method->setAccessible(true);

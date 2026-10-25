@@ -5,6 +5,47 @@
 		statt still zu fehlen oder still auf Seiten zurueckzufallen.
 	-->
 	<div class="scoreview-controls">
+		<!--
+			The display variant (E19): what MuseScore engraves - a part, a
+			phone-sized page, concert pitch. Unlike the layout below, each is a
+			new engraving, made on demand; where the server cannot make them,
+			the choices stay visible, greyed out, with the reason.
+		-->
+		<fieldset class="scoreview-popover-group">
+			<legend>{{ t('Edition') }}</legend>
+			<NcSelect
+				:modelValue="selectedSource"
+				:options="variantSources"
+				:clearable="false"
+				:disabled="variantUnavailable !== ''"
+				:inputLabel="t('Score or part')"
+				label="label"
+				@update:modelValue="$emit('update:variantSource', $event.value)" />
+			<NcCheckboxRadioSwitch
+				v-if="showConcert"
+				:modelValue="variantConcert"
+				:disabled="variantUnavailable !== ''"
+				@update:modelValue="$emit('update:variantConcert', $event)">
+				{{ t('Concert pitch (transposing instruments as they sound)') }}
+			</NcCheckboxRadioSwitch>
+		</fieldset>
+		<fieldset class="scoreview-popover-group">
+			<legend>{{ t('Page format') }}</legend>
+			<NcCheckboxRadioSwitch
+				v-for="option in formatOptions"
+				:key="option.value"
+				:modelValue="variantFormat"
+				type="radio"
+				:value="option.value"
+				name="scoreview-variant-format"
+				:disabled="option.value !== 'orig' && variantUnavailable !== ''"
+				@update:modelValue="$emit('update:variantFormat', $event)">
+				{{ option.label }}
+			</NcCheckboxRadioSwitch>
+			<p v-if="variantUnavailable" class="scoreview-popover-hint">
+				{{ variantUnavailable }}
+			</p>
+		</fieldset>
 		<fieldset class="scoreview-popover-group">
 			<legend>{{ t('Layout') }}</legend>
 			<template v-for="option in options" :key="option.value">
@@ -50,12 +91,14 @@
 <script>
 import { translate } from '@nextcloud/l10n'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import NcSelect from '@nextcloud/vue/components/NcSelect'
 
 export default {
 	name: 'LayoutControls',
 
 	components: {
 		NcCheckboxRadioSwitch,
+		NcSelect,
 	},
 
 	props: {
@@ -82,9 +125,43 @@ export default {
 			type: String,
 			default: '',
 		},
+
+		// [{value, label}] - 'full', 'ex<N>', 'part<id>' (lib/variantChoice.js)
+		variantSources: {
+			type: Array,
+			default: () => [],
+		},
+
+		variantSource: {
+			type: String,
+			default: 'full',
+		},
+
+		// 'orig' | 'phone' | 'phonel'
+		variantFormat: {
+			type: String,
+			default: 'orig',
+		},
+
+		variantConcert: {
+			type: Boolean,
+			default: false,
+		},
+
+		// Only where some instrument does not sound as written
+		showConcert: {
+			type: Boolean,
+			default: false,
+		},
+
+		// Why the server makes no variants, otherwise empty
+		variantUnavailable: {
+			type: String,
+			default: '',
+		},
 	},
 
-	emits: ['update:layout', 'update:doublePage'],
+	emits: ['update:layout', 'update:doublePage', 'update:variantSource', 'update:variantFormat', 'update:variantConcert'],
 
 	computed: {
 		options() {
@@ -92,6 +169,18 @@ export default {
 				{ value: 'pages', label: this.t('Pages'), reason: '' },
 				{ value: 'band', label: this.t('System band (staves side by side, for phones)'), reason: '' },
 				{ value: 'lyrics', label: this.t('Lyrics only'), reason: this.lyricsUnavailable },
+			]
+		},
+
+		selectedSource() {
+			return this.variantSources.find((o) => o.value === this.variantSource) ?? this.variantSources[0] ?? null
+		},
+
+		formatOptions() {
+			return [
+				{ value: 'orig', label: this.t('As in the file') },
+				{ value: 'phone', label: this.t('Phone, upright') },
+				{ value: 'phonel', label: this.t('Phone, landscape') },
 			]
 		},
 

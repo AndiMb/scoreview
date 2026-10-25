@@ -4,6 +4,7 @@ import {
 	CLIENT_TOO_LARGE,
 	CONVERSION_FAILED,
 	convertInBrowser,
+	convertVariantInBrowser,
 } from './clientConversion.js'
 
 /**
@@ -155,5 +156,75 @@ describe('convertInBrowser', () => {
 			{ phase: 'pages', page: 2, of: 2 },
 			{ phase: 'done' },
 		])
+	})
+})
+
+/**
+ * A display variant (E19): the engine calls of convertVariant() in
+ * converter/convert.mjs, and the base check after them.
+ */
+describe('convertVariantInBrowser', () => {
+	const base = {
+		timing: { events: [{ elid: 7, timeMs: 1500 }], elements: {} },
+		measures: { events: [{ elid: 7, timeMs: 1500 }], elements: { 7: { page: 0, x: 10.01, y: 20, w: 3, h: 4 } } },
+	}
+
+	function variantEngine({ mapping = { baseElid: { 7: 7 }, staffMap: [0] } } = {}) {
+		const fake = engineAttrappe({ pages: 1 })
+		const { score, rufe } = fake
+		const merke = (was, ergebnis) => {
+			rufe.push(was)
+			return Promise.resolve(ergebnis)
+		}
+		score.savePositions = (ofSegments, ofMain = false) => merke(`savePositions(${ofSegments},${ofMain})`, JSON.stringify({
+			elements: [{ id: 7, page: 0, x: 10.005, y: 20, sx: 3, sy: 4 }],
+			events: [{ elid: 7, position: 1500 }],
+		}))
+		score.metadata = () => merke('metadata', { pages: 1, excerpts: [{ id: 0 }], parts: [{ id: '3', name: 'Kl' }], noteSpellings: [] })
+		score.setExcerptId = (id) => merke(`setExcerptId(${id})`, undefined)
+		score.generateExcerpts = (ids) => merke(`generateExcerpts(${ids.join(',')})`, [2])
+		score.applyView = (o) => merke(`applyView(${o.format},${o.concertPitch},${o.transposeSemitones})`, 1)
+		score.viewMapping = () => merke('viewMapping', mapping)
+		// A page with one segment id on staff 0, so M10 and I4 have something to check.
+		score.saveSvg = (i) => merke(`saveSvg(${i})`, '<svg><g class="Note seg-7 st-0 vc-0"></g></svg>')
+		return fake
+	}
+
+	it('generates the part, applies the view, numbers measures as the base', async () => {
+		const { rufe, engine } = variantEngine()
+		const v = await convertVariantInBrowser({ fetchSource: quelle(), loadEngine: () => Promise.resolve(engine), key: 'part3~phone~w~-2', base })
+		expect(rufe).toEqual([
+			'load(mscz)',
+			'generateExcerpts(3)',
+			'setExcerptId(2)',
+			'applyView(phone,null,-2)',
+			'npages',
+			'saveSvg(0)',
+			'savePositions(true,false)',
+			'savePositions(false,true)',
+			'metadata',
+			'viewMapping',
+			'destroy(false)',
+		])
+		expect(v.meta.variant).toBe('part3~phone~w~-2')
+		expect(v.meta.parts).toEqual([{ id: '3', name: 'Kl' }])
+		expect(v.midi).toBeUndefined()
+	})
+
+	it('selects a stored part only if the score has it', async () => {
+		const { engine } = variantEngine()
+		await expect(convertVariantInBrowser({ fetchSource: quelle(), loadEngine: () => Promise.resolve(engine), key: 'ex1~orig~w~0', base }))
+			.rejects.toMatchObject({ code: CONVERSION_FAILED })
+	})
+
+	it('refuses a variant that breaks an invariant', async () => {
+		const { engine } = variantEngine({ mapping: { baseElid: {}, staffMap: [] } })
+		await expect(convertVariantInBrowser({ fetchSource: quelle(), loadEngine: () => Promise.resolve(engine), key: 'full~phone~w~0', base }))
+			.rejects.toThrow(/I3/)
+	})
+
+	it('refuses something that is no variant key', async () => {
+		await expect(convertVariantInBrowser({ fetchSource: quelle(), loadEngine: () => Promise.reject(new Error('never')), key: 'full~orig~w~0', base }))
+			.rejects.toMatchObject({ code: CONVERSION_FAILED })
 	})
 })

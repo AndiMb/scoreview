@@ -43,6 +43,10 @@ sidecar/testdata/*.mpos
 # Viertel Auftakt, 4/4, 3/4, 6/8 - fuer die Taktart je Takt der Engine
 # (measureFacts) im Konverter-Selbsttest, Kopie unter converter/timesig-test.mscz.
 !sidecar/testdata/timesig-test.mscz
+# Ebenfalls selbst erstellt (parts-test.build.sh mit MuseScore 4.7): gespeicherte
+# Auszuege, Klarinette in B, Mehrtaktpause - fuer die Darstellungsvarianten
+# (E19) im Konverter-Selbsttest, Kopie unter converter/parts-test.mscz.
+!sidecar/testdata/parts-test.mscz
 
 # Signaturmaterial der App: der private Schluessel darf NIE ins Repo, und
 # signature.json entsteht je Release neu (siehe docs/development.md).

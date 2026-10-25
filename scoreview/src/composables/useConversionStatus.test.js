@@ -16,8 +16,10 @@ vi.mock('@nextcloud/router', () => ({ generateUrl: (url) => url }))
 vi.mock('@nextcloud/l10n', () => ({ translate: (app, text) => text }))
 // Der Rückfall im Browser ist hier nicht die Frage - er soll nur nicht
 // mitlaufen. `progress: null` heißt „serverseitig konvertiert".
+const clientRun = vi.fn()
+const clientRunVariant = vi.fn()
 vi.mock('./useClientConversion.js', () => ({
-	useClientConversion: () => ({ run: vi.fn(), release: vi.fn(), progress: { value: null } }),
+	useClientConversion: () => ({ run: clientRun, runVariant: clientRunVariant, release: vi.fn(), progress: { value: null } }),
 }))
 
 const { useConversionStatus } = await import('./useConversionStatus.js')
@@ -178,5 +180,65 @@ describe('useConversionStatus', () => {
 		expect(axiosGet.mock.calls.length).toBe(abrufe + 1)
 		status.stop()
 		delete globalThis.document
+	})
+})
+
+/**
+ * Display variants (E19) come from wherever the base came from - decided in
+ * the one branch of poll(), not again for each variant.
+ */
+describe('requestVariant', () => {
+	beforeEach(() => {
+		vi.useFakeTimers()
+		axiosGet.mockReset()
+		clientRun.mockReset()
+		clientRunVariant.mockReset()
+	})
+
+	afterEach(() => {
+		vi.useRealTimers()
+	})
+
+	it('asks the server when the server converted the base', async () => {
+		axiosGet.mockResolvedValueOnce({ data: { status: 'ready', files: {}, variants: { supported: true } } })
+		const status = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
+		await status.poll()
+		expect(status.variantsSupported.value).toBe(true)
+
+		axiosGet.mockResolvedValueOnce({ data: { status: 'pending' } })
+		axiosGet.mockResolvedValueOnce({ data: { status: 'ready', files: { pages: ['p'] } } })
+		const answer = status.requestVariant('ex0~orig~w~0')
+		await vi.advanceTimersByTimeAsync(2000)
+		expect(await answer).toEqual({ variant: 'ex0~orig~w~0', status: 'ready', files: { pages: ['p'] } })
+		expect(axiosGet.mock.calls[1][0]).toBe('/apps/scoreview/api/scores/{fileId}/variants/{key}')
+		expect(clientRunVariant).not.toHaveBeenCalled()
+	})
+
+	it('reports what the server cannot', async () => {
+		axiosGet.mockResolvedValueOnce({ data: { status: 'ready', files: {}, variants: { supported: false } } })
+		const status = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
+		await status.poll()
+		expect(status.variantsSupported.value).toBe(false)
+	})
+
+	it('converts in the browser when the browser converted the base', async () => {
+		axiosGet.mockResolvedValueOnce({ data: { status: 'client', etag: 'e' } })
+		clientRun.mockResolvedValue({ files: {} })
+		clientRunVariant.mockResolvedValue({ status: 'ready', variant: 'full~phone~w~0', files: {} })
+		const status = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
+		await status.poll()
+		expect(status.variantsSupported.value).toBe(true)
+		expect((await status.requestVariant('full~phone~w~0')).status).toBe('ready')
+		expect(axiosGet).toHaveBeenCalledTimes(1)
+	})
+
+	it('has nothing before the base is there, and forgets on reset', async () => {
+		const status = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
+		expect((await status.requestVariant('full~phone~w~0')).errorCode).toBe('base_not_ready')
+		axiosGet.mockResolvedValueOnce({ data: { status: 'ready', files: {}, variants: { supported: true } } })
+		await status.poll()
+		status.reset()
+		expect(status.variantsSupported.value).toBe(false)
+		expect((await status.requestVariant('full~phone~w~0')).errorCode).toBe('base_not_ready')
 	})
 })

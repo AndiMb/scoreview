@@ -94,12 +94,12 @@ class MyPartController extends Controller {
 	#[PublicPage]
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
-	public function updatePractice(int $fileId, ?int $transpose = null, ?bool $coach = null, ?int $othersLevel = null): JSONResponse {
+	public function updatePractice(int $fileId, ?int $transpose = null, ?bool $coach = null, ?int $othersLevel = null, ?string $source = null, ?bool $concert = null, ?bool $transposeNotation = null): JSONResponse {
 		$userId = $this->userWithAccess($fileId);
 		if ($userId === null) {
 			return $this->notFound();
 		}
-		return new JSONResponse(['practice' => $this->preferences->setPractice($userId, $fileId, $transpose, $coach, $othersLevel)]);
+		return new JSONResponse(['practice' => $this->preferences->setPractice($userId, $fileId, $transpose, $coach, $othersLevel, $source, $concert, $transposeNotation)]);
 	}
 
 	private function userWithAccess(int $fileId): ?string {

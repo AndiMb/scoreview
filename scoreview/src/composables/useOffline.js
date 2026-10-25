@@ -18,9 +18,11 @@ import {
 	splitByUser,
 	stagingName,
 	upsertEntry,
+	variantUrlFor,
 } from '../lib/offlinePlan.js'
 import { WORKLET_URL } from '../lib/player.js'
 import { isPlayable } from '../lib/setlistNav.js'
+import { LAST_VARIANT_PREFIX } from './useScoreVariant.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -171,13 +173,36 @@ async function store(cache, url) {
 }
 
 /**
+ * The variant key useScoreVariant.js remembered for this score on this device.
+ *
+ * @param {number} fileId
+ * @return {?string}
+ */
+function lastVariantKey(fileId) {
+	try {
+		return window.localStorage.getItem(LAST_VARIANT_PREFIX + fileId)
+	} catch {
+		return null
+	}
+}
+
+/**
  * @param {number} fileId
  * @return {Promise<{plan: ?{urls: string[], etag: ?string}, status: object, pageCount: number, shared: string[]}>}
  */
 async function planScore(fileId) {
 	const api = apiUrlsFor(generateUrl, fileId)
 	const status = (await axios.get(api.status)).data
-	const plan = planForScore({ statusBody: status, api })
+	// The display variant this device showed last (useScoreVariant.js) goes
+	// along; one that cannot be had is no reason not to save the score.
+	let variantUrl = null
+	let variantBody = null
+	const key = lastVariantKey(fileId)
+	if (key && status?.status === 'ready' && status?.variants?.supported) {
+		variantUrl = variantUrlFor(generateUrl, fileId, key)
+		variantBody = (await axios.get(variantUrl).catch(() => null))?.data ?? null
+	}
+	const plan = planForScore({ statusBody: status, api, variantUrl, variantBody })
 	return {
 		plan,
 		status,

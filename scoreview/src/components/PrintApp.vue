@@ -87,6 +87,7 @@ import { pageBoxMm, pageCss } from '../lib/printLayout.js'
 import { keyByElid } from '../lib/scoreFacts.js'
 import { BASE_PAGE_WIDTH_PX, buildTimeline, groupRectsByPage } from '../lib/scoreLayout.js'
 import { svgPageToPdf } from '../lib/svgToPdf.js'
+import { elidMapping } from '../lib/variantChoice.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -157,6 +158,16 @@ export default {
 		const timeline = shallowRef(null)
 		const measuresTimeline = shallowRef(null)
 		const scoreMeta = shallowRef(null)
+		// The display variant the viewer showed (E19), from `?variant=`: a
+		// part or phone pages print as such. Its meta describes the picture;
+		// the piece stays scoreMeta's.
+		const variantKey = new URLSearchParams(window.location.search).get('variant')
+		const variantMeta = shallowRef(null)
+		const pictureMeta = computed(() => (variantMeta.value && scoreMeta.value
+			? { ...scoreMeta.value, noteSpellings: variantMeta.value.noteSpellings, pageFormat: variantMeta.value.pageFormat ?? scoreMeta.value.pageFormat }
+			: scoreMeta.value))
+		const pictureParts = computed(() => variantMeta.value?.parts ?? scoreMeta.value?.parts ?? [])
+		const elids = computed(() => elidMapping(variantMeta.value))
 		const currentEtag = ref(null)
 		// From the status body, as in the viewer: offer the PDF file only where
 		// the person may create files next to the score.
@@ -177,6 +188,8 @@ export default {
 			// Nothing to seek on paper.
 			seek: () => {},
 			parts: () => scoreMeta.value?.parts ?? [],
+			pictureParts: () => pictureParts.value,
+			pictureElid: (elid) => elids.value.toPicture(elid),
 			myPartId: () => myPart.myPartId.value,
 			isLeader: () => leaders.isLeader.value,
 		})
@@ -198,11 +211,26 @@ export default {
 						axios.get(files.measuresJson),
 						axios.get(files.metaJson),
 					])
-					timeline.value = buildTimeline(timingRes.data)
-					measuresTimeline.value = buildTimeline(measuresRes.data)
+					let picture = { timing: timingRes.data, measures: measuresRes.data, pages: files.pages, meta: null }
+					if (variantKey) {
+						// Where the variant cannot be had, the score prints as
+						// the file has it - better than no print at all.
+						const answer = await conversion.requestVariant(variantKey)
+						if (answer?.status === 'ready') {
+							const [vTiming, vMeasures, vMeta] = await Promise.all([
+								axios.get(answer.files.timingJson),
+								axios.get(answer.files.measuresJson),
+								axios.get(answer.files.metaJson),
+							])
+							picture = { timing: vTiming.data, measures: vMeasures.data, pages: answer.files.pages, meta: vMeta.data }
+						}
+					}
+					timeline.value = buildTimeline(picture.timing)
+					measuresTimeline.value = buildTimeline(picture.measures)
 					scoreMeta.value = metaRes.data
+					variantMeta.value = picture.meta
 					currentEtag.value = files.etag
-					pageUrls.value = files.pages
+					pageUrls.value = picture.pages
 					scoreFacts.ensureMidi(files.midi)
 					myPart.load()
 				} catch (err) {
@@ -216,8 +244,8 @@ export default {
 		// Whether the SVG carries segment ids (M10) is known once a sheet has
 		// indexed itself - the same signal the viewer uses (E15).
 		const svgHasSegIds = ref(false)
-		const capabilities = computed(() => capabilitiesOf({ meta: scoreMeta.value, svgHasSegIds: svgHasSegIds.value }))
-		const spellings = computed(() => (capabilities.value.spellings ? spellingMap(scoreMeta.value?.noteSpellings) : null))
+		const capabilities = computed(() => capabilitiesOf({ meta: pictureMeta.value, svgHasSegIds: svgHasSegIds.value }))
+		const spellings = computed(() => (capabilities.value.spellings ? spellingMap(pictureMeta.value?.noteSpellings) : null))
 		const elidKeys = computed(() => keyByElid(timeline.value, scoreFacts.facts.value?.keys ?? [], measuresTimeline.value, durationMs.value))
 		const systemRectsByPage = computed(() => (measuresTimeline.value ? groupRectsByPage(measuresTimeline.value) : []))
 
@@ -226,6 +254,9 @@ export default {
 			fileName: page.fileName ?? '',
 			pageUrls,
 			scoreMeta,
+			pictureMeta,
+			pictureParts,
+			variantKey,
 			canWriteFolder,
 			state: conversion.state,
 			errorText: conversion.errorText,
@@ -270,12 +301,22 @@ export default {
 	computed: {
 		/** The file name without its extension - what the print dialog shows as the job. */
 		title() {
-			return this.fileName.replace(/\.(mscz|mscx)$/i, '')
+			const base = this.fileName.replace(/\.(mscz|mscx)$/i, '')
+			// A part prints under its own name next to the score's (E19):
+			// "Lied - Sopran.pdf" beside "Lied.pdf", not a second "Lied.pdf".
+			// A stored part has the name its arranger gave it.
+			const stored = /^ex(\d+)~/.exec(this.variantKey ?? '')
+			if (stored) {
+				const name = this.scoreMeta?.excerpts?.[Number(stored[1])]?.name
+				return name ? `${base} - ${name}` : base
+			}
+			const isPart = this.pictureParts.length > 0 && this.pictureParts.length < (this.scoreMeta?.parts?.length ?? 0)
+			return isPart ? `${base} - ${this.pictureParts.map((p) => p.name).filter(Boolean).join(', ')}` : base
 		},
 
 		/** The sheet size: the score's own page format (printLayout.js). */
 		pageBox() {
-			return pageBoxMm(this.scoreMeta)
+			return pageBoxMm(this.pictureMeta)
 		},
 
 		sheetStyle() {
@@ -293,14 +334,14 @@ export default {
 		},
 
 		partCount() {
-			return this.scoreMeta?.parts?.length ?? 0
+			return this.pictureParts.length
 		},
 
 		myPartIndex() {
 			if (this.myPartId === null) {
 				return null
 			}
-			const index = (this.scoreMeta?.parts ?? []).findIndex((part) => String(part.id) === String(this.myPartId))
+			const index = this.pictureParts.findIndex((part) => String(part.id) === String(this.myPartId))
 			return index === -1 ? null : index
 		},
 

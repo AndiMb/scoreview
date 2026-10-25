@@ -48,11 +48,13 @@ function errorText(err) {
  * @param {() => number} deps.durationMs Gesamtdauer für den letzten Takt
  * @param {(timeMs: number) => void} deps.seek springt die Wiedergabe an
  * @param {() => Array} [deps.parts] meta.parts - fuer Stimmnotizen
+ * @param deps.pictureElid
+ * @param deps.pictureParts
  * @param {() => ?string} [deps.myPartId] „Meine Stimme"
  * @param {() => boolean} [deps.isLeader] Anzeigehilfe; durchgesetzt wird
  *   die Rolle serverseitig
  */
-export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag, durationMs, seek, parts = () => [], myPartId = () => null, isLeader = () => false }) {
+export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag, durationMs, seek, parts = () => [], pictureParts = parts, pictureElid = (elid) => elid, myPartId = () => null, isLeader = () => false }) {
 	const annotations = ref([])
 	const error = ref('')
 	const visible = ref(false)
@@ -111,7 +113,9 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			// A saved loop is a range to set, not a spot to mark (savedLoops).
 			.filter((a) => a.kind !== 'stamp' && a.kind !== 'loop')
 			.map((a) => {
-				const rect = (a.elid !== null && a.anchorEtag === currentEtag() ? notes.elements[String(a.elid)] : null)
+				// The anchor is the base's segment; the picture may be a variant
+				// with its own numbering (E19) - pictureElid() translates.
+				const rect = (a.elid !== null && a.anchorEtag === currentEtag() ? notes.elements[String(pictureElid(a.elid))] : null)
 					?? measures.elements[String(a.measureNumber - 1)]
 				// mine/visibility fuers Marker-Styling in ScorePage.vue: eigene
 				// und geteilte Notizen sollen unterscheidbar sein. `content`
@@ -140,6 +144,9 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			return []
 		}
 		const scoreParts = parts() ?? []
+		// Target staves are counted in the picture: a part drawn alone is
+		// staff 0 there, and a part not drawn has no staff (E19).
+		const drawnIds = (pictureParts() ?? []).map((part) => String(part.id))
 		return listed.value
 			.filter((a) => a.kind === 'stamp')
 			.map((a) => {
@@ -148,7 +155,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 					return null
 				}
 				const elementRect = a.elid !== null && a.elid !== undefined && a.anchorEtag === currentEtag()
-					? (notes.elements[String(a.elid)] ?? null)
+					? (notes.elements[String(pictureElid(a.elid))] ?? null)
 					: null
 				return {
 					id: a.id,
@@ -161,7 +168,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 					measureRect,
 					elementRect,
 					targetIndices: a.visibility === 'parts'
-						? resolveTargets(a, scoreParts).map((part) => scoreParts.indexOf(part))
+						? resolveTargets(a, scoreParts).map((part) => drawnIds.indexOf(String(part.id))).filter((i) => i !== -1)
 						: [],
 				}
 			})

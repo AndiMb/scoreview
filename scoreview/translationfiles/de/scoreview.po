@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php
+#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
 msgid "File not found or no access."
 msgstr "Datei nicht gefunden oder kein Zugriff."
 
@@ -60,11 +60,11 @@ msgstr "Ungültiger Notizanker."
 msgid "Not allowed to convert this score again."
 msgstr "Diese Partitur darf nicht neu konvertiert werden."
 
-#: lib/Controller/ConversionController.php lib/Controller/EngineController.php
+#: lib/Controller/ConversionController.php lib/Controller/EngineController.php lib/Controller/VariantController.php
 msgid "Requested file does not exist."
 msgstr "Angeforderte Datei existiert nicht."
 
-#: lib/Controller/ConversionController.php
+#: lib/Controller/ConversionController.php lib/Controller/VariantController.php
 msgid "Conversion not finished yet."
 msgstr "Konvertierung noch nicht fertig."
 
@@ -215,6 +215,10 @@ msgstr "Adressen für den Konvertierungsdienst und die SoundFont-Quelle müssen 
 #: lib/Controller/SoundFontController.php
 msgid "The server could not provide the SoundFont. The ScoreView status in the administration settings shows why."
 msgstr "Der Server konnte das SoundFont nicht bereitstellen. Warum, zeigt der Status von ScoreView in den Verwaltungseinstellungen."
+
+#: lib/Controller/VariantController.php
+msgid "This score has no such part."
+msgstr "Diese Partitur hat keine solche Stimme."
 
 #: lib/Search/ScoreSearchProvider.php
 msgid "Scores"
@@ -672,6 +676,22 @@ msgstr "Folgt {name} nicht · getrennt"
 msgid "Not following {name}"
 msgstr "Folgt {name} nicht"
 
+#: src/components/LayoutControls.vue
+msgid "Edition"
+msgstr "Fassung"
+
+#: src/components/LayoutControls.vue
+msgid "Score or part"
+msgstr "Partitur oder Stimme"
+
+#: src/components/LayoutControls.vue
+msgid "Concert pitch (transposing instruments as they sound)"
+msgstr "Klingend notiert (transponierende Instrumente, wie sie klingen)"
+
+#: src/components/LayoutControls.vue
+msgid "Page format"
+msgstr "Seitenformat"
+
 #: src/components/LayoutControls.vue src/components/ScoreViewer.vue
 msgid "Layout"
 msgstr "Darstellung der Noten"
@@ -691,6 +711,18 @@ msgstr "Systemband (Notenzeilen nebeneinander, fürs Handy)"
 #: src/components/LayoutControls.vue
 msgid "Lyrics only"
 msgstr "Nur Liedtext"
+
+#: src/components/LayoutControls.vue
+msgid "As in the file"
+msgstr "Wie in der Datei"
+
+#: src/components/LayoutControls.vue
+msgid "Phone, upright"
+msgstr "Handy hochkant"
+
+#: src/components/LayoutControls.vue
+msgid "Phone, landscape"
+msgstr "Handy quer"
 
 #: src/components/LayoutControls.vue src/components/NoteNameControls.vue src/components/TunerPanel.vue
 msgid "Off"
@@ -1797,16 +1829,28 @@ msgid "The score cursor keeps running independently of this."
 msgstr "Der Notenansicht-Cursor läuft unabhängig davon mit."
 
 #: src/components/ScoreViewer.vue
+msgid "Engraving the chosen part or page format …"
+msgstr "Die gewählte Stimme bzw. das Seitenformat wird gesetzt …"
+
+#: src/components/ScoreViewer.vue
+msgid "This score can be engraved on pages the size of a phone screen, with larger notes."
+msgstr "Diese Partitur lässt sich auf Seiten in Handygröße setzen, mit größeren Noten."
+
+#: src/components/ScoreViewer.vue
+msgid "Use phone pages"
+msgstr "Handyseiten verwenden"
+
+#: src/components/ScoreViewer.vue
+msgid "No, thanks"
+msgstr "Nein, danke"
+
+#: src/components/ScoreViewer.vue
 msgid "On a phone, the system band shows the staves side by side in landscape."
 msgstr "Auf dem Handy zeigt das Systemband die Notenzeilen nebeneinander, am besten im Querformat."
 
 #: src/components/ScoreViewer.vue
 msgid "Try the system band"
 msgstr "Systemband ausprobieren"
-
-#: src/components/ScoreViewer.vue
-msgid "No, thanks"
-msgstr "Nein, danke"
 
 #: src/components/ScoreViewer.vue
 msgid "Lyrics view is not available: {reason} Showing the pages instead."
@@ -1835,6 +1879,14 @@ msgstr "Keine Stimme gewählt"
 #: src/components/ScoreViewer.vue
 msgid "My voice on the right, the others on the left"
 msgstr "Meine Stimme rechts, die anderen links"
+
+#: src/components/ScoreViewer.vue
+msgid "Full score"
+msgstr "Partitur"
+
+#: src/components/ScoreViewer.vue
+msgid "{part} (generated)"
+msgstr "{part} (erzeugt)"
 
 #: src/components/ScoreViewer.vue
 msgid "Exit fullscreen"
@@ -2039,6 +2091,10 @@ msgstr "Einen Halbton tiefer"
 #: src/components/TransposeControls.vue
 msgid "Raise by a semitone"
 msgstr "Einen Halbton höher"
+
+#: src/components/TransposeControls.vue
+msgid "Transpose the notes too"
+msgstr "Noten mittransponieren"
 
 #: src/components/TransposeControls.vue
 msgid "Only the sound is transposed. The notation is not."
@@ -2279,6 +2335,38 @@ msgstr "Die Aufnahme konnte nicht abgespielt werden."
 #: src/composables/useRecorder.js
 msgid "No connection to the server."
 msgstr "Keine Verbindung zum Server."
+
+#: src/composables/useScoreVariant.js
+msgid "This server engraves no parts or phone pages; the score is shown as the file has it."
+msgstr "Dieser Server setzt keine Stimmen und keine Handyseiten; die Partitur erscheint so, wie die Datei sie enthält."
+
+#: src/composables/useScoreVariant.js
+msgid "This server engraves no parts or phone pages."
+msgstr "Dieser Server setzt keine Stimmen und keine Handyseiten."
+
+#: src/composables/useScoreVariant.js
+msgid "Too many new parts or page formats in a short time. Please try again later."
+msgstr "Zu viele neue Stimmen oder Seitenformate in kurzer Zeit. Bitte später noch einmal versuchen."
+
+#: src/composables/useScoreVariant.js
+msgid "The score is too large to be engraved again."
+msgstr "Die Partitur ist zu groß, um neu gesetzt zu werden."
+
+#: src/composables/useScoreVariant.js
+msgid "This score is too large to be set in this browser."
+msgstr "Diese Partitur ist zu groß, um in diesem Browser gesetzt zu werden."
+
+#: src/composables/useScoreVariant.js
+msgid "The engraving engine could not be started in this browser."
+msgstr "Die Satz-Engine ließ sich in diesem Browser nicht starten."
+
+#: src/composables/useScoreVariant.js
+msgid "The score changed in the meantime. Please open it again."
+msgstr "Die Partitur hat sich inzwischen geändert. Bitte erneut öffnen."
+
+#: src/composables/useScoreVariant.js
+msgid "This part or page format could not be engraved. The score is shown as the file has it."
+msgstr "Diese Stimme bzw. dieses Seitenformat ließ sich nicht setzen. Die Partitur erscheint so, wie die Datei sie enthält."
 
 #: src/composables/useSetlist.js
 msgid "The setlist could not be loaded."

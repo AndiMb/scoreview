@@ -6,6 +6,7 @@ namespace OCA\ScoreView\BackgroundJob;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Db\ScoreVariant;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\ConverterException;
@@ -13,6 +14,7 @@ use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\SidecarBusyException;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SidecarException;
+use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\QueuedJob;
@@ -92,8 +94,78 @@ class ConvertScoreJob extends QueuedJob {
 		private IAppConfig $appConfig,
 		private ITempManager $tempManager,
 		private LoggerInterface $logger,
+		private VariantService $variantService,
 	) {
 		parent::__construct($time);
+	}
+
+	/**
+	 * A display variant (docs/architecture.md E19), engraved now, inside the
+	 * request that asked for it - Controller\VariantController calls this
+	 * on a row it has claimed. Here, and only here, as for the base: which
+	 * path converts is decided in this class (E3).
+	 *
+	 * Synchronous on purpose. The base conversion waits for the next cron
+	 * run, which is minutes with system cron and longer with AJAX cron; for
+	 * a switch to "my part only" that is too long, and a local run takes
+	 * 0.7-2.9 s with a hard time limit. The sidecar engraves no variants -
+	 * its stock MuseScore lacks what a variant needs (ConversionBackend::
+	 * supportsVariants()) - so the row ends with a code that says so.
+	 *
+	 * The outcome is written to the row; nothing is thrown.
+	 */
+	public function convertVariant(Node $node, ScoreVariant $variant): void {
+		if (!$this->backend->supportsVariants()) {
+			$this->variantService->markError($variant, 'The configured conversion path engraves no display variants.', ScoreVariant::ERROR_UNSUPPORTED);
+			return;
+		}
+		$maxBytes = $this->appConfig->getValueInt(Application::APP_ID, 'max_score_bytes', self::DEFAULT_MAX_BYTES);
+		if ($maxBytes > 0 && $node->getSize() > $maxBytes) {
+			$this->variantService->markError($variant, sprintf('File is %d bytes, larger than the limit of %d bytes.', $node->getSize(), $maxBytes), ScoreConversion::ERROR_TOO_LARGE);
+			return;
+		}
+
+		$scorePath = null;
+		$baseDir = null;
+		try {
+			$scorePath = $this->copyToTempFile($node);
+			$baseDir = $this->tempManager->getTemporaryFolder('scoreview-base');
+			if ($baseDir === false) {
+				throw new \RuntimeException('No temporary directory available for the base artifacts.');
+			}
+			// The converter checks the variant against the base's timing and
+			// measures. IAppData need not be a local directory (object
+			// storage), so they go to a temporary one first.
+			foreach (['timing' => 'timing.json', 'measures' => 'measures.json'] as $name => $file) {
+				file_put_contents($baseDir . '/' . $file, $this->conversionService->readArtifact($variant->getFileId(), $variant->getEtag(), $name));
+			}
+			$artifacts = $this->localConverter->convertVariant($scorePath, $variant->getVariant(), $baseDir);
+			$this->variantService->markReady(
+				$variant,
+				$artifacts['pages'],
+				$artifacts['timing'],
+				$artifacts['measures'],
+				$artifacts['meta'],
+				$this->localConverter->engineVersion(),
+			);
+		} catch (\Throwable $e) {
+			$this->logger->error('ScoreView: variant {variant} failed for fileId={fileId}: {message}', [
+				'variant' => $variant->getVariant(),
+				'fileId' => $variant->getFileId(),
+				'message' => $e->getMessage(),
+				'exception' => $e,
+			]);
+			$this->variantService->markError($variant, $e->getMessage(), $e instanceof ConverterException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
+		} finally {
+			if ($scorePath !== null) {
+				@unlink($scorePath);
+			}
+			if (is_string($baseDir)) {
+				@unlink($baseDir . '/timing.json');
+				@unlink($baseDir . '/measures.json');
+				@rmdir($baseDir);
+			}
+		}
 	}
 
 	/**

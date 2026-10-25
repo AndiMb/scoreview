@@ -10,7 +10,8 @@
 // Browser dieselben wie die vom Server - gemessen: timing/measures/meta Byte
 // für Byte identisch.
 
-import { toPositions } from '../../converter/lib/artifacts.mjs'
+import { checkVariant, toPositions, toVariantMeta } from '../../converter/lib/artifacts.mjs'
+import { engineViewOptions, parseVariantKey } from '../../converter/lib/variantKey.mjs'
 
 /** Partitur größer als das, was einem Gerät im Browser zuzumuten ist. */
 export const CLIENT_TOO_LARGE = 'client_too_large'
@@ -137,6 +138,65 @@ export async function convertInBrowser({ fetchSource, loadEngine, maxBytes = 0, 
 		)
 	}
 
+	return mitEngine({ bytes, loadEngine, grenze, onProgress }, (score) => erzeugeArtefakte(score, onProgress))
+}
+
+/**
+ * A display variant in the browser (docs/architecture.md E19) - the same
+ * engine calls as `convertVariant()` in converter/convert.mjs, and the same
+ * check against the base afterwards: a variant that breaks an invariant is
+ * refused here as it is on the server, rather than shown with the cursor and
+ * the notes in the wrong place.
+ *
+ * One load per variant, as there: applyView() edits the loaded score.
+ *
+ * @param {object} deps as convertInBrowser, plus
+ * @param deps.fetchSource
+ * @param deps.loadEngine
+ * @param {string} deps.key canonical variant key
+ * @param {{timing: object, measures: object}} deps.base the base conversion's artifacts
+ * @param deps.maxBytes
+ * @param deps.onProgress
+ * @param deps.timeouts
+ * @return {Promise<{pages: string[], timing: object, measures: object, meta: object}>}
+ */
+export async function convertVariantInBrowser({ fetchSource, loadEngine, key, base, maxBytes = 0, onProgress = () => {}, timeouts = {} }) {
+	const variant = parseVariantKey(key)
+	if (!variant) {
+		throw new ClientConversionError(CONVERSION_FAILED, `Not a variant key: ${key}`)
+	}
+	const grenze = {
+		import: ENGINE_IMPORT_TIMEOUT_MS,
+		start: ENGINE_START_TIMEOUT_MS,
+		convert: CONVERT_TIMEOUT_MS,
+		...timeouts,
+	}
+	onProgress({ phase: 'source' })
+	const bytes = await fetchSource()
+	if (maxBytes > 0 && bytes.byteLength > maxBytes) {
+		throw new ClientConversionError(CLIENT_TOO_LARGE, `Score is ${bytes.byteLength} bytes, the limit is ${maxBytes}.`)
+	}
+	const artefakte = await mitEngine({ bytes, loadEngine, grenze, onProgress }, (score) => erzeugeVariante(score, variant, key, onProgress))
+	const { problems } = checkVariant(base, { ...artefakte, svgs: artefakte.pages })
+	if (problems.length > 0) {
+		throw new ClientConversionError(CONVERSION_FAILED, `Variant ${key} fails its invariants: ${problems.join('; ')}`)
+	}
+	return artefakte
+}
+
+/**
+ * Engine laden, Partitur setzen, `produce` laufen lassen, Engine abbauen -
+ * der gemeinsame Rahmen beider Konvertierungen im Browser.
+ *
+ * @param {object} lauf
+ * @param {Uint8Array} lauf.bytes
+ * @param {() => Promise<object>} lauf.loadEngine
+ * @param {{import: number, start: number, convert: number}} lauf.grenze
+ * @param {(fortschritt: object) => void} lauf.onProgress
+ * @param {(score: object) => Promise<object>} produce
+ * @return {Promise<object>}
+ */
+async function mitEngine({ bytes, loadEngine, grenze, onProgress }, produce) {
 	onProgress({ phase: 'engine' })
 	let Engine
 	try {
@@ -165,7 +225,7 @@ export async function convertInBrowser({ fetchSource, loadEngine, maxBytes = 0, 
 
 	try {
 		return await withDeadline(
-			erzeugeArtefakte(score, onProgress),
+			produce(score),
 			grenze.convert,
 			CONVERSION_FAILED,
 			'The conversion did not finish in time.',
@@ -209,6 +269,45 @@ async function erzeugeArtefakte(score, onProgress) {
 		timing: toPositions(JSON.parse(await score.savePositions(true))),
 		measures: toPositions(JSON.parse(await score.savePositions(false))),
 		meta: await score.metadata(),
+	}
+	onProgress({ phase: 'done' })
+	return artefakte
+}
+
+/**
+ * @param {object} score
+ * @param {object} variant parsed key (converter/lib/variantKey.mjs)
+ * @param {string} key
+ * @param {(fortschritt: object) => void} onProgress
+ * @return {Promise<object>}
+ */
+async function erzeugeVariante(score, variant, key, onProgress) {
+	if (variant.source.kind === 'ex') {
+		const stored = (await score.metadata()).excerpts ?? []
+		if (variant.source.index >= stored.length) {
+			throw new ClientConversionError(CONVERSION_FAILED, `The score has no stored part ${variant.source.index}.`)
+		}
+		await score.setExcerptId(variant.source.index)
+	} else if (variant.source.kind === 'part') {
+		const [id] = await score.generateExcerpts([variant.source.partId])
+		await score.setExcerptId(id)
+	}
+	await score.applyView(engineViewOptions(variant))
+
+	const pageCount = await score.npages()
+	if (pageCount < 1) {
+		throw new ClientConversionError(CONVERSION_FAILED, 'The engine returned no SVG page.')
+	}
+	const pages = []
+	for (let i = 0; i < pageCount; i++) {
+		onProgress({ phase: 'pages', page: i + 1, of: pageCount })
+		pages.push(await score.saveSvg(i))
+	}
+	const artefakte = {
+		pages,
+		timing: toPositions(JSON.parse(await score.savePositions(true))),
+		measures: toPositions(JSON.parse(await score.savePositions(false, true))),
+		meta: toVariantMeta(await score.metadata(), await score.viewMapping(), key),
 	}
 	onProgress({ phase: 'done' })
 	return artefakte

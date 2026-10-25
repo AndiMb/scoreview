@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Tests\Unit\Service;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreConversionMapper;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
@@ -42,7 +43,7 @@ class ConversionServiceTest extends TestCase {
 	}
 
 	private function service(): ConversionService {
-		return new ConversionService($this->mapper, $this->appData, $this->time);
+		return new ConversionService($this->mapper, $this->appData, $this->time, $this->createMock(VariantService::class));
 	}
 
 	// --- Allowlist der Artefakte ------------------------------------------

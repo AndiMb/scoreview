@@ -80,13 +80,28 @@ export function apiUrlsFor(generateUrl, fileId) {
 }
 
 /**
+ * The address the viewer asks for a display variant (E19) -
+ * useConversionStatus.requestVariant() on the server path.
+ *
+ * @param {(path: string, params: object) => string} generateUrl
+ * @param {number} fileId
+ * @param {string} key canonical variant key
+ * @return {string}
+ */
+export function variantUrlFor(generateUrl, fileId, key) {
+	return generateUrl('/apps/scoreview/api/scores/{fileId}/variants/{key}', { fileId, key })
+}
+
+/**
  * @param {object} input
  * @param {object} input.statusBody Antwort von `status` (muss `ready` sein)
  * @param {ReturnType<typeof apiUrlsFor>} input.api
+ * @param {?string} [input.variantUrl] the display variant last shown on this device (E19)
+ * @param {?object} [input.variantBody] its answer; saved along only when `ready`
  * @return {{urls: string[], etag: ?string}|null} null, wenn die Partitur
  *   (noch) nicht fertig konvertiert ist - dann gibt es nichts vorzumerken
  */
-export function planForScore({ statusBody, api }) {
+export function planForScore({ statusBody, api, variantUrl = null, variantBody = null }) {
 	const files = statusBody?.files
 	if (statusBody?.status !== 'ready' || !files || !Array.isArray(files.pages)) {
 		return null
@@ -102,8 +117,14 @@ export function planForScore({ statusBody, api }) {
 		files.timingJson,
 		files.measuresJson,
 		files.metaJson,
-	].filter((u) => typeof u === 'string' && u !== '')
-	return { urls: unique(urls), etag: files.etag ?? null }
+	]
+	// The picture this device last showed, so the offline viewer opens on
+	// the same part or page format. Its MIDI is the base's, already above.
+	const variant = variantBody?.status === 'ready' && Array.isArray(variantBody.files?.pages) ? variantBody.files : null
+	if (variant && variantUrl) {
+		urls.push(variantUrl, ...variant.pages, variant.timingJson, variant.measuresJson, variant.metaJson)
+	}
+	return { urls: unique(urls.filter((u) => typeof u === 'string' && u !== '')), etag: files.etag ?? null }
 }
 
 /**

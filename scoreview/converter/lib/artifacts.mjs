@@ -104,6 +104,71 @@ export function svgSegments(svgText) {
 }
 
 /**
+ * M10 for a set of pages: every segment id the SVG carries has an element in
+ * timing.json, and noteheads sit on their segment. Shared by checkPromises
+ * (the base conversion) and checkVariant (a display variant).
+ *
+ * @param {object} timing timing.json in cache form
+ * @param {string[]} svgs the pages
+ * @return {{problems: string[], markedSegments: number, maxNoteOffset: number}}
+ */
+export function checkSegmentIds(timing, svgs = []) {
+	const problems = []
+	// M10: Das SVG traegt die Segmentkennung, die spos vergibt - sonst kann
+	// der Viewer den klingenden Notenkopf nicht faerben und faellt auf das
+	// Band zurueck. Die Zusage gilt nur fuer diesen Weg: MuseScore selbst
+	// schreibt diese Kennungen nicht, und der Selbsttest des Sidecars kennt
+	// M10 deshalb nicht (siehe docs/architecture.md E3).
+	let markiert = 0
+	let unbekannt = 0
+	let verrutscht = 0
+	let maxAbstand = 0
+	const bekannt = timing?.elements ?? {}
+	const gezeichnet = new Set()
+
+	for (const svg of svgs) {
+		const { ids, notes } = svgSegments(svg)
+		for (const id of ids) {
+			markiert++
+			if (bekannt[String(id)]) {
+				gezeichnet.add(id)
+			} else {
+				unbekannt++
+			}
+		}
+		for (const note of notes) {
+			const rect = bekannt[String(note.id)]
+			if (!rect) {
+				continue
+			}
+			const abstand = note.x - rect.x
+			maxAbstand = Math.max(maxAbstand, Math.abs(abstand))
+			// Ein Notenkopf sitzt gemessen innerhalb einer Einheit auf der
+			// Segmentposition, bei 107-162 Einheiten Segmentbreite. Waere die
+			// Nummerierung um eins verschoben, laege er ein ganzes Segment
+			// weiter - diese Schranke faengt das, ohne an Rundung zu haengen.
+			if (abstand < -rect.w || abstand > 2 * rect.w) {
+				verrutscht++
+			}
+		}
+	}
+
+	if (svgs.length > 0) {
+		if (markiert === 0) {
+			problems.push('the SVG carries no segment IDs - the sounding notehead cannot be located (M10 violated)')
+		}
+		if (unbekannt > 0) {
+			problems.push(`${unbekannt} segment IDs in the SVG have no element in spos (M10 violated)`)
+		}
+		if (verrutscht > 0) {
+			problems.push(`${verrutscht} noteheads are not at their segment position - notation and timeline are numbered differently (M10 violated)`)
+		}
+	}
+
+	return { problems, markedSegments: gezeichnet.size, maxNoteOffset: Math.round(maxAbstand * 100) / 100 }
+}
+
+/**
  * Die Zusagen aus docs/architecture.md, gegen ein Konvertierungsergebnis
  * geprueft - inhaltlich dieselbe Liste wie `check_promises` im Sidecar.
  * Dass es sie zweimal gibt, ist der Preis fuer zwei unabhaengige
@@ -157,56 +222,8 @@ export function checkPromises({ pages, timing, midi, meta, svgs = [] }) {
 		problems.push('event times are not monotonically increasing')
 	}
 
-	// M10: Das SVG traegt die Segmentkennung, die spos vergibt - sonst kann
-	// der Viewer den klingenden Notenkopf nicht faerben und faellt auf das
-	// Band zurueck. Die Zusage gilt nur fuer diesen Weg: MuseScore selbst
-	// schreibt diese Kennungen nicht, und der Selbsttest des Sidecars kennt
-	// M10 deshalb nicht (siehe docs/architecture.md E3).
-	let markiert = 0
-	let unbekannt = 0
-	let verrutscht = 0
-	let maxAbstand = 0
-	const bekannt = timing?.elements ?? {}
-	const gezeichnet = new Set()
-
-	for (const svg of svgs) {
-		const { ids, notes } = svgSegments(svg)
-		for (const id of ids) {
-			markiert++
-			if (bekannt[String(id)]) {
-				gezeichnet.add(id)
-			} else {
-				unbekannt++
-			}
-		}
-		for (const note of notes) {
-			const rect = bekannt[String(note.id)]
-			if (!rect) {
-				continue
-			}
-			const abstand = note.x - rect.x
-			maxAbstand = Math.max(maxAbstand, Math.abs(abstand))
-			// Ein Notenkopf sitzt gemessen innerhalb einer Einheit auf der
-			// Segmentposition, bei 107-162 Einheiten Segmentbreite. Waere die
-			// Nummerierung um eins verschoben, laege er ein ganzes Segment
-			// weiter - diese Schranke faengt das, ohne an Rundung zu haengen.
-			if (abstand < -rect.w || abstand > 2 * rect.w) {
-				verrutscht++
-			}
-		}
-	}
-
-	if (svgs.length > 0) {
-		if (markiert === 0) {
-			problems.push('the SVG carries no segment IDs - the sounding notehead cannot be located (M10 violated)')
-		}
-		if (unbekannt > 0) {
-			problems.push(`${unbekannt} segment IDs in the SVG have no element in spos (M10 violated)`)
-		}
-		if (verrutscht > 0) {
-			problems.push(`${verrutscht} noteheads are not at their segment position - notation and timeline are numbered differently (M10 violated)`)
-		}
-	}
+	const m10 = checkSegmentIds(timing, svgs)
+	problems.push(...m10.problems)
 
 	return {
 		problems,
@@ -215,8 +232,8 @@ export function checkPromises({ pages, timing, midi, meta, svgs = [] }) {
 			events: events.length,
 			elements: elements.length,
 			repeatedElids: repeated,
-			markedSegments: gezeichnet.size,
-			maxNoteOffset: Math.round(maxAbstand * 100) / 100,
+			markedSegments: m10.markedSegments,
+			maxNoteOffset: m10.maxNoteOffset,
 		},
 	}
 }
@@ -417,5 +434,131 @@ export function checkLyrics({ meta, timing, svgs }) {
 	return {
 		problems,
 		details: { lyricSyllables: silben?.length ?? 0, noteSpellings: spellings?.length ?? 0 },
+	}
+}
+
+/**
+ * Staff indices an SVG page draws (`st-N`, M10).
+ *
+ * @param {string} svgText
+ * @return {Set<number>}
+ */
+export function svgStaves(svgText) {
+	const staves = new Set()
+	if (typeof svgText !== 'string') {
+		return staves
+	}
+	for (const match of svgText.matchAll(/class="[^"]*\bst-(\d+)\b[^"]*"/g)) {
+		staves.add(Number(match[1]))
+	}
+	return staves
+}
+
+/**
+ * meta.json of a display variant (E19): what the picture needs, nothing the
+ * base conversion already says. Every field that carries an elid or a staff
+ * index is the variant's own - it describes the variant's pages; tempo,
+ * parts, time signatures and rehearsal marks stay with the base, which no
+ * variant changes. `keySigs` is the variant's (the notation's keys, for the
+ * self-test); the viewer keeps the base's, which it transposes itself.
+ * `parts` names the parts the variant draws, in staff order, so the viewer
+ * can find a part's staff in the picture.
+ *
+ * @param {object} viewMeta the engine's metadata() of the view
+ * @param {{baseElid: Record<string, number>, staffMap: number[]}} mapping viewMapping()
+ * @param {string} key the canonical variant key
+ * @return {object}
+ */
+export function toVariantMeta(viewMeta, mapping, key) {
+	// The engine reports the pitch a transposed view plays. The viewer plays
+	// the base MIDI and transposes the sound itself (practice.transpose), by
+	// the same amount the key's last field names - a tapped note would sound
+	// transposed twice. So the pitch goes back to the base's; the spelling
+	// (tpc) stays the transposed one, because that is what the page shows.
+	const shift = Number(String(key).split('~')[3]) || 0
+	const meta = {
+		variant: key,
+		pages: viewMeta?.pages ?? 0,
+		pageFormat: viewMeta?.pageFormat ?? null,
+		keySigs: viewMeta?.keySigs ?? [],
+		noteSpellings: (viewMeta?.noteSpellings ?? []).map((entry) => (shift === 0
+			? entry
+			: { ...entry, notes: (entry.notes ?? []).map(([pitch, tpc]) => [pitch - shift, tpc]) })),
+		parts: (viewMeta?.parts ?? []).map((part) => ({ id: part.id, name: part.name })),
+		baseElid: mapping?.baseElid ?? {},
+		staffMap: mapping?.staffMap ?? [],
+	}
+	// Absent means "too much text" (over 20 000 syllables), as in the base
+	// meta.json - keep that distinction instead of writing an empty list.
+	if (Array.isArray(viewMeta?.lyricSyllables)) {
+		meta.lyricSyllables = viewMeta.lyricSyllables
+	}
+	return meta
+}
+
+/**
+ * The four invariants of a display variant (docs/architecture.md E19),
+ * checked after every variant conversion: a variant that fails them would
+ * put the cursor, the measure field and the notes in the wrong place, so it
+ * is better not cached at all.
+ *
+ *   I1 time axis: every event time of the variant is one of the base's;
+ *   I2 measures: same measure numbering - identical measure events and the
+ *      same measure elements;
+ *   I3 every segment the variant plays has a base segment (baseElid);
+ *   I4 every staff the variant draws maps to a base staff (staffMap);
+ *   plus M10 on the variant's own pages.
+ *
+ * @param {object} base {timing, measures} of the base conversion, cache form
+ * @param {object} variant {timing, measures, meta, svgs} of the variant
+ * @return {{problems: string[], details: object}}
+ */
+export function checkVariant(base, variant) {
+	const problems = []
+	const baseTimes = new Set((base?.timing?.events ?? []).map((e) => e.timeMs))
+	const near = (t) => baseTimes.has(t) || baseTimes.has(t - 1) || baseTimes.has(t + 1)
+	const offAxis = (variant?.timing?.events ?? []).filter((e) => !near(e.timeMs)).length
+	if (offAxis > 0) {
+		problems.push(`I1: ${offAxis} event times of the variant are not on the base time axis`)
+	}
+
+	const sameEvents = JSON.stringify(variant?.measures?.events ?? []) === JSON.stringify(base?.measures?.events ?? [])
+	const baseMeasureIds = Object.keys(base?.measures?.elements ?? {}).sort()
+	const variantMeasureIds = Object.keys(variant?.measures?.elements ?? {}).sort()
+	if (!sameEvents || JSON.stringify(baseMeasureIds) !== JSON.stringify(variantMeasureIds)) {
+		problems.push(`I2: measure numbering differs from the base (${variantMeasureIds.length} vs ${baseMeasureIds.length} measures)`)
+	}
+
+	const baseElid = variant?.meta?.baseElid ?? {}
+	const played = new Set((variant?.timing?.events ?? []).map((e) => e.elid))
+	const unmapped = [...played].filter((elid) => baseElid[String(elid)] === undefined).length
+	if (unmapped > 0) {
+		problems.push(`I3: ${unmapped} segments of the variant have no base segment`)
+	}
+
+	const staffMap = variant?.meta?.staffMap ?? []
+	const drawn = new Set()
+	for (const svg of variant?.svgs ?? []) {
+		for (const st of svgStaves(svg)) {
+			drawn.add(st)
+		}
+	}
+	const lost = [...drawn].filter((st) => !(staffMap[st] >= 0)).length
+	if (lost > 0) {
+		problems.push(`I4: ${lost} staves of the variant have no base staff`)
+	}
+
+	const m10 = checkSegmentIds(variant?.timing, variant?.svgs ?? [])
+	problems.push(...m10.problems)
+
+	return {
+		problems,
+		details: {
+			pages: (variant?.svgs ?? []).length,
+			events: (variant?.timing?.events ?? []).length,
+			measures: variantMeasureIds.length,
+			staves: drawn.size,
+			markedSegments: m10.markedSegments,
+		},
 	}
 }

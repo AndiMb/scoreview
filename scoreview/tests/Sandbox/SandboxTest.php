@@ -119,6 +119,29 @@ class SandboxTest extends TestCase {
 		$this->assertStringStartsWith('MThd', $artifacts['midi']);
 	}
 
+	/**
+	 * A display variant (E19) under the same grants: the base's directory is
+	 * read, nothing but the output directory is written - and the converter
+	 * checks the variant against that base before it writes anything.
+	 */
+	public function testEineVarianteLiestDieBasisUndSchreibtNurIhrErgebnis(): void {
+		$baseOut = $this->tempDir();
+		$variantOut = $this->tempDir();
+		$tempManager = $this->createMock(ITempManager::class);
+		$tempManager->method('getTemporaryFolder')->willReturnOnConsecutiveCalls($baseOut . '/', $variantOut . '/');
+		$converter = $this->converter([], $tempManager);
+		$score = $converter->getConverterDir() . '/parts-test.mscz';
+
+		$base = $converter->convert($score);
+		$artifacts = $converter->convertVariant($score, 'part3~phone~w~-2', $baseOut);
+
+		$this->assertNotEmpty($base['pages']);
+		$this->assertNotEmpty($artifacts['pages']);
+		$meta = json_decode($artifacts['meta'], true);
+		$this->assertSame([2], $meta['staffMap']);
+		$this->assertFileDoesNotExist($variantOut . DIRECTORY_SEPARATOR . 'score.mid', 'a variant has no MIDI of its own');
+	}
+
 	/** @param array<string, string> $values */
 	private function converter(array $values, ?ITempManager $tempManager = null): LocalConverter {
 		$values += ['node_path' => $this->runtimePath];

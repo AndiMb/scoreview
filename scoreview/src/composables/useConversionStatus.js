@@ -31,6 +31,14 @@ const LANGE_WARTEZEIT_MS = 120_000
  */
 const POLL_DEADLINE_MS = 1_860_000
 
+/**
+ * A display variant the server is engraving for another request answers
+ * `pending` (Controller\VariantController); the run itself takes seconds.
+ * How often and how long to ask again before giving up.
+ */
+const VARIANT_POLL_MS = 1500
+const VARIANT_DEADLINE_MS = 180_000
+
 const t = (text, vars) => translate('scoreview', text, vars)
 
 /**
@@ -99,6 +107,20 @@ export function useConversionStatus({ fileId, onReady }) {
 	const client = useClientConversion()
 	/** Gesetzt, solange die Artefakte aus dem Browser stammen - siehe reconvert(). */
 	let letzteClientAntwort = null
+	/**
+	 * Whether display variants (E19) can be had for the open score - from
+	 * the server's capability, or always when the browser converts (it runs
+	 * the same engine).
+	 */
+	const variantsSupported = ref(false)
+	/**
+	 * Where variants come from: set in the one branch below that decides
+	 * between server and browser, so asking for a variant needs no branch
+	 * of its own - the viewer cannot tell, as with the base (E3, E7).
+	 *
+	 * @type {?(key: string, mine: number) => Promise<object>}
+	 */
+	let varianten = null
 
 	/**
 	 * `unknown` ist sowohl expliziter Code als auch Rückfall für einen
@@ -162,8 +184,12 @@ export function useConversionStatus({ fileId, onReady }) {
 
 		if (body.status === 'ready') {
 			state.value = 'ready'
+			varianten = variantVomServer
+			variantsSupported.value = body.variants?.supported === true
 			await onReady(body)
 		} else if (body.status === 'client') {
+			varianten = (key) => client.runVariant(key)
+			variantsSupported.value = true
 			await konvertiereImBrowser(body, mine)
 		} else if (body.status === 'error') {
 			state.value = 'error'
@@ -196,6 +222,51 @@ export function useConversionStatus({ fileId, onReady }) {
 			}
 			langeWartezeit.value = gewartet > LANGE_WARTEZEIT_MS
 			later(nextStatusDelay(attempts++))
+		}
+	}
+
+	/**
+	 * A display variant (E19) of the open score: `{status: 'ready', variant,
+	 * files}` with `files` shaped like the base's (`midi` and `etag` are the
+	 * base's), or `{status: 'error', errorCode}`. Null when the score changed
+	 * while waiting.
+	 *
+	 * @param {string} key canonical variant key (converter/lib/variantKey.mjs)
+	 * @return {Promise<?object>}
+	 */
+	async function requestVariant(key) {
+		const mine = generation
+		if (varianten === null) {
+			return { status: 'error', variant: key, errorCode: 'base_not_ready' }
+		}
+		const antwort = await varianten(key, mine)
+		return mine === generation ? antwort : null
+	}
+
+	/**
+	 * The server engraves a missing variant inside the request, so the first
+	 * answer is usually final; `pending` means another request is at it.
+	 *
+	 * @param {string} key
+	 * @param {number} mine
+	 * @return {Promise<object>}
+	 */
+	async function variantVomServer(key, mine) {
+		const url = generateUrl('/apps/scoreview/api/scores/{fileId}/variants/{key}', { fileId: fileId(), key })
+		const begonnen = Date.now()
+		for (;;) {
+			let body
+			try {
+				body = (await axios.get(url)).data
+			} catch (err) {
+				body = err?.response?.data?.errorCode
+					? err.response.data
+					: { status: 'error', errorCode: 'unknown', error: err?.message ?? '' }
+			}
+			if (body?.status !== 'pending' || mine !== generation || Date.now() - begonnen > VARIANT_DEADLINE_MS) {
+				return body?.status === 'pending' ? { status: 'error', variant: key, errorCode: 'stale' } : { variant: key, ...body }
+			}
+			await new Promise((resolve) => setTimeout(resolve, VARIANT_POLL_MS))
 		}
 	}
 
@@ -310,6 +381,8 @@ export function useConversionStatus({ fileId, onReady }) {
 		// hält der Tab die Artefakte jeder je geöffneten Partitur.
 		client.release()
 		letzteClientAntwort = null
+		varianten = null
+		variantsSupported.value = false
 		state.value = 'loading'
 		errorMessage.value = ''
 		errorCode.value = ''
@@ -336,5 +409,5 @@ export function useConversionStatus({ fileId, onReady }) {
 
 	// `clientProgress` ist null, solange nichts im Browser gerechnet wird -
 	// auf einer Instanz mit funktionierendem Serverweg also immer.
-	return { state, errorMessage, errorCode, errorText, langeWartezeit, clientProgress: client.progress, poll, reconvert, stop, reset }
+	return { state, errorMessage, errorCode, errorText, langeWartezeit, clientProgress: client.progress, variantsSupported, requestVariant, poll, reconvert, stop, reset }
 }

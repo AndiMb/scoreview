@@ -3,6 +3,7 @@ import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { buildTimeline, groupRectsByPage } from '../lib/scoreLayout.js'
 import { createScoreSync } from '../lib/scoreSync.js'
 import { createWakeWindow } from '../lib/timeLoopWake.js'
+import { elidMapping } from '../lib/variantChoice.js'
 
 /**
  * Geteiltes leeres Array fuer Seiten ohne Takte - ein `[]` im Template waere
@@ -78,6 +79,36 @@ export function useScoreSession() {
 	// like useAutoScroll does with `force`.
 	const cursorForced = ref(false)
 	const currentElid = ref(null)
+
+	// The display variant shown instead of the base pages (E19), or null.
+	// Its meta.json describes the picture only; everything about the piece
+	// stays in scoreMeta. `pictureMeta` is what reads the picture - the
+	// base meta with the variant's elid- and staff-bearing fields over it.
+	const variantMeta = shallowRef(null)
+	const variantKey = ref(null)
+	const pictureMeta = computed(() => {
+		const base = scoreMeta.value
+		const variant = variantMeta.value
+		if (!base || !variant) {
+			return base
+		}
+		const merged = { ...base, noteSpellings: variant.noteSpellings, pageFormat: variant.pageFormat ?? base.pageFormat, pages: variant.pages }
+		// Absent means "too much text" in both - keep that apart from "none".
+		if (Array.isArray(variant.lyricSyllables)) {
+			merged.lyricSyllables = variant.lyricSyllables
+		} else {
+			delete merged.lyricSyllables
+		}
+		return merged
+	})
+	// The parts the picture draws, in staff order - for "which staff is my
+	// part" (lib/staffBands.js); the mixer keeps scoreParts.
+	const pictureParts = computed(() => variantMeta.value?.parts ?? scoreParts.value)
+	// Segment numbers between picture and base (I3): notes are anchored
+	// against the base, whatever picture they were made in.
+	const elids = computed(() => elidMapping(variantMeta.value))
+	// What the base looked like, to go back to it without a reload.
+	let basePicture = null
 
 	// Zaehlt jeden reset(): Ein load(), das nach einem await eine andere Zahl
 	// vorfindet, gehoert zu einem Stueck, das nicht mehr offen ist
@@ -155,6 +186,9 @@ export function useScoreSession() {
 			timeline.value = notes
 			measuresTimeline.value = buildTimeline(measuresRes.data)
 			pageUrls.value = files.pages
+			basePicture = { timeline: notes, measures: measuresTimeline.value, pages: files.pages }
+			variantMeta.value = null
+			variantKey.value = null
 			currentEtag.value = files.etag
 			scoreMeta.value = metaRes.data
 			hooks.applyMetadata(metaRes.data)
@@ -197,21 +231,9 @@ export function useScoreSession() {
 				hooks.useSilentClock(notes)
 			}
 
-			sync = createScoreSync(notes, (rect) => {
-				const force = Date.now() < forceScrollUntil
-				cursorForced.value = force
-				cursorRect.value = rect
-				// Nachführen statt nur beim Seitenwechsel zu springen. Nach
-				// einem Sprung der Leitung auch dann, wenn gerade von Hand
-				// geblaettert wurde: Blaettern loest das Folgen nicht, der
-				// Sprung soll also sichtbar werden (forceAutoScrollFor).
-				// Erst nach dem Rendern: Das Nachfuehren misst den Cursor im
-				// DOM, und der steht bis dahin noch an der alten Stelle. In der
-				// Wiedergabe faellt das nicht auf, weil die naechste Note es
-				// richtet - nach einem Sprung im Stillstand kommt keine, und
-				// die Ansicht fuhr zur vorigen Stelle statt zur neuen.
-				nextTick(() => hooks.updateAutoScroll(rect, force))
-			})
+			// The picture shown by now - a variant chosen for this score may
+			// already have replaced the base while the player was loading.
+			startSync(timeline.value)
 
 			pumpTimeDisplay()
 		} catch (err) {
@@ -220,6 +242,80 @@ export function useScoreSession() {
 			}
 			hooks.onError(err.message)
 		}
+	}
+
+	/**
+	 * The cursor's source of truth: which rectangle the time falls into, on
+	 * the timeline of whatever picture is shown.
+	 *
+	 * @param {object} notes timing.json as built by buildTimeline()
+	 */
+	function startSync(notes) {
+		sync = createScoreSync(notes, (rect) => {
+			const force = Date.now() < forceScrollUntil
+			cursorForced.value = force
+			cursorRect.value = rect
+			// Nachführen statt nur beim Seitenwechsel zu springen. Nach
+			// einem Sprung der Leitung auch dann, wenn gerade von Hand
+			// geblaettert wurde: Blaettern loest das Folgen nicht, der
+			// Sprung soll also sichtbar werden (forceAutoScrollFor).
+			// Erst nach dem Rendern: Das Nachfuehren misst den Cursor im
+			// DOM, und der steht bis dahin noch an der alten Stelle. In der
+			// Wiedergabe faellt das nicht auf, weil die naechste Note es
+			// richtet - nach einem Sprung im Stillstand kommt keine, und
+			// die Ansicht fuhr zur vorigen Stelle statt zur neuen.
+			nextTick(() => hooks.updateAutoScroll(rect, force))
+		})
+	}
+
+	/**
+	 * Shows a display variant instead of the base pages, or the base again
+	 * (E19). Only the picture changes - pages, timing and measures, which
+	 * share the base's time axis and measure numbering (I1, I2). Sound,
+	 * mixer, tempo, notes and the open position stay as they are; the cursor
+	 * finds its place on the new pages at the next frame.
+	 *
+	 * @param {?object} answer `{variant, files}` of a ready variant, null for the base
+	 * @return {Promise<boolean>} false when the score changed meanwhile
+	 */
+	async function applyPicture(answer) {
+		const mine = generation
+		if (!basePicture) {
+			return false
+		}
+		let next
+		if (answer?.files) {
+			const [timingRes, measuresRes, metaRes] = await Promise.all([
+				axios.get(answer.files.timingJson),
+				axios.get(answer.files.measuresJson),
+				axios.get(answer.files.metaJson),
+			])
+			if (mine !== generation) {
+				return false
+			}
+			next = {
+				timeline: buildTimeline(timingRes.data),
+				measures: buildTimeline(measuresRes.data),
+				pages: answer.files.pages,
+				meta: metaRes.data,
+				key: answer.variant ?? metaRes.data?.variant ?? null,
+			}
+		} else {
+			next = { ...basePicture, meta: null, key: null }
+		}
+		timeline.value = next.timeline
+		measuresTimeline.value = next.measures
+		pageUrls.value = next.pages
+		variantMeta.value = next.meta
+		variantKey.value = next.key
+		cursorRect.value = null
+		currentElid.value = null
+		if (sync) {
+			startSync(next.timeline)
+			forceAutoScrollFor(1500)
+			wakeTimeDisplay()
+		}
+		return true
 	}
 
 	/**
@@ -377,6 +473,9 @@ export function useScoreSession() {
 		scoreParts.value = []
 		timeline.value = null
 		measuresTimeline.value = null
+		variantMeta.value = null
+		variantKey.value = null
+		basePicture = null
 		currentEtag.value = null
 		currentElid.value = null
 		rendererBackend.value = null
@@ -393,6 +492,12 @@ export function useScoreSession() {
 		durationMs,
 		clock,
 		scoreMeta,
+		pictureMeta,
+		pictureParts,
+		variantMeta,
+		variantKey,
+		elids,
+		applyPicture,
 		pageUrls,
 		scoreParts,
 		totalMeasures,

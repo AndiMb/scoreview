@@ -56,8 +56,15 @@ class ConversionService {
 	 *    and beat numbers over the notes would never be offered, for every
 	 *    score converted before - again decided at the content, which lacked
 	 *    the fields.
+	 * 6: meta.json carries `excerpts` (the parts the file stores) and
+	 *    `hasTransposingParts` (E19). The viewer builds its choice of display
+	 *    variants from them; without the raise, scores converted before would
+	 *    offer no stored part and no concert pitch until someone reconverted
+	 *    them. On sidecar instances this converts once for nothing (stock
+	 *    MuseScore writes neither field) - one rule for every instance was
+	 *    preferred to a second rule that asks which path wrote a row.
 	 */
-	public const CURRENT_FORMAT_VERSION = 5;
+	public const CURRENT_FORMAT_VERSION = 6;
 
 	/**
 	 * Wie lange ein Lauf einen Datensatz halten darf, bevor er als tot gilt.
@@ -75,6 +82,7 @@ class ConversionService {
 		private ScoreConversionMapper $mapper,
 		private IAppData $appData,
 		private ITimeFactory $time,
+		private VariantService $variants,
 	) {
 	}
 
@@ -124,6 +132,10 @@ class ConversionService {
 	 * @param string $backend Welcher Weg das erzeugt hat (ConversionBackend).
 	 */
 	public function markReady(ScoreConversion $conversion, array $pageSvgs, string $midi, string $timingJson, string $measuresJson, string $metaJson, string $backend): void {
+		// Variants of this version were checked against the base being
+		// replaced; a new base (another engine, a reconversion) may number
+		// its segments differently, and their mappings would point astray.
+		$this->variants->deleteForVersion($conversion->getFileId(), $conversion->getEtag());
 		$folder = $this->getOrCreateFolder($conversion->getFileId(), $conversion->getEtag());
 		foreach (array_values($pageSvgs) as $i => $svg) {
 			$this->writeFile($folder, $this->pageFileName($i + 1), $svg);
@@ -270,6 +282,16 @@ class ConversionService {
 		return [$this->getFolder($fileId, $etag)->getFile($fileName), $mimeType];
 	}
 
+	/**
+	 * An artifact's content - for the variant run, which hands the base's
+	 * timing and measures to the converter to check the variant against.
+	 *
+	 * @throws NotFoundException
+	 */
+	public function readArtifact(int $fileId, string $etag, string $name): string {
+		return $this->getArtifact($fileId, $etag, $name)[0]->getContent();
+	}
+
 	/** Eigener Zugriff, weil auch getPageCount() und der AnnotationController ihn brauchen. */
 	public function getMetaJsonFile(int $fileId, string $etag): ISimpleFile {
 		return $this->getFolder($fileId, $etag)->getFile(self::META_FILE);
@@ -332,6 +354,8 @@ class ConversionService {
 		foreach ($this->mapper->findAllByFileId($fileId) as $conversion) {
 			$this->mapper->delete($conversion);
 		}
+		// Their files went with the folder above.
+		$this->variants->deleteRowsForFile($fileId);
 	}
 
 	/**
@@ -346,6 +370,7 @@ class ConversionService {
 			if ($old->getEtag() === $currentEtag) {
 				continue;
 			}
+			$this->variants->deleteForVersion($fileId, $old->getEtag());
 			try {
 				$this->appData->getFolder('scoreview')->getFolder((string)$fileId)->getFolder($old->getEtag())->delete();
 			} catch (NotFoundException) {

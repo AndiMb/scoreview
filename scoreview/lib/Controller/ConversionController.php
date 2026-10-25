@@ -9,6 +9,7 @@ use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\ClientFallback;
+use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\PracticeTrackService;
@@ -74,6 +75,7 @@ class ConversionController extends Controller {
 		private IAppConfig $appConfig,
 		private IL10N $l,
 		private SoundFontService $soundFontService,
+		private ConversionBackend $backend,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -190,6 +192,10 @@ class ConversionController extends Controller {
 			// stuende der Knopf auch an einer nur geliehenen Partitur und
 			// endete jedes Mal in einem 403.
 			$body['canReconvert'] = $node->isUpdateable();
+			// Whether the server can engrave display variants (E19) - a
+			// capability, not a path (E15). The choices themselves come from
+			// meta.json, which the viewer loads anyway.
+			$body['variants'] = ['supported' => $this->backend->supportsVariants()];
 		}
 		return new JSONResponse($body);
 	}

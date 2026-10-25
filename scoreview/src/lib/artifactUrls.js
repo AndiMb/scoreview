@@ -70,3 +70,21 @@ export function createArtifactUrls(artifacts, etag, umgebung = {}) {
 		},
 	}
 }
+
+/**
+ * The same for a display variant converted in the browser (E19): its own
+ * pages, timing, measures and meta as blob URLs, the base's MIDI and etag
+ * unchanged - a variant changes the picture, not the piece, and notes are
+ * anchored against the base. Same keys as the server's variant answer
+ * (Controller\VariantController::readyBody()).
+ *
+ * @param {object} artifacts {pages, timing, measures, meta} of the variant
+ * @param {{midi: string, etag: string}} baseFiles the base's `files`
+ * @param {object} [umgebung] nur für Tests
+ * @return {{files: object, revoke: () => void}}
+ */
+export function createVariantUrls(artifacts, baseFiles, umgebung = {}) {
+	const { files, revoke } = createArtifactUrls({ ...artifacts, midi: new Uint8Array(0) }, baseFiles.etag, umgebung)
+	// The empty MIDI blob made above is not handed out; it goes with revoke().
+	return { files: { ...files, midi: baseFiles.midi }, revoke }
+}

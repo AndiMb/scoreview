@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createArtifactUrls } from './artifactUrls.js'
+import { createArtifactUrls, createVariantUrls } from './artifactUrls.js'
 
 /**
  * Der Rückfall im Browser trägt nur, solange sein `files`-Objekt **genau** so
@@ -91,5 +91,25 @@ describe('createArtifactUrls', () => {
 		revoke()
 		revoke()
 		expect(url.freigegeben).toHaveLength(url.erzeugt.length)
+	})
+})
+
+describe('createVariantUrls', () => {
+	const basis = { midi: '/apps/scoreview/api/scores/7/artifact/midi?v=e-1', etag: 'etag-1' }
+	const { midi, ...variante } = artefakte
+
+	it('has the server keys, the base MIDI and the base etag', () => {
+		expect(midi).toBeDefined()
+		const { files } = createVariantUrls(variante, basis, urlAttrappe())
+		expect(Object.keys(files).sort()).toEqual([...SCHLUESSEL_DES_SERVERS].sort())
+		expect(files.midi).toBe(basis.midi)
+		expect(files.etag).toBe('etag-1')
+	})
+
+	it('releases everything it made, the unused MIDI blob included', () => {
+		const urls = urlAttrappe()
+		const { revoke } = createVariantUrls(variante, basis, urls)
+		revoke()
+		expect(urls.freigegeben).toEqual(urls.erzeugt.map((e) => e.adresse))
 	})
 })

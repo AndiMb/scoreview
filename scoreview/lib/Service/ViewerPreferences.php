@@ -302,7 +302,7 @@ class ViewerPreferences {
 	}
 
 	/**
-	 * @return array{transpose: int, coach: bool, othersLevel: int}
+	 * @return array{transpose: int, coach: bool, othersLevel: int, source: string, concert: bool, transposeNotation: bool}
 	 */
 	public function getPractice(string $userId, int $fileId): array {
 		$raw = $this->config->getUserValue($userId, Application::APP_ID, self::KEY_PRACTICE_PREFIX . $fileId, '');
@@ -316,10 +316,25 @@ class ViewerPreferences {
 	 * die Vorgabe, verschwindet der Eintrag, statt je geoeffneter Partitur
 	 * einen leeren anzuhaeufen.
 	 *
-	 * @return array{transpose: int, coach: bool, othersLevel: int} was danach gilt
+	 * `source`, `concert` and `transposeNotation` are the display variant
+	 * (E19): which part or score, concert pitch, notation transposed along
+	 * with the sound. Per file like the rest - a tenor wants the tenor part
+	 * in every piece, on every device. The page format is not here: it
+	 * belongs to the device, not to the person (useScoreVariant.js).
+	 *
+	 * @return array{transpose: int, coach: bool, othersLevel: int, source: string, concert: bool, transposeNotation: bool} was danach gilt
 	 */
-	public function setPractice(string $userId, int $fileId, ?int $transpose, ?bool $coach, ?int $othersLevel): array {
+	public function setPractice(string $userId, int $fileId, ?int $transpose, ?bool $coach, ?int $othersLevel, ?string $source = null, ?bool $concert = null, ?bool $transposeNotation = null): array {
 		$werte = $this->getPractice($userId, $fileId);
+		if ($source !== null) {
+			$werte['source'] = $source;
+		}
+		if ($concert !== null) {
+			$werte['concert'] = $concert;
+		}
+		if ($transposeNotation !== null) {
+			$werte['transposeNotation'] = $transposeNotation;
+		}
 		if ($transpose !== null) {
 			$werte['transpose'] = $transpose;
 		}
@@ -344,16 +359,27 @@ class ViewerPreferences {
 	 * Wert ausserhalb kommt nur von Hand (occ) oder aus einem alten Bundle -
 	 * dann gilt der naechste gueltige, nicht ein Fehler.
 	 *
+	 * A source that is no source (Service\VariantKey's grammar) is the full
+	 * score; whether the score has it is the viewer's to check, against the
+	 * meta.json of the version it opens.
+	 *
 	 * @param array<string, mixed> $data
-	 * @return array{transpose: int, coach: bool, othersLevel: int}
+	 * @return array{transpose: int, coach: bool, othersLevel: int, source: string, concert: bool, transposeNotation: bool}
 	 */
 	public static function normalizePractice(array $data): array {
 		$transpose = is_numeric($data['transpose'] ?? null) ? (int)$data['transpose'] : 0;
 		$level = is_numeric($data['othersLevel'] ?? null) ? (int)$data['othersLevel'] : self::DEFAULT_OTHERS_LEVEL;
+		$source = is_string($data['source'] ?? null) ? $data['source'] : 'full';
+		if ($source !== 'full' && VariantKey::parse($source . '~orig~w~1') === null) {
+			$source = 'full';
+		}
 		return [
 			'transpose' => max(-self::TRANSPOSE_LIMIT, min(self::TRANSPOSE_LIMIT, $transpose)),
 			'coach' => ($data['coach'] ?? false) === true,
 			'othersLevel' => max(0, min(127, $level)),
+			'source' => $source,
+			'concert' => ($data['concert'] ?? false) === true,
+			'transposeNotation' => ($data['transposeNotation'] ?? false) === true,
 		];
 	}
 

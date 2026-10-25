@@ -4,7 +4,16 @@ import { ref } from 'vue'
 import { clampLevel, DEFAULT_OTHERS_LEVEL } from '../lib/coachMix.js'
 
 /** Die Vorgaben der Uebe-Einstellungen, wie Service\ViewerPreferences. */
-export const PRACTICE_DEFAULTS = Object.freeze({ transpose: 0, coach: false, othersLevel: DEFAULT_OTHERS_LEVEL })
+export const PRACTICE_DEFAULTS = Object.freeze({
+	transpose: 0,
+	coach: false,
+	othersLevel: DEFAULT_OTHERS_LEVEL,
+	// The display variant (E19): part or score, concert pitch, notation
+	// transposed with the sound - see useScoreVariant.js.
+	source: 'full',
+	concert: false,
+	transposeNotation: false,
+})
 
 /**
  * „Meine Stimme" je Partitur, serverseitig gemerkt
@@ -78,7 +87,7 @@ export function useMyPart({ fileId }) {
 	/**
 	 * Uebe-Einstellungen aendern - nur die mitgegebenen Felder.
 	 *
-	 * @param {{transpose?: number, coach?: boolean, othersLevel?: number}} changes
+	 * @param {{transpose?: number, coach?: boolean, othersLevel?: number, source?: string, concert?: boolean, transposeNotation?: boolean}} changes
 	 */
 	async function setPractice(changes) {
 		generation++
@@ -96,8 +105,11 @@ export function useMyPart({ fileId }) {
 }
 
 /**
+ * As Service\ViewerPreferences::normalizePractice(). Whether the score has
+ * `source` is checked where the score is known (lib/variantChoice.js).
+ *
  * @param {?object} data
- * @return {{transpose: number, coach: boolean, othersLevel: number}}
+ * @return {{transpose: number, coach: boolean, othersLevel: number, source: string, concert: boolean, transposeNotation: boolean}}
  */
 export function normalizePractice(data) {
 	const t = Math.trunc(Number(data?.transpose) || 0)
@@ -105,5 +117,8 @@ export function normalizePractice(data) {
 		transpose: Math.max(-12, Math.min(12, t)),
 		coach: data?.coach === true,
 		othersLevel: data?.othersLevel === undefined ? DEFAULT_OTHERS_LEVEL : clampLevel(data.othersLevel),
+		source: typeof data?.source === 'string' && /^(?:full|ex(?:0|[1-9][0-9]{0,2})|part[A-Za-z0-9_-]{1,40})$/.test(data.source) ? data.source : 'full',
+		concert: data?.concert === true,
+		transposeNotation: data?.transposeNotation === true,
 	}
 }

@@ -447,7 +447,10 @@
 									:semitones="effectiveTranspose"
 									:startKey="startKey"
 									:fromLeader="sessionTranspose !== null"
-									@update:semitones="onTransposeInput" />
+									:notationAvailable="variantsSupported"
+									:transposeNotation="variant.transposeNotation"
+									@update:semitones="onTransposeInput"
+									@update:transposeNotation="variant.setTransposeNotation" />
 							</template>
 							<template #page-export>
 								<PracticeExportControls
@@ -610,7 +613,16 @@
 									v-model:layout="layout"
 									v-model:doublePage="doublePage"
 									:spreadUnavailable="spreadUnavailable"
-									:lyricsUnavailable="lyricsUnavailable" />
+									:lyricsUnavailable="lyricsUnavailable"
+									:variantSources="variantSourceChoices"
+									:variantSource="variant.source"
+									:variantFormat="variant.format"
+									:variantConcert="variant.concert"
+									:showConcert="variant.hasTransposingParts"
+									:variantUnavailable="variant.unavailableReason"
+									@update:variantSource="variant.setSource"
+									@update:variantFormat="variant.setFormat"
+									@update:variantConcert="variant.setConcert" />
 							</template>
 							<template #page-noteNames>
 								<NoteNameControls
@@ -815,6 +827,23 @@
 						Angebot auf Handybreite (D9): einmal, die Antwort wird
 						gemerkt (bandOffered).
 					-->
+					<NcNoteCard v-if="variant.status === 'loading'" type="info" class="scoreview-hint">
+						{{ t('Engraving the chosen part or page format …') }}
+					</NcNoteCard>
+					<NcNoteCard v-else-if="variant.status === 'error'" type="warning" class="scoreview-hint">
+						{{ variant.errorText }}
+					</NcNoteCard>
+					<NcNoteCard v-if="variant.offerPhonePages" type="info" class="scoreview-hint">
+						{{ t('This score can be engraved on pages the size of a phone screen, with larger notes.') }}
+						<div class="scoreview-hint-actions">
+							<NcButton variant="primary" @click="variant.answerPhoneOffer(true)">
+								{{ t('Use phone pages') }}
+							</NcButton>
+							<NcButton @click="variant.answerPhoneOffer(false)">
+								{{ t('No, thanks') }}
+							</NcButton>
+						</div>
+					</NcNoteCard>
 					<NcNoteCard v-if="offerBand" type="info" class="scoreview-hint">
 						{{ t('On a phone, the system band shows the staves side by side in landscape.') }}
 						<div class="scoreview-hint-actions">
@@ -834,7 +863,7 @@
 						v-if="activeLayout === 'lyrics' && timeline"
 						ref="lyrics"
 						:follow="followCursor"
-						:syllables="scoreMeta?.lyricSyllables ?? []"
+						:syllables="pictureMeta?.lyricSyllables ?? []"
 						:staves="myStaves"
 						:timeline="timeline"
 						:measureRectsByPage="systemRectsByPage"
@@ -1087,7 +1116,7 @@
 import { loadState } from '@nextcloud/initial-state'
 import { getLanguage, translate } from '@nextcloud/l10n'
 import { generateUrl, getRootUrl } from '@nextcloud/router'
-import { computed, getCurrentInstance, inject, nextTick, ref, watch } from 'vue'
+import { computed, getCurrentInstance, inject, nextTick, reactive, ref, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -1176,6 +1205,7 @@ import { usePracticeExport } from '../composables/usePracticeExport.js'
 import { useRecorder } from '../composables/useRecorder.js'
 import { useScoreFacts } from '../composables/useScoreFacts.js'
 import { NO_RECTS, useScoreSession } from '../composables/useScoreSession.js'
+import { useScoreVariant } from '../composables/useScoreVariant.js'
 import { useSetlist } from '../composables/useSetlist.js'
 import { useSpeedTrainer } from '../composables/useSpeedTrainer.js'
 import { useStartTone } from '../composables/useStartTone.js'
@@ -1459,6 +1489,23 @@ export default {
 		const effectiveTranspose = computed(() => sessionTranspose.value ?? myPart.practice.value.transpose)
 		watch(effectiveTranspose, (n) => playback.setTranspose(n), { immediate: true })
 
+		// The display variant (E19): a part, phone pages, concert pitch,
+		// notation transposed with the sound. Which one is wanted comes from
+		// here; where it is made, from useConversionStatus.
+		// reactive(): the template and the options API read its refs unwrapped.
+		const variant = reactive(useScoreVariant({
+			fileId: () => activeFileId.value,
+			meta: () => scoreMeta.value,
+			myPartId: () => myPart.myPartId.value,
+			practice: () => myPart.practice.value,
+			setPractice: myPart.setPractice,
+			transpose: () => effectiveTranspose.value,
+			supported: () => conversion.variantsSupported.value,
+			requestVariant: conversion.requestVariant,
+			applyPicture: session.applyPicture,
+			shownKey: () => session.variantKey.value,
+		}))
+
 		// Die Leitungen der Partitur. Wie „Meine Stimme" im
 		// fileid-Watcher geladen: Sie haengen an der Datei, nicht an ihrer
 		// Konvertierung, und „Neu konvertieren" aendert an ihnen nichts.
@@ -1474,6 +1521,8 @@ export default {
 			durationMs: () => durationMs.value,
 			seek: (timeMs) => clock.value?.seek(timeMs),
 			parts: () => session.scoreParts.value,
+			pictureParts: () => session.pictureParts.value,
+			pictureElid: (elid) => session.elids.value.toPicture(elid),
 			myPartId: () => myPart.myPartId.value,
 			isLeader: () => leaders.isLeader.value,
 		})
@@ -1585,7 +1634,7 @@ export default {
 			measuresTimeline: () => measuresTimeline.value,
 			durationMs: () => durationMs.value,
 			displayTimeMs: () => playback.displayTimeMs.value,
-			currentElid: () => session.currentElid.value,
+			currentElid: () => session.elids.value.toBase(session.currentElid.value),
 			currentEtag: () => currentEtag.value,
 			clock: () => clock.value,
 			marks: () => scoreFacts.marks.value,
@@ -1779,15 +1828,25 @@ export default {
 		// Ob sich die Notenzeilen ueberhaupt Stimmen zuordnen lassen -
 		// gemeldet von der ersten geladenen Seite (ScorePage.vue).
 		const staffMappingOk = ref(false)
+		// A new picture brings new pages; whether their staves map to parts
+		// is reported again by the first of them (onStaffMapping).
+		watch(session.pageUrls, () => {
+			staffMappingOk.value = false
+		})
 		// Die Stimme, die als „meine" gilt, als Index in meta.parts - also in
 		// derselben Reihenfolge, in der die Notenzeilen im System stehen.
 		const myPartIndex = computed(() => {
 			if (myPart.myPartId.value === null) {
 				return null
 			}
-			const index = session.scoreParts.value.findIndex((part) => String(part.id) === String(myPart.myPartId.value))
+			// In the picture, not in the score: a part drawn on its own is
+			// staff 0 there, whatever its place in the full score (E19).
+			const index = session.pictureParts.value.findIndex((part) => String(part.id) === String(myPart.myPartId.value))
 			return index === -1 ? null : index
 		})
+		// Whether the score has my part at all - for what plays, not for what is drawn.
+		const myPartInScore = computed(() => myPart.myPartId.value !== null
+			&& session.scoreParts.value.some((part) => String(part.id) === String(myPart.myPartId.value)))
 		// Die Notenzeile der eigenen Stimme fuer die Intonation (`st-N`, M10) -
 		// nur, wo die Zeilen sich den Stimmen zuordnen lassen (eine Zeile je
 		// Stimme, siehe lib/staffBands.js). Sonst bleibt es bei Nadel und
@@ -1812,8 +1871,10 @@ export default {
 		// Was die Artefakte hergeben (E15): Liedtext, Schreibweisen, Kennungen.
 		// Ob das SVG Kennungen traegt, meldet die erste indizierte Seite.
 		const svgHasSegIds = ref(false)
-		const capabilities = computed(() => capabilitiesOf({ meta: scoreMeta.value, svgHasSegIds: svgHasSegIds.value }))
-		const spellings = computed(() => (capabilities.value.spellings ? spellingMap(scoreMeta.value?.noteSpellings) : null))
+		// On the picture's meta: spellings and syllables carry the elids and
+		// staves of the pages on screen (E19).
+		const capabilities = computed(() => capabilitiesOf({ meta: session.pictureMeta.value, svgHasSegIds: svgHasSegIds.value }))
+		const spellings = computed(() => (capabilities.value.spellings ? spellingMap(session.pictureMeta.value?.noteSpellings) : null))
 
 		// Uebe-Track als MP3 (H1/H10) - mit der Mischung, die gerade klingt.
 		const myPartName = () => session.scoreParts.value.find((p) => String(p.id) === String(myPart.myPartId.value))?.name ?? null
@@ -1949,6 +2010,9 @@ export default {
 			openVoiceSelection,
 			staffMappingOk,
 			myPartIndex,
+			myPartInScore,
+			variant,
+			variantsSupported: conversion.variantsSupported,
 			activeFileId,
 			compactBar: bar.compact,
 			toolsOpen: bar.toolsOpen,
@@ -2220,6 +2284,9 @@ export default {
 			durationMs,
 			clock,
 			scoreMeta,
+			pictureMeta: session.pictureMeta,
+			pictureParts: session.pictureParts,
+			variantKey: session.variantKey,
 			pageUrls: session.pageUrls,
 			scoreParts: session.scoreParts,
 			totalMeasures: session.totalMeasures,
@@ -2329,8 +2396,23 @@ export default {
 			return this.armedStamp ? stampName(this.armedStamp.stamp) : ''
 		},
 
+		/**
+		 * The parts and scores to choose from (E19), labelled: names are
+		 * score content and stay as they are (E4); a generated part says so.
+		 */
+		variantSourceChoices() {
+			return this.variant.options.map((option) => ({
+				value: option.value,
+				label: option.kind === 'full'
+					? this.t('Full score')
+					: option.kind === 'stored'
+						? option.name
+						: this.t('{part} (generated)', { part: option.name }),
+			}))
+		},
+
 		partCount() {
-			return this.scoreParts.length
+			return this.pictureParts.length
 		},
 
 		/**
@@ -2370,7 +2452,7 @@ export default {
 				hasRealPlayer: this.hasRealPlayer,
 				canFocusMyPart: this.canFocusMyPart,
 				hasParts: this.scoreParts.length > 0,
-				canCoach: this.myPartIndex !== null,
+				canCoach: this.myPartInScore,
 				recordingEnabled: this.recordingEnabled,
 				intonationEnabled: this.intonationEnabled,
 				setlistCanCreate: this.setlistCanCreate,
@@ -2424,7 +2506,7 @@ export default {
 
 		/** Warum es keine Liedtext-Ansicht gibt - oder leer. */
 		lyricsUnavailable() {
-			const reason = unavailableReason(this.capabilities, 'lyrics', this.scoreMeta)
+			const reason = unavailableReason(this.capabilities, 'lyrics', this.pictureMeta)
 			return reason === null ? '' : this.unavailableText(reason)
 		},
 
@@ -2510,7 +2592,7 @@ export default {
 
 		/** Warum es keine Tonnamen gibt - oder leer. */
 		noteNamesUnavailable() {
-			const reason = unavailableReason(this.capabilities, 'noteNames', this.scoreMeta)
+			const reason = unavailableReason(this.capabilities, 'noteNames', this.pictureMeta)
 			return reason === null ? '' : this.unavailableText(reason)
 		},
 
@@ -2558,7 +2640,7 @@ export default {
 
 		/** Why there are no beat numbers - or empty. */
 		countsUnavailable() {
-			const reason = unavailableReason(this.capabilities, 'counts', this.scoreMeta)
+			const reason = unavailableReason(this.capabilities, 'counts', this.pictureMeta)
 			return reason === null ? '' : this.unavailableText(reason)
 		},
 
@@ -2570,7 +2652,7 @@ export default {
 			if (this.beatCounts === 'off' || this.countsUnavailable !== '') {
 				return null
 			}
-			return countLabels({ meters: this.scoreMeters, spellings: this.scoreMeta?.noteSpellings })
+			return countLabels({ meters: this.scoreMeters, spellings: this.pictureMeta?.noteSpellings })
 		},
 
 		/** Only my staff - where staves map to parts, as for the note names. */
@@ -3049,6 +3131,7 @@ export default {
 			// (useScoreSession.js) - ein noch laufendes Laden gilt ab hier
 			// als veraltet.
 			this.resetSession()
+			this.variant.reset()
 			this.resetStartTone()
 			this.resetSpeedTrainer()
 			this.resetConversion()
@@ -3212,7 +3295,10 @@ export default {
 			if (!this.can('settings') || this.standalonePage || this.offline) {
 				return
 			}
-			window.open(generateUrl('/apps/scoreview/print/{fileId}', { fileId: this.activeFileId }), '_blank', 'noopener')
+			// What is on screen: a part or phone pages print as such (E19).
+			const key = this.variantKey
+			const url = generateUrl('/apps/scoreview/print/{fileId}', { fileId: this.activeFileId })
+			window.open(key ? `${url}?variant=${encodeURIComponent(key)}` : url, '_blank', 'noopener')
 		},
 
 		closeTuner() {

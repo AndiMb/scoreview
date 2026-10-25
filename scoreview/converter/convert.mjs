@@ -12,7 +12,13 @@
  *
  * Aufruf:
  *   node convert.mjs [--fonts <verzeichnis>] <eingabe.mscz> <ausgabeverzeichnis>
+ *   node convert.mjs [--fonts <verzeichnis>] --variant <key> --base <dir> <eingabe.mscz> <ausgabeverzeichnis>
  *   node convert.mjs [--fonts <verzeichnis>] --selftest
+ *
+ * With --variant it writes a display variant (docs/architecture.md E19)
+ * instead: pages, timing.json, measures.json and a variant meta.json - no
+ * MIDI, a variant plays the base's. --base is the base conversion's cache
+ * directory, read only, to check the variant against it.
  *
  * Ergebnis geht als eine Zeile JSON nach stdout, Fehler als Klartext nach
  * stderr mit Exitcode != 0. Kein Lograuschen auf stdout: Engine- und
@@ -21,10 +27,12 @@
  */
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { createRequire } from 'module'
 import { cpus } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
-import { checkLyrics, checkMeters, checkPromises, checkScoreFacts, toPositions } from './lib/artifacts.mjs'
+import { checkLyrics, checkMeters, checkPromises, checkScoreFacts, checkVariant, toPositions, toVariantMeta } from './lib/artifacts.mjs'
+import { engineViewOptions, parseVariantKey } from './lib/variantKey.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 
@@ -58,7 +66,8 @@ const stdoutWrite = process.stdout.write.bind(process.stdout)
 process.stdout.write = (chunk, ...rest) => process.stderr.write(chunk, ...rest)
 
 // Die Qt-freie scoreview-engine. Benutzt wird davon genau diese Oberflaeche:
-// load (mit Zusatzfonts), npages, saveSvg, saveMidi, savePositions, metadata.
+// load (mit Zusatzfonts), npages, saveSvg, saveMidi, savePositions, metadata -
+// and for a variant setExcerptId, generateExcerpts, applyView, viewMapping.
 const { default: Engine } = await import('scoreview-engine')
 
 /** Dateiendungen, die MuseScores Fontengine liest. */
@@ -99,13 +108,19 @@ async function loadFonts(fontVerzeichnis) {
 		}
 	}
 	try {
-		const fonts = await import('@librescore/fonts')
+		// Synchronous on purpose, like every file access in this module.
+		// Once the engine runs, an asynchronous one stalls: measured under
+		// Node 20 in the test container, an `await import()` or
+		// `fs.promises.readFile` after Engine.ready took 18-24 s instead of
+		// milliseconds (a larger UV_THREADPOOL_SIZE did not help), and the
+		// conversion with it.
+		const fonts = createRequire(import.meta.url)('@librescore/fonts')
 		return [readFileSync(fonts.CN), readFileSync(fonts.KR)]
 	} catch (error) {
 		// Nicht installiert ist der Normalfall und bleibt still. Alles andere
 		// - eine kaputte Datei, ein Rechteproblem - waere sonst unsichtbar:
 		// Die Konvertierung gelingt ja, nur die Liedtexte sind Kaestchen.
-		if (error?.code !== 'ERR_MODULE_NOT_FOUND') {
+		if (error?.code !== 'MODULE_NOT_FOUND') {
 			process.stderr.write(`Additional fonts could not be loaded: ${error?.message ?? error}\n`)
 		}
 		return []
@@ -173,13 +188,119 @@ async function convert(msczPath, fontVerzeichnis) {
 	return result
 }
 
+/**
+ * One display variant of a score (E19). The same engine as convert(), one
+ * load per variant: applyView() edits the loaded score and nothing takes the
+ * edit back, so a second variant needs a fresh load - which is what this
+ * process gets anyway.
+ *
+ * @param {string} msczPath
+ * @param {string} key canonical variant key (lib/variantKey.mjs)
+ * @param {?string} fontVerzeichnis
+ * @return {Promise<{pages: string[], timing: object, measures: object, meta: object}>}
+ */
+async function convertVariant(msczPath, key, fontVerzeichnis) {
+	const variant = parseVariantKey(key)
+	if (!variant) {
+		throw new Error(`Not a variant key: ${key}`)
+	}
+	await Engine.ready
+	const score = await Engine.load('mscz', readFileSync(msczPath), await loadFonts(fontVerzeichnis))
+
+	if (variant.source.kind === 'ex') {
+		const stored = (await score.metadata()).excerpts ?? []
+		if (variant.source.index >= stored.length) {
+			throw new Error(`The score has no stored part ${variant.source.index} (it has ${stored.length}).`)
+		}
+		await score.setExcerptId(variant.source.index)
+	} else if (variant.source.kind === 'part') {
+		const [id] = await score.generateExcerpts([variant.source.partId])
+		await score.setExcerptId(id)
+	}
+	await score.applyView(engineViewOptions(variant))
+
+	const pageCount = await score.npages()
+	if (pageCount < 1) {
+		throw new Error('The engine returned no SVG page.')
+	}
+	const pages = []
+	for (let i = 0; i < pageCount; i++) {
+		pages.push(await score.saveSvg(i))
+	}
+	return {
+		pages,
+		timing: toPositions(JSON.parse(await score.savePositions(true))),
+		// Measures numbered as the full score numbers them (I2): a part's
+		// multimeasure rest stands for every measure it covers.
+		measures: toPositions(JSON.parse(await score.savePositions(false, true))),
+		meta: toVariantMeta(await score.metadata(), await score.viewMapping(), key),
+	}
+}
+
+/**
+ * @param {string} baseDir cache directory of the base conversion
+ * @return {{timing: object, measures: object}}
+ */
+function readBase(baseDir) {
+	return {
+		timing: JSON.parse(readFileSync(join(baseDir, 'timing.json'), 'utf8')),
+		measures: JSON.parse(readFileSync(join(baseDir, 'measures.json'), 'utf8')),
+	}
+}
+
 function writeArtifacts(outDir, { pages, midi, timing, measures, meta }) {
 	mkdirSync(outDir, { recursive: true })
 	pages.forEach((svg, i) => writeFileSync(join(outDir, `page-${i + 1}.svg`), svg))
-	writeFileSync(join(outDir, 'score.mid'), midi)
+	if (midi) {
+		writeFileSync(join(outDir, 'score.mid'), midi)
+	}
 	writeFileSync(join(outDir, 'timing.json'), JSON.stringify(timing))
 	writeFileSync(join(outDir, 'measures.json'), JSON.stringify(measures))
 	writeFileSync(join(outDir, 'meta.json'), JSON.stringify(meta))
+}
+
+/**
+ * The self-test's variant check (see --selftest). parts-test.mscz has the
+ * stored parts "Sopran" and "Frauenstimmen" (Sopran + Alt), a clarinet in B
+ * flat (part id 3) with an eight-measure rest, and starts in F major.
+ *
+ * @param {?string} fontVerzeichnis
+ * @return {Promise<{problems: string[], details: object}>}
+ */
+async function checkViews(fontVerzeichnis) {
+	const problems = []
+	const details = {}
+	const path = join(HERE, 'parts-test.mscz')
+	const base = await convert(path, fontVerzeichnis)
+
+	const stored = base.meta.excerpts ?? []
+	if (stored.map((e) => e.name).join('|') !== 'Sopran|Frauenstimmen') {
+		problems.push(`meta.json lists stored parts ${JSON.stringify(stored.map((e) => e.name))}, expected Sopran and Frauenstimmen`)
+	}
+	if (base.meta.hasTransposingParts !== true) {
+		problems.push('meta.json does not see the transposing clarinet (hasTransposingParts)')
+	}
+
+	const expect = {
+		'ex1~orig~w~0': { staffMap: [0, 1] },
+		'part3~phone~w~-2': { staffMap: [2], concertKey: -3 },
+		'full~orig~c~0': { staffMap: [0, 1, 2, 3, 4] },
+	}
+	for (const [key, want] of Object.entries(expect)) {
+		const variant = await convertVariant(path, key, fontVerzeichnis)
+		const result = checkVariant(base, { ...variant, svgs: variant.pages })
+		problems.push(...result.problems.map((p) => `${key}: ${p}`))
+		if (JSON.stringify(variant.meta.staffMap) !== JSON.stringify(want.staffMap)) {
+			problems.push(`${key}: staffMap ${JSON.stringify(variant.meta.staffMap)}, expected ${JSON.stringify(want.staffMap)}`)
+		}
+		// F major (-1) a whole tone lower is E flat major (-3): the
+		// transposition reached the notation, not just the sound.
+		if (want.concertKey !== undefined && variant.meta.keySigs?.[0]?.concertKey !== want.concertKey) {
+			problems.push(`${key}: key ${variant.meta.keySigs?.[0]?.concertKey}, expected ${want.concertKey}`)
+		}
+		details[key] = result.details
+	}
+	return { problems, details }
 }
 
 async function main() {
@@ -195,6 +316,29 @@ async function main() {
 		if (!fontVerzeichnis) {
 			throw new Error('--fonts expects a directory.')
 		}
+	}
+
+	// `--variant <key> --base <dir>`, cut out like --fonts.
+	let variantKey = null
+	let baseDir = null
+	for (const flag of ['--variant', '--base']) {
+		const at = args.indexOf(flag)
+		if (at === -1) {
+			continue
+		}
+		const value = args[at + 1] ?? null
+		args.splice(at, value === null ? 1 : 2)
+		if (!value) {
+			throw new Error(`${flag} expects a value.`)
+		}
+		if (flag === '--variant') {
+			variantKey = value
+		} else {
+			baseDir = value
+		}
+	}
+	if ((variantKey === null) !== (baseDir === null)) {
+		throw new Error('--variant and --base go together.')
 	}
 
 	if (args[0] === '--selftest') {
@@ -231,19 +375,39 @@ async function main() {
 		// measures a guess from the duration gets wrong - a pickup, 3/4, 6/8.
 		const meters = checkMeters((await convert(join(HERE, 'timesig-test.mscz'), fontVerzeichnis)).meta)
 		problems.push(...meters.problems)
+		// Fifth: display variants (E19) on a score with stored parts, a
+		// transposing instrument and a multimeasure rest - a stored part, a
+		// generated one on a phone page a tone lower, the full score in
+		// concert pitch. Each against the base, on the four invariants.
+		const views = await checkViews(fontVerzeichnis)
+		problems.push(...views.problems)
 		stdoutWrite(JSON.stringify({
 			ok: problems.length === 0,
 			error: problems.length > 0 ? problems.join('; ') : null,
 			problems,
-			details: { musescoreVersion: await museScoreVersion(), seconds, ...details, scoreFacts: fakten.details, lyrics: text.details, meters: meters.details },
+			details: { musescoreVersion: await museScoreVersion(), seconds, ...details, scoreFacts: fakten.details, lyrics: text.details, meters: meters.details, views: views.details },
 		}) + '\n')
 		return
 	}
 
 	if (args.length !== 2) {
-		throw new Error('Usage: convert.mjs [--fonts <directory>] <input.mscz> <output-directory> | --selftest')
+		throw new Error('Usage: convert.mjs [--fonts <directory>] [--variant <key> --base <directory>] <input.mscz> <output-directory> | --selftest')
 	}
 	const [input, outDir] = args
+
+	if (variantKey !== null) {
+		const variant = await convertVariant(resolve(input), variantKey, fontVerzeichnis)
+		// A variant that breaks an invariant is not written: the server
+		// would cache it, and every reader would get a cursor and notes in
+		// the wrong place.
+		const { problems } = checkVariant(readBase(resolve(baseDir)), { ...variant, svgs: variant.pages })
+		if (problems.length > 0) {
+			throw new Error(`Variant ${variantKey} fails its invariants: ${problems.join('; ')}`)
+		}
+		writeArtifacts(resolve(outDir), variant)
+		stdoutWrite(JSON.stringify({ variant: variantKey, pages: variant.pages.length }) + '\n')
+		return
+	}
 	const converted = await convert(resolve(input), fontVerzeichnis)
 	writeArtifacts(resolve(outDir), converted)
 

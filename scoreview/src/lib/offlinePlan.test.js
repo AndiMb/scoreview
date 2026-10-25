@@ -14,6 +14,7 @@ import {
 	splitByUser,
 	stagingName,
 	upsertEntry,
+	variantUrlFor,
 } from './offlinePlan.js'
 
 // generateUrl wie in @nextcloud/router, ohne index.php
@@ -162,5 +163,27 @@ describe('Staging-Caches', () => {
 		expect(isStaleStaging(stagingName(now), now + 61 * 60 * 1000)).toBe(true)
 		expect(isStaleStaging('scoreview-offline-data', now)).toBe(false)
 		expect(isStaleStaging('scoreview-offline-staging-kaputt', now)).toBe(true)
+	})
+})
+
+describe('planForScore with a display variant', () => {
+	const api = apiUrlsFor((path, p) => path.replace('{fileId}', p.fileId), 7)
+	const ready = {
+		status: 'ready',
+		files: { pages: ['/p1'], midi: '/midi', timingJson: '/t', measuresJson: '/m', metaJson: '/meta', etag: 'e' },
+	}
+	const variantUrl = variantUrlFor((path, p) => path.replace('{fileId}', p.fileId).replace('{key}', p.key), 7, 'ex0~phone~w~0')
+
+	it('saves the variant this device showed, MIDI once', () => {
+		const variantBody = { status: 'ready', files: { pages: ['/v1', '/v2'], midi: '/midi', timingJson: '/vt', measuresJson: '/vm', metaJson: '/vmeta' } }
+		const { urls } = planForScore({ statusBody: ready, api, variantUrl, variantBody })
+		expect(variantUrl).toBe('/apps/scoreview/api/scores/7/variants/ex0~phone~w~0')
+		expect(urls).toEqual(expect.arrayContaining([variantUrl, '/v1', '/v2', '/vt', '/vm', '/vmeta']))
+		expect(urls.filter((u) => u === '/midi')).toHaveLength(1)
+	})
+
+	it('leaves out a variant that is not ready', () => {
+		const { urls } = planForScore({ statusBody: ready, api, variantUrl, variantBody: { status: 'error', errorCode: 'x' } })
+		expect(urls).not.toContain(variantUrl)
 	})
 })

@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php
+#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
 msgid "File not found or no access."
 msgstr ""
 
@@ -60,11 +60,11 @@ msgstr ""
 msgid "Not allowed to convert this score again."
 msgstr ""
 
-#: lib/Controller/ConversionController.php lib/Controller/EngineController.php
+#: lib/Controller/ConversionController.php lib/Controller/EngineController.php lib/Controller/VariantController.php
 msgid "Requested file does not exist."
 msgstr ""
 
-#: lib/Controller/ConversionController.php
+#: lib/Controller/ConversionController.php lib/Controller/VariantController.php
 msgid "Conversion not finished yet."
 msgstr ""
 
@@ -214,6 +214,10 @@ msgstr ""
 
 #: lib/Controller/SoundFontController.php
 msgid "The server could not provide the SoundFont. The ScoreView status in the administration settings shows why."
+msgstr ""
+
+#: lib/Controller/VariantController.php
+msgid "This score has no such part."
 msgstr ""
 
 #: lib/Search/ScoreSearchProvider.php
@@ -672,6 +676,22 @@ msgstr ""
 msgid "Not following {name}"
 msgstr ""
 
+#: src/components/LayoutControls.vue
+msgid "Edition"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "Score or part"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "Concert pitch (transposing instruments as they sound)"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "Page format"
+msgstr ""
+
 #: src/components/LayoutControls.vue src/components/ScoreViewer.vue
 msgid "Layout"
 msgstr ""
@@ -690,6 +710,18 @@ msgstr ""
 
 #: src/components/LayoutControls.vue
 msgid "Lyrics only"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "As in the file"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "Phone, upright"
+msgstr ""
+
+#: src/components/LayoutControls.vue
+msgid "Phone, landscape"
 msgstr ""
 
 #: src/components/LayoutControls.vue src/components/NoteNameControls.vue src/components/TunerPanel.vue
@@ -1797,15 +1829,27 @@ msgid "The score cursor keeps running independently of this."
 msgstr ""
 
 #: src/components/ScoreViewer.vue
+msgid "Engraving the chosen part or page format …"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "This score can be engraved on pages the size of a phone screen, with larger notes."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Use phone pages"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "No, thanks"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
 msgid "On a phone, the system band shows the staves side by side in landscape."
 msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "Try the system band"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "No, thanks"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
@@ -1834,6 +1878,14 @@ msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "My voice on the right, the others on the left"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Full score"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "{part} (generated)"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
@@ -2038,6 +2090,10 @@ msgstr ""
 
 #: src/components/TransposeControls.vue
 msgid "Raise by a semitone"
+msgstr ""
+
+#: src/components/TransposeControls.vue
+msgid "Transpose the notes too"
 msgstr ""
 
 #: src/components/TransposeControls.vue
@@ -2278,6 +2334,38 @@ msgstr ""
 
 #: src/composables/useRecorder.js
 msgid "No connection to the server."
+msgstr ""
+
+#: src/composables/useScoreVariant.js
+msgid "This server engraves no parts or phone pages; the score is shown as the file has it."
+msgstr ""
+
+#: src/composables/useScoreVariant.js
+msgid "This server engraves no parts or phone pages."
+msgstr ""
+
+#: src/composables/useScoreVariant.js
+msgid "Too many new parts or page formats in a short time. Please try again later."
+msgstr ""
+
+#: src/composables/useScoreVariant.js
+msgid "The score is too large to be engraved again."
+msgstr ""
+
+#: src/composables/useScoreVariant.js
+msgid "This score is too large to be set in this browser."
+msgstr ""
+
+#: src/composables/useScoreVariant.js
+msgid "The engraving engine could not be started in this browser."
+msgstr ""
+
+#: src/composables/useScoreVariant.js
+msgid "The score changed in the meantime. Please open it again."
+msgstr ""
+
+#: src/composables/useScoreVariant.js
+msgid "This part or page format could not be engraved. The score is shown as the file has it."
 msgstr ""
 
 #: src/composables/useSetlist.js

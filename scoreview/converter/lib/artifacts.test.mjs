@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkLyrics, checkMeters, checkPromises, checkScoreFacts, toPositions } from './artifacts.mjs'
+import { checkLyrics, checkMeters, checkPromises, checkScoreFacts, checkVariant, toPositions, toVariantMeta } from './artifacts.mjs'
 
 /**
  * Diese Umformung ist die Stelle, an der der lokale Konvertierungsweg das
@@ -331,5 +331,104 @@ describe('checkLyrics', () => {
 		const c = converted()
 		c.meta.lyricSyllables[1].syllabic = 'end'
 		expect(checkLyrics(c).problems).toEqual([expect.stringContaining('Hal-le-lu-ja')])
+	})
+})
+
+/**
+ * A display variant (docs/architecture.md E19) must keep the base's time axis
+ * and measure numbering and map every segment and staff back to the base.
+ */
+describe('checkVariant', () => {
+	const base = {
+		timing: { events: [{ elid: 0, timeMs: 0 }, { elid: 1, timeMs: 500 }, { elid: 2, timeMs: 1000 }], elements: {} },
+		measures: { events: [{ elid: 0, timeMs: 0 }, { elid: 1, timeMs: 1000 }], elements: { 0: {}, 1: {} } },
+	}
+	const svg = '<g class="Note seg-0 st-0 vc-0"></g><g class="Note seg-1 st-1 vc-0"></g>'
+	const good = () => ({
+		timing: {
+			events: [{ elid: 0, timeMs: 0 }, { elid: 1, timeMs: 1001 }],
+			elements: { 0: { x: 0, w: 10 }, 1: { x: 0, w: 10 } },
+		},
+		measures: { events: [{ elid: 0, timeMs: 0 }, { elid: 1, timeMs: 1000 }], elements: { 0: {}, 1: {} } },
+		meta: { baseElid: { 0: 0, 1: 2 }, staffMap: [3, 4] },
+		svgs: [svg],
+	})
+
+	it('passes a variant on the base axis, rounding forgiven by a millisecond', () => {
+		expect(checkVariant(base, good()).problems).toEqual([])
+	})
+
+	it('I1: refuses an event time the base does not have', () => {
+		const v = good()
+		v.timing.events.push({ elid: 1, timeMs: 750 })
+		expect(checkVariant(base, v).problems.join()).toMatch(/^I1/)
+	})
+
+	it('I2: refuses a different measure numbering', () => {
+		const v = good()
+		v.measures.elements = { 0: {} }
+		expect(checkVariant(base, v).problems.join()).toMatch(/I2/)
+		const w = good()
+		w.measures.events = [{ elid: 0, timeMs: 0 }]
+		expect(checkVariant(base, w).problems.join()).toMatch(/I2/)
+	})
+
+	it('I3: refuses a played segment without a base segment', () => {
+		const v = good()
+		delete v.meta.baseElid[1]
+		expect(checkVariant(base, v).problems.join()).toMatch(/I3: 1 /)
+	})
+
+	it('I4: refuses a drawn staff without a base staff', () => {
+		const v = good()
+		v.meta.staffMap = [3]
+		expect(checkVariant(base, v).problems.join()).toMatch(/I4: 1 /)
+		v.meta.staffMap = [3, -1]
+		expect(checkVariant(base, v).problems.join()).toMatch(/I4: 1 /)
+	})
+
+	it('carries M10 over to the variant pages', () => {
+		const v = good()
+		v.svgs = ['<g class="Note seg-9 st-0"></g>']
+		expect(checkVariant(base, v).problems.join()).toMatch(/M10/)
+	})
+})
+
+describe('toVariantMeta', () => {
+	const engineMeta = {
+		pages: 2,
+		pageFormat: { width: 105, height: 186 },
+		keySigs: [{ measure: 1, tick: 0, concertKey: -3, mode: 'major' }],
+		noteSpellings: [{ elid: 0, staff: 0, voice: 0, tick: 0, notes: [[70, 14]] }],
+		lyricSyllables: [],
+		parts: [{ id: '3' }],
+		tempo: 96,
+		measureFacts: [{}],
+	}
+
+	it('keeps what the picture needs and leaves the piece to the base', () => {
+		const meta = toVariantMeta(engineMeta, { baseElid: { 0: 4 }, staffMap: [2] }, 'part3~phone~w~3')
+		expect(meta).toEqual({
+			variant: 'part3~phone~w~3',
+			pages: 2,
+			pageFormat: { width: 105, height: 186 },
+			keySigs: engineMeta.keySigs,
+			// sounding pitch back by the key's +3, spelling kept
+			noteSpellings: [{ elid: 0, staff: 0, voice: 0, tick: 0, notes: [[67, 14]] }],
+			lyricSyllables: [],
+			parts: [{ id: '3', name: undefined }],
+			baseElid: { 0: 4 },
+			staffMap: [2],
+		})
+	})
+
+	it('leaves the pitch alone when nothing is transposed', () => {
+		expect(toVariantMeta(engineMeta, {}, 'ex0~phone~c~0').noteSpellings).toEqual(engineMeta.noteSpellings)
+	})
+
+	it('keeps "too much lyrics" (field absent) apart from "no lyrics"', () => {
+		const { lyricSyllables, ...ohne } = engineMeta
+		expect(lyricSyllables).toEqual([])
+		expect('lyricSyllables' in toVariantMeta(ohne, {}, 'full~phone~w~0')).toBe(false)
 	})
 })

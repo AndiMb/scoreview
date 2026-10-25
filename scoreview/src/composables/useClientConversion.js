@@ -1,7 +1,13 @@
 import axios from '@nextcloud/axios'
 import { ref } from 'vue'
-import { createArtifactUrls } from '../lib/artifactUrls.js'
-import { convertInBrowser } from '../lib/clientConversion.js'
+import { createArtifactUrls, createVariantUrls } from '../lib/artifactUrls.js'
+import { convertInBrowser, convertVariantInBrowser } from '../lib/clientConversion.js'
+
+/**
+ * How many display variants (E19) one tab keeps. Each is a set of pages in
+ * memory - a phone's memory is the limit here, not a server's disk.
+ */
+const MAX_VARIANTS = 3
 
 /**
  * Der Rückfall: Konvertieren im Browser, wo der Server es nicht kann.
@@ -34,8 +40,14 @@ export function useClientConversion() {
 	/** Für die Anzeige: `{phase, page?, of?}` - siehe lib/clientConversion.js. */
 	const progress = ref(null)
 
-	/** Genau ein Eintrag: `{key, files, revoke}`. */
+	/**
+	 * Genau ein Eintrag: `{key, files, revoke, antwort, base}` - `antwort`
+	 * and `base` (the base's timing and measures) are what a variant of it
+	 * needs.
+	 */
 	let cache = null
+	/** Variants of the cached score, oldest first: key -> {files, revoke}. */
+	const variants = new Map()
 	/**
 	 * Läufe zählen, damit ein spät zurückkehrender Lauf nicht die Anzeige
 	 * einer inzwischen ganz anderen Partitur überschreibt. Abbrechen lässt
@@ -79,18 +91,66 @@ export function useClientConversion() {
 
 		release()
 		const { files, revoke } = createArtifactUrls(artefakte, antwort.etag)
-		cache = { key: schluessel, files, revoke }
+		cache = { key: schluessel, files, revoke, antwort, base: { timing: artefakte.timing, measures: artefakte.measures } }
 		progress.value = null
 		return koerper(files, antwort)
+	}
+
+	/**
+	 * A display variant of the score run() converted last - answered in the
+	 * shape of the server's variant route, so the viewer cannot tell them
+	 * apart.
+	 *
+	 * @param {string} key canonical variant key
+	 * @return {Promise<object>} `{status: 'ready', variant, files}` or `{status: 'error', errorCode}`
+	 */
+	async function runVariant(key) {
+		if (cache === null) {
+			return { status: 'error', variant: key, errorCode: 'base_not_ready' }
+		}
+		const known = variants.get(key)
+		if (known) {
+			variants.delete(key)
+			variants.set(key, known)
+			return { status: 'ready', variant: key, files: known.files }
+		}
+		const basis = cache
+		try {
+			const artefakte = await convertVariantInBrowser({
+				fetchSource: () => holeQuelle(basis.antwort.sourceUrl),
+				loadEngine: () => ladeEngine(basis.antwort.engineUrl),
+				key,
+				base: basis.base,
+				maxBytes: basis.antwort.maxBytes ?? 0,
+			})
+			if (cache !== basis) {
+				// The score changed meanwhile; nobody wants this any more.
+				return { status: 'error', variant: key, errorCode: 'base_not_ready' }
+			}
+			const made = createVariantUrls(artefakte, basis.files)
+			variants.set(key, made)
+			while (variants.size > MAX_VARIANTS) {
+				const [oldest, entry] = variants.entries().next().value
+				entry.revoke()
+				variants.delete(oldest)
+			}
+			return { status: 'ready', variant: key, files: made.files }
+		} catch (err) {
+			return { status: 'error', variant: key, errorCode: err?.code ?? 'conversion_failed', error: err?.message ?? '' }
+		}
 	}
 
 	/** Gibt die Blob-URLs frei. Nach dem Schließen des Viewers und vor jedem neuen Lauf. */
 	function release() {
 		cache?.revoke()
 		cache = null
+		for (const entry of variants.values()) {
+			entry.revoke()
+		}
+		variants.clear()
 	}
 
-	return { progress, run, release }
+	return { progress, run, runVariant, release }
 }
 
 /**

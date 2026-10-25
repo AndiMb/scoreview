@@ -35,6 +35,12 @@ return [
 		// Dieselbe Rechtepruefung wie oben; der Viewer hat von Nextclouds
 		// Viewer nur die fileId, keinen Pfad.
 		['name' => 'conversion#source', 'url' => '/api/scores/{fileId}/source', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		// Display variants (docs/architecture.md E19): a part, a phone page,
+		// concert pitch, transposed notation. The key's grammar is checked in
+		// the controller (Service\VariantKey) - here only its character class,
+		// so an unknown key is a 404 from there and not a routing error.
+		['name' => 'variant#status', 'url' => '/api/scores/{fileId}/variants/{key}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+', 'key' => '[A-Za-z0-9_~\-]+']],
+		['name' => 'variant#artifact', 'url' => '/api/scores/{fileId}/variants/{key}/artifact/{name}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+', 'key' => '[A-Za-z0-9_~\-]+', 'name' => '[a-z0-9\-]+']],
 
 		// SoundFont fuer die Browser-Wiedergabe (siehe docs/architecture.md
 		// E1). Nicht an eine fileId gebunden - eine Datei fuer die gesamte

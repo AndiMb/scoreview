@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Tests\Unit\Controller;
 use OCA\ScoreView\Controller\ConversionController;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Service\ClientFallback;
+use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\SoundFontService;
@@ -66,6 +67,7 @@ class ConversionControllerTest extends TestCase {
 			$this->createMock(IAppConfig::class),
 			$l,
 			$this->createMock(SoundFontService::class),
+			$this->createMock(ConversionBackend::class),
 		);
 	}
 

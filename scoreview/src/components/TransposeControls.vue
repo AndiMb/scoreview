@@ -27,7 +27,19 @@
 		<p v-if="keyLabel" class="scoreview-popover-hint">
 			{{ keyLabel }}
 		</p>
-		<p class="scoreview-popover-hint">
+		<!--
+			Where the server (or this browser) engraves display variants (E19),
+			the notation can follow: MuseScore sets the score again a tone
+			lower, spelled as its own transpose dialog would. One number for
+			both - sound and notes never drift apart.
+		-->
+		<NcCheckboxRadioSwitch
+			v-if="notationAvailable"
+			:modelValue="transposeNotation"
+			@update:modelValue="$emit('update:transposeNotation', $event)">
+			{{ t('Transpose the notes too') }}
+		</NcCheckboxRadioSwitch>
+		<p v-else class="scoreview-popover-hint">
 			{{ t('Only the sound is transposed. The notation is not.') }}
 		</p>
 		<p v-if="fromLeader" class="scoreview-popover-hint">
@@ -45,6 +57,7 @@
 <script>
 import { getLanguage, translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import { keyTonicName, transposeKey } from '../lib/noteNames.js'
 
 export default {
@@ -52,6 +65,7 @@ export default {
 
 	components: {
 		NcButton,
+		NcCheckboxRadioSwitch,
 	},
 
 	props: {
@@ -72,9 +86,20 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		// Whether the notation can be transposed as well (E19)
+		notationAvailable: {
+			type: Boolean,
+			default: false,
+		},
+
+		transposeNotation: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
-	emits: ['update:semitones'],
+	emits: ['update:semitones', 'update:transposeNotation'],
 
 	computed: {
 		valueLabel() {

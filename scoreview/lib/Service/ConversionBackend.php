@@ -49,6 +49,17 @@ class ConversionBackend {
 	}
 
 	/**
+	 * Can the server engrave display variants (E19)? Only the local path: the
+	 * sidecar's stock MuseScore writes neither the segment ids (M10) nor the
+	 * mappings back to the score that a variant needs. A capability, not a
+	 * path - the viewer gets this as `variants.supported` and never asks
+	 * which path ran (E15).
+	 */
+	public function supportsVariants(): bool {
+		return $this->isLocal();
+	}
+
+	/**
 	 * Fuer SettingsController: alles ausser 'sidecar' bedeutet lokal, nie ein
 	 * ungueltiger Zustand. Die Richtung folgt der Voreinstellung oben - ein
 	 * unbrauchbarer Wert soll auf demselben Weg landen wie ein fehlender,

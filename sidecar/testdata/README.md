@@ -77,3 +77,30 @@ des lokalen Wegs prüft daran `measureFacts` der Engine (ab
 `v4.7.5-engine.5`): Taktart und tatsächliche Länge je Takt (480, 1920, 1440,
 1440 Ticks) und die aufsteigenden `tick`-Werte der `noteSpellings`. Der
 Sidecar kennt das Feld nicht und benutzt die Datei deshalb nicht.
+
+## `parts-test.mscz`
+
+Die fünfte Ausnahme, selbst erstellt (CC0, steht so in der Datei) für die
+Darstellungsvarianten
+([E19](../../docs/architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)):
+Sopran und Alt mit Liedtext, Klarinette in B (transponierend, in den Takten
+14–21 eine Pause, im Auszug eine Mehrtaktpause), Klavier auf zwei
+Notenzeilen; 24 Takte, eine Wiederholung mit Volta, ein Zeilenumbruch und
+ein Abschnittsumbruch nach Takt 12, ab dem MuseScore wieder bei 1 zählt.
+Gespeichert sind die Auszüge „Sopran“ und „Frauenstimmen“ (Sopran und Alt);
+für Klarinette und Klavier gibt es keinen, die erzeugt die Engine.
+
+Entsteht reproduzierbar mit MuseScore 4.7 selbst, ohne Handarbeit in der
+Oberfläche (`MS=<MuseScore4> sh parts-test.build.sh`): `parts-test.gen.py`
+schreibt die MusicXML, MuseScore macht daraus die `.mscz`, ein XML-Eingriff
+setzt den Abschnittsumbruch, `--score-parts` erzeugt die Auszüge mit ihren
+Verknüpfungen zur Partitur (`<linkedTo>` auf deren EIDs),
+`parts-test.assemble.py` legt sie als gespeicherte Auszüge in die Datei, und
+MuseScore speichert das Ergebnis noch einmal – damit ist es eine Datei, die
+MuseScore selbst geschrieben hat.
+
+`scoreview/converter/parts-test.mscz` ist eine Kopie davon. Der Selbsttest
+des lokalen Wegs prüft daran `excerpts` und `hasTransposingParts` und drei
+Varianten gegen die vier Invarianten. Der Sidecar setzt keine Varianten und
+benutzt die Datei deshalb nicht.
+

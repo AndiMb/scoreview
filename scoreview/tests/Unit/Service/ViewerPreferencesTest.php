@@ -153,12 +153,12 @@ class ViewerPreferencesTest extends TestCase {
 	public function testUebeEinstellungenHabenVorgabenOhneEintrag(): void {
 		$config = $this->createMock(IConfig::class);
 		$config->method('getUserValue')->willReturn('');
-		$this->assertSame(['transpose' => 0, 'coach' => false, 'othersLevel' => 40], (new ViewerPreferences($config))->getPractice('anna', 7));
+		$this->assertSame(['transpose' => 0, 'coach' => false, 'othersLevel' => 40, 'source' => 'full', 'concert' => false, 'transposeNotation' => false], (new ViewerPreferences($config))->getPractice('anna', 7));
 	}
 
 	public function testUebeEinstellungenWerdenBegrenzt(): void {
 		$this->assertSame(
-			['transpose' => -12, 'coach' => false, 'othersLevel' => 127],
+			['transpose' => -12, 'coach' => false, 'othersLevel' => 127, 'source' => 'full', 'concert' => false, 'transposeNotation' => false],
 			ViewerPreferences::normalizePractice(['transpose' => -40, 'coach' => 'ja', 'othersLevel' => 999]),
 		);
 	}
@@ -167,9 +167,9 @@ class ViewerPreferencesTest extends TestCase {
 		$config = $this->createMock(IConfig::class);
 		$config->method('getUserValue')->willReturn('{"transpose":-2,"coach":true,"othersLevel":30}');
 		$config->expects($this->once())->method('setUserValue')
-			->with('anna', 'scoreview', 'practice.7', '{"transpose":-2,"coach":true,"othersLevel":60}');
+			->with('anna', 'scoreview', 'practice.7', '{"transpose":-2,"coach":true,"othersLevel":60,"source":"full","concert":false,"transposeNotation":false}');
 		$werte = (new ViewerPreferences($config))->setPractice('anna', 7, null, null, 60);
-		$this->assertSame(['transpose' => -2, 'coach' => true, 'othersLevel' => 60], $werte);
+		$this->assertSame(['transpose' => -2, 'coach' => true, 'othersLevel' => 60, 'source' => 'full', 'concert' => false, 'transposeNotation' => false], $werte);
 	}
 
 	public function testLoeschtDenEintragBeiLauterVorgaben(): void {
@@ -253,5 +253,17 @@ class ViewerPreferencesTest extends TestCase {
 			fn (string $u, string $a, string $key, string $default): string => $key === ViewerPreferences::KEY_AUTO_SCROLL ? '0' : $default,
 		);
 		$this->assertFalse((new ViewerPreferences($config))->get('anna')['autoScroll']);
+	}
+
+	public function testRemembersTheDisplayVariantAndRefusesWhatIsNoSource(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturn('');
+		$prefs = new ViewerPreferences($config);
+		$this->assertSame('ex1', $prefs->setPractice('anna', 7, null, null, null, 'ex1', true, true)['source']);
+		$this->assertSame('part3', ViewerPreferences::normalizePractice(['source' => 'part3'])['source']);
+		$this->assertSame('full', ViewerPreferences::normalizePractice(['source' => 'part../x'])['source']);
+		$this->assertSame('full', ViewerPreferences::normalizePractice(['source' => 'ex01'])['source']);
+		$this->assertSame('full', ViewerPreferences::normalizePractice(['source' => 7])['source']);
+		$this->assertTrue(ViewerPreferences::normalizePractice(['concert' => true, 'transposeNotation' => true])['transposeNotation']);
 	}
 }
