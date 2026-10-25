@@ -1269,6 +1269,10 @@ msgid "Live intonation"
 msgstr ""
 
 #: src/components/RecordingPanel.vue
+msgid "Judged against a′ = {hz} Hz, as set in the tuner."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
 msgid "Use headphones. From a loudspeaker the accompaniment reaches the microphone, and the notes cannot be evaluated."
 msgstr ""
 
@@ -2073,7 +2077,19 @@ msgid "Start tuner"
 msgstr ""
 
 #: src/components/TunerPanel.vue
+msgid "Lower the reference by 1 Hz"
+msgstr ""
+
+#: src/components/TunerPanel.vue
 msgid "Reference a′ = {hz} Hz"
+msgstr ""
+
+#: src/components/TunerPanel.vue
+msgid "Raise the reference by 1 Hz"
+msgstr ""
+
+#: src/components/TunerPanel.vue
+msgid "Also for intonation and playback."
 msgstr ""
 
 #: src/components/TunerPanel.vue

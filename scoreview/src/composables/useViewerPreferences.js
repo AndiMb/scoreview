@@ -9,6 +9,7 @@ import {
 	normalizeHighlightMode,
 } from '../lib/highlightStyle.js'
 import { isDarkBackground, normalizeNoteTheme, noteThemeCssVars, resolveNoteTheme } from '../lib/noteTheme.js'
+import { normalizeReferencePitch } from '../lib/referencePitch.js'
 import { SPREAD_PREFS } from '../lib/spreadLayout.js'
 
 /**
@@ -60,6 +61,9 @@ export function useViewerPreferences() {
 	// Two pages side by side where there is room (A2). Default page 1 on the
 	// left, as Service\ViewerPreferences::DEFAULT_DOUBLE_PAGE - not the first value.
 	const doublePage = ref(SPREAD_PREFS.includes(anfang.doublePage) ? anfang.doublePage : 'left')
+	// a' for tuner, intonation and playback (lib/referencePitch.js); 440 from
+	// a server that does not know it yet.
+	const referencePitch = ref(normalizeReferencePitch(anfang.referencePitch))
 
 	// Ob das Nextcloud-Theme gerade dunkel ist - gelesen am Grund selbst
 	// (lib/noteTheme.js). Nachgelesen, wenn das Betriebssystem umschaltet:
@@ -92,7 +96,7 @@ export function useViewerPreferences() {
 	// (Controller\PreferenceController, E8). Wer am Telefon den
 	// Dunkelmodus waehlt, soll ihn beim naechsten Oeffnen wiederfinden.
 	let saveTimer = null
-	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts, doublePage], () => {
+	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts, doublePage, referencePitch], () => {
 		if (saveTimer) {
 			clearTimeout(saveTimer)
 		}
@@ -114,6 +118,7 @@ export function useViewerPreferences() {
 				autoScroll: autoScroll.value,
 				beatCounts: beatCounts.value,
 				doublePage: doublePage.value,
+				referencePitch: referencePitch.value,
 			})
 		} catch (err) {
 			// Bewusst nur ins Log: Die Einstellung wirkt im geoeffneten Viewer
@@ -126,7 +131,7 @@ export function useViewerPreferences() {
 		}
 	}
 
-	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts, doublePage }
+	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts, doublePage, referencePitch }
 }
 
 /**

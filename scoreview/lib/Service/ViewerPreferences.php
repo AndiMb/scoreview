@@ -60,6 +60,21 @@ class ViewerPreferences {
 	 * (src/lib/spreadLayout.js); the setting says what to do then.
 	 */
 	public const KEY_DOUBLE_PAGE = 'double_page';
+	/**
+	 * Reference pitch a' in Hz for everything that hears or plays pitch:
+	 * tuner, intonation, wait mode and the playback itself. Per user, not per
+	 * file - it belongs to the ensemble and its instrument (an organ at 443),
+	 * not to the piece.
+	 */
+	public const KEY_REFERENCE_PITCH = 'reference_pitch';
+	public const DEFAULT_REFERENCE_PITCH = 440;
+	/**
+	 * Whole Hz within the synthesizer's global fine tune of ±100 cents
+	 * (415.3 … 466.1 Hz). Baroque 415 lies just outside; it is a semitone
+	 * down at 440 (docs/limits.md).
+	 */
+	public const REFERENCE_PITCH_MIN = 420;
+	public const REFERENCE_PITCH_MAX = 460;
 	public const NOTE_NAME_SYSTEMS = ['off', 'de', 'en', 'solfa-fixed', 'solfa-movable'];
 	public const BEAT_COUNTS = ['off', 'mine', 'all'];
 	/** The first value of a list is NOT the default here - see DEFAULT_DOUBLE_PAGE. */
@@ -108,7 +123,7 @@ class ViewerPreferences {
 	}
 
 	/**
-	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string, doublePage: string}
+	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string, doublePage: string, referencePitch: int}
 	 */
 	public function get(?string $userId): array {
 		if ($userId === null) {
@@ -134,6 +149,7 @@ class ViewerPreferences {
 			'autoScroll' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_AUTO_SCROLL, '1') === '1',
 			'beatCounts' => self::oneOf($this->config->getUserValue($userId, Application::APP_ID, self::KEY_BEAT_COUNTS, 'off'), self::BEAT_COUNTS),
 			'doublePage' => self::doublePage($this->config->getUserValue($userId, Application::APP_ID, self::KEY_DOUBLE_PAGE, self::DEFAULT_DOUBLE_PAGE)),
+			'referencePitch' => self::normalizeReferencePitch($this->config->getUserValue($userId, Application::APP_ID, self::KEY_REFERENCE_PITCH, (string)self::DEFAULT_REFERENCE_PITCH)),
 		];
 	}
 
@@ -174,6 +190,32 @@ class ViewerPreferences {
 			$this->config->setUserValue($userId, Application::APP_ID, self::KEY_AUTO_SCROLL, $autoScroll ? '1' : '0');
 		}
 		return $werte;
+	}
+
+	/**
+	 * The reference pitch, only when it comes along (as setDisplay()).
+	 *
+	 * @return array{referencePitch?: int}
+	 */
+	public function setReferencePitch(string $userId, int|float|string|null $referencePitch): array {
+		if ($referencePitch === null) {
+			return [];
+		}
+		$wert = self::normalizeReferencePitch($referencePitch);
+		$this->config->setUserValue($userId, Application::APP_ID, self::KEY_REFERENCE_PITCH, (string)$wert);
+		return ['referencePitch' => $wert];
+	}
+
+	/**
+	 * Clamped to the range instead of rejected, rounded to whole Hz - like
+	 * the transposition, a value outside only comes by hand (occ) or from
+	 * an old bundle. Not a number at all means the default.
+	 */
+	public static function normalizeReferencePitch(int|float|string $value): int {
+		if (!is_numeric($value) || !is_finite((float)$value)) {
+			return self::DEFAULT_REFERENCE_PITCH;
+		}
+		return max(self::REFERENCE_PITCH_MIN, min(self::REFERENCE_PITCH_MAX, (int)round((float)$value)));
 	}
 
 	/**
@@ -346,6 +388,7 @@ class ViewerPreferences {
 			'autoScroll' => true,
 			'beatCounts' => 'off',
 			'doublePage' => self::DEFAULT_DOUBLE_PAGE,
+			'referencePitch' => self::DEFAULT_REFERENCE_PITCH,
 		];
 	}
 

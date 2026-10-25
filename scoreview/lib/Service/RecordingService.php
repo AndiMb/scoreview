@@ -55,7 +55,7 @@ class RecordingService {
 
 	/**
 	 * @param resource $wav der Rumpf als lesbarer Strom (RequestBodyReader)
-	 * @param array{scoreStartMs: int, tempoFactor: float, withAccompaniment: bool} $meta
+	 * @param array{scoreStartMs: int, tempoFactor: float, withAccompaniment: bool, referenceHz?: int} $meta
 	 * @throws RecordingException
 	 */
 	public function create(int $fileId, string $userId, $wav, array $meta, bool $replaceOldest): Recording {
@@ -102,6 +102,7 @@ class RecordingService {
 		$recording->setScoreStartMs($meta['scoreStartMs']);
 		$recording->setTempoFactor($meta['tempoFactor']);
 		$recording->setWithAccompaniment($meta['withAccompaniment']);
+		$recording->setReferenceHz($meta['referenceHz'] ?? ViewerPreferences::DEFAULT_REFERENCE_PITCH);
 		$recording = $this->storage->store($recording, $wav);
 		// VOR dem Verdraengen: Scheitert die Nachpruefung, geht nur die neue
 		// Aufnahme wieder, die alten bleiben unangetastet.

@@ -12,6 +12,7 @@ use OCA\ScoreView\Service\RecordingException;
 use OCA\ScoreView\Service\RecordingService;
 use OCA\ScoreView\Service\RequestBodyReader;
 use OCA\ScoreView\Service\UserFileResolver;
+use OCA\ScoreView\Service\ViewerPreferences;
 use OCA\ScoreView\Service\WavFormat;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -78,6 +79,9 @@ class RecordingController extends Controller {
 	 * @param int $scoreStartMs Partiturzeit des ersten Samples, schon um die
 	 *                          Latenzen korrigiert (src/lib/recordingAlign.js)
 	 * @param float $tempoFactor Tempofaktor waehrend der Aufnahme
+	 * @param float $referenceHz reference a' while recording - the one the
+	 *                           singer heard, not today's setting; an old
+	 *                           bundle does not send it and recorded at 440
 	 * @param bool $replaceOldest die Nutzerin hat das Ersetzen bestaetigt - still
 	 *                            ueberschrieben wird nichts
 	 */
@@ -98,6 +102,7 @@ class RecordingController extends Controller {
 		float $tempoFactor = 1.0,
 		bool $withAccompaniment = false,
 		bool $replaceOldest = false,
+		float $referenceHz = ViewerPreferences::DEFAULT_REFERENCE_PITCH,
 	): JSONResponse {
 		$userId = $this->resolve($fileId);
 		if ($userId === null) {
@@ -127,6 +132,7 @@ class RecordingController extends Controller {
 			'scoreStartMs' => max(-86400000, min(86400000, $scoreStartMs)),
 			'tempoFactor' => is_finite($tempoFactor) ? max(0.25, min(4.0, $tempoFactor)) : 1.0,
 			'withAccompaniment' => $withAccompaniment,
+			'referenceHz' => ViewerPreferences::normalizeReferencePitch($referenceHz),
 		];
 		try {
 			$recording = $this->recordings->create($fileId, $userId, $wav, $meta, $replaceOldest);
@@ -209,6 +215,7 @@ class RecordingController extends Controller {
 			'scoreStartMs' => $recording->getScoreStartMs(),
 			'tempoFactor' => $recording->getTempoFactor(),
 			'withAccompaniment' => (bool)$recording->getWithAccompaniment(),
+			'referenceHz' => $recording->getReferenceHz(),
 		];
 	}
 

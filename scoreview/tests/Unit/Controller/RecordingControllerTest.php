@@ -76,6 +76,7 @@ class RecordingControllerTest extends TestCase {
 		$r->setScoreStartMs(-120);
 		$r->setTempoFactor(0.8);
 		$r->setWithAccompaniment(true);
+		$r->setReferenceHz(442);
 		return $r;
 	}
 
@@ -95,6 +96,7 @@ class RecordingControllerTest extends TestCase {
 			'scoreStartMs' => -120,
 			'tempoFactor' => 0.8,
 			'withAccompaniment' => true,
+			'referenceHz' => 442,
 		], $daten['recordings'][0]);
 	}
 
@@ -103,12 +105,24 @@ class RecordingControllerTest extends TestCase {
 		$strom = RecordingServiceTest::strom('WAV');
 		$this->body->method('readToStream')->willReturn($strom);
 		$this->recordings->expects($this->once())->method('create')
-			->with(42, 'anna', $strom, ['scoreStartMs' => 500, 'tempoFactor' => 4.0, 'withAccompaniment' => true], true)
+			->with(42, 'anna', $strom, ['scoreStartMs' => 500, 'tempoFactor' => 4.0, 'withAccompaniment' => true, 'referenceHz' => 460], true)
 			->willReturn($this->aufnahme());
 
-		$antwort = $this->controller()->create(42, 500, 9.0, true, true);
+		$antwort = $this->controller()->create(42, 500, 9.0, true, true, 470.0);
 
 		$this->assertSame(Http::STATUS_CREATED, $antwort->getStatus());
+	}
+
+	public function testRecordingWithoutReferenceWasMadeAt440(): void {
+		// An older bundle does not send the reference - it always heard 440.
+		$this->angemeldet($this->createMock(Node::class));
+		$strom = RecordingServiceTest::strom('WAV');
+		$this->body->method('readToStream')->willReturn($strom);
+		$this->recordings->expects($this->once())->method('create')
+			->with(42, 'anna', $strom, $this->callback(fn (array $meta): bool => $meta['referenceHz'] === 440), false)
+			->willReturn($this->aufnahme());
+
+		$this->controller()->create(42, 0);
 	}
 
 	public function testAngekuendigteUeberlaengeWirdNichtGelesen(): void {

@@ -110,6 +110,8 @@ class RecordingServiceTest extends TestCase {
 		$this->assertSame(1234, $r->getScoreStartMs());
 		$this->assertSame(0.8, $r->getTempoFactor());
 		$this->assertTrue($r->getWithAccompaniment());
+		// Not in META: what an older caller leaves out was recorded at 440.
+		$this->assertSame(440, $r->getReferenceHz());
 	}
 
 	public function testKeineWavIstUngueltig(): void {

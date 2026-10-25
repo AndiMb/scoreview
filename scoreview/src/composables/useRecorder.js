@@ -56,6 +56,7 @@ export const PENDING = 'pending'
  * @param deps.setAccompanimentGain
  * @param deps.maxPerScore
  * @param deps.maxSeconds
+ * @param {() => number} [deps.referenceHz] a' while recording, stored with the recording
  * @return {object}
  */
 export function useRecorder({
@@ -79,6 +80,7 @@ export function useRecorder({
 	setAccompanimentGain,
 	maxPerScore,
 	maxSeconds,
+	referenceHz = () => 440,
 }) {
 	const recordings = ref([])
 	const error = ref('')
@@ -114,6 +116,9 @@ export function useRecorder({
 	let anchor = null
 	let startAnchor = null
 	let tempoAtStart = 1
+	// Taken at the start like the tempo: the reference the singer heard,
+	// even if the setting changes before the upload.
+	let referenceAtStart = 440
 	let startedPlayback = false
 	let replaceConfirmed = false
 	// Die Partitur, zu der die laufende Aufnahme gehoert - festgehalten beim
@@ -205,6 +210,7 @@ export function useRecorder({
 		anchor = null
 		elapsedMs.value = 0
 		tempoAtStart = tempoFactor()
+		referenceAtStart = referenceHz()
 		const context = handle.context
 		// Fuer eine Aufnahme ohne laufende Wiedergabe: gesungen ab der
 		// Cursorstelle, im eingestellten Tempo.
@@ -277,6 +283,7 @@ export function useRecorder({
 			scoreStartMs,
 			tempoFactor: tempoAtStart,
 			withAccompaniment: withAccompaniment.value,
+			referenceHz: referenceAtStart,
 			durationMs: Math.round((samplesTotal / WAV_SAMPLE_RATE) * 1000),
 		}
 		const wav = encodeWav(chunks)
@@ -294,6 +301,7 @@ export function useRecorder({
 					scoreStartMs: meta.scoreStartMs,
 					tempoFactor: meta.tempoFactor,
 					withAccompaniment: meta.withAccompaniment ? 1 : 0,
+					referenceHz: meta.referenceHz,
 					replaceOldest: replaceOldest ? 1 : 0,
 				},
 			})

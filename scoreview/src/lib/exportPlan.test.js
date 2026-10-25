@@ -23,6 +23,11 @@ describe('buildExportPlan', () => {
 		expect(plan.outputSeconds).toBe((8000 + TAIL_MS) / 1000)
 	})
 
+	it('plays at the reference pitch the viewer plays at', () => {
+		expect(buildExportPlan({ volumes, pans, durationMs: 8000 }).fineTune).toBe(0)
+		expect(buildExportPlan({ volumes, pans, durationMs: 8000, referencePitch: 442 }).fineTune).toBeCloseTo(7.85, 2)
+	})
+
 	it('rechnet das Tempo in die Laenge ein', () => {
 		const plan = buildExportPlan({ volumes, pans, durationMs: 8000, rate: 0.8 })
 		expect(plan.outputSeconds).toBeCloseTo((8000 / 0.8 + TAIL_MS) / 1000)

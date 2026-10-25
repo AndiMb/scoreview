@@ -11,6 +11,7 @@
 import { coachMix } from './coachMix.js'
 import { measureClicks, normalizeMetronomeMode } from './metronome.js'
 import { channelsOfPart } from './panLayout.js'
+import { fineTuneCents } from './referencePitch.js'
 
 /** Ausklang nach dem letzten Ton - ohne ihn bricht der Hall hart ab. */
 export const TAIL_MS = 1000
@@ -19,6 +20,7 @@ export const TAIL_MS = 1000
  * @typedef {object} ExportPlan
  * @property {Array<{channel:number, volume:number, pan:number, program:?number}>} channels Mischung je Kanal
  * @property {number} transpose Halbtoene (H6)
+ * @property {number} fineTune cents against a' = 440 (lib/referencePitch.js)
  * @property {number} rate Tempofaktor (playbackRate), 1 = Original
  * @property {number} startMs Partiturzeit, ab der gerendert wird
  * @property {number} endMs Partiturzeit, bis zu der Noten zaehlen
@@ -32,6 +34,7 @@ export const TAIL_MS = 1000
  * @param {Map<number, number>} input.pans channel -> -1..1
  * @param {Map<number, ?number>} [input.programs] channel -> GM-Programm (null = wie im MIDI)
  * @param {number} [input.transpose]
+ * @param {number} [input.referencePitch] a' in Hz
  * @param {number} [input.rate]
  * @param {?{fromMs:number, toMs:number}} [input.range] nur dieser Bereich (Loop)
  * @param {?{mode?:'downbeat'|'all'|'eighths', everyBeat?:boolean}} [input.metronome] null = ohne Klick; `everyBeat` ist die Form vor 1.16
@@ -41,7 +44,7 @@ export const TAIL_MS = 1000
  * @param {number} [input.baseBpm] Viertel-BPM der Partitur (fuer die Schlagzahl)
  * @return {ExportPlan}
  */
-export function buildExportPlan({ volumes, pans, programs = new Map(), transpose = 0, rate = 1, range = null, metronome = null, measures = null, meters = null, durationMs, baseBpm = 120 }) {
+export function buildExportPlan({ volumes, pans, programs = new Map(), transpose = 0, referencePitch = 440, rate = 1, range = null, metronome = null, measures = null, meters = null, durationMs, baseBpm = 120 }) {
 	const channels = [...volumes.keys()].sort((a, b) => a - b).map((channel) => ({
 		channel,
 		volume: volumes.get(channel) ?? 100,
@@ -55,6 +58,7 @@ export function buildExportPlan({ volumes, pans, programs = new Map(), transpose
 	return {
 		channels,
 		transpose: Math.trunc(transpose) || 0,
+		fineTune: fineTuneCents(referencePitch),
 		rate: r,
 		startMs,
 		endMs,

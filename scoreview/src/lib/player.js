@@ -13,6 +13,7 @@ import { Sequencer, WorkletSynthesizer } from 'spessasynth_lib'
 import { withAppVersion } from './assetVersion.js'
 import { createAudioIdle } from './audioIdle.js'
 import { audioSession } from './audioSession.js'
+import { fineTuneCents } from './referencePitch.js'
 import { pickToneChannel } from './startTone.js'
 
 // spessasynth_lib's AudioWorklet-Prozessor läuft in einem eigenen
@@ -304,6 +305,17 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	}
 
 	/**
+	 * Play at reference a' (lib/referencePitch.js). The global fine tune for
+	 * the same reasons as setTranspose(): it survives seeks, drums ignore it,
+	 * and the start tone moves along.
+	 *
+	 * @param {number} a4 Hz
+	 */
+	function setReferencePitch(a4) {
+		synth.setSystemParameter('fineTune', fineTuneCents(a4))
+	}
+
+	/**
 	 * Einen Controller setzen und gegen den Sequencer verriegeln.
 	 *
 	 * Gemessen: Jeder Suchlauf - und damit jeder Loop-Ruecksprung - setzt den
@@ -521,6 +533,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		setTempo,
 		getTempo,
 		setTranspose,
+		setReferencePitch,
 		setAccompanimentGain,
 		applyChannelVolumes,
 		applyChannelPans,

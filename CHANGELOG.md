@@ -23,6 +23,11 @@ All notable changes to ScoreView. The format follows
   playing keeps sounding, and your own part stays silent for the whole mode.
   Metronome, speed trainer, recording and following a leader cannot run at
   the same time.
+- **Adjustable reference pitch** a′ (420–460 Hz, in the tuner) instead of a
+  fixed 440 Hz. It is one setting per user for everything that hears or
+  plays pitch: the tuner, intonation, wait mode, the playback with its start
+  tone, and the MP3 export. A recording keeps the reference it was sung
+  against, so changing the setting later does not re-judge it.
 
 ## [1.21.2] – 2026-10-24
 

@@ -7,8 +7,9 @@
 // note: it folds to the nearest note, never to an octave, because a tuner
 // is expected to show which octave is sounding.
 //
-// Reference a' = A4_HZ, fixed (docs/limits.md); adjustable together with the
-// intonation check later, which is why the constant lives in intonation.js.
+// The tuner folds against the user's reference directly (nearest(hz, a4),
+// useTuner.js) instead of scaling the frames like the intonation check: it
+// shows the frequency it measured (lib/referencePitch.js).
 
 import { A4_HZ } from './intonation.js'
 import { CLARITY_THRESHOLD } from './pitchDetect.js'

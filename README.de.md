@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:d3007324be5d -->
+<!-- translation-of: README.md sha256:91973542c975 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -109,7 +109,8 @@ zeigt beim Singen eine Nadel am Cursor und danach die Stellen, die zu hoch oder
 zu tief, zu früh oder zu spät oder zu kurz waren. Zum Töne-Lernen hält der
 **Warte-Modus** vor jeder Note der eigenen Stimme an, bis sie gesungen wird.
 Das **Stimmgerät** zeigt den gesungenen Ton mit Oktave, Frequenz und
-Abweichung in Cent, geschrieben nach der Tonart an der aktuellen Stelle.
+Abweichung in Cent, geschrieben nach der Tonart an der aktuellen Stelle; sein
+Stimmton a′ (420–460 Hz) stimmt auch Intonation und Wiedergabe.
 Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt zeigt wofür.
 
 Das geht auch in den mobilen Nextcloud-Apps, mit wenigen Einschränkungen: Das

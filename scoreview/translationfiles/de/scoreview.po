@@ -1269,6 +1269,10 @@ msgid "Live intonation"
 msgstr "Live-Intonation"
 
 #: src/components/RecordingPanel.vue
+msgid "Judged against a′ = {hz} Hz, as set in the tuner."
+msgstr "Bewertet gegen a′ = {hz} Hz, wie im Stimmgerät eingestellt."
+
+#: src/components/RecordingPanel.vue
 msgid "Use headphones. From a loudspeaker the accompaniment reaches the microphone, and the notes cannot be evaluated."
 msgstr "Nimm Kopfhörer. Aus dem Lautsprecher gelangt die Begleitung ins Mikrofon, und die Noten lassen sich nicht auswerten."
 
@@ -2073,8 +2077,20 @@ msgid "Start tuner"
 msgstr "Stimmgerät starten"
 
 #: src/components/TunerPanel.vue
+msgid "Lower the reference by 1 Hz"
+msgstr "Referenz um 1 Hz senken"
+
+#: src/components/TunerPanel.vue
 msgid "Reference a′ = {hz} Hz"
 msgstr "Referenz a′ = {hz} Hz"
+
+#: src/components/TunerPanel.vue
+msgid "Raise the reference by 1 Hz"
+msgstr "Referenz um 1 Hz anheben"
+
+#: src/components/TunerPanel.vue
+msgid "Also for intonation and playback."
+msgstr "Gilt auch für Intonation und Wiedergabe."
 
 #: src/components/TunerPanel.vue
 msgid "{hz} Hz"

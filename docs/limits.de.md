@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:7cf35204e849 -->
+<!-- translation-of: limits.md sha256:771ab81d4e4d -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -494,9 +494,16 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   Weiterklingen. Die eigene Stimme ist für den ganzen Modus stumm; wer
   währenddessen ihre Lautstärke im Mixer ändert, bekommt beim Beenden die
   alte zurück. **Mit einer echten Stimme und am Handy noch nicht geprüft.**
-- **Die Referenzstimmung ist fest: a' = 440 Hz.** Ein Chor, der als Ganzes
-  absinkt, wird gegen 440 bewertet, nicht gegen sich selbst. Das Stimmgerät
-  nutzt dieselbe Referenz.
+- **Der Stimmton a' ist eine Einstellung je Nutzer, 420–460 Hz in ganzen
+  Hertz** (Vorgabe 440, einzustellen im Stimmgerät). Er gilt für Stimmgerät,
+  Intonation, Warte-Modus, die Wiedergabe samt Anfangston und den MP3-Export.
+  Gemessen in Chromium: Bei 442 klang die Wiedergabe 7,89 Cent höher als bei
+  440 (erwartet 7,85), und das Stimmgerät zeigte bei beiden dieselbe
+  Abweichung in Cent. Eine Aufnahme behält den Stimmton, gegen den sie
+  gesungen wurde. Barockstimmung mit 415 Hz liegt außerhalb des Bereichs;
+  sie ist ein Halbton tiefer (Transponieren −1) bei 440. Ein Chor, der als
+  Ganzes absinkt, wird weiterhin gegen die Einstellung bewertet, nicht gegen
+  sich selbst.
 - **Das Stimmgerät zeigt eine Stimme.** Es nutzt dieselbe Analyse wie die
   Intonation (Median über 120 ms, höchstens zwölfmal je Sekunde erneuert); ein
   Signal ohne klare Tonhöhe – zwei Stimmen, Atem, ein Akkord – zeigt nichts

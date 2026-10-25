@@ -4,8 +4,9 @@
 	note-name system and the key of the score at the current position - a
 	tuner in F major says B♭, not A♯.
 
-	Reference a' = 440 Hz, fixed (docs/limits.md): adjustable together with
-	the intonation check later, both share the constant (lib/intonation.js).
+	The reference a' is set here because a tuner is where musicians look for
+	it - but it is one value for everything that hears or plays pitch
+	(lib/referencePitch.js): intonation, wait mode and the playback follow it.
 -->
 <template>
 	<div class="scoreview-tuner">
@@ -29,8 +30,27 @@
 				{{ active ? t('Stop') : t('Start tuner') }}
 			</NcButton>
 		</div>
-		<p class="scoreview-tuner-hint">
-			{{ t('Reference a′ = {hz} Hz', { hz: referenceHz }) }}
+		<div class="scoreview-tuner-reference">
+			<NcButton
+				variant="tertiary"
+				:aria-label="t('Lower the reference by 1 Hz')"
+				:disabled="referenceHz <= minHz"
+				@click="change(-1)">
+				−
+			</NcButton>
+			<span class="scoreview-tuner-hint" aria-live="polite">
+				{{ t('Reference a′ = {hz} Hz', { hz: referenceHz }) }}
+			</span>
+			<NcButton
+				variant="tertiary"
+				:aria-label="t('Raise the reference by 1 Hz')"
+				:disabled="referenceHz >= maxHz"
+				@click="change(1)">
+				+
+			</NcButton>
+		</div>
+		<p class="scoreview-tuner-hint scoreview-tuner-hint--small">
+			{{ t('Also for intonation and playback.') }}
 		</p>
 	</div>
 </template>
@@ -41,8 +61,9 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import Microphone from 'vue-material-design-icons/Microphone.vue'
 import MicrophoneOff from 'vue-material-design-icons/MicrophoneOff.vue'
 import TunerNeedle from './TunerNeedle.vue'
-import { A4_HZ, classify, formatCents } from '../lib/intonation.js'
+import { classify, formatCents } from '../lib/intonation.js'
 import { nameOf } from '../lib/noteNames.js'
+import { normalizeReferencePitch, REFERENCE_PITCH_MAX, REFERENCE_PITCH_MIN } from '../lib/referencePitch.js'
 import { octaveOf, tpcForPitch } from '../lib/tuner.js'
 
 export default {
@@ -89,14 +110,21 @@ export default {
 			type: Number,
 			default: 0,
 		},
+
+		// a' in Hz (v-model:referenceHz), lib/referencePitch.js
+		referenceHz: {
+			type: Number,
+			default: 440,
+		},
 	},
 
-	emits: ['toggle'],
+	emits: ['toggle', 'update:referenceHz'],
+
+	data() {
+		return { minHz: REFERENCE_PITCH_MIN, maxHz: REFERENCE_PITCH_MAX }
+	},
 
 	computed: {
-		referenceHz() {
-			return A4_HZ
-		},
 
 		noteName() {
 			if (!this.reading) {
@@ -136,6 +164,10 @@ export default {
 	},
 
 	methods: {
+		change(delta) {
+			this.$emit('update:referenceHz', normalizeReferencePitch(this.referenceHz + delta))
+		},
+
 		t(text, vars) {
 			return translate('scoreview', text, vars)
 		},
@@ -172,6 +204,17 @@ export default {
 .scoreview-tuner-hint {
 	color: var(--color-text-maxcontrast);
 	margin: 0;
+}
+
+.scoreview-tuner-reference {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-variant-numeric: tabular-nums;
+}
+
+.scoreview-tuner-hint--small {
+	font-size: 0.9em;
 }
 
 .scoreview-tuner-error {

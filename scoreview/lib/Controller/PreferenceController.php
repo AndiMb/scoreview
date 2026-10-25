@@ -72,6 +72,7 @@ class PreferenceController extends Controller {
 		?bool $autoScroll = null,
 		?string $beatCounts = null,
 		?string $doublePage = null,
+		?float $referencePitch = null,
 	): JSONResponse {
 		$userId = $this->userSession->getUser()?->getUID();
 		if ($userId === null) {
@@ -83,7 +84,8 @@ class PreferenceController extends Controller {
 		return new JSONResponse(
 			$this->preferences->set($userId, $highlightColor, $highlightMode)
 			+ $this->preferences->setDisplay($userId, $stereoMyPart, $noteTheme)
-			+ $this->preferences->setViewing($userId, $noteNames, $noteNamesMine, $layout, $bandOffered, $autoScroll, $beatCounts, $doublePage),
+			+ $this->preferences->setViewing($userId, $noteNames, $noteNamesMine, $layout, $bandOffered, $autoScroll, $beatCounts, $doublePage)
+			+ $this->preferences->setReferencePitch($userId, $referencePitch),
 		);
 	}
 }

@@ -220,6 +220,33 @@ class ViewerPreferencesTest extends TestCase {
 		$this->assertSame([], $preferences->setViewing('anna', null, null, null, null));
 	}
 
+	public function testReferencePitchIsClampedToWholeHz(): void {
+		$this->assertSame(442, ViewerPreferences::normalizeReferencePitch('442'));
+		$this->assertSame(443, ViewerPreferences::normalizeReferencePitch(442.6));
+		// Within the synthesizer's ±100 cents, not rejected.
+		$this->assertSame(420, ViewerPreferences::normalizeReferencePitch(415));
+		$this->assertSame(460, ViewerPreferences::normalizeReferencePitch('9999'));
+		$this->assertSame(440, ViewerPreferences::normalizeReferencePitch('a'));
+		$this->assertSame(440, ViewerPreferences::normalizeReferencePitch(''));
+	}
+
+	public function testReferencePitchDefaultsTo440(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnArgument(3);
+		$preferences = new ViewerPreferences($config);
+		$this->assertSame(440, $preferences->get('anna')['referencePitch']);
+		$this->assertSame(440, $preferences->defaults()['referencePitch']);
+	}
+
+	public function testStoresReferencePitchOnlyWhenSent(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->expects($this->once())->method('setUserValue')
+			->with('anna', Application::APP_ID, ViewerPreferences::KEY_REFERENCE_PITCH, '443');
+		$preferences = new ViewerPreferences($config);
+		$this->assertSame(['referencePitch' => 443], $preferences->setReferencePitch('anna', 443.0));
+		$this->assertSame([], $preferences->setReferencePitch('anna', null));
+	}
+
 	public function testReadsSwitchedOffAutoScroll(): void {
 		$config = $this->createMock(IConfig::class);
 		$config->method('getUserValue')->willReturnCallback(

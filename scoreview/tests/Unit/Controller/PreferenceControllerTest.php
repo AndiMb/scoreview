@@ -95,6 +95,15 @@ class PreferenceControllerTest extends TestCase {
 		$this->assertSame('left', $response->getData()['doublePage']);
 	}
 
+	public function testStoresTheReferencePitchClamped(): void {
+		$response = $this->controller('anna')->update('#00ff00', 'notes', referencePitch: 442.0);
+		$this->assertSame(442, $response->getData()['referencePitch']);
+		$this->assertSame('442', $this->gespeichert[ViewerPreferences::KEY_REFERENCE_PITCH]);
+
+		$response = $this->controller('anna')->update('#00ff00', 'notes', referencePitch: 400.0);
+		$this->assertSame(420, $response->getData()['referencePitch']);
+	}
+
 	public function testNormalisiertEinenUnbekanntenDunkelmodus(): void {
 		$antwort = $this->controller('anna')->update('#00ff00', 'notes', false, 'sepia;x');
 

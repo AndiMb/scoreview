@@ -1000,6 +1000,7 @@
 							v-model:accompanimentVolume="accompanimentVolume"
 							:recordingEnabled="recordingEnabled"
 							:intonationEnabled="intonationEnabled"
+							:referenceHz="referencePitch"
 							:hasRealPlayer="hasRealPlayer"
 							:recordings="recordings"
 							:phase="recordPhase"
@@ -1043,6 +1044,8 @@
 							:micError="micError"
 							:nameSystem="tunerNameSystem"
 							:concertKey="tunerKey"
+							:referenceHz="referencePitch"
+							@update:referenceHz="referencePitch = $event"
 							@toggle="toggleTuner" />
 					</ScorePanel>
 					<!--
@@ -1421,6 +1424,9 @@ export default {
 		const preferences = useViewerPreferences()
 		const autoScroll = useAutoScroll({ scrollEl: scrollElement, enabled: () => preferences.autoScroll.value })
 		const playback = usePlayback({ clock, durationMs, defaultTempoBpm: DEFAULT_TEMPO_BPM })
+		// The playback sounds at the reference the tuner and intonation hear
+		// against (lib/referencePitch.js).
+		watch(preferences.referencePitch, (a4) => playback.setReferencePitch(a4), { immediate: true })
 		// The meter per measure comes from the score facts, which need the
 		// MIDI and are built further down - the lookup is handed in later.
 		let meterAt = () => null
@@ -1739,7 +1745,7 @@ export default {
 		const microphone = useMicrophone({ audioContext: playback.getAudioContext, holdAudio: playback.holdAudio })
 		// The tuner (B3) on the same chain - it needs no score, only the
 		// microphone; the key of the score only spells its note.
-		const tuner = useTuner({ microphone })
+		const tuner = useTuner({ microphone, referenceHz: () => preferences.referencePitch.value })
 		const myChannels = () => channelsOfPart(playback.mixerChannels.value, myPart.myPartId.value)
 		const clockPlaying = () => clock.value?.isPlaying() ?? false
 
@@ -1767,6 +1773,7 @@ export default {
 			setAccompanimentGain: playback.setAccompanimentGain,
 			maxPerScore: () => features.maxRecordingsPerScore,
 			maxSeconds: () => features.maxRecordingSeconds,
+			referenceHz: () => preferences.referencePitch.value,
 		})
 
 		// Ob sich die Notenzeilen ueberhaupt Stimmen zuordnen lassen -
@@ -1817,6 +1824,7 @@ export default {
 			mix: playback.currentMix,
 			base: () => ({
 				transpose: effectiveTranspose.value,
+				referencePitch: playback.referencePitch.value,
 				rate: playback.tempo.value,
 				measures: measuresTimeline.value,
 				meters: scoreFacts.meters.value,
@@ -1853,6 +1861,7 @@ export default {
 			myStaff: () => intonationStaff.value,
 			measureOf: (ms) => resolveMeasurePosition(measuresTimeline.value, ms, durationMs.value)?.measureNumber ?? null,
 			loadAudio: recorder.loadAudio,
+			referenceHz: () => preferences.referencePitch.value,
 		})
 
 		// Wait mode (C2). My part is silent for the whole mode; its level stays
@@ -2095,6 +2104,7 @@ export default {
 			layout: preferences.layout,
 			bandOffered: preferences.bandOffered,
 			autoScroll: preferences.autoScroll,
+			referencePitch: preferences.referencePitch,
 			cursorForced: session.cursorForced,
 			pagesCursorOutOfView: autoScroll.cursorOutOfView,
 			sessionTranspose,

@@ -13,6 +13,7 @@ import {
 	toDisplayTimeMs,
 } from '../lib/playbackTime.js'
 import { createPlayer } from '../lib/player.js'
+import { normalizeReferencePitch } from '../lib/referencePitch.js'
 import { createSilentClock } from '../lib/silentClock.js'
 import { createSoundFontCache } from '../lib/soundFontCache.js'
 
@@ -96,6 +97,8 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	// Transposition des Klangs in Halbtoenen (H6); gilt ueber Stueckwechsel
 	// hinweg, bis usePracticeSettings den Wert der neuen Partitur setzt.
 	const transpose = ref(0)
+	// a' the synthesizer plays at - set from the user's setting (ScoreViewer.vue).
+	const referencePitch = ref(440)
 	// Was zuletzt an den Player ging - der Uebe-Track (H1) rendert genau
 	// diese Mischung, gleich, ob sie aus dem Mixer, „Meine Stimme" oder dem
 	// Coach stammt. Eine Quelle statt einer zweiten Mischlogik.
@@ -274,6 +277,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 			applied.pans.clear()
 			applied.programs.clear()
 			player.setTranspose(transpose.value)
+			player.setReferencePitch(referencePitch.value)
 			hasRealPlayer.value = true
 			durationMs.value = player.durationMs
 			presetList.value = player.getPresetList() ?? []
@@ -434,6 +438,14 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	function setTranspose(semitones) {
 		transpose.value = Math.max(-12, Math.min(12, Math.trunc(Number(semitones) || 0)))
 		clock.value?.setTranspose?.(transpose.value)
+	}
+
+	/**
+	 * @param {number} a4 Hz, see lib/referencePitch.js
+	 */
+	function setReferencePitch(a4) {
+		referencePitch.value = normalizeReferencePitch(a4)
+		clock.value?.setReferencePitch?.(referencePitch.value)
 	}
 
 	/**
@@ -723,6 +735,8 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		setTempoFactor,
 		transpose,
 		setTranspose,
+		referencePitch,
+		setReferencePitch,
 		getSoundFont,
 		currentMix,
 		setAccompanimentGain,

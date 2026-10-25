@@ -487,9 +487,15 @@ re-measured on real devices and with real input latency.
   continuation. Your own part is silent for the whole mode; a change to its
   volume in the mixer meanwhile is undone when the mode ends. **Not yet
   checked with a real voice, nor on a phone.**
-- **The reference pitch is fixed: a' = 440 Hz.** A choir that sinks as a whole
-  is judged against 440, not against itself. The tuner uses the same
-  reference.
+- **The reference pitch a' is one setting per user, 420–460 Hz in whole Hz**
+  (default 440, set in the tuner). It applies to the tuner, intonation, wait
+  mode, the playback with its start tone, and the MP3 export. Measured in
+  Chromium: at 442 the playback sounded 7.89 cents higher than at 440
+  (expected 7.85), and the tuner read the same deviation in cents at both. A
+  recording keeps the reference it was sung against. Baroque pitch at 415 Hz
+  lies outside the range; it is a semitone down (Transpose −1) at 440. A
+  choir that sinks as a whole is still judged against the setting, not
+  against itself.
 - **The tuner shows one voice.** It uses the same analysis as intonation
   (median over 120 ms, refreshed at most 12 times per second); a signal
   without a clear pitch – two voices, breath, a chord – shows nothing rather

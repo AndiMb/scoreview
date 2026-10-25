@@ -769,7 +769,10 @@ Begleitung und Aufnahme laufen damit auf derselben Uhr. Der Restfehler steht in
 **Intonation** rechnet YIN (`pitchDetect.js`) in einem Web Worker, live und
 danach aus der gespeicherten WAV – gespeichert wird nichts zusätzlich, eine
 Verbesserung am Verfahren wirkt auch auf alte Aufnahmen. Bewertet wird der
-Median nach dem Einschwingen (100 ms), gegen a' = 440 Hz, Oktaven gefaltet;
+Median nach dem Einschwingen (100 ms), gegen den eingestellten Stimmton a'
+(`referencePitch.js`: die gehörten Frequenzen werden beim Eintreffen auf 440
+umgerechnet, die Vergleiche selbst kennen nur 440; eine Aufnahme rechnet mit
+ihrem gespeicherten `referenceHz`), Oktaven gefaltet;
 ein Signal ohne klare Tonhöhe ist „nicht auswertbar“ statt geschätzt.
 Notenköpfe färben sich nur, wo das SVG `st-`/`vc-` trägt
 ([M10](#m10-die-engine-schreibt-segment-notenzeile-und-stimme-ins-svg)) und

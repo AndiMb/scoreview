@@ -1,6 +1,7 @@
 import { translate } from '@nextcloud/l10n'
 import { getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
 import { createGeneration } from '../lib/generation.js'
+import { A4_HZ } from '../lib/intonation.js'
 import { nearest, smooth } from '../lib/tuner.js'
 
 /**
@@ -36,9 +37,10 @@ const t = (text) => translate('scoreview', text)
  *
  * @param {object} deps
  * @param {object} deps.microphone useMicrophone()
+ * @param {() => number} [deps.referenceHz] a' (lib/referencePitch.js)
  * @return {object}
  */
-export function useTuner({ microphone }) {
+export function useTuner({ microphone, referenceHz = () => A4_HZ }) {
 	const active = ref(false)
 	/** {midi, cents, hz} or null for silence and unclear signal (two voices, breath). */
 	const reading = shallowRef(null)
@@ -177,7 +179,7 @@ export function useTuner({ microphone }) {
 		if (now - shownAt < SHOW_MIN_INTERVAL_MS) {
 			return
 		}
-		const near = nearest(hz)
+		const near = nearest(hz, referenceHz())
 		if (!near) {
 			return
 		}

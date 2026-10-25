@@ -29,6 +29,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setScoreStartMs(int $scoreStartMs)
  * @method float getTempoFactor()
  * @method void setTempoFactor(float $tempoFactor)
+ * @method int getReferenceHz()
+ * @method void setReferenceHz(int $referenceHz)
  * @method ?bool getWithAccompaniment()
  * @method void setWithAccompaniment(?bool $withAccompaniment)
  */
@@ -41,6 +43,7 @@ class Recording extends Entity {
 	protected $scoreStartMs = 0;
 	protected $tempoFactor = 1.0;
 	protected $withAccompaniment = false;
+	protected $referenceHz = 440;
 
 	public function __construct() {
 		$this->addType('fileId', 'integer');
@@ -50,5 +53,6 @@ class Recording extends Entity {
 		$this->addType('scoreStartMs', 'integer');
 		$this->addType('tempoFactor', 'float');
 		$this->addType('withAccompaniment', 'boolean');
+		$this->addType('referenceHz', 'integer');
 	}
 }

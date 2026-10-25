@@ -54,6 +54,9 @@ async function render({ midi, soundFont, plan, tags, kbps = 128 }) {
 	// Die globale Transposition: uebersteht Suchlaeufe, laesst Schlagzeug aus
 	// (gemessen fuer den Player, P2.1 - derselbe Kern).
 	synth.setSystemParameter('keyShift', plan.transpose)
+	// At the reference the viewer plays at (lib/referencePitch.js); a plan
+	// without it (none should exist) stays at 440.
+	synth.setSystemParameter('fineTune', plan.fineTune ?? 0)
 
 	const seq = new SpessaSynthSequencer(synth)
 	seq.loadNewSongList([BasicMIDI.fromArrayBuffer(midi, 'score.mid')])

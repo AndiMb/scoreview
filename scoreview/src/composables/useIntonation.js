@@ -12,6 +12,7 @@ import {
 	worstClass,
 } from '../lib/intonation.js'
 import { captureToScoreMs, recordingToScoreMs } from '../lib/recordingAlign.js'
+import { framesAt440 } from '../lib/referencePitch.js'
 import { evaluateRhythm, medianOnsetMs } from '../lib/rhythm.js'
 import { decodeWav } from '../lib/wavCodec.js'
 
@@ -62,6 +63,7 @@ const t = (text, vars) => translate('scoreview', text, vars)
  * @param deps.myStaff
  * @param deps.measureOf
  * @param deps.loadAudio
+ * @param {() => number} [deps.referenceHz] a' for live frames; a recording brings its own
  * @return {object}
  */
 export function useIntonation({
@@ -77,6 +79,7 @@ export function useIntonation({
 	myStaff,
 	measureOf,
 	loadAudio,
+	referenceHz = () => 440,
 }) {
 	const live = ref(false)
 	/** {cents: ?number, cls: string} oder null */
@@ -272,10 +275,12 @@ export function useIntonation({
 		}
 	}
 
-	function onLiveFrames(frames) {
-		if (!live.value || !liveContext || frames.length === 0) {
+	function onLiveFrames(heard) {
+		if (!live.value || !liveContext || heard.length === 0) {
 			return
 		}
+		// Here, before the listeners: wait mode compares the same frames.
+		const frames = framesAt440(heard, referenceHz())
 		frameListeners.forEach((cb) => cb(frames))
 		const frame = frames[frames.length - 1]
 		const scoreMs = isPlaying()
@@ -334,7 +339,7 @@ export function useIntonation({
 	/**
 	 * Eine Aufnahme auswerten.
 	 *
-	 * @param {{id: (number|string), scoreStartMs:number, tempoFactor:number}} recording
+	 * @param {{id: (number|string), scoreStartMs:number, tempoFactor:number, referenceHz?:number}} recording
 	 */
 	async function analyze(recording) {
 		error.value = ''
@@ -368,7 +373,9 @@ export function useIntonation({
 				return
 			}
 			const { frames, level } = result
-			const imPartitur = frames.map((f) => ({ scoreMs: recordingToScoreMs(recording, f.timeSec), hz: f.hz, clarity: f.clarity }))
+			// Against the reference it was sung at, not today's setting
+			// (lib/referencePitch.js); without one it is from before, at 440.
+			const imPartitur = framesAt440(frames.map((f) => ({ scoreMs: recordingToScoreMs(recording, f.timeSec), hz: f.hz, clarity: f.clarity })), recording.referenceHz)
 			const tempo = recording.tempoFactor || 1
 			const evaluations = evaluateRecording(imPartitur, notes(), myChannels(), { tempoFactor: tempo })
 			// Same frames, no second pass through the worker: rhythm is read

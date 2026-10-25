@@ -183,6 +183,11 @@
 				</template>
 				{{ live ? t('Stop live intonation') : t('Live intonation') }}
 			</NcButton>
+			<!-- Only when it is not the usual 440: otherwise a choir wonders why
+				everything is 8 cents off, and the setting sits in the tuner. -->
+			<p v-if="referenceHz !== 440" class="scoreview-practice-hint">
+				{{ t('Judged against a′ = {hz} Hz, as set in the tuner.', { hz: referenceHz }) }}
+			</p>
 			<!-- Lautsprecher statt Kopfhoerer macht das Signal
 				mehrstimmig - dann kommt „nicht auswertbar", und hier steht, warum. -->
 			<p v-if="live" class="scoreview-practice-hint">
@@ -324,6 +329,8 @@ export default {
 	props: {
 		recordingEnabled: { type: Boolean, default: false },
 		intonationEnabled: { type: Boolean, default: false },
+		// a' for live intonation and new recordings (lib/referencePitch.js)
+		referenceHz: { type: Number, default: 440 },
 		hasRealPlayer: { type: Boolean, default: false },
 		recordings: { type: Array, default: () => [] },
 		phase: { type: String, default: 'idle' },

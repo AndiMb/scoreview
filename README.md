@@ -106,7 +106,8 @@ that were too sharp or too flat, came in early or late, or were cut short.
 To learn the notes, **wait mode** stops before each of your notes until you
 sing it. The **tuner** shows the note you are singing
 with its octave, frequency and deviation in cents, spelled for the key at the
-current position. The microphone only runs when explicitly requested, and a
+current position; its reference a′ (420–460 Hz) also tunes intonation and
+playback. The microphone only runs when explicitly requested, and a
 red dot shows what for.
 
 This also works in the Nextcloud mobile apps, with a few limitations: the

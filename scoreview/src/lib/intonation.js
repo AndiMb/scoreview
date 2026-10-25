@@ -14,12 +14,13 @@
 // die Sollnote; eine Oktavverwechslung durch mehrstimmiges Signal faengt
 // schon die Sicherheit (`clarity`) in pitchDetect.js ab.
 //
-// **Referenz a' = 440 Hz fest.** Gegen eine abgesunkene
-// Chorstimmung zu bewerten waere eine spaetere Erweiterung.
+// **Compared against a' = 440 only.** The adjustable reference is applied
+// before, to the frames themselves (lib/referencePitch.js). Judging against
+// a choir that has sunk as a whole would be a later extension.
 
 import { CLARITY_THRESHOLD } from './pitchDetect.js'
 
-/** Reference pitch of a' - shared with the tuner (lib/tuner.js): one place to make it adjustable later. */
+/** a' the comparisons work in; the user's reference is lib/referencePitch.js. */
 export const A4_HZ = 440
 
 export const DEFAULT_THRESHOLDS = { green: 25, yellow: 50 }
