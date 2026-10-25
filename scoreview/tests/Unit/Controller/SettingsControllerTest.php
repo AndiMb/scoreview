@@ -215,6 +215,29 @@ class SettingsControllerTest extends TestCase {
 		$this->assertArrayNotHasKey('sidecar_url', $this->strings);
 	}
 
+	public function testDerRendererDesSidecarsWirdNormalisiertGespeichert(): void {
+		$this->controller()->update(sidecarRenderer: 'musescore');
+		$this->assertSame(ConversionBackend::RENDERER_MUSESCORE, $this->strings[ConversionBackend::SIDECAR_RENDERER_KEY]);
+
+		// An unknown value is the default, never a third state.
+		$this->controller()->update(sidecarRenderer: 'lilypond');
+		$this->assertSame(ConversionBackend::RENDERER_ENGINE, $this->strings[ConversionBackend::SIDECAR_RENDERER_KEY]);
+
+		$this->strings = [];
+		$this->controller()->update(followPollMs: 800);
+		$this->assertArrayNotHasKey(ConversionBackend::SIDECAR_RENDERER_KEY, $this->strings);
+	}
+
+	public function testDelegierteAdminDarfDenRendererWaehlen(): void {
+		// It starts nothing and calls no address - not a privileged field.
+		$this->vollerAdmin = false;
+
+		$antwort = $this->controller()->update(sidecarRenderer: 'musescore');
+
+		$this->assertSame(200, $antwort->getStatus());
+		$this->assertSame(ConversionBackend::RENDERER_MUSESCORE, $this->strings[ConversionBackend::SIDECAR_RENDERER_KEY]);
+	}
+
 	public function testOhneFelderBleibenSofortkonvertierungUndSoundFontAdresse(): void {
 		// Ein POST ohne die Felder setzte frueher "aus" bzw. leer.
 		$this->bools['eager_conversion'] = true;

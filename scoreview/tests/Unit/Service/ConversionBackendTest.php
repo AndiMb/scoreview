@@ -48,4 +48,28 @@ class ConversionBackendTest extends TestCase {
 		$this->assertSame(ConversionBackend::SIDECAR, ConversionBackend::normalize('sidecar'));
 		$this->assertSame(ConversionBackend::LOCAL, ConversionBackend::normalize('local'));
 	}
+
+	/** @param array<string, string> $werte */
+	private function backendMit(array $werte): ConversionBackend {
+		$appConfig = $this->createMock(IAppConfig::class);
+		$appConfig->method('getValueString')
+			->willReturnCallback(static fn (string $app, string $key, string $default = '') => $werte[$key] ?? $default);
+		return new ConversionBackend($appConfig);
+	}
+
+	public function testDerSidecarRendertOhneEinstellungMitDerEngine(): void {
+		// Existing sidecar installations keep MuseScore through the
+		// migration, not through this default.
+		$this->assertSame(ConversionBackend::RENDERER_ENGINE, $this->backendOhneEinstellung()->sidecarRenderer());
+		$this->assertSame(ConversionBackend::RENDERER_MUSESCORE, $this->backendMit(['sidecar_renderer' => 'musescore'])->sidecarRenderer());
+		$this->assertSame(ConversionBackend::RENDERER_ENGINE, ConversionBackend::normalizeRenderer('MuseScore'));
+		$this->assertSame(ConversionBackend::RENDERER_ENGINE, ConversionBackend::normalizeRenderer(''));
+	}
+
+	public function testVariantenGibtEsUeberallDortWoDieEngineKonvertiert(): void {
+		$this->assertTrue($this->backendMit(['conversion_backend' => 'local', 'sidecar_renderer' => 'musescore'])->supportsVariants());
+		$this->assertTrue($this->backendMit(['conversion_backend' => 'sidecar', 'sidecar_renderer' => 'engine'])->supportsVariants());
+		$this->assertTrue($this->backendMit(['conversion_backend' => 'sidecar'])->supportsVariants());
+		$this->assertFalse($this->backendMit(['conversion_backend' => 'sidecar', 'sidecar_renderer' => 'musescore'])->supportsVariants());
+	}
 }

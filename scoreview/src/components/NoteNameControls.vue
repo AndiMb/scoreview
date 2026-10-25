@@ -38,7 +38,7 @@
 			<!--
 				Beat numbers (B1): "1 + 2 +" over the notes, from the engine's
 				time signature per measure (E12). Unavailable where the pages
-				were set without it - the sidecar path, an older conversion.
+				were set without it - MuseScore on the sidecar, an older conversion.
 			-->
 			<fieldset class="scoreview-popover-group">
 				<legend>{{ t('Beat numbers') }}</legend>

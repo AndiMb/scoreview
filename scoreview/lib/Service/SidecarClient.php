@@ -8,11 +8,12 @@ use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ServerException;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Db\ScoreVariant;
 use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;
 
 /**
- * Dünner Wrapper um die Sidecar-HTTP-API (sidecar/server.py). Kein Parsen
+ * Dünner Wrapper um die Sidecar-HTTP-API (sidecar/scoreview_sidecar/app.py). Kein Parsen
  * von Timing-Daten hier - der Sidecar liefert timing.json bereits fertig
  * geparst, diese Klasse cached/proxy't nur Bytes.
  */
@@ -49,10 +50,14 @@ class SidecarClient {
 	 * Worker mit üblichem `memory_limit` vorher - und zwar als unspezifischer
 	 * Fatal Error, nicht als Konvertierungsfehler mit Code.
 	 *
+	 * `$renderer` is what the sidecar converts with (ConversionBackend::
+	 * sidecarRenderer()); an image from before the choice ignores the field
+	 * and converts with MuseScore.
+	 *
 	 * @param resource $mscz Lesender Stream auf die .mscz (z.B. Node::fopen('rb'))
 	 * @throws SidecarException
 	 */
-	public function submitConversion($mscz, string $filename): string {
+	public function submitConversion($mscz, string $filename, string $renderer = ConversionBackend::RENDERER_ENGINE): string {
 		if (!$this->isConfigured()) {
 			throw new SidecarException('Sidecar is not configured (Settings → ScoreView).', errorCode: ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
@@ -65,6 +70,10 @@ class SidecarClient {
 						'name' => 'file',
 						'contents' => $mscz,
 						'filename' => $filename,
+					],
+					[
+						'name' => 'renderer',
+						'contents' => $renderer,
 					],
 				],
 			]);
@@ -163,9 +172,14 @@ class SidecarClient {
 	 * Negativfall HTTP 200 mit `ok: false` - ein 5xx waere von "Sidecar
 	 * nicht erreichbar" nicht zu unterscheiden.
 	 *
-	 * @return array{ok: bool, error?: string, details?: array}
+	 * With the engine renderer it is the converter's own self-test, the one
+	 * the local path runs. An image from before the renderer choice ignores
+	 * the parameter and tests MuseScore; its answer names no renderer, and
+	 * that is reported as what it is - an image too old for the setting.
+	 *
+	 * @return array{ok: bool, error?: string, details?: array, renderer?: string}
 	 */
-	public function runSelfTest(): array {
+	public function runSelfTest(string $renderer = ConversionBackend::RENDERER_ENGINE): array {
 		if (!$this->isConfigured()) {
 			return ['ok' => false, 'error' => 'Sidecar is not configured (Settings → ScoreView).'];
 		}
@@ -173,7 +187,7 @@ class SidecarClient {
 			// Grosszuegiger Timeout: der Selbsttest laesst eine echte
 			// MuseScore-Konvertierung laufen (gemessen ~6s fuer die
 			// einseitige Testpartitur).
-			$response = $this->clientService->newClient()->get($this->getBaseUrl() . '/selftest', [
+			$response = $this->clientService->newClient()->get($this->getBaseUrl() . '/selftest?renderer=' . rawurlencode($renderer), [
 				'headers' => $this->headers(),
 				'timeout' => 120,
 			]);
@@ -184,7 +198,78 @@ class SidecarClient {
 		if (!is_array($body) || !isset($body['ok'])) {
 			return ['ok' => false, 'error' => 'Sidecar response to /selftest without an ok field (sidecar too old?).'];
 		}
+		$ran = $body['renderer'] ?? ConversionBackend::RENDERER_MUSESCORE;
+		if ($ran !== $renderer) {
+			return [
+				'ok' => false,
+				'renderer' => $ran,
+				'error' => sprintf('The sidecar image cannot convert with "%s" - it predates that choice. Rebuild the image (sidecar/README.md).', $renderer),
+			];
+		}
 		return $body;
+	}
+
+	/**
+	 * A display variant (E19), engraved by the sidecar's engine within this
+	 * call - the app asks inside the browser request that wants it
+	 * (BackgroundJob\ConvertScoreJob::convertVariant()). The base's timing
+	 * and measures go along: the converter checks the variant against them,
+	 * as on the local path.
+	 *
+	 * @param resource $mscz
+	 * @return array{pages: string[], timing: string, measures: string, meta: string, engine: string}
+	 * @throws SidecarException
+	 */
+	public function convertVariant($mscz, string $filename, string $key, string $timingJson, string $measuresJson): array {
+		if (!$this->isConfigured()) {
+			throw new SidecarException('Sidecar is not configured (Settings → ScoreView).', errorCode: ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+		}
+		try {
+			$response = $this->clientService->newClient()->post($this->getBaseUrl() . '/variant', [
+				'headers' => $this->headers(),
+				// A run measures 3-4 s; the sidecar waits up to 20 s for a
+				// free slot before it says it is busy.
+				'timeout' => 120,
+				'multipart' => [
+					['name' => 'file', 'contents' => $mscz, 'filename' => $filename],
+					['name' => 'timing', 'contents' => $timingJson, 'filename' => 'timing.json'],
+					['name' => 'measures', 'contents' => $measuresJson, 'filename' => 'measures.json'],
+					['name' => 'key', 'contents' => $key],
+				],
+			]);
+		} catch (ClientException $e) {
+			// 404: the route is missing - an image from before the engine
+			// renderer. Not the score's fault and not an outage.
+			if ($e->getResponse()->getStatusCode() === 404) {
+				throw new SidecarException('The sidecar image engraves no display variants yet - rebuild it (sidecar/README.md).', 0, $e, ScoreVariant::ERROR_UNSUPPORTED);
+			}
+			throw new SidecarException('Sidecar variant request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
+		} catch (ServerException $e) {
+			if ($e->getResponse()->getStatusCode() === 503) {
+				throw new SidecarException('Sidecar busy: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_BUSY);
+			}
+			throw new SidecarException('Sidecar variant request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+		} catch (\Exception $e) {
+			throw new SidecarException('Sidecar variant request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+		}
+		$body = json_decode((string)$response->getBody(), true);
+		if (!is_array($body) || !isset($body['status'])) {
+			throw new SidecarException('Sidecar response to /variant without status.');
+		}
+		if ($body['status'] !== ScoreConversion::STATUS_READY) {
+			throw new SidecarException('Variant failed in the sidecar: ' . (string)($body['error'] ?? 'unknown error'), errorCode: ScoreConversion::ERROR_CONVERSION_FAILED);
+		}
+		$files = $body['files'] ?? null;
+		if (!is_array($files) || !is_array($files['pages'] ?? null) || $files['pages'] === []) {
+			throw new SidecarException('The sidecar returned no page for the variant.', errorCode: ScoreConversion::ERROR_NO_PAGES);
+		}
+		return [
+			'pages' => array_map(fn ($url) => $this->fetchFile((string)$url), array_values($files['pages'])),
+			'timing' => $this->fetchFile((string)($files['timingJson'] ?? '')),
+			'measures' => $this->fetchFile((string)($files['measuresJson'] ?? '')),
+			'meta' => $this->fetchFile((string)($files['metaJson'] ?? '')),
+			'engine' => (string)($body['engine'] ?? 'unknown'),
+		];
 	}
 
 	/**

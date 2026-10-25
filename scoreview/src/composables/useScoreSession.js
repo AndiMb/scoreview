@@ -203,7 +203,7 @@ export function useScoreSession() {
 			canWriteFolder.value = mayWrite === true
 			totalMeasures.value = metaRes.data.measures ?? measuresTimeline.value.events.length
 			hooks.loadAnnotations()
-			// Die Studierbuchstaben kommen auf dem Sidecar-Weg nur aus dem MIDI
+			// Die Studierbuchstaben kommen mit MuseScore auf dem Sidecar nur aus dem MIDI
 			// - und das laedt sonst nur, wer Ton hat (useScoreFacts).
 			hooks.ensureMidi(files.midi)
 			midiUrl.value = files.midi

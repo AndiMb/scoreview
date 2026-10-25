@@ -188,6 +188,10 @@ export function useScoreVariant(deps) {
 			client_too_large: t('This score is too large to be set in this browser.'),
 			client_engine_unavailable: t('The engraving engine could not be started in this browser.'),
 			base_not_ready: t('The score changed in the meantime. Please open it again.'),
+			// The sidecar engraves variants too (E19); these two are about the
+			// service, not the score, and the server tries again after a minute.
+			sidecar_busy: t('The conversion service is busy. Please try again in a moment.'),
+			sidecar_unreachable: t('The conversion service could not be reached.'),
 		}
 		return texts[errorCode.value] ?? t('This part or page format could not be engraved. The score is shown as the file has it.')
 	})

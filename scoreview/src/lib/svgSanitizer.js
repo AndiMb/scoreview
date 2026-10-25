@@ -140,7 +140,7 @@ const ALLOWED_ATTR = [
  * mitgezogen (Verlaeufe, `clip-path`, `mask`) - die stehen zwar in keinem der
  * heute ausgelieferten SVGs, kollidieren aber genauso, sobald sie auftauchen.
  *
- * Der Sidecar-Weg vergibt ueberhaupt keine Kennungen (nachgesehen: null `id`,
+ * MuseScore auf dem Sidecar vergibt ueberhaupt keine Kennungen (nachgesehen: null `id`,
  * null `<use>` je Seite) - dort laeuft die Schleife ins Leere.
  *
  * @param {DocumentFragment} fragment

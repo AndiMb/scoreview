@@ -177,7 +177,7 @@ def test_selftest_wartet_nur_begrenzt_auf_einen_platz(client, monkeypatch, tmp_p
     with contextlib.ExitStack() as stack:
         for _ in range(config.MAX_CONCURRENT_CONVERSIONS):
             stack.enter_context(jobs.conversion_slot(timeout=1))
-        antwort = client.get("/selftest", headers=SECRET)
+        antwort = client.get("/selftest?renderer=musescore", headers=SECRET)
 
     # Weiterhin 200 mit ok:false - ein 5xx waere von "nicht erreichbar"
     # nicht zu unterscheiden (siehe README, /selftest).
@@ -199,7 +199,7 @@ def test_selftest_laeuft_auf_einem_konvertierungsplatz(client, monkeypatch, tmp_
 
     monkeypatch.setattr(app_modul, "run_score_media", mscore)
 
-    client.get("/selftest", headers=SECRET)
+    client.get("/selftest?renderer=musescore", headers=SECRET)
 
     erste = config.FIRST_DISPLAY_NUMBER
     assert len(gesehen) == 1

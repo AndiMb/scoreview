@@ -4,7 +4,9 @@ Everything here is read exactly once at import time - a sidecar is
 configured by its container, not at runtime.
 """
 
+import json
 import os
+import re
 from pathlib import Path
 
 APP_SECRET = os.environ.get("SCOREVIEW_SIDECAR_SECRET")
@@ -15,6 +17,27 @@ if not APP_SECRET:
     )
 
 MSCORE_BIN = "/opt/musescore/bin/mscore4portable"
+
+# Two renderers in one image (docs/architecture.md E3): MuseScore itself
+# (the AppImage, `--score-media`) and the scoreview-engine - the same
+# converter the app runs on its local path, under the Node in the image.
+# The engine writes what stock MuseScore cannot: segment ids in the SVG
+# (M10), the score facts and lyric lists in meta.json (E12, E15), and the
+# display variants (E19). MuseScore keeps the original music fonts of old
+# scores and rasterises SVG images. The app names the renderer per job;
+# this default applies to a request without one (an older app, a manual
+# curl).
+RENDERER_ENGINE = "engine"
+RENDERER_MUSESCORE = "musescore"
+RENDERERS = (RENDERER_ENGINE, RENDERER_MUSESCORE)
+DEFAULT_RENDERER = os.environ.get("SCOREVIEW_SIDECAR_RENDERER", RENDERER_ENGINE).strip().lower()
+if DEFAULT_RENDERER not in RENDERERS:
+    raise RuntimeError(
+        f"SCOREVIEW_SIDECAR_RENDERER must be one of {', '.join(RENDERERS)}, not {DEFAULT_RENDERER!r}."
+    )
+
+NODE_BIN = os.environ.get("SCOREVIEW_NODE_BIN", "/usr/local/bin/node")
+CONVERTER_DIR = Path(os.environ.get("SCOREVIEW_CONVERTER_DIR", "/opt/scoreview-converter"))
 
 # Measured on real conversions: ~6s per rendered page plus ~2s startup
 # (linear fit over 1/4/5-page scores, see docs/limits.md). A timeout
@@ -108,6 +131,12 @@ TIMEOUT_SECONDS_NUMERIC = _timeout_as_seconds(TIMEOUT_SECONDS)
 # laeuft sonst kein X-Server, Kollisionen gibt es also nicht.
 FIRST_DISPLAY_NUMBER = 99
 
+# How long POST /variant waits for a free conversion slot. The app engraves
+# a variant inside a browser request (E19), so waiting long only moves the
+# timeout there; past this the sidecar answers 503 and the viewer can ask
+# again.
+VARIANT_SLOT_WAIT_SECONDS = 20
+
 # Wie lange /selftest auf einen freien Konvertierungsplatz wartet. Die
 # PHP-Seite gibt dem ganzen Aufruf 120 s (SidecarClient::runSelfTest), die
 # Konvertierung selbst braucht ~8 s - 60 s Warten lassen dafuer genug Luft.
@@ -171,3 +200,19 @@ def musescore_version() -> str:
     (measured: without xvfb it returns nothing usable).
     """
     return os.environ.get("SCOREVIEW_MUSESCORE_VERSION", "unbekannt")
+
+
+_ENGINE_TAG = re.compile(r"/download/v?([^/]+)/")
+
+
+def engine_version() -> str:
+    """Release tag of the scoreview-engine in the image, e.g.
+    "4.7.5-engine.6" - read from the converter's package.json, the same one
+    place the app reads it from (LocalConverter::engineVersion()). The
+    app stores it with every display variant."""
+    try:
+        manifest = json.loads((CONVERTER_DIR / "package.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "unknown"
+    match = _ENGINE_TAG.search((manifest.get("dependencies") or {}).get("scoreview-engine", ""))
+    return match.group(1) if match else "unknown"

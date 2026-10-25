@@ -11,7 +11,7 @@ import { fromArtifacts, marksNeedMidi, metersFromArtifacts } from '../lib/scoreF
  * die Partiturfakten. Nur mit SoundFont allerdings - ohne Ton (keiner
  * konfiguriert, Laden uebersprungen) laedt niemand das MIDI. Fuer den
  * Anfangston ist das gleichgueltig, er braucht ohnehin Ton; die
- * Studierbuchstaben aber kommen auf dem Sidecar-Weg NUR aus dem MIDI
+ * Studierbuchstaben aber kommen mit MuseScore auf dem Sidecar NUR aus dem MIDI
  * (scoreFacts.js), und die Taktnavigation soll ohne Ton genauso gehen. Dann
  * holt dieses Composable das MIDI selbst - und nur dann (marksNeedMidi): Auf
  * dem lokalen Weg bezahlt niemand dafuer.
@@ -49,7 +49,7 @@ export function useScoreFacts({ midiData, meta, measuresTimeline }) {
 	// The meter per displayed measure, for the metronome and the beat
 	// numbers. Engine facts where they are, else the MIDI's time signatures
 	// - which is loaded whenever the marks need it, and that is exactly the
-	// case without engine facts (sidecar path, differing measure count).
+	// case without engine facts (MuseScore on the sidecar, differing measure count).
 	const meters = computed(() => metersFromArtifacts(meta(), parsed.value, measuresTimeline()))
 
 	// Getrennt von `facts`, damit die Buchstaben das MIDI nur anfassen, wenn

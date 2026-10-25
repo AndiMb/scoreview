@@ -59,7 +59,7 @@ def test_laesst_hoechstens_so_viele_konvertierungen_gleichzeitig_laufen(monkeypa
 
     monkeypatch.setattr(jobs, "run_score_media", blockierendes_mscore)
 
-    ids = [jobs.submit(FakeUpload()) for _ in range(grenze + 3)]
+    ids = [jobs.submit(FakeUpload(), config.RENDERER_MUSESCORE) for _ in range(grenze + 3)]
 
     # Warten, bis die erlaubte Zahl wirklich drin ist.
     frist = time.monotonic() + 5
@@ -100,7 +100,7 @@ def test_ein_fehler_gibt_den_slot_wieder_frei(monkeypatch):
     monkeypatch.setattr(jobs, "run_score_media", kaputtes_mscore)
 
     for _ in range(config.MAX_CONCURRENT_CONVERSIONS + 2):
-        job_id = jobs.submit(FakeUpload())
+        job_id = jobs.submit(FakeUpload(), config.RENDERER_MUSESCORE)
         frist = time.monotonic() + 5
         while time.monotonic() < frist and jobs.JOBS[job_id]["status"] != "error":
             time.sleep(0.01)
@@ -153,15 +153,15 @@ def test_lehnt_ab_wenn_alle_warteplaetze_belegt_sind(monkeypatch):
     plaetze = config.MAX_CONCURRENT_CONVERSIONS
 
     try:
-        laufende = [jobs.submit(FakeUpload()) for _ in range(plaetze)]
+        laufende = [jobs.submit(FakeUpload(), config.RENDERER_MUSESCORE) for _ in range(plaetze)]
         assert _warte_bis(lambda: blockade.laufend() == plaetze)
         # Laufende Auftraege belegen keinen Warteplatz - nur "pending" zaehlt.
-        wartende = [jobs.submit(FakeUpload()) for _ in range(2)]
+        wartende = [jobs.submit(FakeUpload(), config.RENDERER_MUSESCORE) for _ in range(2)]
         assert all(jobs.JOBS[j]["status"] == "pending" for j in wartende)
 
         vorher = set(config.JOBS_DIR.iterdir())
         with pytest.raises(jobs.QueueFull):
-            jobs.submit(FakeUpload())
+            jobs.submit(FakeUpload(), config.RENDERER_MUSESCORE)
         # Abgelehnt heisst: nichts gespeichert, kein Registry-Eintrag.
         assert set(config.JOBS_DIR.iterdir()) == vorher
         assert len(jobs.JOBS) == plaetze + 2
@@ -172,7 +172,7 @@ def test_lehnt_ab_wenn_alle_warteplaetze_belegt_sind(monkeypatch):
     assert _warte_bis(lambda: all(jobs.JOBS[j]["status"] == "error" for j in alle), 10)
     # Wieder Platz: jetzt nimmt er an. Abwarten, bis auch dieser durch ist -
     # sonst lief er nach dem Test mit dem echten run_score_media weiter.
-    nachzuegler = jobs.submit(FakeUpload())
+    nachzuegler = jobs.submit(FakeUpload(), config.RENDERER_MUSESCORE)
     assert _warte_bis(lambda: jobs.JOBS[nachzuegler]["status"] == "error")
 
 
@@ -185,7 +185,7 @@ def test_gleichzeitige_laeufe_bekommen_verschiedene_displays(monkeypatch):
 
     try:
         for _ in range(plaetze):
-            jobs.submit(FakeUpload())
+            jobs.submit(FakeUpload(), config.RENDERER_MUSESCORE)
         assert _warte_bis(lambda: blockade.laufend() == plaetze)
         assert len(set(blockade.displays)) == plaetze
     finally:
@@ -253,7 +253,7 @@ def test_verworfener_auftrag_startet_kein_mscore(monkeypatch, tmp_path):
 def test_verworfen_waehrend_des_laufs_raeumt_selbst_auf(monkeypatch, tmp_path):
     arbeitsverzeichnis = tmp_path / "j"
     arbeitsverzeichnis.mkdir()
-    jobs.JOBS["j"] = {"status": "pending", "createdAt": time.monotonic(), "completedAt": None}
+    jobs.JOBS["j"] = {"status": "pending", "renderer": config.RENDERER_MUSESCORE, "createdAt": time.monotonic(), "completedAt": None}
 
     def mscore_und_reaper(pfad, **_):
         jobs.JOBS.pop("j")

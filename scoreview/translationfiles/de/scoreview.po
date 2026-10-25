@@ -257,8 +257,8 @@ msgid "On this server, without a container (MuseScore as WebAssembly, needs Node
 msgstr "Auf diesem Server, ohne Container (MuseScore als WebAssembly, braucht Node.js) – Voreinstellung"
 
 #: src/components/AdminSettings.vue
-msgid "Sidecar container (MuseScore 4 in its own container)"
-msgstr "Sidecar-Container (MuseScore 4 in einem eigenen Container)"
+msgid "Sidecar container (conversion in its own container)"
+msgstr "Sidecar-Container (Konvertierung in einem eigenen Container)"
 
 #: src/components/AdminSettings.vue
 msgid "Only administrators can change the sidecar connection, the path to node and the SoundFont download URL."
@@ -275,6 +275,22 @@ msgstr "Shared Secret"
 #: src/components/AdminSettings.vue
 msgid "Leave empty to keep the current secret."
 msgstr "Leer lassen, um das bisherige Secret zu behalten."
+
+#: src/components/AdminSettings.vue
+msgid "Convert with"
+msgstr "Konvertieren mit"
+
+#: src/components/AdminSettings.vue
+msgid "scoreview-engine – everything the local path offers: highlighted notes, lyrics view, note names, parts and phone pages – default"
+msgstr "scoreview-engine – alles, was der lokale Weg bietet: hervorgehobene Noten, Liedtextansicht, Tonnamen, Stimmenauszüge und Handyseiten – Voreinstellung"
+
+#: src/components/AdminSettings.vue
+msgid "MuseScore itself – the original music font of old scores and SVG images in the score, without those features"
+msgstr "MuseScore selbst – Originalnotenschrift alter Partituren und SVG-Bilder in der Partitur, ohne diese Funktionen"
+
+#: src/components/AdminSettings.vue
+msgid "The engine needs a sidecar image built with ScoreView 1.24 or later; the self-test below says whether yours has it."
+msgstr "Die Engine braucht ein Sidecar-Image ab ScoreView 1.24; ob deines sie hat, zeigt der Selbsttest unten."
 
 #: src/components/AdminSettings.vue
 msgid "Path to node or deno (optional)"
@@ -471,6 +487,14 @@ msgstr "Node.js {version}"
 #: src/components/AdminSettings.vue
 msgid "on this server, {version}"
 msgstr "auf diesem Server, {version}"
+
+#: src/components/AdminSettings.vue
+msgid "with MuseScore"
+msgstr "mit MuseScore"
+
+#: src/components/AdminSettings.vue
+msgid "with the scoreview-engine"
+msgstr "mit der scoreview-engine"
 
 #: src/components/AdminSettings.vue
 msgid "not configured"
@@ -2184,7 +2208,7 @@ msgstr "Originalgröße"
 msgid "Too many changes in a short time. Please wait a moment and try again."
 msgstr "Zu viele Änderungen in kurzer Zeit. Bitte einen Moment warten und es erneut versuchen."
 
-#: src/composables/useConversionStatus.js
+#: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
 msgid "The conversion service could not be reached."
 msgstr "Der Konvertierungsdienst konnte nicht erreicht werden."
 
@@ -2363,6 +2387,10 @@ msgstr "Die Satz-Engine ließ sich in diesem Browser nicht starten."
 #: src/composables/useScoreVariant.js
 msgid "The score changed in the meantime. Please open it again."
 msgstr "Die Partitur hat sich inzwischen geändert. Bitte erneut öffnen."
+
+#: src/composables/useScoreVariant.js
+msgid "The conversion service is busy. Please try again in a moment."
+msgstr "Der Konvertierungsdienst ist ausgelastet. Bitte gleich noch einmal versuchen."
 
 #: src/composables/useScoreVariant.js
 msgid "This part or page format could not be engraved. The score is shown as the file has it."

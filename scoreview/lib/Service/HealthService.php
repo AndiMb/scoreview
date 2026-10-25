@@ -91,6 +91,7 @@ class HealthService {
 			'reachable' => $health['reachable'],
 			'error' => $health['error'] ?? null,
 			'url' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'),
+			'renderer' => $this->backend->sidecarRenderer(),
 		];
 	}
 

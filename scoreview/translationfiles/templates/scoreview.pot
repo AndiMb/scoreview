@@ -257,7 +257,7 @@ msgid "On this server, without a container (MuseScore as WebAssembly, needs Node
 msgstr ""
 
 #: src/components/AdminSettings.vue
-msgid "Sidecar container (MuseScore 4 in its own container)"
+msgid "Sidecar container (conversion in its own container)"
 msgstr ""
 
 #: src/components/AdminSettings.vue
@@ -274,6 +274,22 @@ msgstr ""
 
 #: src/components/AdminSettings.vue
 msgid "Leave empty to keep the current secret."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Convert with"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "scoreview-engine – everything the local path offers: highlighted notes, lyrics view, note names, parts and phone pages – default"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "MuseScore itself – the original music font of old scores and SVG images in the score, without those features"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "The engine needs a sidecar image built with ScoreView 1.24 or later; the self-test below says whether yours has it."
 msgstr ""
 
 #: src/components/AdminSettings.vue
@@ -470,6 +486,14 @@ msgstr ""
 
 #: src/components/AdminSettings.vue
 msgid "on this server, {version}"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "with MuseScore"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "with the scoreview-engine"
 msgstr ""
 
 #: src/components/AdminSettings.vue
@@ -2184,7 +2208,7 @@ msgstr ""
 msgid "Too many changes in a short time. Please wait a moment and try again."
 msgstr ""
 
-#: src/composables/useConversionStatus.js
+#: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
 msgid "The conversion service could not be reached."
 msgstr ""
 
@@ -2362,6 +2386,10 @@ msgstr ""
 
 #: src/composables/useScoreVariant.js
 msgid "The score changed in the meantime. Please open it again."
+msgstr ""
+
+#: src/composables/useScoreVariant.js
+msgid "The conversion service is busy. Please try again in a moment."
 msgstr ""
 
 #: src/composables/useScoreVariant.js

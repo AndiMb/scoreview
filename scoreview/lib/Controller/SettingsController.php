@@ -100,7 +100,7 @@ class SettingsController extends Controller {
 		$this->clientFallback->forget();
 		$result = $this->backend->isLocal()
 			? $this->localConverter->runSelfTest()
-			: $this->sidecarClient->runSelfTest();
+			: $this->sidecarClient->runSelfTest($this->backend->sidecarRenderer());
 		return new JSONResponse($result + ['backend' => $this->backend->current()]);
 	}
 
@@ -143,6 +143,7 @@ class SettingsController extends Controller {
 		?bool $featureOffline = null,
 		?int $practiceTrackMaxMb = null,
 		?int $pdfMaxMb = null,
+		?string $sidecarRenderer = null,
 	): JSONResponse {
 		// Leer = automatisch suchen (siehe Service\LocalConverter), nicht
 		// "kein node".
@@ -169,6 +170,12 @@ class SettingsController extends Controller {
 		// Konfiguration landet.
 		if ($conversionBackend !== null) {
 			$this->appConfig->setValueString(Application::APP_ID, ConversionBackend::CONFIG_KEY, ConversionBackend::normalize($conversionBackend));
+		}
+		// Not among the privileged fields: it chooses between two renderers
+		// in a container the full admin already set up, it starts nothing
+		// and calls no address of its own.
+		if ($sidecarRenderer !== null) {
+			$this->appConfig->setValueString(Application::APP_ID, ConversionBackend::SIDECAR_RENDERER_KEY, ConversionBackend::normalizeRenderer($sidecarRenderer));
 		}
 		if ($nodePath !== null) {
 			$this->appConfig->setValueString(Application::APP_ID, 'node_path', $nodePath);

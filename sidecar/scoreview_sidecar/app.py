@@ -10,6 +10,7 @@ adding the path to ``PUBLIC_PATHS``.
 """
 
 import hashlib
+import re
 import secrets
 import shutil
 import tempfile
@@ -19,7 +20,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_file
 
-from . import config, jobs
+from . import config, engine, jobs
 from .musescore import check_promises, run_score_media
 
 # The only endpoint without a secret (see sidecar/README.md): it is what
@@ -46,6 +47,36 @@ def soundfont_version() -> str:
                     digest.update(chunk)
             _SOUNDFONT_VERSION = digest.hexdigest()
     return _SOUNDFONT_VERSION
+
+
+# The shape of a variant key (E19, `src~fmt~pitch~tr`), as the app's route
+# allows it. Only the shape: what the key means, convert.mjs checks.
+_VARIANT_KEY = re.compile(r"^[A-Za-z0-9_~\-]{1,64}$")
+
+
+def _renderer(value) -> str:
+    """The renderer a request names, or the configured default when it
+    names none. An unknown name is a 400: converting with something the
+    caller did not ask for would give it artifacts it does not expect."""
+    if value is None or value == "":
+        return config.DEFAULT_RENDERER
+    if value not in config.RENDERERS:
+        abort(400, f"renderer must be one of {', '.join(config.RENDERERS)}")
+    return value
+
+
+def _files_body(job_id: str, job: dict) -> dict:
+    """Relative URLs of a ready job's artifacts. A variant has no MIDI."""
+    files = job["files"]
+    body = {
+        "pages": [f"/convert/{job_id}/artifact/page-{n}" for n in range(1, len(files["pages"]) + 1)],
+        "timingJson": f"/convert/{job_id}/artifact/timing",
+        "measuresJson": f"/convert/{job_id}/artifact/measures",
+        "metaJson": f"/convert/{job_id}/artifact/meta",
+    }
+    if "midi" in files:
+        body["midi"] = f"/convert/{job_id}/artifact/midi"
+    return body
 
 
 def _ready_job(job_id: str) -> dict:
@@ -81,8 +112,11 @@ def create_app(start_reaper: bool = True) -> Flask:
     # einem Teilproblem gar nicht erst hochkommen lassen.
     @app.get("/selftest")
     def selftest():
+        renderer = _renderer(request.args.get("renderer"))
+        if renderer == config.RENDERER_ENGINE:
+            return _engine_selftest()
         if not config.SELFTEST_SCORE.exists():
-            return jsonify({"ok": False, "error": f"self-test score missing: {config.SELFTEST_SCORE}"})
+            return jsonify({"ok": False, "renderer": config.RENDERER_MUSESCORE, "error": f"self-test score missing: {config.SELFTEST_SCORE}"})
 
         workdir = Path(tempfile.mkdtemp(prefix="scoreview-selftest-"))
         try:
@@ -102,6 +136,7 @@ def create_app(start_reaper: bool = True) -> Flask:
             problems, details = check_promises(media)
             return jsonify({
                 "ok": not problems,
+                "renderer": config.RENDERER_MUSESCORE,
                 "error": "; ".join(problems) if problems else None,
                 "details": {
                     "musescoreVersion": config.musescore_version(),
@@ -113,7 +148,22 @@ def create_app(start_reaper: bool = True) -> Flask:
             # Bewusst 200 mit ok:false statt 5xx: ein 5xx waere fuer die
             # PHP-Seite von "Sidecar nicht erreichbar" nicht zu unterscheiden -
             # dieselbe Ueberlegung wie bei /soundfont/info.
-            return jsonify({"ok": False, "error": str(exc)})
+            return jsonify({"ok": False, "renderer": config.RENDERER_MUSESCORE, "error": str(exc)})
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+    def _engine_selftest():
+        """The converter's own self-test (`convert.mjs --selftest`), the one
+        the app runs on its local path: five bundled scores instead of one,
+        and on top of M2/M4/M7 the engine's own promises - segment ids
+        (M10), score facts, lyrics, meters, display variants."""
+        workdir = Path(tempfile.mkdtemp(prefix="scoreview-selftest-"))
+        try:
+            with jobs.conversion_slot(timeout=config.SELFTEST_SLOT_WAIT_SECONDS):
+                result = engine.selftest(workdir)
+            return jsonify({**result, "renderer": config.RENDERER_ENGINE})
+        except Exception as exc:  # noqa: BLE001 - same rule as the MuseScore self-test
+            return jsonify({"ok": False, "renderer": config.RENDERER_ENGINE, "error": str(exc)})
         finally:
             shutil.rmtree(workdir, ignore_errors=True)
 
@@ -141,8 +191,9 @@ def create_app(start_reaper: bool = True) -> Flask:
         uploaded = request.files.get("file")
         if uploaded is None or uploaded.filename == "":
             abort(400, "multipart field 'file' with the .mscz upload is required")
+        renderer = _renderer(request.form.get("renderer"))
         try:
-            job_id = jobs.submit(uploaded)
+            job_id = jobs.submit(uploaded, renderer)
         except jobs.QueueFull as exc:
             # 503 statt 429: die Ablehnung sagt nichts ueber diesen Aufrufer
             # oder diese Partitur, sondern dass der Dienst gerade ausgelastet
@@ -155,7 +206,7 @@ def create_app(start_reaper: bool = True) -> Flask:
             response.status_code = 503
             response.headers["Retry-After"] = str(config.QUEUE_FULL_RETRY_AFTER_SECONDS)
             return response
-        return jsonify({"jobId": job_id}), 202
+        return jsonify({"jobId": job_id, "renderer": renderer}), 202
 
     @app.get("/convert/<job_id>")
     def convert_status(job_id):
@@ -163,17 +214,44 @@ def create_app(start_reaper: bool = True) -> Flask:
         if job is None:
             abort(404)
 
-        body = {"status": job["status"]}
+        # `renderer` says what actually ran, so the app can tell an image
+        # without the engine from one that has it.
+        body = {"status": job["status"], "renderer": job.get("renderer", config.RENDERER_MUSESCORE)}
         if job["status"] == "ready":
-            page_count = len(job["files"]["pages"])
-            body["files"] = {
-                "pages": [f"/convert/{job_id}/artifact/page-{n}" for n in range(1, page_count + 1)],
-                "midi": f"/convert/{job_id}/artifact/midi",
-                "timingJson": f"/convert/{job_id}/artifact/timing",
-                "measuresJson": f"/convert/{job_id}/artifact/measures",
-                "metaJson": f"/convert/{job_id}/artifact/meta",
-            }
+            body["files"] = _files_body(job_id, job)
         elif job["status"] == "error":
+            body["error"] = job.get("error", "unknown error")
+        return jsonify(body)
+
+    @app.post("/variant")
+    def variant():
+        """A display variant (E19), engraved within this request.
+
+        Multipart: `file` (the .mscz), `timing` and `measures` (the base
+        conversion's timing.json and measures.json, which the variant is
+        checked against), and the form field `key`. Answers like
+        GET /convert/<id> for a finished job; the files are fetched over the
+        same artifact route. A score the engine cannot engrave this way is a
+        200 with status "error" - a result, not a failure of the service."""
+        uploaded = request.files.get("file")
+        timing = request.files.get("timing")
+        measures = request.files.get("measures")
+        key = request.form.get("key", "")
+        if uploaded is None or timing is None or measures is None or not _VARIANT_KEY.match(key):
+            abort(400, "multipart fields 'file', 'timing', 'measures' and a variant 'key' are required")
+        try:
+            job_id = jobs.run_variant(uploaded, key, timing, measures)
+        except jobs.NoSlotAvailable as exc:
+            # 503 like a full queue: busy, not broken.
+            response = jsonify({"error": str(exc)})
+            response.status_code = 503
+            response.headers["Retry-After"] = str(config.VARIANT_SLOT_WAIT_SECONDS)
+            return response
+        job = jobs.get(job_id)
+        body = {"status": job["status"], "renderer": config.RENDERER_ENGINE, "engine": config.engine_version()}
+        if job["status"] == "ready":
+            body["files"] = _files_body(job_id, job)
+        else:
             body["error"] = job.get("error", "unknown error")
         return jsonify(body)
 
@@ -203,7 +281,7 @@ def create_app(start_reaper: bool = True) -> Flask:
             return send_file(pages[number - 1], mimetype="image/svg+xml")
 
         entry = ARTIFACTS.get(name)
-        if entry is None:
+        if entry is None or entry[0] not in job["files"]:
             abort(404)
         key, mimetype = entry
         return send_file(job["files"][key], mimetype=mimetype)

@@ -52,6 +52,19 @@ class VariantService {
 	 */
 	public const RETRY_ERROR_AFTER_SECONDS = 3600;
 
+	/**
+	 * Errors that say nothing about the score: a busy or unreachable sidecar,
+	 * or a path that engraved no variants (an image from before the engine
+	 * renderer, MuseScore chosen at the time). The next request may try
+	 * again much sooner - the cause may already be gone.
+	 */
+	private const TRANSIENT_ERRORS = [
+		ScoreConversion::ERROR_SIDECAR_BUSY,
+		ScoreConversion::ERROR_SIDECAR_UNREACHABLE,
+		ScoreVariant::ERROR_UNSUPPORTED,
+	];
+	public const RETRY_TRANSIENT_AFTER_SECONDS = 60;
+
 	/** accessed_at is written at most this often, so reading a variant is not a write each time. */
 	private const TOUCH_EVERY_SECONDS = 3600;
 
@@ -156,7 +169,10 @@ class VariantService {
 
 	public function mayRetry(ScoreVariant $variant): bool {
 		if ($variant->getStatus() === ScoreConversion::STATUS_ERROR) {
-			return $this->age($variant) > self::RETRY_ERROR_AFTER_SECONDS;
+			$wait = in_array($variant->getErrorCode(), self::TRANSIENT_ERRORS, true)
+				? self::RETRY_TRANSIENT_AFTER_SECONDS
+				: self::RETRY_ERROR_AFTER_SECONDS;
+			return $this->age($variant) > $wait;
 		}
 		// Ready in an older format, or a dead run.
 		return !$this->isCurrent($variant) && !$this->isRunning($variant);

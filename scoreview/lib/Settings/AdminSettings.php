@@ -48,6 +48,7 @@ class AdminSettings implements ISettings {
 	public function getForm(): TemplateResponse {
 		$this->initialState->provideInitialState('admin-settings', [
 			'conversionBackend' => $this->backend->current(),
+			'sidecarRenderer' => $this->backend->sidecarRenderer(),
 			// Delegierte Admins sehen diese Seite auch, duerfen aber node-Pfad,
 			// Sidecar (URL, Secret) und SoundFont-Quelle nicht aendern - das
 			// startet Programme bzw. laesst den Server Adressen abrufen (siehe

@@ -6,12 +6,14 @@ namespace OCA\ScoreView\Tests\Unit\BackgroundJob;
 
 use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Db\ScoreVariant;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\LocalConverterException;
 use OCA\ScoreView\Service\SidecarBusyException;
 use OCA\ScoreView\Service\SidecarClient;
+use OCA\ScoreView\Service\SidecarException;
 use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
@@ -40,6 +42,9 @@ class ConvertScoreJobTest extends TestCase {
 	private IAppConfig&MockObject $appConfig;
 	private ITempManager&MockObject $tempManager;
 	private string $backend = ConversionBackend::SIDECAR;
+	private string $renderer = ConversionBackend::RENDERER_ENGINE;
+	private VariantService&MockObject $variantService;
+	private File&MockObject $file;
 	private ?ScoreConversion $gefunden = null;
 
 	protected function setUp(): void {
@@ -50,10 +55,11 @@ class ConvertScoreJobTest extends TestCase {
 		$this->jobList = $this->createMock(IJobList::class);
 		$this->appConfig = $this->createMock(IAppConfig::class);
 		$this->tempManager = $this->createMock(ITempManager::class);
+		$this->variantService = $this->createMock(VariantService::class);
 
 		// Eine Partitur, die es gibt, die klein genug ist und noch nie
 		// konvertiert wurde - alles Weitere entscheidet dann die Wegwahl.
-		$file = $this->createMock(File::class);
+		$file = $this->file = $this->createMock(File::class);
 		$file->method('getEtag')->willReturn('etag1');
 		$file->method('getSize')->willReturn(30_000);
 		$file->method('getName')->willReturn('probe.mscz');
@@ -69,11 +75,13 @@ class ConvertScoreJobTest extends TestCase {
 		);
 	}
 
-	private function jobLaufenLassen(array $zusatz = []): void {
+	private function job(): ConvertScoreJob {
 		$backend = $this->createMock(ConversionBackend::class);
 		$backend->method('isLocal')->willReturn($this->backend === ConversionBackend::LOCAL);
+		$backend->method('sidecarRenderer')->willReturn($this->renderer);
+		$backend->method('supportsVariants')->willReturn($this->backend === ConversionBackend::LOCAL || $this->renderer === ConversionBackend::RENDERER_ENGINE);
 
-		$job = new ConvertScoreJob(
+		return new ConvertScoreJob(
 			$this->createMock(ITimeFactory::class),
 			$this->rootFolder,
 			$this->conversionService,
@@ -84,15 +92,24 @@ class ConvertScoreJobTest extends TestCase {
 			$this->appConfig,
 			$this->tempManager,
 			$this->createMock(LoggerInterface::class),
-			$this->createMock(VariantService::class),
+			$this->variantService,
 		);
+	}
+
+	private function jobLaufenLassen(array $zusatz = []): void {
+		$job = $this->job();
 		$method = new \ReflectionMethod($job, 'run');
 		$method->setAccessible(true);
 		$method->invoke($job, ['userId' => 'andreas', 'fileId' => 42] + $zusatz);
 	}
 
 	public function testReichtDiePartiturBeimSidecarEinUndLaesstPollen(): void {
-		$this->sidecarClient->expects($this->once())->method('submitConversion')->willReturn('job-1');
+		// The renderer goes along with every job: the sidecar does not
+		// decide it, the app's setting does.
+		$this->renderer = ConversionBackend::RENDERER_MUSESCORE;
+		$this->sidecarClient->expects($this->once())->method('submitConversion')
+			->with($this->anything(), 'probe.mscz', ConversionBackend::RENDERER_MUSESCORE)
+			->willReturn('job-1');
 		$this->localConverter->expects($this->never())->method('convert');
 		$this->jobList->expects($this->once())->method('add');
 
@@ -142,7 +159,7 @@ class ConvertScoreJobTest extends TestCase {
 		// Gilt fuer beide Wege gleichermassen - die Grenze sitzt vor der
 		// Wegwahl, damit sie nicht an einem der beiden vorbeigeht.
 		$this->backend = ConversionBackend::LOCAL;
-		$file = $this->createMock(File::class);
+		$file = $this->file = $this->createMock(File::class);
 		$file->method('getEtag')->willReturn('etag1');
 		$file->method('getSize')->willReturn(500 * 1024 * 1024);
 		$folder = $this->createMock(Folder::class);
@@ -239,5 +256,49 @@ class ConvertScoreJobTest extends TestCase {
 		$c->setStatus($status);
 		$c->setFormatVersion(\OCA\ScoreView\Service\ConversionService::CURRENT_FORMAT_VERSION);
 		return $c;
+	}
+
+	private function variante(): ScoreVariant {
+		$variant = new ScoreVariant();
+		$variant->setFileId(42);
+		$variant->setEtag('etag1');
+		$variant->setVariant('part3~phone~w~-2');
+		return $variant;
+	}
+
+	public function testVarianteUeberDenSidecarMitDerEngine(): void {
+		$this->conversionService->method('readArtifact')->willReturnMap([
+			[42, 'etag1', 'timing', '{"t":1}'],
+			[42, 'etag1', 'measures', '{"m":1}'],
+		]);
+		$this->localConverter->expects($this->never())->method('convertVariant');
+		$this->sidecarClient->expects($this->once())->method('convertVariant')
+			->with($this->anything(), 'probe.mscz', 'part3~phone~w~-2', '{"t":1}', '{"m":1}')
+			->willReturn(['pages' => ['<svg/>'], 'timing' => 'T', 'measures' => 'M', 'meta' => '{}', 'engine' => '4.7.5-engine.6']);
+		// The engine version is the sidecar's, not the one bundled with the app.
+		$this->variantService->expects($this->once())->method('markReady')
+			->with($this->anything(), ['<svg/>'], 'T', 'M', '{}', '4.7.5-engine.6');
+
+		$this->job()->convertVariant($this->file, $this->variante());
+	}
+
+	public function testVarianteDesSidecarsScheitertMitSeinemCode(): void {
+		$this->conversionService->method('readArtifact')->willReturn('{}');
+		$this->sidecarClient->method('convertVariant')->willThrowException(
+			new SidecarException('too old', errorCode: ScoreVariant::ERROR_UNSUPPORTED),
+		);
+		$this->variantService->expects($this->once())->method('markError')
+			->with($this->anything(), 'too old', ScoreVariant::ERROR_UNSUPPORTED);
+
+		$this->job()->convertVariant($this->file, $this->variante());
+	}
+
+	public function testMitMuseScoreGibtEsKeineVariante(): void {
+		$this->renderer = ConversionBackend::RENDERER_MUSESCORE;
+		$this->sidecarClient->expects($this->never())->method('convertVariant');
+		$this->variantService->expects($this->once())->method('markError')
+			->with($this->anything(), $this->anything(), ScoreVariant::ERROR_UNSUPPORTED);
+
+		$this->job()->convertVariant($this->file, $this->variante());
 	}
 }

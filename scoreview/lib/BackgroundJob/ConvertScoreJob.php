@@ -107,10 +107,12 @@ class ConvertScoreJob extends QueuedJob {
 	 *
 	 * Synchronous on purpose. The base conversion waits for the next cron
 	 * run, which is minutes with system cron and longer with AJAX cron; for
-	 * a switch to "my part only" that is too long, and a local run takes
-	 * 0.7-2.9 s with a hard time limit. The sidecar engraves no variants -
-	 * its stock MuseScore lacks what a variant needs (ConversionBackend::
-	 * supportsVariants()) - so the row ends with a code that says so.
+	 * a switch to "my part only" that is too long, and a run takes 3-4 s with
+	 * a hard time limit. Both paths engrave with the engine - locally in a
+	 * child process, on the sidecar in one call to it. A sidecar that
+	 * converts with MuseScore itself engraves none - stock MuseScore lacks
+	 * what a variant needs (ConversionBackend::supportsVariants()) - so the
+	 * row ends with a code that says so.
 	 *
 	 * The outcome is written to the row; nothing is thrown.
 	 */
@@ -122,6 +124,11 @@ class ConvertScoreJob extends QueuedJob {
 		$maxBytes = $this->appConfig->getValueInt(Application::APP_ID, 'max_score_bytes', self::DEFAULT_MAX_BYTES);
 		if ($maxBytes > 0 && $node->getSize() > $maxBytes) {
 			$this->variantService->markError($variant, sprintf('File is %d bytes, larger than the limit of %d bytes.', $node->getSize(), $maxBytes), ScoreConversion::ERROR_TOO_LARGE);
+			return;
+		}
+
+		if (!$this->backend->isLocal()) {
+			$this->convertVariantInSidecar($node, $variant);
 			return;
 		}
 
@@ -165,6 +172,45 @@ class ConvertScoreJob extends QueuedJob {
 				@unlink($baseDir . '/measures.json');
 				@rmdir($baseDir);
 			}
+		}
+	}
+
+	/**
+	 * The sidecar half of convertVariant(): the score goes as a stream, the
+	 * base's timing and measures as strings - no temporary files here, the
+	 * sidecar has its own working directory.
+	 */
+	private function convertVariantInSidecar(Node $node, ScoreVariant $variant): void {
+		try {
+			$timing = $this->conversionService->readArtifact($variant->getFileId(), $variant->getEtag(), 'timing');
+			$measures = $this->conversionService->readArtifact($variant->getFileId(), $variant->getEtag(), 'measures');
+			$stream = $node->fopen('rb');
+			if ($stream === false) {
+				throw new SidecarException('Score could not be opened for reading.');
+			}
+			try {
+				$artifacts = $this->sidecarClient->convertVariant($stream, $node->getName(), $variant->getVariant(), $timing, $measures);
+			} finally {
+				if (is_resource($stream)) {
+					fclose($stream);
+				}
+			}
+			$this->variantService->markReady(
+				$variant,
+				$artifacts['pages'],
+				$artifacts['timing'],
+				$artifacts['measures'],
+				$artifacts['meta'],
+				$artifacts['engine'],
+			);
+		} catch (\Throwable $e) {
+			$this->logger->error('ScoreView: variant {variant} failed in the sidecar for fileId={fileId}: {message}', [
+				'variant' => $variant->getVariant(),
+				'fileId' => $variant->getFileId(),
+				'message' => $e->getMessage(),
+				'exception' => $e,
+			]);
+			$this->variantService->markError($variant, $e->getMessage(), $e instanceof ConverterException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
 		}
 	}
 
@@ -249,7 +295,7 @@ class ConvertScoreJob extends QueuedJob {
 			if ($stream === false) {
 				throw new SidecarException('Score could not be opened for reading.');
 			}
-			$jobId = $this->sidecarClient->submitConversion($stream, $node->getName());
+			$jobId = $this->sidecarClient->submitConversion($stream, $node->getName(), $this->backend->sidecarRenderer());
 		} catch (SidecarBusyException $e) {
 			$this->retryWhenBusy($conversion, $userId, $fileId, $busyRetry, $e);
 			return;

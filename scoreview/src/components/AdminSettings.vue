@@ -23,7 +23,7 @@
 					name="conversion-backend"
 					value="sidecar"
 					class="scoreview-field">
-					{{ t('Sidecar container (MuseScore 4 in its own container)') }}
+					{{ t('Sidecar container (conversion in its own container)') }}
 				</NcCheckboxRadioSwitch>
 
 				<!--
@@ -59,6 +59,35 @@
 						:label="t('Shared secret')"
 						:placeholder="secretPlaceholder"
 						:helperText="initial.sidecarSecretSet ? t('Leave empty to keep the current secret.') : ''" />
+
+					<!--
+						Zwei Renderer im selben Image (E3). Die Engine ist die
+						Voreinstellung, weil nur mit ihr alles geht, was der
+						lokale Weg kann; MuseScore bleibt fuer alte Partituren
+						mit ihrer Originalschrift und fuer SVG-Bilder.
+					-->
+					<p class="scoreview-field">
+						{{ t('Convert with') }}
+					</p>
+					<NcCheckboxRadioSwitch
+						v-model="form.sidecarRenderer"
+						type="radio"
+						name="sidecar-renderer"
+						value="engine"
+						class="scoreview-field">
+						{{ t('scoreview-engine – everything the local path offers: highlighted notes, lyrics view, note names, parts and phone pages – default') }}
+					</NcCheckboxRadioSwitch>
+					<NcCheckboxRadioSwitch
+						v-model="form.sidecarRenderer"
+						type="radio"
+						name="sidecar-renderer"
+						value="musescore"
+						class="scoreview-field">
+						{{ t('MuseScore itself – the original music font of old scores and SVG images in the score, without those features') }}
+					</NcCheckboxRadioSwitch>
+					<p class="scoreview-hint scoreview-field">
+						{{ t('The engine needs a sidecar image built with ScoreView 1.24 or later; the self-test below says whether yours has it.') }}
+					</p>
 				</template>
 
 				<NcTextField
@@ -293,6 +322,7 @@ export default {
 			initial,
 			form: {
 				conversionBackend: initial.conversionBackend,
+				sidecarRenderer: initial.sidecarRenderer ?? 'engine',
 				nodePath: initial.nodePath,
 				soundFontFetchUrl: initial.soundFontFetchUrl,
 				sidecarUrl: initial.sidecarUrl,
@@ -502,9 +532,10 @@ export default {
 					detail: h.local.available ? t('on this server, {version}', { version }) : (h.local.error || ''),
 				}
 			}
+			const renderer = h.sidecar.renderer === 'musescore' ? t('with MuseScore') : t('with the scoreview-engine')
 			return {
 				ok: h.sidecar.reachable,
-				detail: h.sidecar.reachable ? h.sidecar.url : (h.sidecar.error || t('not configured')),
+				detail: h.sidecar.reachable ? `${h.sidecar.url}, ${renderer}` : (h.sidecar.error || t('not configured')),
 			}
 		},
 

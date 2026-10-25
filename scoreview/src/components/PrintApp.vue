@@ -194,7 +194,7 @@ export default {
 			isLeader: () => leaders.isLeader.value,
 		})
 		// No playback here, so nobody else has the MIDI: the facts fetch it
-		// themselves where the keys need it (sidecar path, E12).
+		// themselves where the keys need it (MuseScore on the sidecar, E12).
 		const scoreFacts = useScoreFacts({
 			midiData: () => null,
 			meta: () => scoreMeta.value,

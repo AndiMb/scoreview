@@ -1,4 +1,12 @@
-# MuseScore sidecar image: MuseScore 4 behind a small HTTP API.
+# MuseScore sidecar image: MuseScore 4 behind a small HTTP API - and, as a
+# second renderer, the scoreview-engine the app runs on its local path.
+#
+# Built from the REPOSITORY ROOT, because the engine renderer is the app's own
+# converter (scoreview/converter), not a copy of it:
+#
+#   docker build -f sidecar/Dockerfile -t scoreview-musescore-cli .
+#
+# sidecar/Dockerfile.dockerignore keeps the context down to what is copied.
 #
 # Pinned MuseScore Studio version - update deliberately, never track "latest".
 # Chosen because it is well past the 4.0.0/4.0.1 .spos/.mpos export
@@ -20,6 +28,26 @@ ARG MUSESCORE_APPIMAGE_URL=https://github.com/musescore/MuseScore/releases/downl
 #     --jq '.assets[] | select(.name|endswith("x86_64.AppImage")) | .digest'
 #   curl -fsSL -o ms.AppImage "<MUSESCORE_APPIMAGE_URL>" && sha256sum ms.AppImage
 ARG MUSESCORE_APPIMAGE_SHA256=a31b2da2dbcc2191bcc98beb7be5c15f2f517bedb3444def96fe3088b74d3a1e
+
+# The converter stage: Node and `npm ci` against the converter's lockfile, so
+# the engine in the image is byte for byte the one the app's release ships
+# (integrity hashes in package-lock.json). Node comes from the official image
+# - the same nodejs.org build, made for glibc 2.28 and up, so it runs on the
+# Ubuntu below. Pinned by digest for the reason given there. Node 22: the
+# first line with the stable permission model (`--permission`, 22.13), which
+# locks each run in (scoreview_sidecar/engine.py). Find the digest with
+#   docker buildx imagetools inspect node:22-bookworm-slim   (line "Digest:")
+FROM node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS converter
+WORKDIR /opt/scoreview-converter
+COPY scoreview/converter/package.json scoreview/converter/package-lock.json ./
+# With @librescore/fonts: the app's release leaves the CJK fonts out because
+# of the App Store's 30 MiB limit, an image has no such limit - so here
+# Chinese, Japanese and Korean lyrics come out as text, not boxes.
+RUN npm ci --omit=dev --no-audit --no-fund
+COPY scoreview/converter/convert.mjs ./
+COPY scoreview/converter/lib/artifacts.mjs scoreview/converter/lib/variantKey.mjs ./lib/
+# The five self-test scores of `convert.mjs --selftest`.
+COPY scoreview/converter/*.mscz ./
 
 # Basis-Image per Digest statt nur per Tag: `ubuntu:22.04` wird laufend neu
 # gebaut, derselbe Dockerfile ergaebe sonst von Build zu Build ein anderes
@@ -56,7 +84,7 @@ RUN apt-get update && \
     rm -rf /tmp/musescore.AppImage /var/lib/apt/lists/*
 
 WORKDIR /data
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY sidecar/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # The HTTP API wraps the same xvfb-run+timeout+mscore invocation as
@@ -65,11 +93,17 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # /usr/local/bin/entrypoint.sh ...) but is no longer the container's
 # default command.
 #
-# scoreview_sidecar is a package of four modules - config / musescore /
-# jobs / app (see scoreview_sidecar/__init__.py). wsgi.py is the entry
+# scoreview_sidecar is a package of five modules - config / musescore /
+# engine / jobs / app (see scoreview_sidecar/__init__.py). wsgi.py is the entry
 # point for gunicorn.
-COPY scoreview_sidecar /opt/scoreview-sidecar/scoreview_sidecar
-COPY wsgi.py /opt/scoreview-sidecar/wsgi.py
+COPY sidecar/scoreview_sidecar /opt/scoreview-sidecar/scoreview_sidecar
+COPY sidecar/wsgi.py /opt/scoreview-sidecar/wsgi.py
+
+# The engine renderer: Node and the converter from the stage above. Read only
+# for the scoreview user - nothing in a run writes into it (the permission
+# flags in engine.py allow writing only into the job's output directory).
+COPY --from=converter /usr/local/bin/node /usr/local/bin/node
+COPY --from=converter /opt/scoreview-converter /opt/scoreview-converter
 
 # Die gepinnte Version zur Bauzeit ins Image schreiben, statt sie
 # zur Laufzeit aus `mscore4portable --version` zu lesen. Grund: dieser Aufruf
@@ -86,7 +120,7 @@ ENV SCOREVIEW_MUSESCORE_VERSION="${MUSESCORE_VERSION} (${MUSESCORE_BUILD})"
 # deckt Wiederholung und Volta ab, also genau die Struktur, an der ein
 # Formatwechsel in `--score-media` zuerst auffiele (docs/architecture.md
 # M7).
-COPY selftest-score.mscz /opt/scoreview-sidecar/selftest-score.mscz
+COPY sidecar/selftest-score.mscz /opt/scoreview-sidecar/selftest-score.mscz
 
 # Overridable per `docker run -e`; scoreview_sidecar/musescore.py enforces
 # this as a hard wall-clock guard so a hung MuseScore process cannot hang a
@@ -104,6 +138,11 @@ ENV MSCORE_TIMEOUT_SECONDS=600
 # ohnehin - bis zu SCOREVIEW_MAX_QUEUED (Default 30, siehe config.py),
 # darueber lehnt /convert mit 503 ab.
 ENV SCOREVIEW_MAX_CONCURRENT=2
+
+# Which renderer a request without its own choice gets (see config.py). The
+# app names one with every job (its setting `sidecar_renderer`), so this only
+# matters for older apps and manual calls.
+ENV SCOREVIEW_SIDECAR_RENDERER=engine
 
 # Haertung: der Konvertierungsprozess (mscore4portable, eine grosse
 # C++/Qt-Codebasis auf beliebigen, nicht vertrauenswuerdigen

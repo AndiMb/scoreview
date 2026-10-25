@@ -11,7 +11,7 @@
 			Notenkopf verdeckt. Es ist der Rückfall, nicht die Ergänzung: Sobald
 			die Notenköpfe selbst leuchten (M10), malt es nichts mehr - zwei
 			Anzeigen derselben Stelle sind eine zu viel. Sichtbar bleibt es, wo
-			das SVG keine Kennungen trägt (Sidecar-Weg, siehe
+			das SVG keine Kennungen trägt (MuseScore auf dem Sidecar, siehe
 			docs/architecture.md M9/M10). Im DOM bleibt es in beiden Fällen: Das
 			Autoscroll misst seine Bildschirmposition (ref="cursor", siehe
 			getCursorClientRect()). Die Stapelreihenfolge kommt aus dem CSS

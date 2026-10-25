@@ -37,7 +37,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import config
+from . import config, engine
 from .musescore import parse_pos_xml, run_score_media
 
 _LOG = logging.getLogger(__name__)
@@ -114,8 +114,10 @@ def _worker_loop():
             _LOG.exception("conversion worker: unexpected error in job %s", job_id)
 
 
-def submit(uploaded_file) -> str:
+def submit(uploaded_file, renderer: str = config.DEFAULT_RENDERER) -> str:
     """Reserviert einen Warteplatz, speichert den Upload und reiht ihn ein.
+
+    `renderer` is one of config.RENDERERS; the caller has checked it.
 
     Raises QueueFull, wenn alle Warteplaetze belegt sind - dann wird auch
     nichts gespeichert."""
@@ -129,7 +131,7 @@ def submit(uploaded_file) -> str:
         # Eintrag VOR dem Speichern: so zaehlt der Warteplatz schon, waehrend
         # die Datei noch geschrieben wird, und gleichzeitige Uploads koennen
         # die Grenze nicht gemeinsam ueberschreiten.
-        JOBS[job_id] = {"status": "pending", "createdAt": time.monotonic(), "completedAt": None}
+        JOBS[job_id] = {"status": "pending", "renderer": renderer, "createdAt": time.monotonic(), "completedAt": None}
 
     workdir = config.JOBS_DIR / job_id
     try:
@@ -162,10 +164,12 @@ def _update(job_id: str, **fields) -> bool:
 
 
 def run_conversion(job_id: str, input_path: Path, workdir: Path):
-    if get(job_id) is None:
+    job = get(job_id)
+    if job is None:
         # Schon verworfen, bevor er drankam - dann auch keinen Platz belegen.
         shutil.rmtree(workdir, ignore_errors=True)
         return
+    renderer = job.get("renderer", config.DEFAULT_RENDERER)
     # Wait for a free slot BEFORE marking the job as processing: while it
     # waits it is honestly still "pending", which is exactly what the caller
     # should see.
@@ -175,7 +179,85 @@ def run_conversion(job_id: str, input_path: Path, workdir: Path):
             # Ergebnis, das niemand mehr abholt.
             shutil.rmtree(workdir, ignore_errors=True)
             return
-        _convert(job_id, input_path, workdir, display)
+        if renderer == config.RENDERER_ENGINE:
+            _convert_with_engine(job_id, input_path, workdir)
+        else:
+            _convert(job_id, input_path, workdir, display)
+
+
+def _convert_with_engine(job_id: str, input_path: Path, workdir: Path):
+    """The engine writes the artifacts as files itself - nothing to parse
+    here, they already have the app's cache form (E3)."""
+    out_dir = workdir / "out"
+    try:
+        pages = engine.convert(input_path, out_dir)
+        done = _update(
+            job_id,
+            status="ready",
+            completedAt=time.monotonic(),
+            files={
+                "pages": pages,
+                "midi": out_dir / "score.mid",
+                "timingJson": out_dir / "timing.json",
+                "measuresJson": out_dir / "measures.json",
+                "metaJson": out_dir / "meta.json",
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - reported via the status API, not re-raised
+        done = _update(job_id, status="error", error=str(exc), completedAt=time.monotonic())
+    if not done:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def run_variant(uploaded_file, key: str, base_timing, base_measures) -> str:
+    """Engraves a display variant (E19) right away and returns its job id;
+    the job is `ready` or `error` when this returns, and its files are
+    fetched over the same artifact route as a base conversion's.
+
+    Synchronous because the app engraves a variant inside the browser
+    request that asks for it (3-4 s); a queue would only add the poll.
+    It takes a conversion slot like any job - waiting at most
+    config.VARIANT_SLOT_WAIT_SECONDS, then NoSlotAvailable - and does not
+    count against the waiting places: nothing of it waits in the queue.
+    Always with the engine; stock MuseScore cannot make a variant."""
+    job_id = uuid.uuid4().hex
+    workdir = config.JOBS_DIR / job_id
+    base_dir = workdir / "base"
+    with JOBS_LOCK:
+        # "processing" from the start, not "pending": submit() counts the
+        # pending jobs as the waiting places, and a variant never waits in
+        # that queue.
+        now = time.monotonic()
+        JOBS[job_id] = {"status": "processing", "renderer": config.RENDERER_ENGINE, "createdAt": now, "startedAt": now, "completedAt": None}
+    try:
+        base_dir.mkdir(parents=True)
+        uploaded_file.save(workdir / "input.mscz")
+        base_timing.save(base_dir / "timing.json")
+        base_measures.save(base_dir / "measures.json")
+        with conversion_slot(timeout=config.VARIANT_SLOT_WAIT_SECONDS):
+            out_dir = workdir / "out"
+            try:
+                pages = engine.convert_variant(workdir / "input.mscz", key, base_dir, out_dir)
+            except Exception as exc:  # noqa: BLE001 - a failed variant is a result, not a crash
+                _update(job_id, status="error", error=str(exc), completedAt=time.monotonic())
+                return job_id
+        _update(
+            job_id,
+            status="ready",
+            completedAt=time.monotonic(),
+            files={
+                "pages": pages,
+                "timingJson": out_dir / "timing.json",
+                "measuresJson": out_dir / "measures.json",
+                "metaJson": out_dir / "meta.json",
+            },
+        )
+        return job_id
+    except BaseException:
+        with JOBS_LOCK:
+            JOBS.pop(job_id, None)
+        shutil.rmtree(workdir, ignore_errors=True)
+        raise
 
 
 def _convert(job_id: str, input_path: Path, workdir: Path, display: int):

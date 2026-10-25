@@ -16,7 +16,7 @@
 //
 // Ohne Kennungen bleibt die Karte leer - der Aufrufer erkennt daran, dass die
 // Partitur von einer aelteren Konvertierung oder aus Stock-MuseScore stammt
-// (der Sidecar-Weg), und bleibt beim Band.
+// (MuseScore auf dem Sidecar), und bleibt beim Band.
 
 /** Praefix der Segmentkennung im class-Attribut (M10). */
 const SEGMENT_PREFIX = 'seg-'
@@ -135,7 +135,7 @@ const VOICE_PREFIX = 'vc-'
  * einem einzelnen Ton, und eine gruen gefaerbte Halslinie ueber zwei Koepfen
  * verschiedener Farbe waere eine falsche Aussage.
  *
- * Ohne `st-` (Sidecar-Weg, aeltere Konvertierung) bleibt die Karte leer, und
+ * Ohne `st-` (MuseScore auf dem Sidecar, aeltere Konvertierung) bleibt die Karte leer, und
  * die Intonation bleibt bei Nadel und Liste.
  *
  * @param {Element|null} root

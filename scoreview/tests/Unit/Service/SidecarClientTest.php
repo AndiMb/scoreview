@@ -5,14 +5,19 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Tests\Unit\Service;
 
 require_once __DIR__ . '/../../stubs/GuzzleServerException.php';
+require_once __DIR__ . '/../../stubs/GuzzleClientException.php';
 
+use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ServerException;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Db\ScoreVariant;
+use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\SidecarBusyException;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SidecarException;
 use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
 use OCP\IAppConfig;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -76,5 +81,130 @@ class SidecarClientTest extends TestCase {
 	#[DataProvider('kopfzeilen')]
 	public function testLiestRetryAfter(string $kopf, int $sekunden): void {
 		$this->assertSame($sekunden, SidecarClient::retryAfterSeconds($kopf));
+	}
+
+	/**
+	 * A client whose HTTP calls answer from $antworten (URL → body) and are
+	 * recorded in $this->anfragen.
+	 *
+	 * @param array<string, string> $antworten
+	 */
+	private function antwortender(array $antworten, ?\Throwable $postFehler = null): SidecarClient {
+		$this->anfragen = [];
+		$antwort = function (string $url) use ($antworten): IResponse {
+			$response = $this->createMock(IResponse::class);
+			$response->method('getBody')->willReturn($antworten[$url] ?? '');
+			return $response;
+		};
+		$http = $this->createMock(IClient::class);
+		$http->method('post')->willReturnCallback(function (string $url, array $options) use ($antwort, $postFehler) {
+			$this->anfragen[] = ['POST', $url, $options];
+			if ($postFehler !== null) {
+				throw $postFehler;
+			}
+			return $antwort($url);
+		});
+		$http->method('get')->willReturnCallback(function (string $url, array $options = []) use ($antwort) {
+			$this->anfragen[] = ['GET', $url, $options];
+			return $antwort($url);
+		});
+		$service = $this->createMock(IClientService::class);
+		$service->method('newClient')->willReturn($http);
+		$config = $this->createMock(IAppConfig::class);
+		$config->method('getValueString')->willReturnCallback(
+			static fn (string $app, string $key) => ['sidecar_url' => 'http://sidecar:8765', 'sidecar_secret' => 'geheim'][$key] ?? '',
+		);
+		return new SidecarClient($service, $config);
+	}
+
+	/** @var list<array{string, string, array}> */
+	private array $anfragen = [];
+
+	public function testReichtDenRendererMitEin(): void {
+		$client = $this->antwortender(['http://sidecar:8765/convert' => '{"jobId":"j1","renderer":"musescore"}']);
+
+		$this->assertSame('j1', $client->submitConversion(fopen('php://memory', 'rb'), 'probe.mscz', ConversionBackend::RENDERER_MUSESCORE));
+
+		$felder = array_column($this->anfragen[0][2]['multipart'], 'contents', 'name');
+		$this->assertSame('musescore', $felder['renderer']);
+	}
+
+	public function testSelbsttestFragtDenGewaehltenRenderer(): void {
+		$client = $this->antwortender(['http://sidecar:8765/selftest?renderer=engine' => '{"ok":true,"renderer":"engine","details":{}}']);
+
+		$this->assertTrue($client->runSelfTest(ConversionBackend::RENDERER_ENGINE)['ok']);
+	}
+
+	public function testSelbsttestErkenntEinZuAltesImage(): void {
+		// An image from before the renderer choice ignores the parameter and
+		// answers for MuseScore, without naming a renderer. A green self-test
+		// there would hide that the setting has no effect.
+		$client = $this->antwortender(['http://sidecar:8765/selftest?renderer=engine' => '{"ok":true,"details":{}}']);
+
+		$ergebnis = $client->runSelfTest(ConversionBackend::RENDERER_ENGINE);
+
+		$this->assertFalse($ergebnis['ok']);
+		$this->assertStringContainsString('Rebuild the image', $ergebnis['error']);
+	}
+
+	public function testVarianteHoltSeitenUndMetaUeberDieArtefaktroute(): void {
+		$client = $this->antwortender([
+			'http://sidecar:8765/variant' => json_encode([
+				'status' => 'ready',
+				'engine' => '4.7.5-engine.6',
+				'files' => [
+					'pages' => ['/convert/v1/artifact/page-1', '/convert/v1/artifact/page-2'],
+					'timingJson' => '/convert/v1/artifact/timing',
+					'measuresJson' => '/convert/v1/artifact/measures',
+					'metaJson' => '/convert/v1/artifact/meta',
+				],
+			]),
+			'http://sidecar:8765/convert/v1/artifact/page-1' => '<svg>1</svg>',
+			'http://sidecar:8765/convert/v1/artifact/page-2' => '<svg>2</svg>',
+			'http://sidecar:8765/convert/v1/artifact/timing' => 'T',
+			'http://sidecar:8765/convert/v1/artifact/measures' => 'M',
+			'http://sidecar:8765/convert/v1/artifact/meta' => '{}',
+		]);
+
+		$ergebnis = $client->convertVariant(fopen('php://memory', 'rb'), 'probe.mscz', 'ex1~orig~w~0', '{"t":1}', '{"m":1}');
+
+		$this->assertSame(['pages' => ['<svg>1</svg>', '<svg>2</svg>'], 'timing' => 'T', 'measures' => 'M', 'meta' => '{}', 'engine' => '4.7.5-engine.6'], $ergebnis);
+		$felder = array_column($this->anfragen[0][2]['multipart'], 'contents', 'name');
+		$this->assertSame('ex1~orig~w~0', $felder['key']);
+		$this->assertSame('{"t":1}', $felder['timing']);
+		$this->assertSame('{"m":1}', $felder['measures']);
+	}
+
+	public function testVarianteDieImSidecarScheitertIstEinKonvertierungsfehler(): void {
+		$client = $this->antwortender(['http://sidecar:8765/variant' => '{"status":"error","error":"fails its invariants"}']);
+		try {
+			$client->convertVariant(fopen('php://memory', 'rb'), 'probe.mscz', 'ex1~orig~w~0', '{}', '{}');
+			$this->fail('SidecarException erwartet');
+		} catch (SidecarException $e) {
+			$this->assertSame(ScoreConversion::ERROR_CONVERSION_FAILED, $e->getErrorCode());
+			$this->assertStringContainsString('fails its invariants', $e->getMessage());
+		}
+	}
+
+	/** @return array<string, array{\Throwable, string}> */
+	public static function variantenFehler(): array {
+		return [
+			// No /variant route: an image from before the engine renderer.
+			'404' => [new ClientException(404), ScoreVariant::ERROR_UNSUPPORTED],
+			'401' => [new ClientException(401), ScoreConversion::ERROR_SIDECAR_REJECTED],
+			'503' => [new ServerException(503), ScoreConversion::ERROR_SIDECAR_BUSY],
+			'500' => [new ServerException(500), ScoreConversion::ERROR_SIDECAR_UNREACHABLE],
+		];
+	}
+
+	#[DataProvider('variantenFehler')]
+	public function testOrdnetFehlerDerVarianteEin(\Throwable $fehler, string $code): void {
+		$client = $this->antwortender([], $fehler);
+		try {
+			$client->convertVariant(fopen('php://memory', 'rb'), 'probe.mscz', 'ex1~orig~w~0', '{}', '{}');
+			$this->fail('SidecarException erwartet');
+		} catch (SidecarException $e) {
+			$this->assertSame($code, $e->getErrorCode());
+		}
 	}
 }

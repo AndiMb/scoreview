@@ -1,7 +1,7 @@
 // Partiturfakten: Tonhoehe meiner Stimme, Tonart, Grundton und
 // Studierbuchstaben - rein, ohne DOM und ohne Player.
 //
-// Zwei Quellen, EINE Form (E3): Die Engine des lokalen Wegs schreibt
+// Zwei Quellen, EINE Form (E3): Die Engine (lokal oder im Sidecar) schreibt
 // `keySigs`/`rehearsalMarks` in meta.json, Stock-MuseScore auf dem Sidecar
 // nicht. Entschieden wird am INHALT des Artefakts, nie am
 // Konvertierungsweg - dasselbe Muster wie bei den M10-Klassen. Fehlt ein
@@ -165,7 +165,7 @@ export function keyByElid(timeline, keys, measuresTimeline, durationMs) {
 
 /**
  * Der Grundton als MIDI-Tonhoehe. Ohne Modus gilt die Dur-Tonika:
- * Auf dem Sidecar-Weg ist Moll nicht erkennbar, und ein falsches Dur ist
+ * Mit MuseScore auf dem Sidecar ist Moll nicht erkennbar, und ein falsches Dur ist
  * dort die ehrliche Naeherung - der Ton liegt immerhin in der Tonleiter.
  *
  * @param {{concertKey:number, mode:?string}} key

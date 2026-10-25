@@ -95,6 +95,32 @@ class VariantServiceTest extends TestCase {
 		$this->assertTrue($s->mayRetry($this->variant(ScoreConversion::STATUS_ERROR, VariantService::RETRY_ERROR_AFTER_SECONDS + 1)));
 	}
 
+	/** @return array<string, array{string}> */
+	public static function transientErrors(): array {
+		return [
+			'busy sidecar' => [ScoreConversion::ERROR_SIDECAR_BUSY],
+			'unreachable sidecar' => [ScoreConversion::ERROR_SIDECAR_UNREACHABLE],
+			'no variants on this path' => [ScoreVariant::ERROR_UNSUPPORTED],
+		];
+	}
+
+	#[DataProvider('transientErrors')]
+	public function testAnErrorOfTheServiceIsRetriedSoon(string $code): void {
+		$s = $this->service();
+		$fresh = $this->variant(ScoreConversion::STATUS_ERROR, 30);
+		$fresh->setErrorCode($code);
+		$this->assertFalse($s->mayRetry($fresh));
+		$later = $this->variant(ScoreConversion::STATUS_ERROR, VariantService::RETRY_TRANSIENT_AFTER_SECONDS + 1);
+		$later->setErrorCode($code);
+		$this->assertTrue($s->mayRetry($later));
+	}
+
+	public function testAnErrorOfTheScoreWaitsTheHour(): void {
+		$v = $this->variant(ScoreConversion::STATUS_ERROR, VariantService::RETRY_TRANSIENT_AFTER_SECONDS + 1);
+		$v->setErrorCode(ScoreConversion::ERROR_CONVERSION_FAILED);
+		$this->assertFalse($this->service()->mayRetry($v));
+	}
+
 	public function testAReadyVariantOfAnOlderFormatIsMadeAgain(): void {
 		$s = $this->service();
 		$this->assertTrue($s->isCurrent($this->variant(ScoreConversion::STATUS_READY, 10)));

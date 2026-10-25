@@ -1,0 +1,14 @@
+# Build context of sidecar/Dockerfile is the repository root (see there).
+# Everything is left out except what the Dockerfile copies.
+*
+!sidecar/Dockerfile
+!sidecar/entrypoint.sh
+!sidecar/wsgi.py
+!sidecar/selftest-score.mscz
+!sidecar/scoreview_sidecar/*.py
+!scoreview/converter/package.json
+!scoreview/converter/package-lock.json
+!scoreview/converter/convert.mjs
+!scoreview/converter/lib/artifacts.mjs
+!scoreview/converter/lib/variantKey.mjs
+!scoreview/converter/*.mscz
