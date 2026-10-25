@@ -632,9 +632,13 @@ fünf Bildschirme breit; darin blättert das Band **seitenweise** statt zu
 gleiten (`bandPaging.js`): Erreicht der Cursor 85 % der Breite, springt es so
 weit, dass er bei 15 % steht – das zuletzt Gelesene bleibt links stehen, das
 Bild steht bis zum nächsten Sprung still, und es kostet kein Scrollen je
-Note. Während des eigenen Sprungs ist das Einrasten an den Systemanfängen
-aus; gemessen hielt `scroll-snap` sonst einen Sprung auf 988 px bei 745 px
-an. `Bild↓`/`Bild↑` und ein Pedal blättern in einem breiten System erst
+Note. Folgt das Band der Wiedergabe, springt es **ohne Gleiten**, beim
+Umblättern wie beim nächsten System: Am Ende eines Systems steht die nächste
+Note schon rechts außerhalb, und ein Gleiten dauerte auf einem Galaxy S23
+400–850 ms – so lange war der Cursor bei jedem Systemwechsel nicht zu sehen.
+Gleiten bleibt, wo die Hand blättert (Pedal, „Zurück zur Wiedergabe“). Während
+des eigenen Sprungs ist das Einrasten an den Systemanfängen aus; gemessen
+hielt `scroll-snap` sonst einen Sprung auf 988 px bei 745 px an. `Bild↓`/`Bild↑` und ein Pedal blättern in einem breiten System erst
 seitenweise, dann ein System weiter. Wer den Viewer zum ersten Mal unter 600 px Breite mit Seiten
 öffnet, bekommt das Band einmal angeboten; die Antwort merkt sich die App.
 
@@ -643,7 +647,13 @@ Standardgröße, Knöpfe, `+`/`-`/`0`, zwei Finger), getrennt vom Seitenzoom: De
 ist eine an die Fensterbreite gekoppelte Seitenbreite und bedeutet im Band
 nichts, ein gemeinsamer Wert spränge bei jedem Wechsel. Gemerkt wird er je
 Gerät, wie Seitenformat und Latenz. Ein größer gezoomtes System schiebt man im
-Band senkrecht, ein kleineres steht oben. Ändert sich die Größe der Rahmen –
+Band senkrecht, ein kleineres steht oben. Den freien Platz darunter füllt das
+Band bewusst **nicht** mit dem nächsten System: Ein System ist am Handy auch
+bei 48-px-Notenzeilen zwei bis fünf Bildschirme breit, gestapelt läse man das
+obere nach rechts und spränge dann an den Anfang des unteren zurück – das
+Zickzack der Seitenansicht, das das Band vermeiden soll. Wer hochkant mehrere
+Systeme untereinander sehen will, nimmt die Handyseiten
+([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)). Ändert sich die Größe der Rahmen –
 Zoom, Drehen, ein Hinweis darüber, die quer beim Abspielen einfahrende Leiste
 (gemessen: Bandhöhe 157 → 208 px) –, behält das Band seine Stelle
 (`bandAnchor`): auf dem Cursor, solange es folgt, sonst auf der Stelle am linken

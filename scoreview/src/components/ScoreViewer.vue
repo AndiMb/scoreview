@@ -3981,4 +3981,16 @@ export default {
 		font-size: 16px;
 	}
 }
+
+/*
+ * Nextcloud's Viewer keeps a header's height free below every file
+ * (`.viewer .modal-wrapper .modal-container { bottom: var(--header-height) }`),
+ * and through it the file list showed. On a phone held sideways that is 50 of
+ * 325 px. A score has nothing to put there, so its viewer reaches the bottom.
+ * Tied by :has() to this app's own root, so other files keep the Viewer's
+ * layout; one class more than the Viewer's rule, not !important.
+ */
+.viewer.modal-mask .modal-wrapper .modal-container:has(> .modal-container__content .scoreview-viewer) {
+	bottom: 0;
+}
 </style>

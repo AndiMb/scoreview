@@ -239,13 +239,18 @@ export default {
 		// a moment, as in the page view, so that looking back is not torn
 		// away. Inside a frame wider than the screen it turns pages
 		// (bandPaging.js, issue #21).
+		//
+		// Following the playing it turns at once, like a page, not in a
+		// glide: measured on a Galaxy S23, a glide took 400-850 ms, and at the
+		// end of a system the next note already stands right of the screen -
+		// the cursor was out of view for that long at every system.
 		cursorRect() {
 			const index = this.cursorCrop
 			if (this.follow && index >= 0 && (this.forced || !shouldSuppressAutoScroll(this.lastGestureAt, Date.now()))) {
 				if (index !== this.current) {
-					this.goTo(index)
+					this.goTo(index, 'instant')
 				} else {
-					this.turnPage(index)
+					this.turnPage(index, 'instant')
 				}
 			}
 			this.reportVisibility()
@@ -377,8 +382,9 @@ export default {
 		 * nears the right edge.
 		 *
 		 * @param {number} index
+		 * @param {ScrollBehavior} [behavior]
 		 */
-		turnPage(index) {
+		turnPage(index, behavior = 'smooth') {
 			const scroller = this.$refs.scroller
 			const span = this.cursorSpan(index)
 			if (!scroller || !span) {
@@ -394,7 +400,7 @@ export default {
 				lead: LEAD,
 			})
 			if (left !== null) {
-				this.pageTo(left)
+				this.pageTo(left, { behavior })
 			}
 		},
 
