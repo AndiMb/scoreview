@@ -13,6 +13,7 @@ ScoreView consists of the Nextcloud app and a conversion path. There are
 | SoundFont | fetched by the server itself from a preset address | shipped with the container |
 | To set up | nothing | start the container, enter address and secret |
 | Coloured noteheads, lyrics view, note names | yes | no – stock MuseScore does not deliver the data ([E15](architecture.md#e15-fähigkeiten-statt-weg), German) |
+| Parts, phone pages, concert pitch, transposed notes | yes, engraved on demand ([Display variants](limits.md#display-variants)) | no ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild), German) |
 | Recommended if | no containers are running | containers are running anyway |
 
 **Path A is the default and needs no configuration.** Where a Node runtime is

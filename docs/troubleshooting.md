@@ -319,6 +319,29 @@ If the chosen display is not available for a score, the
 viewer shows the pages with a notice and keeps the choice for the next
 score.
 
+## Parts, phone pages or concert pitch cannot be selected
+
+Under **View → Layout**, “Edition” and “Page format” name the reason when they
+are greyed out:
+
+- **“This server engraves no parts or phone pages …”** – the instance converts
+  via the sidecar, whose stock MuseScore cannot engrave them
+  ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild) (German)).
+  Only the local conversion path (or the browser fallback) does.
+- **“Concert pitch” is missing** – no instrument in this score transposes, so
+  there is nothing to show differently.
+- **A stored part is missing from the list** – the score was converted before
+  1.23.0. Opening it once converts it again; “Convert again” does the same at once.
+
+When a chosen part or page format cannot be made, the viewer keeps showing the
+score as the file has it, with a notice, and keeps the choice:
+
+- **“Too many new parts or page formats in a short time.”** At most 20 new
+  ones per person and hour (S4); ones already made do not count. Try again
+  later.
+- **“… could not be engraved.”** The details are in the Nextcloud log
+  (`ScoreView: variant … failed`).
+
 ## On the iPhone the score is wider than the screen and does not follow sideways
 
 Safari has enlarged the whole web page, not the score. The viewer cannot see

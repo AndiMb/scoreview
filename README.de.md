@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:91973542c975 -->
+<!-- translation-of: README.md sha256:c5cb0a04b868 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -67,14 +67,23 @@ Stimme“ merkt sich die App je Partitur und legt sie auf Wunsch rechts ins
 Stereobild, die übrigen links. Der **Speed-Trainer** steigert das Tempo mit
 jedem Loop-Durchlauf bis zum Zieltempo. **Coach** spielt die eigene Stimme als
 Klavier laut und rechts, die übrigen leise links, und **Transponieren** setzt
-den Klang um Halbtöne höher oder tiefer, ohne das Notenbild zu ändern.
+den Klang um Halbtöne höher oder tiefer – und, wo der Server es setzt, die
+Noten mit.
+
+**Die eigene Stimme, gesetzt.** Die **Fassung** zeigt eine Stimme für sich
+statt der Partitur: die in der Datei gespeicherten Auszüge oder einen, den
+MuseScore für jede andere Stimme erzeugt. Transponierende Instrumente lassen
+sich **klingend** zeigen. MuseScore setzt das jeweils selbst, beim ersten
+Wählen, und Klang, Notizen und Taktzahlen bleiben die der Partitur
+([Darstellungsvarianten](docs/limits.de.md#darstellungsvarianten)).
 
 **Unterwegs üben, am Handy lesen.** Ein **Übe-Track** speichert genau das, was
 man gerade hört – Stimme, Coach, Tempo, Transposition, auf Wunsch nur den
 Loop oder mit Metronom – als MP3 neben der Partitur in Files; die
 Nextcloud-App spielt ihn offline und mit Steuerung auf dem Sperrbildschirm.
 Wer neben der Partitur schreiben darf, erzeugt mit einem Klick **Tracks für
-alle Stimmen**. Zum Lesen auf dem Telefon stellt das **Systemband** die Systeme
+alle Stimmen**. Zum Lesen auf dem Telefon setzen **Handyseiten** die Partitur auf
+Seiten in Bildschirmgröße, mit größeren Noten; das **Systemband** stellt die Systeme
 nebeneinander, jedes so hoch wie der Bildschirm, und die **Liedtext-Ansicht**
 zeigt nur den Text der eigenen Stimme mit allen Strophen, die gesungene Silbe
 hervorgehoben. **Tonnamen** stehen auf Wunsch neben den Notenköpfen – deutsch,

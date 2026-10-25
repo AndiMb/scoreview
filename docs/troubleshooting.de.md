@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:4198d8997a02 -->
+<!-- translation-of: troubleshooting.md sha256:751f60451210 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -319,6 +319,31 @@ Die Auswahl nennt den Grund:
 Ist die gewählte Darstellung bei einer Partitur nicht verfügbar, zeigt der
 Viewer die Seiten mit einem Hinweis und behält die Wahl für die nächste
 Partitur.
+
+## Stimmen, Handyseiten oder „klingend“ sind nicht wählbar
+
+Unter **Ansicht → Darstellung der Noten** nennen „Fassung“ und „Seitenformat“ den Grund, wenn
+sie ausgegraut sind:
+
+- **„Dieser Server setzt keine Stimmen und keine Handyseiten …“** – die Instanz
+  konvertiert über den Sidecar, dessen Stock-MuseScore sie nicht setzen kann
+  ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)).
+  Nur der lokale Konvertierungsweg (oder der Rückfall im Browser) kann das.
+- **„Klingend notiert“ fehlt** – kein Instrument dieser Partitur transponiert,
+  es gäbe nichts anders zu zeigen.
+- **Ein gespeicherter Auszug fehlt in der Liste** – die Partitur wurde vor
+  1.23.0 konvertiert. Einmal öffnen konvertiert sie neu; „Neu konvertieren“
+  tut dasselbe sofort.
+
+Lässt sich eine gewählte Stimme oder ein Seitenformat nicht setzen, zeigt der
+Viewer weiter die Partitur, wie die Datei sie enthält, mit einem Hinweis, und
+behält die Wahl:
+
+- **„Zu viele neue Stimmen oder Seitenformate in kurzer Zeit.“** Höchstens 20
+  neue je Person und Stunde (S4); schon gesetzte zählen nicht. Später noch
+  einmal versuchen.
+- **„… ließ sich nicht setzen.“** Die Einzelheiten stehen im Nextcloud-Log
+  (`ScoreView: variant … failed`).
 
 ## Am iPhone ist die Partitur breiter als der Bildschirm und läuft seitlich nicht mit
 

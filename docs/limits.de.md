@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:771ab81d4e4d -->
+<!-- translation-of: limits.md sha256:a2f320d25fb8 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -63,6 +63,13 @@ Daraus abgeleitet:
   jenseits echter Partituren (größte Testdatei: 566 KB) und schützt nur gegen
   pathologische Uploads. Die App lehnt schon vorher ab: `max_score_bytes`,
   Vorgabe 100 MB, auf beiden Wegen.
+
+- **Unter Node läuft der Konverter mit `--liftoff-only`.** Ohne die Option
+  optimiert Node das 9,5 MB große WebAssembly-Modul der Engine im Hintergrund
+  und wartet beim Beenden des Prozesses auf diese Arbeit: gemessen mit Node
+  20.19, eine Konvertierung, deren eigentliche Arbeit nach 3,5 s erledigt war,
+  dauerte insgesamt 23–29 s; mit der Option 3,2–4,0 s bei Partituren von einer
+  bis fünf Seiten. Deno wartet nicht (4,3 s so oder so) und läuft ohne sie.
 
 **Die Server-Messreihe stammt von 1–5-seitigen Partituren.** Alles darüber
 ist Hochrechnung.
@@ -876,6 +883,54 @@ Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
 - ein Pedal im Systemband – Tasten erreichen den Viewer nur, wenn er den
   Fokus hat, wie beim Blättern der Seiten.
 
+## Darstellungsvarianten
+
+Eine Stimme für sich, Seiten in Handygröße, klingende Notation und Noten,
+die mit dem Klang mittransponiert werden – jeweils von MuseScore selbst
+gesetzt, bei Bedarf ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)).
+Verfügbar auf dem lokalen Konvertierungsweg und im Rückfall im Browser; der
+Sidecar setzt keine, dort bleibt die Wahl ausgegraut und nennt den Grund.
+
+Gemessen auf der Testinstanz (Node 20.19, die eigene Testpartitur
+`parts-test.mscz`, 24 Takte, fünf Notenzeilen):
+
+| | Seiten | Zeit je Lauf |
+|---|---|---|
+| Partitur, wie in der Datei | 3 | – (Grundkonvertierung) |
+| Gespeicherter Auszug „Frauenstimmen“ (zwei Notenzeilen) | 1 | 3–4 s |
+| Erzeugte Klarinettenstimme, Handyseite, einen Ton tiefer | 1 | 3–4 s |
+| Partitur auf Handyseiten, hochkant oder quer | 7 | 3–4 s |
+| Partitur klingend notiert | 3 | 3–4 s |
+
+- **Je Lauf 3–4 s auf dem Server**, gemessen über die Variantenroute samt
+  Anfrage (auf der langsamen Testinstanz rund 6 s, davon 1,5 s deren
+  Anfragezeit). Eine schon gesetzte Variante antwortet wie jedes andere
+  gecachte Artefakt. Unter Deno 2.9: 4,3 s.
+- **Speicher**: Eine erzeugte Stimme braucht weniger als die
+  Grundkonvertierung – 122–124 gegenüber 174–190 MB Prozessspeicher bei
+  vier- und fünfseitigen Chorsätzen.
+- **Handyseiten brauchen etwa 2,3-mal so viele Seiten** wie A4 (7 statt 3);
+  die Noten erscheinen auf einem hochkant gehaltenen Handy etwa doppelt so
+  groß.
+- **Höchstens 8 Varianten je Fassung** bleiben liegen, die am längsten nicht
+  geöffnete fällt zuerst weg; **höchstens 20 neue Läufe je Person und Stunde**
+  (S4). Das Abrufen einer vorhandenen Variante zählt nicht.
+- **Notizen und Stempel** werden gegen die Partitur gespeichert, gleich, was
+  beim Anlegen zu sehen war; eine Variante zeigt sie an derselben Note, oder
+  am Takt, wo sie diese Note nicht hat. Stempel für Stimmen erscheinen nur auf
+  den Notenzeilen, die die Variante zeichnet.
+- **Endlosansichten wurden gemessen und weggelassen.** MuseScores waagrechte
+  und senkrechte Endlosdarstellung setzen die ganze Partitur auf eine Seite:
+  bei einem vierseitigen Chorsatz 13 915 statt höchstens 4 170 Knoten in
+  einem SVG, 30 Zoomschritte in 980 statt 506 ms – und das wächst mit jeder
+  Seite.
+
+Bekannte Schwächen der Handyseiten: Auf einer queren Handyseite passt ein
+großes System unter Umständen nicht unter den Titel, der dann seine erste
+Seite für sich hat; und der Stimmname, der am linken Rand des Titelrahmens
+steht, kann auf der schmalen Hochkant-Seite einen langen Titel überdecken.
+Beides ist MuseScores Satz des Rahmens auf kleinem Papier.
+
 ## Was die App bewusst nicht tut
 
 - **Kein serverseitiges Rendern auf verwaltetem Hosting.** Der lokale
@@ -892,12 +947,13 @@ Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
   aus dem Rückfall gehen nicht zum Server zurück. Ein Upload wäre eine neue
   Vertrauensgrenze – der Server lieferte an alle Leser einer Datei aus, was ein
   einzelner Browser erzeugt hat ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
-- **Kein Reflow.** Das Seitenbild ist MuseScores A4-Satz
+- **Kein Reflow.** Das Seitenbild ist MuseScores Satz
   ([E2](architecture.md#e2-musescore-svg-statt-neusatz-im-browser)).
   „Seitenbreite einpassen“ und „Ganze Seite einpassen“ skalieren, sie brechen
-  nicht um. Echter Umbruch bräuchte
-  ein zweites serverseitiges Layout. Das Systemband schneidet aus demselben
-  Seitenbild aus; umbrechen darf nur der Text der Liedtext-Ansicht.
+  nicht um. Handyseiten ([Darstellungsvarianten](#darstellungsvarianten)) sind
+  ein fester Satz auf kleinerem Papier, kein Umbruch: auch sie skalieren nur.
+  Das Systemband schneidet aus dem Seitenbild aus; umbrechen darf nur der Text
+  der Liedtext-Ansicht.
 - **Kein Bearbeiten von Partituren.** ScoreView zeigt und spielt; es korrigiert
   nichts in der `.mscz`.
 - **Keine Aufnahmen für andere.** Eine Aufnahme hört nur, wer sie gemacht hat;
@@ -922,18 +978,19 @@ Leitung im Browser über den Wechsel zum nächsten Stück der Setliste hinweg
 - **Keine Steuerung auf dem Sperrbildschirm für die Wiedergabe im Viewer.**
   Web Audio bekommt sie nicht ([Sperrbildschirm](#sperrbildschirm)); dafür gibt
   es den Übe-Track.
-- **Kein transponiertes Notenbild.** Transponiert wird der Klang; die Noten
-  und die Tonnamen bleiben, wie sie geschrieben sind. Ein transponiertes
-  Notenbild bräuchte ein zweites serverseitiges Layout.
+- **Kein transponiertes Notenbild auf dem Sidecar-Weg.** Dort wird nur der
+  Klang transponiert; die Noten und die Tonnamen bleiben, wie sie geschrieben
+  sind. Auf dem lokalen Weg und im Browser können die Noten mitgehen
+  ([Darstellungsvarianten](#darstellungsvarianten)).
 - **Kein Stift-/Freihand-Layer.** Notizen sind Text an einem musikalischen Anker.
   Freie Striche wären eine zweite Datenart, deren Anker ein Pfad statt eines
   Punktes sein müsste – und die anders als Text ein Neurendern der Partitur
   nicht übersteht, weil ein Strich an Pixeln hängt und nicht an einem Takt.
-- **Kein zweiter Notensatz je Stimme.** „Nur meine Zeile" nimmt die übrigen
-  Stimmen optisch zurück; die Seite behält ihr Layout samt der Leerräume, wo
-  die anderen Zeilen stehen. Ein echter Einzelstimmenauszug wäre ein zweites
-  serverseitiges Layout (MuseScore kann das über Auszüge) und damit ein
-  weiteres Artefakt je Stimme im Cache.
+- **Keine Stimmenauszüge auf dem Sidecar-Weg.** Dort nimmt „Nur meine Zeile"
+  die übrigen Stimmen optisch zurück, und die Seite behält ihr Layout samt der
+  Leerräume, wo die anderen Zeilen stehen. Auf dem lokalen Weg und im Browser
+  wird eine Stimme für sich gesetzt
+  ([Darstellungsvarianten](#darstellungsvarianten)).
 - **Kein Sandboxing des MuseScore-Prozesses über den Container hinaus.** Der
   Container läuft non-root mit Speicher- und PID-Limit; eine
   Netzwerk-Isolation nur für den Konvertierungs-Subprozess bräuchte eine eigene

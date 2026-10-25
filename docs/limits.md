@@ -67,6 +67,13 @@ Derived from this:
   pathological uploads. The app rejects earlier: `max_score_bytes`, default
   100 MB, on both paths.
 
+- **Under Node, the converter runs with `--liftoff-only`.** Without it,
+  Node optimises the engine's 9.5 MB WebAssembly module in the background and
+  waits for that work when the process ends: measured with Node 20.19, a
+  conversion whose actual work was done after 3.5 s took 23–29 s in total;
+  with the flag 3.2–4.0 s on scores of one to five pages. Deno does not wait
+  (4.3 s either way) and runs without it.
+
 **The server measurement series comes from 1–5-page scores.** Everything
 beyond that is extrapolation.
 
@@ -867,6 +874,51 @@ for the new piece). **Still open:**
 - a pedal in the system band – keys only reach the viewer when it has focus,
   as with turning pages.
 
+## Display variants
+
+A part on its own, pages the size of a phone screen, concert pitch, and notes
+transposed along with the sound – each engraved by MuseScore itself, on
+demand ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild) (German)).
+Available on the local conversion path and in the browser fallback; the
+sidecar engraves none, and there the choices stay greyed out with the reason.
+
+Measured on the test instance (Node 20.19, the own test score
+`parts-test.mscz`, 24 measures, five staves):
+
+| | Pages | Time per run |
+|---|---|---|
+| Full score, as in the file | 3 | – (base conversion) |
+| Stored part “Frauenstimmen” (two staves) | 1 | 3–4 s |
+| Generated clarinet part, phone page, a tone lower | 1 | 3–4 s |
+| Full score on phone pages, upright or landscape | 7 | 3–4 s |
+| Full score in concert pitch | 3 | 3–4 s |
+
+- **Per run 3–4 s on the server**, measured through the variant route
+  including the request (about 6 s on the slow test instance, of which 1.5 s
+  is that instance's request time). A variant already made answers like any
+  cached artifact. Under Deno 2.9: 4.3 s.
+- **Memory**: a generated part needs less than the base conversion – 122–124
+  against 174–190 MB of process memory on 4- and 5-page choral pieces.
+- **Phone pages take about 2.3 times as many pages** as A4 (7 instead of 3);
+  the notes appear about twice as large on a phone held upright.
+- **At most 8 variants per score version** are kept, the least recently
+  opened goes first; **at most 20 new runs per person and hour** (S4).
+  Reading a variant that exists does not count.
+- **Notes and stamps** are stored against the full score, whatever was on
+  screen when they were made; a variant shows them at the same note, or at
+  the measure where it has no such note. Stamps for parts appear only on the
+  staves the variant draws.
+- **Continuous views were measured and left out.** MuseScore's horizontal
+  and vertical continuous view put the whole score on one page: on a
+  four-page choral piece 13,915 instead of at most 4,170 nodes in one SVG,
+  30 zoom steps in 980 instead of 506 ms – and growing with every page.
+
+Known shortcomings of the phone pages: on a landscape phone page a large
+system may not fit under the title, which then has its first page to itself;
+and the part name, set at the left edge of the title frame, can overlap a
+long title on the narrow upright page. Both are MuseScore's layout of the
+frame on a small page.
+
 ## What the app deliberately does not do
 
 - **No server-side rendering on managed hosting.** The local conversion path
@@ -882,11 +934,12 @@ for the new piece). **Still open:**
   the fallback do not go back to the server. An upload would be a new trust
   boundary – the server would deliver to all readers of a file what a single
   browser produced ([E7](architecture.md#e7-konvertierung-im-browser-als-rückfall)).
-- **No reflow.** The page image is MuseScore's A4 engraving
+- **No reflow.** The page image is MuseScore's engraving
   ([E2](architecture.md#e2-musescore-svg-statt-neusatz-im-browser)).
-  “Fit page width” and “Fit whole page” scale, they do not rewrap. Real
-  reflowing would need a second server-side layout. The system band cuts from
-  the same page image; only the text of the lyrics view may wrap.
+  “Fit page width” and “Fit whole page” scale, they do not rewrap. Phone pages
+  ([Display variants](#display-variants)) are a fixed engraving on smaller
+  paper, not a reflow: they too only scale. The system band cuts from the page
+  image; only the text of the lyrics view may wrap.
 - **No editing of scores.** ScoreView shows and plays; it does not correct
   anything in the `.mscz`.
 - **No recordings for others.** A recording can only be heard by the person
@@ -910,18 +963,18 @@ for the new piece). **Still open:**
 - **No lock-screen controls for playback in the viewer.** Web Audio does not
   get them ([Lock screen](#lock-screen)); the practice track exists for
   that.
-- **No transposed notation.** It is the sound that is transposed; the notes and
-  the note names stay as written. Transposed notation would need a second
-  server-side layout.
+- **No transposed notation on the sidecar path.** There it is only the sound
+  that is transposed; the notes and the note names stay as written. On the
+  local path and in the browser the notes can follow
+  ([Display variants](#display-variants)).
 - **No pen/freehand layer.** Notes are text at a musical anchor. Free strokes
   would be a second kind of data whose anchor would have to be a path instead
   of a point – and which, unlike text, would not survive a re-rendering of the
   score, because a stroke is tied to pixels and not to a measure.
-- **No second engraving per part.** “Show only my part” visually dims the
-  other parts; the page keeps its layout, including the empty space where the
-  other staves are. A real single-part extraction would be a second server-side
-  layout (MuseScore can do this via parts) and thus a further artifact per part
-  in the cache.
+- **No parts on the sidecar path.** There “Show only my part” visually dims
+  the other parts, and the page keeps its layout, including the empty space
+  where the other staves are. On the local path and in the browser a part is
+  engraved on its own ([Display variants](#display-variants)).
 - **No sandboxing of the MuseScore process beyond the container.** The
   container runs non-root with memory and PID limits; network isolation just
   for the conversion subprocess would need a sandbox layer of its own. See

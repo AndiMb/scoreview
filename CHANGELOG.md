@@ -8,6 +8,22 @@ All notable changes to ScoreView. The format follows
 
 ### Added
 
+- **Parts, phone pages, concert pitch and transposed notes**, engraved by
+  MuseScore itself instead of being worked around in the browser. Under
+  View → Layout, “Edition” shows a part on its own – the parts the file
+  stores, or one made for any other part – and “Page format” sets the score on
+  pages the size of a phone screen, upright or landscape, with notes about
+  twice as large. Scores with transposing instruments can be shown in concert
+  pitch, and “Transpose the notes too” lets the notation follow the sound's
+  transposition. Playback, mixer, notes, loops and “Follow me” go on as before:
+  a variant changes the picture, not the piece, and keeps the score's time
+  line and measure numbers. A variant is made when first chosen, in 3–4 s,
+  and kept; print and the PDF file take the one on screen, the offline page
+  the one last shown on that device. The edition is remembered per score, the
+  page format per device. Available on the local conversion path and in the
+  browser fallback; the sidecar cannot engrave them, and the choice says so.
+  Needs scoreview-engine `v4.7.5-engine.6`.
+
 - **Rhythm feedback** after a recording: next to “too sharp/too flat”, the
   list of problem spots now says when a note came in **early or late** and
   when it was **cut short** before a rest, in milliseconds. The onset is the
@@ -28,6 +44,16 @@ All notable changes to ScoreView. The format follows
   plays pitch: the tuner, intonation, wait mode, the playback with its start
   tone, and the MP3 export. A recording keeps the reference it was sung
   against, so changing the setting later does not re-judge it.
+
+### Changed
+
+- **Local conversion under Node is about seven times faster.** Node optimised
+  the engine's WebAssembly in the background and waited for that work before
+  the process could end – 23–29 s for a conversion whose work was done after
+  3.5 s, measured with Node 20. The converter now runs with
+  `--liftoff-only`: 3–4 s. Deno was not affected.
+- Every score is converted once more when it is next opened, for the list of
+  stored parts in its metadata.
 
 ## [1.21.2] – 2026-10-24
 

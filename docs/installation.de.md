@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:b62cb16a21ae -->
+<!-- translation-of: installation.md sha256:106f1aad438b -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -14,6 +14,7 @@ es **zwei zur Wahl**, und sie liefern dasselbe Ergebnis
 | SoundFont | holt der Server selbst, Adresse voreingestellt | bringt der Container mit |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
 | Notenköpfe einfärben, Liedtext-Ansicht, Tonnamen | ja | nein – Stock-MuseScore liefert die Daten nicht ([E15](architecture.md#e15-fähigkeiten-statt-weg)) |
+| Stimmenauszüge, Handyseiten, klingend, transponierte Noten | ja, bei Bedarf gesetzt ([Darstellungsvarianten](limits.de.md#darstellungsvarianten)) | nein ([E19](architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)) |
 | Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |
 
 **Weg A ist voreingestellt und braucht keine Einstellung.** Wo eine

@@ -122,6 +122,8 @@ Route mit Token annimmt; Einzelheiten in
 | `GET /api/scores/{fileId}/source` | Die `.mscz` selbst – nur für die Konvertierung im Browser ([E7](#e7-konvertierung-im-browser-als-rückfall)) | ja |
 | `GET /api/engine/{version}/{name}` | Die drei Dateien der scoreview-engine, für denselben Weg – die Engine-Version steht im Pfad, damit auch `.wasm` und `.data` sie tragen, die der Glue relativ zu seiner eigenen URL anfordert (**ohne Anmeldung** – appeigene Bauartefakte, für alle dieselben Bytes; ein nativer `import()` kann keinen Ausweis tragen) | – |
 | `POST /api/scores/{fileId}/reconvert` | Verwirft die gespeicherte Konvertierung und lässt sie neu erzeugen (nur mit Schreibrecht auf die Datei) | – |
+| `GET /api/scores/{fileId}/variants/{key}` | Eine Darstellungsvariante ([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)): fertig mit `files` wie beim Status, sonst wird sie **in dieser Anfrage** gesetzt; `pending`, solange eine andere Anfrage sie setzt | ja |
+| `GET /api/scores/{fileId}/variants/{key}/artifact/{name}` | Ein Artefakt einer Variante (`page-N`, `timing`, `measures`, `meta`; kein `midi`) | ja |
 | `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe | ja |
 | `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen und Stempel; Sichtbarkeit `parts` nur für Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | ja |
 | `GET\|PUT /api/scores/{fileId}/my-part` | „Meine Stimme“ je Partitur und Nutzerin; `GET` liefert die Übe-Einstellungen (`practice`) mit | ja |
@@ -147,7 +149,10 @@ Route mit Token annimmt; Einzelheiten in
 
 Der Statusendpunkt trägt zusätzlich `canWriteFolder`: ob die Person neben der
 Partitur anlegen darf. Daran hängt, ob der Viewer „Tracks für alle Stimmen“
-anbietet und die Druckseite „Als PDF in Dateien speichern“.
+anbietet und die Druckseite „Als PDF in Dateien speichern“. Und
+`variants.supported`: ob der Server Darstellungsvarianten setzen kann – eine
+Fähigkeit, kein Weg ([E15](#e15-fähigkeiten-statt-weg),
+[E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)).
 
 Ohne eigene Route: Der Suchprovider `Search\ScoreSearchProvider` hängt an
 Nextclouds globaler Suche (`/ocs/v2.php/search/providers/scoreview/search`,
@@ -222,6 +227,14 @@ Konvertierung neu ein; nur mit Schreibrecht, denn der Cache hängt an der Datei
 und gilt für alle, die sie öffnen. Für **alle** Partituren einer Instanz auf
 einmal bleibt das Hochzählen von `CURRENT_FORMAT_VERSION` der Hebel.
 
+Darstellungsvarianten ([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild))
+liegen unter dem Ordner ihrer Fassung, in `<etag>/v/<Schlüssel>/`. Alles, was
+eine Fassung räumt – `gcOldVersions`, `deleteAllForFile`, „Neu konvertieren“,
+der Papierkorb –, nimmt ihre Varianten mit; ihre Zeilen in
+`scoreview_variants` räumt `ConversionService` an denselben Stellen. Wird die
+Grundkonvertierung einer Fassung neu geschrieben, verfallen deren Varianten:
+Sie wurden gegen die alte geprüft.
+
 Während ein Lauf arbeitet, verweigert der Knopf – sonst schriebe der laufende
 Job sein Ergebnis auf eine gelöschte Zeile. Ob überhaupt noch einer arbeitet,
 beantwortet `ConversionService::isStale()` an genau einer Stelle: Ein Datensatz
@@ -242,7 +255,8 @@ Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 | `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag`, `kind`, `stamp`, `target_parts`, `by_leader`, `end_measure` |
 | `scoreview_leaders` | `file_id`, `user_id`, `appointed_by`, `created_at` – ernannte Leitungen; die Eigentümerin steht nie darin ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) |
 | `scoreview_follow` | `file_id` (Primärschlüssel: höchstens eine Sitzung je Datei), `leader_uid`, `started_at`, `heartbeat_at`, `version`, `state` ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) |
-| `scoreview_recordings` | `file_id`, `user_id`, `created_at`, `duration_ms`, `size_bytes`, `score_start_ms`, `tempo_factor`, `with_accompaniment` – die WAV selbst liegt in IAppData |
+| `scoreview_recordings` | `file_id`, `user_id`, `created_at`, `duration_ms`, `size_bytes`, `score_start_ms`, `tempo_factor`, `with_accompaniment`, `reference_hz` – die WAV selbst liegt in IAppData |
+| `scoreview_variants` | `file_id`, `etag`, `variant` (eindeutig zusammen – zugleich die Sperre eines Laufs), `status`, `error_code`, `error_message`, `format_version`, `engine`, `page_count`, `accessed_at` ([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)) |
 
 `backend` hält fest, welcher Konvertierungsweg **diese** Darstellung erzeugt hat
 (`sidecar`, `local`, oder `NULL`, wo der Weg nicht festgehalten ist).
@@ -981,6 +995,12 @@ Was ohne Sitzung erreichbar ist, darf nicht unbegrenzt Arbeit auslösen:
   jede Prüfung richtet den Dateibaum einer anderen Person ein.
 - Eine Person hat je Partitur höchstens 500 Notizen (409), denn wer nur lesen
   darf, darf trotzdem private Notizen anlegen, auch mit Token.
+- Darstellungsvarianten ([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)):
+  höchstens 20 neue Läufe je Person und Stunde (429, gezählt nur, wenn
+  wirklich gesetzt wird – nicht beim Abruf einer fertigen Variante), höchstens
+  8 Varianten je Fassung (die am längsten nicht abgerufene fällt weg), und
+  dieselbe Größengrenze wie die Grundkonvertierung (`max_score_bytes`). Jeder
+  Lauf ist ein Prozess mit 130–250 MB.
 
 ### S5: Aufnahmen haben eigene Speichergrenzen
 
@@ -1163,6 +1183,13 @@ Die beiden Darstellungen für das Handy halten sich daran: Das Systemband
 schneidet Systeme aus dem Seitenbild aus, statt sie neu zu setzen, und die
 Liedtext-Ansicht zeigt Text, keine Noten
 ([Üben und Lesen auf dem Handy](#üben-und-lesen-auf-dem-handy)).
+
+Ausgeschlossen ist der Neusatz im **Browser**, nicht ein zweiter Satz durch
+**MuseScore selbst**: Stimmenauszüge, Seiten in Handygröße, klingende und
+transponierte Notation setzt die Engine mit anderen Vorgaben neu
+([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)). Auch das
+ist kein Reflow – eine Handyseite ist ein fester Satz auf kleinerem Papier,
+der sich danach genauso nur skalieren lässt.
 
 ### E3: Zwei Konvertierungswege hinter einer API
 
@@ -2347,6 +2374,7 @@ denselben Daten dazu, würde er ohne eine Zeile im Viewer mitgenutzt.
 | Liedtext | `lyricSyllables` mit mindestens einer Silbe **und** Kennungen nach M10 (`segIds`) |
 | Tonnamen, Ton beim Antippen | `noteSpellings` **und** Kennungen nach M10 (`segIds`) |
 | Zählzeiten | dazu `measureFacts` und ein `tick` je `noteSpellings`-Eintrag (`meters`, ab `v4.7.5-engine.5`, [E12](#e12-partiturfakten-aus-der-engine-mit-midi-rückfall)) – das Metronom kommt ohne aus und schätzt, die Zahlen über den Noten dürfen das nicht |
+| Fassung, Seitenformat, klingend, Noten mittransponieren | `variants.supported` im Status (Server) bzw. der Rückfall im Browser, der dieselbe Engine fährt ([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)); „klingend“ nur bei `hasTransposingParts` |
 
 **Kein stiller Rückfall.** Anders als die Färbung der Notenköpfe, die still auf
 das Band zurückfällt, sagen die neuen Darstellungen, warum sie nicht gehen
@@ -2502,11 +2530,115 @@ Engine löst sich nicht mehr auf. `--no-lock` dagegen ist gesetzt: Das
 App-Verzeichnis ist signiert, eine dort angelegte `deno.lock` brächte
 Nextclouds Integritätsprüfung zum Anschlagen.
 
+### E19: Darstellungsvarianten: dieselbe Zeit, ein anderes Bild
+
+Eine Partitur lässt sich anders setzen als die Datei es tut – **von MuseScore
+selbst**, nur mit anderen Vorgaben: als Stimmenauszug, auf Seiten in
+Handygröße, klingend notiert oder transponiert. Die Engine kann das seit
+`v4.7.5-engine.6` (`setExcerptId`, `generateExcerpts`, `applyView`,
+`viewMapping`); E2 bleibt unberührt, denn es ist kein Neusatz im Browser.
+
+**Was eine Variante ist.** Ein zweiter Satz *Bild*-Artefakte derselben
+Fassung: Seiten, `timing.json`, `measures.json` und ein `meta.json`, das nur
+das Bild beschreibt. **Kein eigenes MIDI** – Mixer, „Meine Stimme“,
+Übe-Tracks, Aufnahme, „Folgt mir“ und Intonation hängen an einem Klang, und
+ein Stimmenauszug, der nur seine Stimme spielte, bräche das Mitsingen mit den
+anderen. Die Variante ändert das Bild, nicht das Stück.
+
+**Vier Achsen, ein Schlüssel.** `<Quelle>~<Format>~<Notation>~<Transposition>`,
+etwa `part3~phone~w~-2`:
+
+| Achse | Werte | Engine |
+|---|---|---|
+| Quelle | `full` · `ex<N>` (gespeicherter Auszug) · `part<id>` (erzeugt) | `setExcerptId` · `generateExcerpts([id])` |
+| Format | `orig` · `phone` (105 × 186 mm) · `phonel` (quer) | Seitengröße, Ränder 4 mm, Zeilen- und Seitenumbrüche entfernt (Abschnittsumbrüche bleiben), leere Notenzeilen ausgeblendet |
+| Notation | `w` (wie die Datei) · `c` (klingend) | Stil `concertPitch` |
+| Transposition | −12 … 12 | nach Intervall, geschrieben wie MuseScores Dialog (`src/view/intervalmap.h`) |
+
+Die Grammatik steht einmal in `converter/lib/variantKey.mjs` (Konverter und
+Viewer) und gespiegelt in `Service\VariantKey` (die URL wird zum
+Ordnernamen); beide werden gegen dieselben Fälle getestet. Nur die kanonische
+Schreibweise ist ein Schlüssel, und der Nullpunkt aller Achsen ist keine
+Variante, sondern die Grundkonvertierung – sonst gäbe es zwei Adressen für
+dieselben Bytes.
+
+**Vier Invarianten** halten Cursor, Taktfeld, Loops, Notizen und „Folgt mir“
+in jeder Variante gültig. Der Konverter prüft sie nach jedem Lauf
+(`checkVariant`) und schreibt sonst nichts – auf dem Server wie im Browser:
+
+- **I1 Zeitachse.** Jede Ereigniszeit der Variante ist eine der Basis (±1 ms).
+  Auszüge teilen Wiederholungsliste und Tempokarte der Hauptpartitur
+  (`Score::repeatList()` und `tempomap()` delegieren an den Master).
+- **I2 Taktzählung.** Gleiche Takt-Ereignisse und gleiche Takt-Elemente wie die
+  Basis – siehe [M13](#m13-auszüge-zählen-takte-über-die-mm-kette).
+- **I3 Segmentbezug.** `baseElid` nennt zu jedem Segment der Variante das der
+  Basis am selben notierten Tick. Notizen werden **immer gegen die Basis**
+  gespeichert und im Bild über die Umkehrung gezeichnet; ohne Gegenstück
+  steht eine Notiz am Takt.
+- **I4 Notenzeilenbezug.** `staffMap` nennt zu jeder Notenzeile der Variante
+  die der Basis, über die Verknüpfung der Auszugs-Notenzeilen mit der
+  Partitur.
+
+**Was im Viewer das Bild ist.** `useScoreSession.applyPicture()` tauscht
+Seiten, `timing` und `measures`; `pictureMeta` legt die elid- und
+notenzeilentragenden Felder der Variante (`noteSpellings`, `lyricSyllables`,
+`pageFormat`) über das `meta.json` der Basis, `pictureParts` nennt die
+gezeichneten Stimmen. Tonarten, Taktarten, Studierbuchstaben, Tempo und
+Stimmen für den Mixer bleiben die der Basis. „Meine Stimme“ als Notenzeile
+wird im Bild gesucht: Ein allein gezeichneter Auszug ist dort Notenzeile 0.
+
+**Transponierte Noten, ein Klang.** „Noten mittransponieren“ ist kein
+eigener Wert: Der Schlüssel bekommt die Transposition des Klangs
+(`practice.transpose`), und der Klang transponiert wie bisher der
+Synthesizer. Damit „Ton beim Antippen“ nicht doppelt verschoben klingt,
+schreibt der Konverter in die Variante die **Tonhöhe der Basis** und die
+**Schreibweise des Bildes** (`toVariantMeta`).
+
+**Wer, wann, wie schnell.** Wer die Datei lesen darf, darf jede Variante
+abrufen – sie ist abgeleitet, regenerierbar und für alle gleich. Die
+Variantenroute setzt eine fehlende **in der Anfrage**
+(`ConvertScoreJob::convertVariant()`, die Wegentscheidung bleibt in der
+Klasse aus E3): Die Grundkonvertierung wartet auf den Cron, für einen Wechsel
+auf „nur meine Stimme“ wäre das zu lang. Gemessen sind 3–4 s je Lauf
+([Grenzwerte](limits.de.md#darstellungsvarianten)). Zwei gleichzeitige Anfragen
+für dieselbe Variante ergeben einen Lauf: Der eindeutige Index ist die Sperre,
+die zweite Anfrage bekommt `pending` und fragt nach.
+
+**Wo es Varianten gibt.** Auf dem lokalen Weg und im Browser-Rückfall – der
+fährt dieselbe Engine und erzeugt Varianten im Tab (höchstens drei,
+`useClientConversion.runVariant()`). Der Sidecar setzt keine: Sein
+Stock-MuseScore schreibt weder die Kennungen aus M10 noch `baseElid` und
+`staffMap`, und die Kommandozeile liefert Auszüge nur als PDF. Der Status
+meldet das als Fähigkeit (`variants.supported`), der Viewer graut die Wahl
+mit Grund aus und dunkelt wie bisher ab.
+
+**Was gemerkt wird.** Fassung, „klingend“ und „Noten mittransponieren“ je
+Person und Partitur bei den Übe-Einstellungen – wer im Tenor singt, will den
+Tenorauszug in jedem Stück, auf jedem Gerät. Das **Seitenformat je Gerät**
+(`localStorage`): dieselbe Person will auf dem Schreibtisch A4 und auf dem
+Handy die Handyseite. Auf einem schmalen Bildschirm bietet der Viewer die
+Handyseiten einmal an, statt sie von selbst zu wählen. Drucken und PDF
+nehmen die angezeigte Variante (`?variant=`), die Offline-Seite die zuletzt
+auf diesem Gerät gezeigte.
+
+**Nicht übernommen: die Endlosansichten.** MuseScores waagrechte und
+senkrechte Endlosdarstellung (`LayoutMode::LINE`/`SYSTEM`) setzen die ganze
+Partitur auf *eine* Seite. Gemessen an einem vierseitigen Chorsatz: 13 915
+statt höchstens 4 170 Knoten in einem SVG, 30 Zoomschritte 980 statt 506 ms –
+und das wächst linear, bei 28 Seiten wären es um 100 000 Knoten auf einmal.
+Blättern, Doppelseite und Druck hängen am Seitenmodell. Die Handyseite bringt
+den Nutzen – größere Noten, Umbruch passend zum Gerät – innerhalb dieses
+Modells.
+
+**Nicht als Achse: weitere Stilschalter** (leere Notenzeilen, Liedtextgröße,
+Taktnummern). Jede Achse vervielfacht den Cache, und diese Schalter sind
+Sache der Datei; das Handyformat blendet leere Notenzeilen von sich aus aus.
+
 ## Formatgrundlagen
 
 Eigenschaften des MuseScore-Exports, auf denen die Umsetzung aufbaut. Alle gegen
 das gebaute Image bzw. die Engine gemessen, nicht angenommen. Die Kennungen
-`M1`…`M12` sind im Code referenziert; M5 ist entfallen und bleibt frei,
+`M1`…`M13` sind im Code referenziert; M5 ist entfallen und bleibt frei,
 damit die übrigen Verweise gelten.
 
 ### M1: `--score-media` liefert alles in einem Aufruf
@@ -2781,6 +2913,27 @@ Zuordnung der Tonnamen der Reihe nach; der Selbsttest prüft sie an
 ([M11](#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen)) –
 für das relative Do wird er nicht gebraucht.
 
+### M13: Auszüge zählen Takte über die MM-Kette
+
+Der Positionsschreiber der Engine nummeriert Takte und Segmente über die
+Kette mit Mehrtaktpausen (`firstMeasureMM`, `next1MM`). Eine Mehrtaktpause
+ist dort **ein** Takt. Stimmenauszüge haben Mehrtaktpausen per Voreinstellung
+(`createMultiMeasureRests`), die Partitur meist nicht – gemessen an
+`parts-test.mscz`: Die Klarinette pausiert in den Takten 14–21 und zeichnet
+dafür eine Pause „8“. Ein `measures.json` des Auszugs nach der eigenen Kette
+hätte 17 statt 24 Takte, und jeder Takt ab 14 stünde unter falscher Nummer.
+
+Deshalb zählt `savePositions(false, true)` die Takte **nach der Kette der
+Hauptpartitur** und gibt jedem den Kasten dessen, was der Auszug an diesem
+Tick zeichnet: Takt 14 bis 21 zeigen alle auf die Mehrtaktpause. Die
+Takt-Ereignisse sind damit Byte für Byte die der Basis (I2). Die
+Segment-Ereignisse bleiben die des Auszugs – unter einer Mehrtaktpause
+gibt es ein Segment, und der Cursor steht dort, solange sie dauert.
+
+Ein Abschnittsumbruch beginnt die **angezeigte** Taktnummer wieder bei 1
+(`parts-test.mscz`: Takte 13–24 tragen 1–12). Das ändert an der Zählung nichts:
+`measures.json` zählt Takte der Reihe nach, nicht ihre Beschriftung.
+
 ## Artefaktschema
 
 `timing.json` und `measures.json` haben dieselbe Form (ein gemeinsamer Parser im
@@ -2879,8 +3032,44 @@ Und eines für die Taktart je Takt (ab `v4.7.5-engine.5`), dazu je
   der Taktdauer und liest Taktartwechsel aus dem MIDI
   ([M11](#m11-was-midi-und-svg-über-studierbuchstaben-und-tonarten-tragen)).
 
+Zwei für die Darstellungsvarianten (ab `v4.7.5-engine.6`,
+[E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)):
+
+```json
+"excerpts":            [{"id": 0, "name": "Sopran", "partIds": ["1"]},
+                        {"id": 1, "name": "Frauenstimmen", "partIds": ["1", "2"]}],
+"hasTransposingParts": true
+```
+
+- `excerpts` sind die in der Datei gespeicherten Auszüge, in der Reihenfolge,
+  in der `ex<N>` sie adressiert; `partIds` sind die `id`s aus `parts`.
+- `hasTransposingParts`: ob irgendeine Stimme irgendwo nicht klingt, wie sie
+  notiert ist – nur dann bietet der Viewer „klingend“ an.
+
+Das `meta.json` einer **Variante** beschreibt nur ihr Bild:
+
+```json
+{
+  "variant": "part3~phone~w~-2",
+  "pages": 1,
+  "pageFormat": {"width": 105, "height": 186},
+  "keySigs": [...], "noteSpellings": [...], "lyricSyllables": [...],
+  "parts": [{"id": "3", "name": "Klarinette in B"}],
+  "baseElid": {"0": 0, "1": 4},
+  "staffMap": [2]
+}
+```
+
+- `noteSpellings` und `lyricSyllables` tragen die `elid`s und Notenzeilen der
+  Variante; `pitch` ist die Tonhöhe der Basis, `tpc` die Schreibweise des
+  Bildes (E19). `keySigs` sind die des Bildes – der Viewer nimmt die der
+  Basis und transponiert sie selbst.
+- `parts` sind die gezeichneten Stimmen in Notenzeilen-Reihenfolge,
+  `baseElid` und `staffMap` die Bezüge I3 und I4.
+
 Welche Fassung dieses Schemas ein Cache-Eintrag hat, hält `format_version` fest
-(`CURRENT_FORMAT_VERSION` = 4, [Konvertierung und Cache](#konvertierung-und-cache)).
+(`CURRENT_FORMAT_VERSION` = 6, [Konvertierung und Cache](#konvertierung-und-cache);
+Varianten `VariantService::FORMAT_VERSION` = 1).
 
 ## Weiter
 

@@ -63,15 +63,23 @@ app remembers "My voice" per score and, if you like, places it on the right of
 the stereo image and the others on the left. The **Speed trainer** raises the
 tempo with every pass through the loop until it reaches the target tempo.
 **Coach** plays your own part loudly on the piano, on the right, and the others
-quietly on the left, and **Transpose** shifts the sound up or down by semitones without
-changing the notation.
+quietly on the left, and **Transpose** shifts the sound up or down by semitones –
+and, where the server engraves it, the notes along with it.
+
+**Your own part, engraved.** The **edition** shows a part on its own instead
+of the full score: the parts stored in the file, or one MuseScore makes for
+any other part. Transposing instruments can be shown **in concert pitch**.
+MuseScore engraves each of these itself, the first time it is chosen, while
+sound, notes and measure numbers stay those of the score
+([Display variants](docs/limits.md#display-variants)).
 
 **Practising on the go, reading on a phone.** A **practice track** saves exactly
 what you are hearing right now – part, coach, tempo, transposition, optionally
 only the loop or with metronome – as an MP3 next to the score in Files; the
 Nextcloud app plays it offline and with controls on the lock screen. Anyone with
 write access to the score's folder can create **Tracks for all parts** with one
-click. For reading on a phone, the **system band** lays the systems out side by
+click. For reading on a phone, **phone pages** set the score on pages the size of
+the screen, with larger notes; the **system band** lays the systems out side by
 side, each as tall as the screen, and the **lyrics view** shows only the text of
 your own part with all verses, the sung syllable highlighted. **Note names** can
 be shown next to the noteheads – German, English or as solfège – and tapping a
