@@ -77,8 +77,15 @@ export function evaluateAudit(report, allowlist, today) {
 }
 
 function runAudit() {
+	// Through npm's own script with this Node where `npm run` names it: on
+	// Windows `npm` is npm.cmd, which execFileSync cannot start without a
+	// shell (since Node's fix for CVE-2024-27980).
+	const npmScript = process.env.npm_execpath
+	const [command, args] = npmScript && /\.c?js$/.test(npmScript)
+		? [process.execPath, [npmScript, 'audit', '--json']]
+		: ['npm', ['audit', '--json']]
 	try {
-		return execFileSync('npm', ['audit', '--json'], { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+		return execFileSync(command, args, { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
 	} catch (error) {
 		// npm audit endet mit Exitcode 1, sobald es ueberhaupt etwas findet;
 		// der Bericht steht trotzdem vollstaendig auf stdout.

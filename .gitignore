@@ -1,6 +1,7 @@
 # Node / build artifacts
 node_modules/
 /scoreview/js/
+/scoreview/coverage/
 # Generated from scoreview/translationfiles/ by `npm run build` (E4) - a
 # translation PR from the web editor cannot regenerate them.
 /scoreview/l10n/

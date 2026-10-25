@@ -22,6 +22,7 @@ npm ci
 npm run build        # Pflicht nach jeder Änderung unter src/ - js/ ist gitignored
 npm run watch        # während der Frontend-Arbeit
 npm test             # vitest: src/lib/, Composables, Konverter-Umformung, l10n-Vollständigkeit
+npm run test:coverage # dasselbe mit Abdeckung von src/lib, Composables, converter/lib - Bericht in coverage/
 npm run lint         # ESLint (@nextcloud/eslint-config), --fix über npm run lint:fix
 npm run stylelint    # Stylelint für die <style scoped>-Blöcke
 npm run l10n:extract # nach jedem neuen/geänderten t() - meldet fehlende und verwaiste Übersetzungen
