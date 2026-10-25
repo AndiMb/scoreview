@@ -6,6 +6,25 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.25.1] – 2026-10-25
+
+### Fixed
+
+- Following the playing, the system band now turns at once instead of
+  gliding. At the end of a system the next note already stands right of the
+  screen, and on a phone a glide took up to 850 ms – for that long the cursor
+  was out of view at every system. Turning by hand (pedal, “Back to the
+  playing position”) still glides.
+- On a phone, the score now reaches the bottom of the screen: Nextcloud's
+  Viewer kept a header's height free below it, and the file list showed
+  through – 50 of 325 px held sideways.
+
+### Development
+
+- `npm run audit` runs on Windows too.
+- `npm run test:coverage` measures the test coverage of `src/lib`, the
+  composables and the converter's transformation.
+
 ## [1.25.0] – 2026-10-25
 
 ### Added
@@ -1530,6 +1549,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.25.1]: https://github.com/AndiMb/scoreview/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/AndiMb/scoreview/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/AndiMb/scoreview/compare/v1.23.0...v1.24.0
 [1.23.0]: https://github.com/AndiMb/scoreview/compare/v1.21.2...v1.23.0
