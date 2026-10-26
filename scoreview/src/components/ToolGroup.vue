@@ -18,6 +18,7 @@
 		v-model:shown="shown"
 		popupRole="dialog"
 		popoverBaseClass="scoreview-bounded-popper"
+		:container="container"
 		:autoBoundaryMaxSize="true">
 		<template #trigger>
 			<NcButton :aria-label="label" :title="label">
@@ -67,6 +68,7 @@ import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcPopover from '@nextcloud/vue/components/NcPopover'
 import ArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
+import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
 
 export default {
 	name: 'ToolGroup',
@@ -89,6 +91,11 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+	},
+
+	// Popovers into the viewer while it is fullscreen (useFullscreenContainer.js).
+	setup() {
+		return useFullscreenContainer()
 	},
 
 	data() {

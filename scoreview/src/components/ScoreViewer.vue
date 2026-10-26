@@ -158,6 +158,7 @@
 						v-if="rehearsalMarks.length > 0 && can('seek')"
 						v-model:shown="marksOpen"
 						popoverBaseClass="scoreview-bounded-popper"
+						:container="popoverContainer"
 						:autoBoundaryMaxSize="true">
 						<template #trigger>
 							<NcButton
@@ -1195,6 +1196,7 @@ import { useBandZoom } from '../composables/useBandZoom.js'
 import { useBarLayout } from '../composables/useBarLayout.js'
 import { useConversionStatus } from '../composables/useConversionStatus.js'
 import { useFollowSession } from '../composables/useFollowSession.js'
+import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
 import { useIntonation } from '../composables/useIntonation.js'
 import { useLeaders } from '../composables/useLeaders.js'
 import { useLoop } from '../composables/useLoop.js'
@@ -2068,6 +2070,8 @@ export default {
 			zoomFollowsWidth: zoomApi.followsWidth,
 			isFullscreen: zoomApi.isFullscreen,
 			pageFullscreen: zoomApi.pageFullscreen,
+			// Rehearsal marks into the viewer while fullscreen (useFullscreenContainer.js).
+			popoverContainer: useFullscreenContainer().container,
 			fullscreenPossible: zoomApi.fullscreenPossible,
 			disposeFullscreen: zoomApi.disposeFullscreen,
 			zoomPercent: zoomApi.percent,
@@ -3598,11 +3602,15 @@ export default {
 
 /* Fullscreen inside the page (useZoom.js, issue #20): above Nextcloud's
  * header and the Files viewer's modal, the whole window. dvh, not vh: on
- * phones vh counts the browser's bars as if they were gone. */
+ * phones vh counts the browser's bars as if they were gone.
+ * The z-index competes inside the viewer's .modal-mask (9998), not with the
+ * page: NcModal puts its header at 10001 and the file arrows at 10000 there.
+ * Below them, the header covered the top row of the bar on the iPhone, and
+ * only its ✕ still answered (issue #15). */
 .scoreview-viewer--page-fullscreen {
 	position: fixed;
 	inset: 0;
-	z-index: 10000;
+	z-index: 10010;
 	height: 100dvh;
 }
 

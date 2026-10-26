@@ -17,6 +17,7 @@
 				:modelValue="selectedSource"
 				:options="variantSources"
 				:clearable="false"
+				:appendToBody="!inFullscreen"
 				:disabled="variantUnavailable !== ''"
 				:inputLabel="t('Score or part')"
 				label="label"
@@ -92,6 +93,7 @@
 import { translate } from '@nextcloud/l10n'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
+import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
 
 export default {
 	name: 'LayoutControls',
@@ -162,6 +164,11 @@ export default {
 	},
 
 	emits: ['update:layout', 'update:doublePage', 'update:variantSource', 'update:variantFormat', 'update:variantConcert'],
+
+	// Popovers into the viewer while it is fullscreen (useFullscreenContainer.js).
+	setup() {
+		return useFullscreenContainer()
+	},
 
 	computed: {
 		options() {

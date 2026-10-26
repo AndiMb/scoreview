@@ -28,6 +28,7 @@
 			v-model:shown="listOpen"
 			class="scoreview-setlist-popover"
 			popoverBaseClass="scoreview-bounded-popper"
+			:container="container"
 			:autoBoundaryMaxSize="true">
 			<template #trigger>
 				<NcButton
@@ -126,7 +127,7 @@
 		-->
 		<template v-else>
 			<span class="scoreview-setlist-text">{{ t('This score is in {n} setlists.', { n: offers.length }) }}</span>
-			<NcPopover popoverBaseClass="scoreview-bounded-popper" :autoBoundaryMaxSize="true">
+			<NcPopover popoverBaseClass="scoreview-bounded-popper" :container="container" :autoBoundaryMaxSize="true">
 				<template #trigger>
 					<NcButton variant="primary" class="scoreview-setlist-accept">
 						{{ t('Choose setlist') }}
@@ -166,6 +167,7 @@ import ChevronRight from 'vue-material-design-icons/ChevronRight.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import Pencil from 'vue-material-design-icons/Pencil.vue'
 import PlaylistMusic from 'vue-material-design-icons/PlaylistMusic.vue'
+import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
 
 /**
  * Nur Darstellung - Zustand und Blättern stehen in useSetlist.js und
@@ -202,6 +204,11 @@ export default {
 	},
 
 	emits: ['previous', 'next', 'goTo', 'edit', 'close', 'accept', 'dismiss'],
+
+	// Popovers into the viewer while it is fullscreen (useFullscreenContainer.js).
+	setup() {
+		return useFullscreenContainer()
+	},
 
 	data() {
 		return {
