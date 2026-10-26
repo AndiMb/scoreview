@@ -47,7 +47,7 @@
 				label="name"
 				:clearable="false"
 				:appendToBody="!inFullscreen"
-				@update:modelValue="(preset) => $emit('program', { channel: group.channels[0], program: preset.program })" />
+				@update:modelValue="(preset) => onProgram(group, preset)" />
 		</div>
 	</div>
 </template>
@@ -60,7 +60,7 @@ import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
 import Headphones from 'vue-material-design-icons/Headphones.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
-import { resolveMixerGroups } from '../lib/mixerLayout.js'
+import { groupPrograms, resolveMixerGroups } from '../lib/mixerLayout.js'
 
 /**
  * Volume, mute, solo, instrument and "my part" per voice group - as a view.
@@ -153,6 +153,12 @@ export default {
 
 		onVolumeInput(group, event) {
 			this.$emit('level', { channels: group.channels, level: Number(event.target.value) / 100 })
+		},
+
+		onProgram(group, preset) {
+			for (const change of groupPrograms(group, this.channels, preset.program)) {
+				this.$emit('program', change)
+			}
 		},
 
 		// NcSelect (vue-select) bekommt hier bewusst das volle Preset-Objekt aus

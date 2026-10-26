@@ -18,7 +18,8 @@
 
 /**
  * Ordnet metadata.tracks[]/parts[] (aus meta.json, siehe docs/architecture.md M6/M8)
- * MIDI-Kanälen zu, EIN Eintrag pro tatsächlich klingender Spur.
+ * MIDI-Kanälen zu, ein Eintrag pro Kanal einer Stimme (alle Klänge, dazu
+ * die Akkordsymbole - siehe unten).
  *
  * Zwei an echtem Material (nicht nur `wwimf`) gefundene Korrekturen
  * gegenüber der ursprünglichen Annahme "Kanal i = tracks[i]":
@@ -36,10 +37,11 @@
  *    Track-Reihenfolge. Bei `wwimf` traf die alte Annahme nur zufällig zu
  *    (Kanäle 0-3 in Dokumentreihenfolge), das hatte den Fehler verdeckt.
  *    Deshalb bevorzugt diese Funktion `trackChannels` - die
- *    echten, aus dem geladenen MIDI selbst gelesenen Kanäle je Spur (siehe
+ *    echten, aus der MIDI-Datei selbst gelesenen Kanäle je Spur (siehe
+ *    `midiNotes.js::readTrackLayout()`, ersatzweise
  *    `player.js::getTrackChannels()`), in derselben Dokumentreihenfolge wie
- *    die (nicht-Metronom-)Einträge hier. Ohne `trackChannels` (z.B. bevor
- *    der Player bereit ist) bleibt der Index als Näherung übrig.
+ *    die (nicht-Metronom-)Einträge hier. Ohne `trackChannels` (bevor das
+ *    MIDI geladen ist) bleibt der Index als Näherung übrig.
  *
  * `tracks` kann leer sein, obwohl `parts` gefüllt ist (M8, `repeat-test.mscz`)
  * - dann direkt auf `parts` zurückfallen, sonst gäbe es überhaupt keine
@@ -202,4 +204,24 @@ export function resolveMixerGroups(channels) {
 		}
 	}
 	return [...groups.values()]
+}
+
+/**
+ * The programs a row's instrument choice sets, one per channel. The whole row
+ * changes, as its slider does - a contrabass turned cello should not keep
+ * plucking as a contrabass. Choosing the row's own instrument again gives
+ * every channel its own sound back (pizzicato, tremolo, ...), so the score's
+ * sound stays reachable from the picker.
+ *
+ * @param {MixerGroup} group
+ * @param {MixerChannel[]} channels from resolveMixerChannels()
+ * @param {number} program the chosen one
+ * @return {Array<{channel:number, program:number}>}
+ */
+export function groupPrograms(group, channels, program) {
+	const own = new Map(channels.map((ch) => [ch.channel, ch.program]))
+	return group.channels.map((channel) => ({
+		channel,
+		program: program === group.program ? (own.get(channel) ?? program) : program,
+	}))
 }

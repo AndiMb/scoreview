@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { readTrackLayout } from './midiNotes.js'
-import { resolveMixerChannels, resolveMixerGroups } from './mixerLayout.js'
+import { groupPrograms, resolveMixerChannels, resolveMixerGroups } from './mixerLayout.js'
 
 describe('resolveMixerChannels', () => {
 	// tracks[].name ist bei MuseScore 4 fuer jede Stimme "MS Basic" (Name der
@@ -128,6 +128,24 @@ describe('chord symbols and further channels (chords-test.mid, see midiNotes.tes
 	it('takes no chord channel from a part without chord symbols', () => {
 		const none = parts.map((p) => ({ ...p, harmonyCount: 0 }))
 		expect(resolveMixerChannels([], none, layout).filter((c) => c.harmonyOf !== undefined)).toEqual([])
+	})
+
+	it("changes the instrument on all of a row's channels", () => {
+		const contrabass = resolveMixerGroups(channels).find((g) => g.key === '3')
+		expect(groupPrograms(contrabass, channels, 42)).toEqual([
+			{ channel: 3, program: 42 },
+			{ channel: 4, program: 42 },
+			{ channel: 5, program: 42 },
+		])
+	})
+
+	it("gives every channel its own sound back when the row's instrument is chosen again", () => {
+		const contrabass = resolveMixerGroups(channels).find((g) => g.key === '3')
+		expect(groupPrograms(contrabass, channels, 43)).toEqual([
+			{ channel: 3, program: 43 },
+			{ channel: 4, program: 32 },
+			{ channel: 5, program: 44 },
+		])
 	})
 
 	it('falls back to the index when the tracks cannot be grouped onto the parts', () => {
