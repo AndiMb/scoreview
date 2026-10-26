@@ -50,6 +50,10 @@ export function followParts(mixerChannels, metaParts) {
 	const byId = new Map((metaParts ?? []).map((part) => [String(part.id), part]))
 	const result = []
 	for (const channel of mixerChannels ?? []) {
+		// Chord symbols are no part to follow: nobody sings or plays them.
+		if (channel.harmonyOf !== undefined) {
+			continue
+		}
 		const id = String(channel.partId ?? `ch${channel.channel}`)
 		let entry = result.find((p) => p.id === id)
 		if (!entry) {

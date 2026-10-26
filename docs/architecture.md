@@ -2810,11 +2810,35 @@ Dazu kommen aus `metadata.parts` die Angaben `instrumentId`, `isVisible`,
 `lyricCount`, `hasDrumStaff`. Die Mixer-UI ist damit ohne eigene Analyse des
 MIDI-Files baubar.
 
+Die scoreview-engine lässt `tracks` gemessen immer leer; der Mixer geht
+deshalb in der Regel über `parts`.
+
 **Die MIDI-Kanalnummer ist aber nicht der Index in `tracks`.** An einer
 fünfstimmigen Partitur gemessen: Sopran/Alt/Tenor/Bariton/Bass liegen auf den
 MIDI-Kanälen 0/2/3/1/6, nicht auf 0–4. `resolveMixerChannels()` leitet die
-Kanäle deshalb aus dem geladenen MIDI ab (`player.js::getTrackChannels()`), nicht
-aus der Position in der Liste.
+Kanäle deshalb aus `score.mid` selbst ab (`midiNotes.js::readTrackLayout()`),
+nicht aus der Position in der Liste. Drei weitere Befunde an einer selbst
+gebauten Partitur (Flöte und Klavier mit Akkordsymbolen, Kontrabass):
+
+- **Eine Stimme spielt auf mehreren Kanälen.** MuseScore gibt jedem Klang eines
+  Instruments einen eigenen Kanal (Kontrabass: arco, pizzicato, tremolo auf
+  3/4/5), und Akkordsymbole bekommen noch einen, `harmony`, ans Ende der
+  Kanalliste angehängt. Eine Mixerzeile trägt alle Kanäle ihrer Stimme; der
+  Akkordkanal wird eine eigene Zeile „Akkordsymbole“ und zählt nicht als
+  „Meine Stimme“. Vorher regelte jede Zeile nur den ersten Kanal, und die
+  Akkorde ließen sich nicht abschalten.
+- **Die Kanäle stehen in der Reihenfolge ihrer Einrichtung**, nicht ihrer
+  ersten Note: Jeder Kanal beginnt in der Spur mit einem eigenen Block bei
+  Tick 0 (CC121, Programm, CC7), in der Reihenfolge der Kanalliste. Der
+  Akkordkanal ist deshalb der zuletzt eingerichtete Kanal der Spur. Seine
+  Nummer verrät ihn nicht: Flöte 0 → Akkorde 1, Klavier 2 → Akkorde 6. Die
+  Kanalliste von spessasynth (`track.channels`) kennt nur Kanäle mit Noten und
+  ordnet sie nach der ersten Note. Bei einer Melodie, die mit einer Pause
+  beginnt, stand der Akkordkanal dort vorn.
+- **Eine Stimme kann mehrere Spuren haben**, eine je System: das Klavier zwei.
+  Eine Spur ohne eigenen neuen Kanal setzt die Stimme davor fort. Nur wenn
+  dabei genau eine Gruppe je Stimme herauskommt, gilt die Zuordnung; sonst
+  bleibt, sichtbar falsch statt stumm falsch, der Index.
 
 ### M7: Wiederholungen rollen sich aus, D.C./D.S./Coda nicht
 

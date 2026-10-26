@@ -5,8 +5,15 @@
 /**
  * @typedef {{instrumentId:string,name:string,partId:string,type:string}} Track
  * @typedef {{id:string,name:string,instrumentId:string,program:number}} Part
- * @typedef {{channel:number,instrumentId:string,name:string,partId:string,program:number}} MixerChannel
- * @typedef {{key:string,name:string,partId:string,program:number,channels:number[]}} MixerGroup
+ * @typedef {{channel:number,instrumentId:string,name:string,partId:?string,program:number,harmonyOf?:string,articulation?:boolean}} MixerChannel
+ *   harmonyOf: the part whose chord symbols the channel plays; partId is then null.
+ *   articulation: a further channel of the same instrument (pizzicato, ...)
+ * @typedef {{key:string,name:string,partId:?string,program:number,channels:number[],voices:number,harmonyOf?:string}} MixerGroup
+ *   voices: the channels that are no articulation - more than one is a divisi
+ * @typedef {Array<number|{channel:number, program:?number}>} TrackChannels
+ *   the channels of one MIDI track in the order of their first message
+ *   (midiNotes.js readTrackLayout()); plain numbers are channels without a
+ *   known program
  */
 
 /**
@@ -36,12 +43,29 @@
  *
  * `tracks` kann leer sein, obwohl `parts` gefüllt ist (M8, `repeat-test.mscz`)
  * - dann direkt auf `parts` zurückfallen, sonst gäbe es überhaupt keine
- * Lautstärkeregelung ("Lautstärke darf nie vollständig fehlen").
+ * Lautstärkeregelung ("Lautstärke darf nie vollständig fehlen"). Measured:
+ * the scoreview-engine always leaves `tracks` empty, so this is the usual way.
+ *
+ * **A part plays on all channels of its track, not only the first.**
+ * MuseScore gives an instrument one channel per sound (strings: arco,
+ * pizzicato, tremolo), and chord symbols one more, "harmony", appended to the
+ * end of the list. A part's row therefore carries all of them, and the
+ * harmony channel - the last one its track sets up - becomes a row of its
+ * own when the part has chord symbols (`harmonyCount`): chords that played
+ * on regardless of the mixer were the complaint, and a singer wants them
+ * apart from the melody. Not "my part" either: partId stays null, so the
+ * focus, the coach and the start tone keep to the written notes.
+ *
+ * **A part can have more MIDI tracks than one** - one per staff, a piano has
+ * two. A track that brings no channel of its own continues the part before
+ * it: MuseScore sets up a part's channels in its first staff's track only.
+ * Only if that yields exactly one group per entry is it used; otherwise the
+ * index stays, as before.
  *
  * @param {Track[]} tracks
  * @param {Part[]} [parts] metadata.parts - liefert den echten Stimmennamen
  *   (tracks[].name ist bei MuseScore 4 nur die Klangbibliothek, "MS Basic")
- * @param {number[][]} [trackChannels] echte MIDI-Kanäle je Spur, in
+ * @param {TrackChannels[]} [trackChannels] echte MIDI-Kanäle je Spur, in
  *   Dokumentreihenfolge der NICHT-Metronom-Spuren (siehe oben)
  * @return {MixerChannel[]}
  */
@@ -67,18 +91,87 @@ export function resolveMixerChannels(tracks, parts, trackChannels) {
 				program: part.program ?? 0,
 			}))
 
-	// Nur anwenden, wenn die Länge zur Anzahl der Einträge passt - bei einer
+	// Nur anwenden, wenn die Zuordnung zur Anzahl der Einträge passt - bei einer
 	// Abweichung (z.B. eine Partitur, deren MIDI-Export doch eine Metronomspur
 	// enthält) wäre eine positionale Zuordnung falsch UND stumm falsch; lieber
 	// sichtbar auf den Index zurückfallen, als eine Stimme fälschlich auf den
 	// Kanal einer anderen zu legen.
-	const realChannelsUsable = Array.isArray(trackChannels) && trackChannels.length === entries.length
+	const groups = Array.isArray(trackChannels) ? groupTracks(trackChannels.map(normalizeTrack), entries.length) : null
 
-	return entries.map((entry, index) => {
-		const real = realChannelsUsable ? trackChannels[index] : null
-		const channel = (real && real.length > 0) ? real[0] : index
-		return { channel, ...entry }
+	const result = []
+	const taken = new Set()
+	const seenParts = new Set()
+	entries.forEach((entry, index) => {
+		const own = groups ? groups[index] : []
+		if (own.length === 0) {
+			result.push({ channel: index, ...entry })
+			return
+		}
+		// A channel belongs to the first entry that plays it: a second track
+		// of the same part (tracks per staff) adds no row of its own.
+		const real = own.filter((info) => !taken.has(info.channel))
+		if (real.length === 0) {
+			return
+		}
+		const firstOfPart = !seenParts.has(String(entry.partId))
+		seenParts.add(String(entry.partId))
+		const part = partsById.get(String(entry.partId))
+		const harmony = firstOfPart && (part?.harmonyCount ?? 0) > 0 && real.length > 1 ? real[real.length - 1] : null
+		let first = true
+		for (const info of real) {
+			taken.add(info.channel)
+			if (info === harmony) {
+				result.push({ ...entry, channel: info.channel, partId: null, harmonyOf: String(entry.partId), program: info.program ?? 0 })
+				continue
+			}
+			const channel = { channel: info.channel, ...entry, program: info.program ?? entry.program }
+			if (!first) {
+				// A further sound of the same instrument (pizzicato, mute):
+				// follows the row, but is no voice of its own (ScoreMixer.vue
+				// offers the instrument choice for one voice only).
+				channel.articulation = true
+			}
+			first = false
+			result.push(channel)
+		}
 	})
+	return result
+}
+
+/**
+ * @param {TrackChannels} track
+ * @return {Array<{channel:number, program:?number}>}
+ */
+function normalizeTrack(track) {
+	return (track ?? []).map((info) => (typeof info === 'number' ? { channel: info, program: null } : info))
+}
+
+/**
+ * The MIDI tracks per mixer entry, in order: one track each when the counts
+ * match; otherwise a track whose channels all belong to the group before it
+ * (a further staff) joins that group, and tracks without a channel drop out.
+ *
+ * @param {Array<Array<{channel:number, program:?number}>>} tracks
+ * @param {number} count
+ * @return {?Array<Array<{channel:number, program:?number}>>} the channels per
+ *   entry in first-message order, null when no assignment fits
+ */
+function groupTracks(tracks, count) {
+	if (tracks.length === count) {
+		return tracks
+	}
+	const groups = []
+	for (const track of tracks) {
+		if (track.length === 0) {
+			continue
+		}
+		const previous = groups[groups.length - 1]
+		if (previous && track.every((info) => previous.some((own) => own.channel === info.channel))) {
+			continue
+		}
+		groups.push([...track])
+	}
+	return groups.length === count ? groups : null
 }
 
 /**
@@ -95,11 +188,18 @@ export function resolveMixerChannels(tracks, parts, trackChannels) {
 export function resolveMixerGroups(channels) {
 	const groups = new Map()
 	for (const ch of channels) {
-		const key = ch.partId ?? `channel-${ch.channel}`
+		const key = ch.partId ?? (ch.harmonyOf !== undefined ? `harmony-${ch.harmonyOf}` : `channel-${ch.channel}`)
 		if (!groups.has(key)) {
-			groups.set(key, { key, name: ch.name, partId: ch.partId, program: ch.program, channels: [] })
+			const group = { key, name: ch.name, partId: ch.partId, program: ch.program, channels: [], voices: 0 }
+			if (ch.harmonyOf !== undefined) {
+				group.harmonyOf = ch.harmonyOf
+			}
+			groups.set(key, group)
 		}
 		groups.get(key).channels.push(ch.channel)
+		if (!ch.articulation) {
+			groups.get(key).voices++
+		}
 	}
 	return [...groups.values()]
 }

@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { readTrackLayout } from './midiNotes.js'
 import { resolveMixerChannels, resolveMixerGroups } from './mixerLayout.js'
 
 describe('resolveMixerChannels', () => {
@@ -78,8 +80,8 @@ describe('resolveMixerGroups', () => {
 			{ channel: 2, instrumentId: 'alto', name: 'Alt', partId: '2', program: 52 },
 		]
 		expect(resolveMixerGroups(channels)).toEqual([
-			{ key: '1', name: 'Sopran', partId: '1', program: 52, channels: [0, 1] },
-			{ key: '2', name: 'Alt', partId: '2', program: 52, channels: [2] },
+			{ key: '1', name: 'Sopran', partId: '1', program: 52, channels: [0, 1], voices: 2 },
+			{ key: '2', name: 'Alt', partId: '2', program: 52, channels: [2], voices: 1 },
 		])
 	})
 
@@ -89,5 +91,46 @@ describe('resolveMixerGroups', () => {
 			{ channel: 1, instrumentId: 'alto', name: 'Alto', partId: '2', program: 52 },
 		]
 		expect(resolveMixerGroups(channels).map((g) => g.channels)).toEqual([[0], [1]])
+	})
+})
+
+describe('chord symbols and further channels (chords-test.mid, see midiNotes.test.js)', () => {
+	const layout = readTrackLayout(readFileSync(new URL('./__fixtures__/chords-test.mid', import.meta.url)))
+	const parts = [
+		{ id: '1', name: 'Flute', instrumentId: 'flute', program: 73, harmonyCount: 4 },
+		{ id: '2', name: 'Piano', instrumentId: 'piano', program: 0, harmonyCount: 4 },
+		{ id: '3', name: 'Contrabass', instrumentId: 'contrabass', program: 43, harmonyCount: 0 },
+	]
+	const channels = resolveMixerChannels([], parts, layout)
+
+	it('gives every part all of its channels, and chord symbols their own entry', () => {
+		expect(channels.map((c) => [c.channel, c.partId, c.harmonyOf ?? null, c.program, c.articulation ?? false])).toEqual([
+			[0, '1', null, 73, false],
+			[1, null, '1', 0, false],
+			[2, '2', null, 0, false],
+			[6, null, '2', 0, false],
+			[3, '3', null, 43, false],
+			[4, '3', null, 32, true],
+			[5, '3', null, 44, true],
+		])
+	})
+
+	it("makes one mixer row per part and one for each part's chord symbols", () => {
+		expect(resolveMixerGroups(channels).map((g) => [g.key, g.name, g.channels, g.voices, g.harmonyOf ?? null])).toEqual([
+			['1', 'Flute', [0], 1, null],
+			['harmony-1', 'Flute', [1], 1, '1'],
+			['2', 'Piano', [2], 1, null],
+			['harmony-2', 'Piano', [6], 1, '2'],
+			['3', 'Contrabass', [3, 4, 5], 1, null],
+		])
+	})
+
+	it('takes no chord channel from a part without chord symbols', () => {
+		const none = parts.map((p) => ({ ...p, harmonyCount: 0 }))
+		expect(resolveMixerChannels([], none, layout).filter((c) => c.harmonyOf !== undefined)).toEqual([])
+	})
+
+	it('falls back to the index when the tracks cannot be grouped onto the parts', () => {
+		expect(resolveMixerChannels([], parts.slice(0, 2), layout).map((c) => c.channel)).toEqual([0, 1])
 	})
 })

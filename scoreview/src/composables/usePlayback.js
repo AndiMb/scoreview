@@ -3,6 +3,7 @@ import { translate } from '@nextcloud/l10n'
 import { computed, ref, shallowRef } from 'vue'
 import { createDropoutCounter, createFrameRateMeter } from '../lib/audioHealth.js'
 import { audioSession } from '../lib/audioSession.js'
+import { readTrackLayout } from '../lib/midiNotes.js'
 import { resolveMixerChannels } from '../lib/mixerLayout.js'
 import {
 	createLatencySmoother,
@@ -158,6 +159,22 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	let metaTracks = null
 	let metaParts = null
 
+	/**
+	 * The channels per MIDI track in setup order (midiNotes.js) - spessasynth
+	 * lists only channels that play, in the order of their first note, which
+	 * puts chord symbols before a melody that starts with a rest.
+	 *
+	 * @param {?ArrayBuffer} bytes
+	 * @return {?Array} null if the file cannot be read; the player's own list then
+	 */
+	function trackLayoutOf(bytes) {
+		try {
+			return bytes ? readTrackLayout(bytes) : null
+		} catch {
+			return null
+		}
+	}
+
 	/** @param {object} meta `meta.json` von MuseScore */
 	function applyMetadata(meta) {
 		metaTracks = meta.tracks
@@ -284,7 +301,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 			// Jetzt mit den echten, aus dem geladenen MIDI gelesenen Kanälen neu
 			// auflösen (siehe mixerLayout.js) - bis hierhin gilt nur die
 			// Index-Näherung, weil getTrackChannels() ein geladenes MIDI braucht.
-			mixerChannels.value = resolveMixerChannels(metaTracks, metaParts, player.getTrackChannels())
+			mixerChannels.value = resolveMixerChannels(metaTracks, metaParts, trackLayoutOf(midiData.value) ?? player.getTrackChannels())
 		} catch (err) {
 			if (!current()) {
 				return

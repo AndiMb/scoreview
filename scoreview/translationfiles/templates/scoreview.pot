@@ -1524,6 +1524,14 @@ msgstr ""
 msgid "Boost this voice, keep the others audible but quiet"
 msgstr ""
 
+#: src/components/ScoreMixer.vue
+msgid "Chord symbols ({name})"
+msgstr ""
+
+#: src/components/ScoreMixer.vue
+msgid "Chord symbols"
+msgstr ""
+
 #: src/components/ScoreModal.vue
 msgid "This setlist has no score you can open yet. Add scores and save."
 msgstr ""

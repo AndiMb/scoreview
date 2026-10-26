@@ -1,19 +1,19 @@
 <template>
 	<div class="scoreview-mixer">
 		<div v-for="group in groups" :key="group.key" class="scoreview-mixer-channel">
-			<span class="scoreview-mixer-name">{{ group.name || group.partId }}</span>
+			<span class="scoreview-mixer-name">{{ label(group) }}</span>
 			<input
 				type="range"
 				min="0"
 				max="100"
 				:value="groupLevel(group)"
 				:disabled="groupMuted(group)"
-				:aria-label="t('Volume: {name}', { name: group.name || group.partId })"
+				:aria-label="t('Volume: {name}', { name: label(group) })"
 				@input="onVolumeInput(group, $event)">
 			<NcButton
 				class="scoreview-mixer-toggle"
 				:pressed="groupMuted(group)"
-				:aria-label="t('Mute: {name}', { name: group.name || group.partId })"
+				:aria-label="t('Mute: {name}', { name: label(group) })"
 				@click="$emit('mute', group.channels)">
 				<template #icon>
 					<VolumeOff :size="20" />
@@ -22,16 +22,17 @@
 			<NcButton
 				class="scoreview-mixer-toggle"
 				:pressed="groupSolo(group)"
-				:aria-label="t('Solo: {name}', { name: group.name || group.partId })"
+				:aria-label="t('Solo: {name}', { name: label(group) })"
 				@click="$emit('solo', group.channels)">
 				<template #icon>
 					<Headphones :size="20" />
 				</template>
 			</NcButton>
 			<NcButton
+				v-if="group.harmonyOf === undefined"
 				class="scoreview-mixer-toggle"
 				:pressed="mix.focusKey === group.key"
-				:aria-label="t('My voice: {name}', { name: group.name || group.partId })"
+				:aria-label="t('My voice: {name}', { name: label(group) })"
 				:title="t('Boost this voice, keep the others audible but quiet')"
 				@click="$emit('focus', group)">
 				<template #icon>
@@ -39,12 +40,13 @@
 				</template>
 			</NcButton>
 			<NcSelect
-				v-if="presetList && presetList.length > 0 && group.channels.length === 1"
+				v-if="presetList && presetList.length > 0 && group.voices === 1"
 				class="scoreview-mixer-program"
 				:modelValue="selectedPreset(group.channels[0])"
 				:options="presetList"
 				label="name"
 				:clearable="false"
+				:appendToBody="!inFullscreen"
 				@update:modelValue="(preset) => $emit('program', { channel: group.channels[0], program: preset.program })" />
 		</div>
 	</div>
@@ -57,6 +59,7 @@ import NcSelect from '@nextcloud/vue/components/NcSelect'
 import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
 import Headphones from 'vue-material-design-icons/Headphones.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
+import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
 import { resolveMixerGroups } from '../lib/mixerLayout.js'
 
 /**
@@ -65,8 +68,10 @@ import { resolveMixerGroups } from '../lib/mixerLayout.js'
  * opening this panel changes nothing that is heard; the panel says what it
  * would like changed, the viewer decides (issue #17).
  *
- * A group can bundle several channels (divisi, see resolveMixerGroups()).
- * A row shows its first channel and changes all members alike.
+ * A group can bundle several channels (divisi, an instrument's further
+ * sounds, see resolveMixerGroups()). A row shows its first channel and
+ * changes all members alike. Chord symbols have a row of their own, without
+ * "my voice": they are no voice anyone sings.
  *
  * The slider runs from 0 to 100 % of the score's own mix (mixState.js) -
  * 100 % is what MuseScore's mixer set, not the synthesizer's maximum.
@@ -99,6 +104,11 @@ export default {
 
 	emits: ['level', 'mute', 'solo', 'focus', 'program'],
 
+	// Popovers into the viewer while it is fullscreen (useFullscreenContainer.js).
+	setup() {
+		return useFullscreenContainer()
+	},
+
 	computed: {
 		groups() {
 			return resolveMixerGroups(this.channels)
@@ -108,6 +118,21 @@ export default {
 	methods: {
 		t(text, vars) {
 			return translate('scoreview', text, vars)
+		},
+
+		/**
+		 * A row's name. Chord symbols carry their part's name only when
+		 * several parts have them - one row "Chord symbols" says enough.
+		 *
+		 * @param {object} group see resolveMixerGroups()
+		 * @return {string}
+		 */
+		label(group) {
+			if (group.harmonyOf === undefined) {
+				return group.name || group.partId
+			}
+			const several = this.groups.filter((other) => other.harmonyOf !== undefined).length > 1
+			return several ? this.t('Chord symbols ({name})', { name: group.name }) : this.t('Chord symbols')
 		},
 
 		channelMix(group) {

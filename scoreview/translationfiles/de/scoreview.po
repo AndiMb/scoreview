@@ -1524,6 +1524,14 @@ msgstr "Meine Stimme: {name}"
 msgid "Boost this voice, keep the others audible but quiet"
 msgstr "Diese Stimme hervorheben, die übrigen leise mithörbar lassen"
 
+#: src/components/ScoreMixer.vue
+msgid "Chord symbols ({name})"
+msgstr "Akkordsymbole ({name})"
+
+#: src/components/ScoreMixer.vue
+msgid "Chord symbols"
+msgstr "Akkordsymbole"
+
 #: src/components/ScoreModal.vue
 msgid "This setlist has no score you can open yet. Add scores and save."
 msgstr "Diese Setliste enthält noch keine Partitur, die du öffnen kannst. Füge Partituren hinzu und speichere."

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { parseMidiNotes } from './midiNotes.js'
+import { parseMidiNotes, readTrackLayout } from './midiNotes.js'
 
 // Das MIDI der Testpartitur m1-test (selbst erstellt, abgeleitet aus repeat-test):
 // 5 Takte 4/4 bei 120 BPM, Takt 1 und 2 wiederholt (Takt 2 ist die erste
@@ -202,5 +202,27 @@ describe('channelVolumes', () => {
 			00 ff 2f 00
 		`)
 		expect(parseMidiNotes(bytes).channelVolumes).toEqual(new Map([[2, 100]]))
+	})
+})
+
+// chords-test.mid: a self-made score (MusicXML -> MuseScore 4.7.5 -> engine):
+// Flute with chord symbols, its melody starting after a half rest; Piano on
+// two staves with chord symbols; Contrabass (arco, pizzicato, tremolo).
+const chords = readFileSync(new URL('./__fixtures__/chords-test.mid', import.meta.url))
+
+describe('readTrackLayout', () => {
+	it('lists the channels of each track in setup order, with their programs', () => {
+		expect(readTrackLayout(chords)).toEqual([
+			// Setup 0 before 1, though the first note is a chord on 1.
+			[{ channel: 0, program: 73 }, { channel: 1, program: 0 }],
+			[{ channel: 2, program: 0 }, { channel: 6, program: 0 }],
+			// The lower staff sets nothing up.
+			[{ channel: 2, program: null }],
+			[{ channel: 3, program: 43 }, { channel: 4, program: 32 }, { channel: 5, program: 44 }],
+		])
+	})
+
+	it('throws on something that is no MIDI file, like parseMidiNotes', () => {
+		expect(() => readTrackLayout(new Uint8Array([1, 2, 3, 4]))).toThrow()
 	})
 })

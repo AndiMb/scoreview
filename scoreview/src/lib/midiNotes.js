@@ -44,34 +44,7 @@ export const DEFAULT_CHANNEL_VOLUME = 100
  *   den Anfangston nuetzlicher als keine.
  */
 export function parseMidiNotes(input) {
-	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input)
-	const reader = createReader(bytes)
-
-	if (reader.ascii(4) !== 'MThd') {
-		throw new Error('Not a MIDI file (MThd missing)')
-	}
-	const headerLength = reader.uint32()
-	reader.uint16() // Format: 0 und 1 werden gleich behandelt - alle Spuren laufen parallel.
-	const trackCount = reader.uint16()
-	const division = reader.uint16()
-	reader.skip(headerLength - 6)
-
-	const rawTracks = []
-	for (let t = 0; t < trackCount && !reader.atEnd(); t++) {
-		const chunkId = reader.ascii(4)
-		const length = reader.uint32()
-		const start = reader.pos
-		const end = Math.min(bytes.length, start + length)
-		if (chunkId === 'MTrk') {
-			rawTracks.push(readTrackEvents(bytes, start, end))
-		} else {
-			// Fremde Chunks sind laut SMF erlaubt und zu ueberspringen; sie
-			// zaehlen nicht als Spur.
-			t--
-		}
-		reader.seek(end)
-	}
-
+	const { division, rawTracks } = readTracks(input)
 	const toMs = createTickConverter(division, rawTracks)
 
 	const notes = []
@@ -137,6 +110,78 @@ export function parseMidiNotes(input) {
 	timeSigs.sort((a, b) => a.timeMs - b.timeMs)
 
 	return { notes, markers, keySigs, timeSigs, channelVolumes: channelVolumesAt(volumeChanges, firstNoteTick), durationMs: toMs(endTick) }
+}
+
+/**
+ * The channels each track addresses, in the order of their first message,
+ * with the program each one starts on - for the mixer (mixerLayout.js).
+ *
+ * The order is the instrument's channel list: MuseScore opens every channel
+ * of a part with a setup block of its own (CC121, program, CC7, ...) at
+ * tick 0, in that list's order, and a chord symbol's "harmony" channel is
+ * appended to the end of it. Measured on a flute with chord symbols whose
+ * melody starts after a rest: blocks for 0, then 1, while the first note is
+ * a chord on 1 - order by first note would have made the chords the flute.
+ * A track without setup blocks (the lower staff of a piano) lists its
+ * channels in the order they play.
+ *
+ * @param {ArrayBuffer|Uint8Array} input the file score.mid
+ * @return {Array<Array<{channel:number, program:?number}>>} one entry per track
+ * @throws {Error} when it is no SMF file at all
+ */
+export function readTrackLayout(input) {
+	return readTracks(input).rawTracks.map((events) => {
+		const channels = new Map()
+		for (const event of events) {
+			if (event.channel === undefined) {
+				continue
+			}
+			if (!channels.has(event.channel)) {
+				channels.set(event.channel, { channel: event.channel, program: null })
+			}
+			const entry = channels.get(event.channel)
+			if (event.type === 'program' && entry.program === null) {
+				entry.program = event.program
+			}
+		}
+		return [...channels.values()]
+	})
+}
+
+/**
+ * @param {ArrayBuffer|Uint8Array} input
+ * @return {{division:number, rawTracks:Array<Array<object>>}}
+ */
+function readTracks(input) {
+	const bytes = input instanceof Uint8Array ? input : new Uint8Array(input)
+	const reader = createReader(bytes)
+
+	if (reader.ascii(4) !== 'MThd') {
+		throw new Error('Not a MIDI file (MThd missing)')
+	}
+	const headerLength = reader.uint32()
+	reader.uint16() // Format: 0 und 1 werden gleich behandelt - alle Spuren laufen parallel.
+	const trackCount = reader.uint16()
+	const division = reader.uint16()
+	reader.skip(headerLength - 6)
+
+	const rawTracks = []
+	for (let t = 0; t < trackCount && !reader.atEnd(); t++) {
+		const chunkId = reader.ascii(4)
+		const length = reader.uint32()
+		const start = reader.pos
+		const end = Math.min(bytes.length, start + length)
+		if (chunkId === 'MTrk') {
+			rawTracks.push(readTrackEvents(bytes, start, end))
+		} else {
+			// Fremde Chunks sind laut SMF erlaubt und zu ueberspringen; sie
+			// zaehlen nicht als Spur.
+			t--
+		}
+		reader.seek(end)
+	}
+
+	return { division, rawTracks }
 }
 
 /**
@@ -248,6 +293,8 @@ function readTrackEvents(bytes, start, end) {
 			events.push({ tick, type: 'noteOff', channel, pitch: data[0], velocity: data[1] })
 		} else if (kind === 0xb0) {
 			events.push({ tick, type: 'controller', channel, controller: data[0], value: data[1] })
+		} else if (kind === 0xc0) {
+			events.push({ tick, type: 'program', channel, program: data[0] })
 		}
 	}
 	return events
