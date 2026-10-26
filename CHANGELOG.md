@@ -6,6 +6,18 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.25.3] – 2026-10-26
+
+### Fixed
+
+- The starting note no longer follows a part's slider. Since 1.25.2 the mixer
+  also controls an instrument's further sounds that never play in the score
+  (a contrabass's pizzicato, say), and the starting note could land on one of
+  them: muting that part, or soloing another, silenced it.
+- Choosing an instrument in the mixer changes all of a row's sounds, not only
+  the first: a contrabass set to cello no longer goes on plucking as a
+  contrabass. Choosing the row's own instrument again gives each sound back.
+
 ## [1.25.2] – 2026-10-26
 
 ### Fixed
@@ -1567,6 +1579,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.25.3]: https://github.com/AndiMb/scoreview/compare/v1.25.2...v1.25.3
 [1.25.2]: https://github.com/AndiMb/scoreview/compare/v1.25.1...v1.25.2
 [1.25.1]: https://github.com/AndiMb/scoreview/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/AndiMb/scoreview/compare/v1.24.0...v1.25.0
