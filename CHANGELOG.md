@@ -6,6 +6,24 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.25.2] – 2026-10-26
+
+### Fixed
+
+- Chord symbols that MuseScore plays as piano chords now have a row of their
+  own in the mixer (“Chord symbols”), so they can be turned down or muted.
+  Before, no slider reached them, and they always played.
+- A mixer row now controls every channel of its part: the further sounds of
+  an instrument (pizzicato, tremolo, mute) follow its slider, mute and solo.
+  When a melody started with a rest under chord symbols, its slider moved the
+  chords instead of the melody. In a score with a piano on two staves, the
+  sliders acted on the wrong channels.
+- On the desktop in fullscreen, the bar's menus open again. They opened
+  outside the fullscreen view and stayed invisible.
+- On the iPhone, the fullscreen inside the page now covers the Viewer's
+  header. Before, the header lay over the bar, and only its ✕ could be
+  tapped (#15).
+
 ## [1.25.1] – 2026-10-25
 
 ### Fixed
@@ -1549,6 +1567,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.25.2]: https://github.com/AndiMb/scoreview/compare/v1.25.1...v1.25.2
 [1.25.1]: https://github.com/AndiMb/scoreview/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/AndiMb/scoreview/compare/v1.24.0...v1.25.0
 [1.24.0]: https://github.com/AndiMb/scoreview/compare/v1.23.0...v1.24.0
