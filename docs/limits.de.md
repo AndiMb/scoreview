@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:8b640f1926ac -->
+<!-- translation-of: limits.md sha256:00e09c4bd0fd -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -149,6 +149,15 @@ Wiederholungen und Volten funktionieren gemessen korrekt.
 **Große Partituren.** Orchesterpartituren sind nicht gemessen. Die
 Server-Messreihe oben stammt von Chorsätzen bis fünf Seiten; im Browser ist
 zusätzlich ein 28-seitiger Chorsatz gemessen.
+
+**Mehr als 16 MIDI-Kanäle.** MuseScore gibt jedem Klang eines Instruments einen
+eigenen Kanal – Streichern drei, Akkordsymbolen einen weiteren – und zählt die
+Kanäle nach dem sechzehnten auf einem weiteren MIDI-Port wieder ab 0. Die
+Wiedergabe beachtet den Port, der Mixer nicht: Er kennt die Kanäle einer Stimme
+ohne ihren Port. Einer Stimme auf einem weiteren Port kann deshalb die
+Mixerzeile fehlen, oder ihr Regler wirkt auf eine Stimme des ersten Ports.
+Nicht gemessen – eine Partitur mit mehr als 16 Kanälen ist noch nicht
+ausprobiert; eine Blasorchester- oder Orchesterpartitur ist die Probe.
 
 **Metronom und Taktart.** Mit der Taktart je Takt aus der Engine
 (`measureFacts`, lokaler Weg und Rückfall im Browser ab `v4.7.5-engine.5`)

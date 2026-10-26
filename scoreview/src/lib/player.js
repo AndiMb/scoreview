@@ -14,7 +14,7 @@ import { withAppVersion } from './assetVersion.js'
 import { createAudioIdle } from './audioIdle.js'
 import { audioSession } from './audioSession.js'
 import { fineTuneCents } from './referencePitch.js'
-import { pickToneChannel } from './startTone.js'
+import { channelsSetUp, pickToneChannel } from './startTone.js'
 
 // spessasynth_lib's AudioWorklet-Prozessor läuft in einem eigenen
 // AudioWorkletGlobalScope und wird per addModule(url) als eigenständige
@@ -48,6 +48,8 @@ const SONG_LOAD_TIMEOUT_MS = 30_000
  * @param {ArrayBuffer} soundFontArrayBuffer
  */
 export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
+	// Read before the sequencer gets the buffer - see startTone.js.
+	const setUpChannels = channelsSetUp(midiArrayBuffer)
 	const context = new AudioContext()
 	// Scheitert der Aufbau irgendwo dazwischen (Worklet nicht ladbar,
 	// SoundFont kaputt, MIDI unlesbar), gehoert der Kontext niemandem mehr -
@@ -377,7 +379,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	 * @return {boolean}
 	 */
 	function canPlayTone() {
-		return pickToneChannel(getTrackChannels()) !== null
+		return pickToneChannel([...getTrackChannels(), setUpChannels]) !== null
 	}
 
 	/**
@@ -391,7 +393,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	 */
 	async function startTone(pitch) {
 		stopTone()
-		const channel = pickToneChannel(getTrackChannels())
+		const channel = pickToneChannel([...getTrackChannels(), setUpChannels])
 		if (channel === null) {
 			return false
 		}

@@ -152,6 +152,14 @@ repeats and voltas were measured to work correctly.
 measurement series above comes from choral pieces of up to five pages; in the
 browser, a 28-page choral piece was measured as well.
 
+**More than 16 MIDI channels.** MuseScore gives every sound of an instrument a
+channel of its own – strings three, chord symbols one more – and numbers the
+channels past the 16th again from 0 on a further MIDI port. Playback follows
+the port, the mixer does not: it knows a part's channels without their port.
+A part on a further port can therefore lack its mixer row, or its slider can
+act on a part of the first port. Not measured – no score with more than 16
+channels has been tried yet; a wind band or orchestral score is the test.
+
 **Metronome and time signature.** With the engine's time signature per
 measure (`measureFacts`, local path and browser fallback since
 `v4.7.5-engine.5`) the metronome clicks the conducted beats: 6/8 and 9/8 in

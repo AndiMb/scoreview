@@ -1,6 +1,7 @@
 // Anfangston: welcher Ton, und auf welchem Kanal. Rein - player.js
 // spielt nur, was hier bestimmt wird, und useStartTone.js verdrahtet.
 
+import { readTrackLayout } from './midiNotes.js'
 import { keyAt, pitchAt, tonicPitch } from './scoreFacts.js'
 
 /** Kanal 9 ist nach General MIDI das Schlagzeug - dort klaenge kein Klavier. */
@@ -37,6 +38,24 @@ export function pickToneChannel(trackChannels) {
 		}
 	}
 	return null
+}
+
+/**
+ * Every channel the file sets up, playing or not. The player's own list
+ * (getTrackChannels) knows only channels with notes, but MuseScore sets up a
+ * channel for each sound of an instrument - a contrabass's pizzicato and
+ * tremolo too - and the mixer owns all of them (mixerLayout.js). A tone on
+ * such a channel would follow that part's slider, mute and solo.
+ *
+ * @param {ArrayBuffer|Uint8Array} midi the file score.mid
+ * @return {number[]} empty when the file cannot be read; the played channels then suffice
+ */
+export function channelsSetUp(midi) {
+	try {
+		return readTrackLayout(midi).flat().map((entry) => entry.channel)
+	} catch {
+		return []
+	}
 }
 
 /**

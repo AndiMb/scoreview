@@ -298,9 +298,10 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 			hasRealPlayer.value = true
 			durationMs.value = player.durationMs
 			presetList.value = player.getPresetList() ?? []
-			// Jetzt mit den echten, aus dem geladenen MIDI gelesenen Kanälen neu
-			// auflösen (siehe mixerLayout.js) - bis hierhin gilt nur die
-			// Index-Näherung, weil getTrackChannels() ein geladenes MIDI braucht.
+			// Jetzt mit den echten Kanälen aus score.mid neu auflösen (siehe
+			// mixerLayout.js) - bis hierhin gilt die Index-Näherung aus
+			// applyMetadata(), weil das MIDI erst mit dem Player kommt. Ist die
+			// Datei nicht lesbar, bleibt die Liste des Players.
 			mixerChannels.value = resolveMixerChannels(metaTracks, metaParts, trackLayoutOf(midiData.value) ?? player.getTrackChannels())
 		} catch (err) {
 			if (!current()) {

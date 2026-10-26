@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { MODE_TONIC, MODE_VOICE, pickToneChannel, pitchName, resolveStartTone } from './startTone.js'
+import { channelsSetUp, MODE_TONIC, MODE_VOICE, pickToneChannel, pitchName, resolveStartTone } from './startTone.js'
 
 describe('startTone.pickToneChannel', () => {
 	it('nimmt den ersten Kanal, den das Stueck nicht benutzt', () => {
@@ -18,6 +19,22 @@ describe('startTone.pickToneChannel', () => {
 
 	it('kommt ohne Spurangaben aus', () => {
 		expect(pickToneChannel(undefined)).toBe(0)
+	})
+})
+
+describe('startTone.channelsSetUp', () => {
+	// chords-test.mid (see midiNotes.test.js): channels 0-6 are set up, but
+	// 4 and 5 (contrabass pizzicato, tremolo) never play a note. The mixer
+	// owns all seven, so a tone on 4 would follow the contrabass's slider.
+	const chords = readFileSync(new URL('./__fixtures__/chords-test.mid', import.meta.url))
+	const played = [[0, 1], [2, 6], [2], [3]]
+
+	it('keeps the tone off channels that are set up but silent', () => {
+		expect(pickToneChannel([...played, channelsSetUp(chords)])).toBe(7)
+	})
+
+	it('lists nothing for a file it cannot read', () => {
+		expect(channelsSetUp(new Uint8Array([1, 2, 3, 4]))).toEqual([])
 	})
 })
 
