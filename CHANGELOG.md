@@ -6,6 +6,25 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.26.0] – 2026-10-27
+
+### Added
+
+- Draw in the score: with finger, pen or mouse, for a slur, a circle round an
+  interval or anything no stamp covers. A drawing is a note like any other –
+  private, shared, or from a leader for particular voices – and keeps to its
+  measure and its part's staff on phone pages and in a part shown on its own.
+- The lyrics view can show **All parts**: the text of every part line by
+  line, named after its part, with the parts that are singing right now
+  lit up.
+- Practice log: the minutes in which a score plays or you record, per day,
+  with this week, last week and days in a row. Leaders can set a weekly goal
+  per piece. Only you see your own time – no leader, no leaderboard.
+  Administrators can switch it off (`feature_practice_log`).
+- Leaders can share their own recordings with voices: the singers of those
+  parts hear their part sung by the leader, in sync with the score. The
+  sharing can be taken back at any time.
+
 ## [1.25.3] – 2026-10-26
 
 ### Fixed
