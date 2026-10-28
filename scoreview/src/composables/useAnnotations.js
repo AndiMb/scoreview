@@ -2,7 +2,8 @@ import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, ref } from 'vue'
-import { classify, DIM, HIDE, resolveTargets, targetNames } from '../lib/annotationFilter.js'
+import { classify, DIM, HIDE, resolveTarget, resolveTargets, targetNames } from '../lib/annotationFilter.js'
+import { decodeDrawing, encodeDrawing } from '../lib/drawingLayout.js'
 import { measurePositionToTimeMs } from '../lib/scoreLayout.js'
 import { anchorFromTap } from '../lib/stampLayout.js'
 
@@ -61,6 +62,11 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 	// Der Stempel, der auf den naechsten Tipp ins Notenbild wartet (Palette,
 	// Symbol, Tipp) - {stamp, visibility, targetParts} oder null.
 	const armedStamp = ref(null)
+	// Drawing (E22): who the drawing is for ({visibility, targetParts}), or
+	// null while not drawing - and the strokes drawn so far, each with the
+	// page's staves ({page, points, systems, mappable}).
+	const drawSpec = ref(null)
+	const drawStrokes = ref([])
 	/**
 	 * Von reset() hochgezählt. In der Setliste wechselt die Partitur, während
 	 * Anfragen noch laufen - ohne die Prüfung landeten die Notizen von A mit
@@ -111,7 +117,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			// Stempel zeichnet ScoreStamps.vue als Symbol - ein Marker mit
 			// Aufklapptext waere genau das, was ein Stempel nicht sein soll: er gehoert sichtbar in die Noten.
 			// A saved loop is a range to set, not a spot to mark (savedLoops).
-			.filter((a) => a.kind !== 'stamp' && a.kind !== 'loop')
+			.filter((a) => a.kind !== 'stamp' && a.kind !== 'loop' && a.kind !== 'drawing')
 			.map((a) => {
 				// The anchor is the base's segment; the picture may be a variant
 				// with its own numbering (E19) - pictureElid() translates.
@@ -170,6 +176,49 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 					targetIndices: a.visibility === 'parts'
 						? resolveTargets(a, scoreParts).map((part) => drawnIds.indexOf(String(part.id))).filter((i) => i !== -1)
 						: [],
+				}
+			})
+			.filter(Boolean)
+	})
+
+	/**
+	 * The drawings for ScoreDrawings.vue (E22): the measure, and the staff of
+	 * the drawing's part counted in the picture on screen. A drawing for a
+	 * part that the picture does not draw (another part shown alone, E19) is
+	 * not shown there - it would land on a stranger's staff.
+	 */
+	const drawings = computed(() => {
+		const measures = measuresTimeline()
+		if (!measures) {
+			return []
+		}
+		const scoreParts = parts() ?? []
+		const drawnIds = (pictureParts() ?? []).map((part) => String(part.id))
+		return listed.value
+			.filter((a) => a.kind === 'drawing')
+			.map((a) => {
+				const measureRect = measures.elements[String(a.measureNumber - 1)] ?? null
+				const data = decodeDrawing(a.content)
+				if (!measureRect || !data) {
+					return null
+				}
+				let staffIndex = null
+				if (data.part) {
+					const part = resolveTarget(data.part, scoreParts)
+					staffIndex = drawnIds.indexOf(String(part?.id ?? data.part.id))
+					if (staffIndex === -1) {
+						return null
+					}
+				}
+				return {
+					id: a.id,
+					page: measureRect.page,
+					fraction: a.fraction,
+					measureRect,
+					staffIndex,
+					strokes: data.strokes,
+					dimmed: a.display === DIM,
+					voices: a.voices,
 				}
 			})
 			.filter(Boolean)
@@ -302,6 +351,8 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 	 * @param {{stamp:string, visibility:string, targetParts:?Array}} spec
 	 */
 	function armStamp(spec) {
+		drawSpec.value = null
+		drawStrokes.value = []
 		armedStamp.value = spec
 	}
 
@@ -341,13 +392,95 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 		return true
 	}
 
+	/**
+	 * Takes up the pen (E22): pointer input on the pages draws until the
+	 * drawing is saved or dropped.
+	 *
+	 * @param {{visibility:string, targetParts:?Array}} spec
+	 */
+	function startDrawing(spec) {
+		armedStamp.value = null
+		drawSpec.value = spec
+		drawStrokes.value = []
+	}
+
+	/** @param {{page:number, points:Array, systems:Array, mappable:boolean}} stroke */
+	function addStroke(stroke) {
+		if (drawSpec.value && stroke.points.length > 0) {
+			drawStrokes.value = [...drawStrokes.value, stroke]
+		}
+	}
+
+	function undoStroke() {
+		drawStrokes.value = drawStrokes.value.slice(0, -1)
+	}
+
+	function cancelDrawing() {
+		drawSpec.value = null
+		drawStrokes.value = []
+	}
+
+	/**
+	 * Saves what was drawn - one drawing per page, anchored where its first
+	 * stroke began. Strokes beside every measure are dropped with a message
+	 * rather than stored somewhere else.
+	 *
+	 * @return {Promise<void>}
+	 */
+	async function saveDrawing() {
+		const spec = drawSpec.value
+		const measures = measuresTimeline()
+		const strokes = drawStrokes.value
+		drawSpec.value = null
+		drawStrokes.value = []
+		if (!spec || !measures || strokes.length === 0) {
+			return
+		}
+		const byPage = new Map()
+		for (const s of strokes) {
+			const list = byPage.get(s.page) ?? []
+			list.push(s)
+			byPage.set(s.page, list)
+		}
+		let lost = false
+		for (const [page, list] of byPage) {
+			const encoded = encodeDrawing({
+				strokes: list.map((s) => s.points),
+				measureElements: measures.elements,
+				page,
+				systems: list[0].systems,
+				mappable: list[0].mappable,
+				pictureParts: pictureParts() ?? [],
+			})
+			if (encoded === null) {
+				lost = true
+				continue
+			}
+			await create({
+				measureNumber: encoded.measureNumber,
+				fraction: encoded.fraction,
+				elid: null,
+				anchorEtag: currentEtag(),
+				content: encoded.content,
+				kind: 'drawing',
+				visibility: spec.visibility,
+				targetParts: spec.targetParts,
+			})
+		}
+		if (lost && error.value === '') {
+			error.value = t('A drawing beside the music was not saved. Start it on the staff.')
+		}
+	}
+
 	function reset() {
 		generation++
 		annotations.value = []
 		error.value = ''
 		visible.value = false
 		armedStamp.value = null
+		drawSpec.value = null
+		drawStrokes.value = []
 	}
 
-	return { annotations, listed, error, visible, markers, stamps, savedLoops, armedStamp, load, create, update, remove, jumpTo, jumpToById, armStamp, disarmStamp, placeArmedStamp, reset }
+	return { annotations, listed, error, visible, markers, stamps, drawings, savedLoops, armedStamp, drawSpec, drawStrokes, load, create, update, remove, jumpTo, jumpToById, armStamp, disarmStamp, placeArmedStamp, startDrawing, addStroke, undoStroke, cancelDrawing, saveDrawing, reset }
 }

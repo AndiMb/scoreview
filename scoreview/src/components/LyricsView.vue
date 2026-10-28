@@ -10,11 +10,57 @@
 		(dasselbe Muster wie die Hervorhebung im Notenbild).
 	-->
 	<div ref="root" class="scoreview-lyrics" @pointerup="onPointerUp">
-		<p v-if="blocks.length === 0" class="scoreview-lyrics-empty">
+		<!--
+			All parts at once: a row per part and system, and the parts that
+			start a syllable light up together - who sings now, and who comes
+			in next, without reading the full score.
+		-->
+		<NcCheckboxRadioSwitch
+			v-if="choirPossible"
+			class="scoreview-lyrics-switch"
+			:modelValue="allParts"
+			type="switch"
+			@update:modelValue="setAllParts">
+			{{ t('All parts') }}
+		</NcCheckboxRadioSwitch>
+		<template v-if="choirMode">
+			<section
+				v-for="block in choirBlocks"
+				:key="block.key"
+				class="scoreview-lyrics-block"
+				:class="{ 'scoreview-lyrics-block--dimmed': focusKeys !== null && !focusKeys.has(block.key) }">
+				<div
+					v-for="row in block.rows"
+					:key="row.staff"
+					class="scoreview-lyrics-row"
+					:class="{ 'scoreview-lyrics-row--mine': myStaffSet.has(row.staff) }">
+					<span class="scoreview-lyrics-part">{{ row.label }}</span>
+					<div class="scoreview-lyrics-row-text">
+						<p
+							v-for="verse in row.verses"
+							:key="verse.verse"
+							class="scoreview-lyrics-verse"
+							:class="{ 'scoreview-lyrics-verse--multi': choirVerseCount > 1 }">
+							<span v-if="choirVerseCount > 1" class="scoreview-lyrics-number" aria-hidden="true">{{ verse.verse + 1 }}.</span>
+							<span
+								v-for="word in verse.words"
+								:key="word.index"
+								class="scoreview-lyrics-word"
+								:data-word="word.index"
+								@pointerdown="onPointerDown(word)"><span
+									v-for="syl in word.syllables"
+									:key="syl.id"
+									:data-syl="syl.id">{{ syl.text }}</span></span>
+						</p>
+					</div>
+				</div>
+			</section>
+		</template>
+		<p v-else-if="blocks.length === 0" class="scoreview-lyrics-empty">
 			{{ t('This part has no lyrics.') }}
 		</p>
 		<section
-			v-for="block in blocks"
+			v-for="block in (choirMode ? [] : blocks)"
 			:key="block.key"
 			class="scoreview-lyrics-block"
 			:class="{ 'scoreview-lyrics-block--dimmed': focusKeys !== null && !focusKeys.has(block.key) }">
@@ -40,17 +86,42 @@
 
 <script>
 import { translate } from '@nextcloud/l10n'
-import { activeSyllable, buildLyrics, occurrences, seekTimeFor, systemKeyFor, versesByElid } from '../lib/lyricsLayout.js'
+import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import { activeSyllable, buildChoirLyrics, buildLyrics, choirActiveSyllables, choirVersesByElid, occurrences, seekTimeFor, systemKeyFor, versesByElid } from '../lib/lyricsLayout.js'
 import { spanInView } from '../lib/scrollPlan.js'
 import { findStepIndex } from '../lib/timingSync.js'
 
 /** Klasse der gesungenen Silbe. */
 const ACTIVE = 'scoreview-lyrics-active'
 
+/** Class of a part's row that starts a syllable now (all parts). */
+const SINGING = 'scoreview-lyrics-row--singing'
+
+/** The "all parts" choice, per device: a phone may want one part, a tablet all. */
+const ALL_PARTS_KEY = 'scoreview.lyricsAllParts'
+
+/** @return {boolean} */
+function readAllParts() {
+	try {
+		return window.localStorage?.getItem(ALL_PARTS_KEY) === '1'
+	} catch {
+		return false
+	}
+}
+
 export default {
 	name: 'LyricsView',
 
+	components: { NcCheckboxRadioSwitch },
+
 	props: {
+		// The part names by staff (lyricsLayout.staffPartNames), or null
+		// where staves and parts do not match - then the rows say "Staff n".
+		partNames: {
+			type: Array,
+			default: null,
+		},
+
 		// meta.lyricSyllables (E15)
 		syllables: {
 			type: Array,
@@ -114,7 +185,52 @@ export default {
 
 	emits: ['seek', 'loop', 'cursorVisible'],
 
+	data() {
+		return {
+			allParts: readAllParts(),
+		}
+	},
+
 	computed: {
+		choirLayout() {
+			return buildChoirLyrics({
+				syllables: this.syllables,
+				blockKeyOf: (elid) => systemKeyFor(this.timeline.elements?.[elid] ?? null, this.measureRectsByPage),
+				labelOf: (staff) => this.partNames?.[staff] || this.t('Staff {n}', { n: staff + 1 }),
+			})
+		},
+
+		/** Only worth offering where more than one staff has text. */
+		choirPossible() {
+			return this.choirLayout.staves.length > 1
+		},
+
+		choirMode() {
+			return this.allParts && this.choirPossible
+		},
+
+		choirBlocks() {
+			return this.choirLayout.blocks
+		},
+
+		choirVerseCount() {
+			return this.choirLayout.verseCount
+		},
+
+		choirIndex() {
+			return {
+				byStaff: choirVersesByElid(this.choirBlocks),
+				events: this.timeline.events ?? [],
+				occ: this.index.occ,
+			}
+		},
+
+		// Only a chosen part is "mine" - the single-part view's fallback to
+		// the top staff is not a choice.
+		myStaffSet() {
+			return new Set(this.staves ?? [])
+		},
+
 		layout() {
 			return buildLyrics({
 				syllables: this.syllables,
@@ -142,6 +258,18 @@ export default {
 		/** Wort-Index -> Wort, fuer Tippen und Ziehen. */
 		wordsByIndex() {
 			const map = new Map()
+			if (this.choirMode) {
+				for (const b of this.choirBlocks) {
+					for (const row of b.rows) {
+						for (const v of row.verses) {
+							for (const w of v.words) {
+								map.set(w.index, w)
+							}
+						}
+					}
+				}
+				return map
+			}
 			for (const b of this.blocks) {
 				for (const v of b.verses) {
 					for (const w of v.words) {
@@ -156,6 +284,13 @@ export default {
 	watch: {
 		blocks() {
 			this.$nextTick(() => this.indexNodes())
+		},
+
+		choirMode() {
+			this.$nextTick(() => {
+				this.indexNodes()
+				this.updateActive()
+			})
 		},
 
 		// The syllable changes in the frame loop, `follow` only with the
@@ -174,6 +309,9 @@ export default {
 		this.nodes = new Map()
 		this.activeNode = null
 		this.activeId = null
+		// All parts: every lit syllable and row, to switch them off again.
+		this.litNodes = []
+		this.litRows = []
 		this.offFrame = null
 		this.dragFrom = null
 		// Last visibility reported - an event per change, not per syllable.
@@ -198,6 +336,65 @@ export default {
 			}
 			this.activeId = null
 			this.activeNode = null
+			this.clearLit()
+		},
+
+		clearLit() {
+			for (const node of this.litNodes) {
+				node.classList.remove(ACTIVE)
+			}
+			for (const row of this.litRows) {
+				row.classList.remove(SINGING)
+			}
+			this.litNodes = []
+			this.litRows = []
+		},
+
+		/** @param {boolean} on */
+		setAllParts(on) {
+			this.allParts = on
+			try {
+				window.localStorage?.setItem(ALL_PARTS_KEY, on ? '1' : '0')
+			} catch {
+				// Private mode: the choice lasts until the page closes.
+			}
+		},
+
+		/**
+		 * All parts: light every part that starts a syllable here. During a
+		 * melisma or a rest nobody starts one - then the last stay lit, as in
+		 * the single-part view.
+		 *
+		 * @param {number} step
+		 */
+		updateChoirActive(step) {
+			const lit = choirActiveSyllables(this.choirIndex, step)
+			const key = lit.map((l) => l.id).join('|')
+			if (lit.length === 0 || key === this.activeId) {
+				return
+			}
+			this.clearLit()
+			for (const { id } of lit) {
+				const node = this.nodes.get(id)
+				if (!node) {
+					continue
+				}
+				node.classList.add(ACTIVE)
+				this.litNodes.push(node)
+				const row = node.closest('.scoreview-lyrics-row')
+				if (row && !this.litRows.includes(row)) {
+					row.classList.add(SINGING)
+					this.litRows.push(row)
+				}
+			}
+			this.activeId = key
+			// Scroll along with the own part where it sings, else the first.
+			const mine = lit.find((l) => this.myStaffSet.has(l.staff))
+			const node = this.nodes.get((mine ?? lit[0]).id) ?? null
+			this.activeNode = node
+			if (node) {
+				this.keepInView(node)
+			}
 		},
 
 		/**
@@ -210,6 +407,10 @@ export default {
 				return
 			}
 			const step = findStepIndex(this.timeline.times, this.readTimeMs())
+			if (this.choirMode) {
+				this.updateChoirActive(step)
+				return
+			}
 			const id = activeSyllable(this.index, step)
 			if (id === null || id === this.activeId) {
 				return
@@ -294,7 +495,8 @@ export default {
 			const to = target ? this.wordsByIndex.get(Number(target.dataset.word)) : from
 			const timeOf = (word, last) => {
 				const syl = last ? word.syllables[word.syllables.length - 1] : word.syllables[0]
-				return seekTimeFor(this.index.events, this.index.syllableVerses, syl.elid, word.verse)
+				const verses = this.choirMode ? (this.choirIndex.byStaff.get(word.staff) ?? new Map()) : this.index.syllableVerses
+				return seekTimeFor(this.index.events, verses, syl.elid, word.verse)
 			}
 			if (!to || to.index === from.index) {
 				const ms = timeOf(from, false)
@@ -369,6 +571,44 @@ export default {
 	background: var(--scoreview-highlight, #d32f2f);
 	color: #fff;
 	border-radius: 3px;
+}
+
+.scoreview-lyrics-switch {
+	margin-block-end: 8px;
+	font-size: var(--default-font-size, 15px);
+}
+
+/* All parts: the part's name in a narrow column, the text beside it. */
+.scoreview-lyrics-row {
+	display: flex;
+	gap: 0.6em;
+	align-items: baseline;
+	border-inline-start: 3px solid transparent;
+	padding-inline-start: 6px;
+}
+
+.scoreview-lyrics-row-text {
+	flex: 1;
+	min-inline-size: 0;
+}
+
+.scoreview-lyrics-part {
+	flex: 0 0 5.5em;
+	overflow: hidden;
+	color: var(--color-text-maxcontrast, #767676);
+	font-size: 0.75em;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.scoreview-lyrics-row--mine .scoreview-lyrics-part {
+	color: inherit;
+	font-weight: bold;
+}
+
+/* Who starts a syllable now: a bar in the highlight colour at the row. */
+.scoreview-lyrics-row--singing {
+	border-inline-start-color: var(--scoreview-highlight, #d32f2f);
 }
 
 .scoreview-lyrics-empty {

@@ -33,6 +33,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setReferenceHz(int $referenceHz)
  * @method ?bool getWithAccompaniment()
  * @method void setWithAccompaniment(?bool $withAccompaniment)
+ * @method ?string getSharedParts()
+ * @method void setSharedParts(?string $sharedParts)
  */
 class Recording extends Entity {
 	protected $fileId;
@@ -44,6 +46,12 @@ class Recording extends Entity {
 	protected $tempoFactor = 1.0;
 	protected $withAccompaniment = false;
 	protected $referenceHz = 440;
+	/**
+	 * A leader's recording released to parts (E21), JSON `[{id, name}]`;
+	 * null = private, the rule for every recording until its author, as a
+	 * leader, releases it (S8).
+	 */
+	protected $sharedParts;
 
 	public function __construct() {
 		$this->addType('fileId', 'integer');

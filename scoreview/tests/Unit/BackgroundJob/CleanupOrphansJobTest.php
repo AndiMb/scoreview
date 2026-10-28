@@ -10,8 +10,11 @@ use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\FollowSession;
 use OCA\ScoreView\Db\LeaderMapper;
 use OCA\ScoreView\Db\MyPartPreferenceMapper;
+use OCA\ScoreView\Db\PracticeGoalMapper;
+use OCA\ScoreView\Db\PracticeLogMapper;
 use OCA\ScoreView\Db\ScoreConversionMapper;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\PracticeLogService;
 use OCA\ScoreView\Service\RecordingStorage;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\IRootFolder;
@@ -40,6 +43,9 @@ class CleanupOrphansJobTest extends TestCase {
 	private FollowMapper&MockObject $followMapper;
 	private RecordingStorage&MockObject $recordingStorage;
 	private MyPartPreferenceMapper&MockObject $myPartPreferences;
+	private PracticeLogMapper&MockObject $practiceLog;
+	private PracticeGoalMapper&MockObject $practiceGoals;
+	private PracticeLogService&MockObject $practiceLogService;
 	private ITimeFactory&MockObject $time;
 
 	protected function setUp(): void {
@@ -51,6 +57,9 @@ class CleanupOrphansJobTest extends TestCase {
 		$this->followMapper = $this->createMock(FollowMapper::class);
 		$this->recordingStorage = $this->createMock(RecordingStorage::class);
 		$this->myPartPreferences = $this->createMock(MyPartPreferenceMapper::class);
+		$this->practiceLog = $this->createMock(PracticeLogMapper::class);
+		$this->practiceGoals = $this->createMock(PracticeGoalMapper::class);
+		$this->practiceLogService = $this->createMock(PracticeLogService::class);
 		$this->time = $this->createMock(ITimeFactory::class);
 		$this->time->method('getDateTime')->willReturnCallback(fn () => new \DateTime('2026-09-24 12:00:00'));
 	}
@@ -67,6 +76,9 @@ class CleanupOrphansJobTest extends TestCase {
 			$this->followMapper,
 			$this->recordingStorage,
 			$this->myPartPreferences,
+			$this->practiceLog,
+			$this->practiceGoals,
+			$this->practiceLogService,
 			$this->createMock(LoggerInterface::class),
 		);
 		$method = new \ReflectionMethod($job, 'run');

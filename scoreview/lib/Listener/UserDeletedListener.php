@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Listener;
 use OCA\ScoreView\Db\AnnotationMapper;
 use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\LeaderMapper;
+use OCA\ScoreView\Db\PracticeLogMapper;
 use OCA\ScoreView\Service\RecordingStorage;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -40,6 +41,10 @@ use Psr\Log\LoggerInterface;
  * Leitungen, die SIE ernannt hat - sie sind die Rolle anderer Personen, nicht
  * ihr Inhalt.
  *
+ * The practice log (E20) goes too - it is nobody's but hers. A weekly goal
+ * she set as a leader stays: it belongs to the choir, and it is shown without
+ * her name from then on.
+ *
  * Jeder Teil hat einen eigenen Fehlerzweig: Scheitert das Löschen der
  * Aufnahmen am Speicher, sollen die Notizen trotzdem verschwinden.
  */
@@ -49,6 +54,7 @@ class UserDeletedListener implements IEventListener {
 		private LeaderMapper $leaderMapper,
 		private FollowMapper $followMapper,
 		private RecordingStorage $recordingStorage,
+		private PracticeLogMapper $practiceLog,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -62,6 +68,7 @@ class UserDeletedListener implements IEventListener {
 		$this->deleteSafely($userId, 'leader roles', fn () => $this->leaderMapper->deleteByUserId($userId));
 		$this->deleteSafely($userId, 'follow sessions', fn () => $this->followMapper->deleteByLeader($userId));
 		$this->deleteSafely($userId, 'recordings', fn () => $this->recordingStorage->deleteAllForUser($userId));
+		$this->deleteSafely($userId, 'practice log days', fn () => $this->practiceLog->deleteByUserId($userId));
 	}
 
 	/**

@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:50f708a098d4 -->
+<!-- translation-of: installation.md sha256:e67eb17fd6b2 -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -418,7 +418,7 @@ aus.
 ## Probe und Konzert
 
 Leitung, „Folgt mir“, eigene Aufnahmen, die Rückmeldung zur Intonation,
-Übe-Tracks und die Offline-Seite sind nach der Installation eingeschaltet und
+Übe-Tracks, das Übetagebuch und die Offline-Seite sind nach der Installation eingeschaltet und
 brauchen nichts weiter. Unter
 **Einstellungen → Verwaltung → ScoreView**, Abschnitte **Probe und Konzert**
 und **Üben unterwegs**, lassen sie sich einzeln abschalten; eine abgeschaltete Funktion verschwindet aus dem
@@ -567,6 +567,7 @@ Offline-Seite gibt dessen Herkunft in ihrer CSP selbst frei.
 | `feature_intonation` | Verwaltung | Rückmeldung zur Intonation (Vorgabe an) |
 | `feature_score_follower` | nur `occ` | Vorgesehen für das Mitverfolgen per Mikrofon, noch ohne Funktion (Vorgabe aus) |
 | `feature_practice_export` | Verwaltung | Übe-Tracks als MP3 in Files (Vorgabe an) |
+| `feature_practice_log` | Verwaltung | Übetagebuch: eigene Übezeit je Stück, Wochenziel der Leitungen (Vorgabe an) |
 | `practice_track_max_mb` | Verwaltung | Höchstgröße eines Übe-Tracks in MB (Vorgabe 60, 5–500) |
 | `feature_offline` | Verwaltung | Offline-Seite und „Offline vormerken“ (Vorgabe an) |
 | `follow_poll_ms` | Verwaltung | Abfrageintervall von „Folgt mir“ ohne Push in ms (Vorgabe 800, erlaubt 500–3000) |

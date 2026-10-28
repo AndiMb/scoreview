@@ -46,7 +46,10 @@ shared, or by a leader for particular voices – and set again with one tap.
 
 **Taking notes.** Private, or shared with everyone who can see the file. Notes
 are attached to a musical position rather than to pixels, so they survive a
-re-render and a re-upload of the same score.
+re-render and a re-upload of the same score. Where no stamp fits, **draw in
+the score** with finger, pen or mouse – a slur, a circle round an interval;
+the drawing keeps to its measure and its part's staff also on phone pages and
+in a part shown on its own.
 
 ![Note at measure 5, anchored to the musical position](docs/img/annotations.png)
 
@@ -81,7 +84,9 @@ write access to the score's folder can create **Tracks for all parts** with one
 click. For reading on a phone, **phone pages** set the score on pages the size of
 the screen, with larger notes; the **system band** lays the systems out side by
 side, each as tall as the screen, and the **lyrics view** shows only the text of
-your own part with all verses, the sung syllable highlighted. **Note names** can
+your own part with all verses, the sung syllable highlighted – or, with
+**All parts**, the text of every part line by line, lighting up whichever
+parts are singing right now. **Note names** can
 be shown next to the noteheads – German, English or as solfège – and tapping a
 note plays its pitch; **beat numbers** (“1 + 2 +”) can sit above the staff of
 your part. With **"Save for offline use"**, a piece or an entire
@@ -108,7 +113,9 @@ from piece to piece without having to switch on Performance mode, set the
 zoom or load the SoundFont again.
 
 **Hearing yourself.** **Own recordings**, playable in sync with the cursor and
-accompaniment, can only be heard by the person who made them. **Intonation
+accompaniment, can only be heard by the person who made them – unless a
+leader **shares** one of theirs **with voices**: then the singers of those
+parts hear their part sung by the leader, in sync with the score. **Intonation
 feedback** shows a needle at the cursor while you sing and afterwards the spots
 that were too sharp or too flat, came in early or late, or were cut short.
 To learn the notes, **wait mode** stops before each of your notes until you
@@ -118,13 +125,18 @@ current position; its reference a′ (420–460 Hz) also tunes intonation and
 playback. The microphone only runs when explicitly requested, and a
 red dot shows what for.
 
+**Keeping at it.** The **practice log** counts the minutes in which a score
+plays or you record – per day and per piece, with days in a row. Leaders can
+set a weekly goal for a piece. Only you see your time: no leader, no
+leaderboard.
+
 This also works in the Nextcloud mobile apps, with a few limitations: the
 Android app does not grant access to the microphone; there, "Open in browser"
 gets you further. And on mobile a setlist opens through one of its scores
 rather than through the file itself. The offline page exists only in the
 browser, not in the apps. The lyrics view and note names require the local
 conversion path (see below). Administrators can switch off "Follow me",
-recording, intonation, practice tracks and the offline page individually; what
+recording, intonation, practice tracks, the practice log and the offline page individually; what
 the features cost and where they end is described in docs/limits.md under
 [Rehearsal and concert features](docs/limits.md#rehearsal-and-concert-features)
 and [Practising and reading on a phone](docs/limits.md#practising-and-reading-on-a-phone).

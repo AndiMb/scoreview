@@ -419,6 +419,17 @@ For operation this means:
 - **Creating and changing are each limited to 60 calls per minute** – anyone
   setting stamps very quickly in a row briefly gets “Too many changes in a
   short time”.
+- **A drawing is a few marks, not a picture:** at most 40 strokes and 800
+  points after smoothing, each point within 400 staff spaces of where the
+  drawing began. It counts as one note, and is changed by deleting it and
+  drawing again.
+- **A drawing belongs to the staff it began on.** Where staves and parts
+  cannot be matched, it belongs to the system instead; then it stays where it
+  was drawn in the full score, but lands above the wrong staff in a part
+  shown on its own. A drawing on a part's staff is not shown in another
+  part's edition. Strokes that begin beside every measure are not saved.
+- **Drawing happens on the pages.** Starting it from the system band or the
+  lyrics view switches to pages; the drawings show in the band all the same.
 
 ### Setlist
 
@@ -587,6 +598,32 @@ re-measured on real devices and with real input latency.
   but not at the staff of its part.
 - **With MuseScore itself on the sidecar, no lyrics view and no note names.**
   Both need lists that only the engine writes; see [Views](#views).
+
+### Practice log
+
+- **Counted is what sounds:** playback of the score or a running recording,
+  per person, score and local calendar day. Practising with the tuner or
+  from a practice track outside the viewer does not count.
+- **Only the person sees their time** – also leaders and admins see nothing
+  of it in the app; there is no ranking. The weekly goal of a score is the
+  same for everyone and set by its leaders (5–1200 minutes).
+- **Bounds:** a device reports at most 300 seconds at a time, at most a day
+  per day, and only for a day within one day of the server's date. A device
+  that is offline loses what it counted while the page was closed; a hidden
+  tab still reports when it is hidden.
+- **Kept for 400 days**, then removed by the daily cleanup; the panel shows
+  this week, last week and the days in a row. Deleting an account deletes its
+  log; a goal stays when its leader's account goes.
+
+### Recordings shared with voices
+
+- **Only leaders share, and only their own recordings.** Taking a sharing
+  back works always, also after losing the role; deleting stays with the
+  person who recorded. The recording keeps counting against that person's
+  storage limits.
+- **Shared means: everyone with access to the file can fetch it.** Which
+  parts see it is decided in the browser, like notes for voices – someone
+  without a chosen part sees it dimmed, with the name of the part.
 
 ### Mobile
 
@@ -965,10 +1002,16 @@ frame on a small page.
   image; only the text of the lyrics view may wrap.
 - **No editing of scores.** ScoreView shows and plays; it does not correct
   anything in the `.mscz`.
-- **No recordings for others.** A recording can only be heard by the person
-  who made it; it lives in the app data, not in Files, and cannot be shared.
+- **No recordings for others – except a leader's, sung for voices.** A
+  recording can only be heard by the person who made it; it lives in the app
+  data, not in Files. The one way out is a leader sharing an own recording
+  with parts
+  ([E21](architecture.md#e21-aufnahmen-der-leitung-für-stimmen) (German)).
   Practice tracks, by contrast, are synthesised and deliberately files in Files
   ([E13](architecture.md#e13-übe-tracks-sind-dateien-in-files)).
+- **No ranking of practice time.** The practice log shows each person their
+  own time only
+  ([E20](architecture.md#e20-übetagebuch-ohne-bestenliste) (German)).
 - **No long polling for “Follow me”.** Each waiting device would occupy a PHP
   worker; polling is short, accelerated by `notify_push` where it is set up
   ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).

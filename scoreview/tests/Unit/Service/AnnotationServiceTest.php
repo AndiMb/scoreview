@@ -376,4 +376,18 @@ class AnnotationServiceTest extends TestCase {
 
 		$this->assertSame('Chorleitung', $data['authorName']);
 	}
+
+	public function testEditingADrawingKeepsItsStrokes(): void {
+		$drawing = new Annotation();
+		$drawing->setUserId('andreas');
+		$drawing->setVisibility(Annotation::VISIBILITY_PRIVATE);
+		$drawing->setKind(Annotation::KIND_DRAWING);
+		$drawing->setContent('{"v":1,"part":null,"s":[[0,0,1,1]]}');
+		$this->mapper->method('findByIdAndFileId')->willReturn($drawing);
+		$this->mapper->method('update')->willReturnArgument(0);
+
+		$result = $this->service->updateContent(1, 42, 'andreas', false, '');
+
+		$this->assertSame('{"v":1,"part":null,"s":[[0,0,1,1]]}', $result->getContent());
+	}
 }

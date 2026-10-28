@@ -121,6 +121,19 @@
 							<Play v-else :size="20" />
 						</template>
 					</NcButton>
+					<!-- Leaders release a recording to voices (E21). -->
+					<NcButton
+						v-if="isLeader && parts.length > 0"
+						:pressed="sharingId === rec.id || (rec.sharedParts ?? []).length > 0"
+						:aria-label="t('Share with voices')"
+						:title="(rec.sharedParts ?? []).length > 0
+							? t('Shared with {voices}', { voices: rec.sharedParts.map((p) => p.name).join(', ') })
+							: t('Share with voices')"
+						@click="toggleSharing(rec)">
+						<template #icon>
+							<AccountMusic :size="20" />
+						</template>
+					</NcButton>
 					<NcButton
 						v-if="intonationEnabled"
 						:aria-label="t('Check intonation')"
@@ -144,6 +157,70 @@
 			<p v-else-if="phase === 'idle' && !pending" class="scoreview-practice-hint">
 				{{ t('No recordings of this score yet.') }}
 			</p>
+			<!--
+				Releasing a recording to voices: the choice of parts, as for a
+				part note. Everyone with access to the score can then hear it -
+				said here, because this is the one way a recording leaves its
+				author.
+			-->
+			<fieldset v-if="sharingRecording" class="scoreview-practice-share">
+				<legend>{{ t('Share this recording with voices') }}</legend>
+				<NcCheckboxRadioSwitch
+					v-for="part in parts"
+					:key="part.id"
+					:modelValue="shareIds.includes(String(part.id))"
+					type="checkbox"
+					@update:modelValue="toggleShareId(part)">
+					{{ part.name }}
+				</NcCheckboxRadioSwitch>
+				<p class="scoreview-practice-hint">
+					{{ t('Singers of these voices can listen to it along with the score. It still counts towards your storage, and you can take it back at any time.') }}
+				</p>
+				<div class="scoreview-practice-row">
+					<NcButton variant="primary" :disabled="shareIds.length === 0" @click="confirmSharing">
+						{{ t('Share') }}
+					</NcButton>
+					<NcButton
+						v-if="(sharingRecording.sharedParts ?? []).length > 0"
+						@click="stopSharing">
+						{{ t('Stop sharing') }}
+					</NcButton>
+					<NcButton variant="tertiary" @click="sharingId = null">
+						{{ t('Cancel') }}
+					</NcButton>
+				</div>
+			</fieldset>
+
+			<!--
+				Sung by the leaders (E21): the part sung for the voices that
+				are to learn it, in sync with the score like an own recording.
+			-->
+			<template v-if="sharedRecordings.length > 0">
+				<h4>{{ t('Sung by your leaders') }}</h4>
+				<ul class="scoreview-recordings">
+					<li
+						v-for="rec in sharedRecordings"
+						:key="rec.id"
+						class="scoreview-recording"
+						:class="{ 'scoreview-recording--active': listening === rec.id, 'scoreview-recording--dimmed': rec.dimmed }">
+						<span class="scoreview-recording-meta">
+							{{ rec.voices.join(', ') || t('All voices') }} · {{ formatDuration(rec.durationMs) }}
+							<span class="scoreview-practice-hint">
+								{{ rec.authorName ? t('by {name}, {date}', { name: rec.authorName, date: formatDate(rec.createdAt) }) : formatDate(rec.createdAt) }}
+							</span>
+						</span>
+						<NcButton
+							:aria-label="listening === rec.id ? t('Stop listening') : t('Listen along with the score')"
+							:title="listening === rec.id ? t('Stop listening') : t('Listen along with the score')"
+							@click="listening === rec.id ? $emit('stopListening') : $emit('listen', rec)">
+							<template #icon>
+								<StopIcon v-if="listening === rec.id" :size="20" />
+								<Play v-else :size="20" />
+							</template>
+						</NcButton>
+					</li>
+				</ul>
+			</template>
 
 			<!-- Nur Aufnahme, beides, und der Pegel je Teil. -->
 			<div v-if="listening !== null" class="scoreview-practice-levels">
@@ -293,6 +370,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import AccountMusic from 'vue-material-design-icons/AccountMusic.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import Delete from 'vue-material-design-icons/Delete.vue'
 import Microphone from 'vue-material-design-icons/Microphone.vue'
@@ -313,6 +391,7 @@ export default {
 	name: 'RecordingPanel',
 
 	components: {
+		AccountMusic,
 		Close,
 		Delete,
 		Microphone,
@@ -328,6 +407,12 @@ export default {
 
 	props: {
 		recordingEnabled: { type: Boolean, default: false },
+		// Released by leaders to parts, already filtered for this person
+		// (lib/sharedRecordings.js) - with `dimmed`, `voices`, `authorName`.
+		sharedRecordings: { type: Array, default: () => [] },
+		// Leaders may release their own recordings to these parts (E21).
+		isLeader: { type: Boolean, default: false },
+		parts: { type: Array, default: () => [] },
 		intonationEnabled: { type: Boolean, default: false },
 		// a' for live intonation and new recordings (lib/referencePitch.js)
 		referenceHz: { type: Number, default: 440 },
@@ -375,9 +460,23 @@ export default {
 		'toggleWaitMode',
 		'clearAnalysis',
 		'jump',
+		'share',
 	],
 
+	data() {
+		return {
+			// The own recording whose voice choice is open (E21), and the
+			// voices ticked there.
+			sharingId: null,
+			shareIds: [],
+		}
+	},
+
 	computed: {
+		sharingRecording() {
+			return this.recordings.find((r) => r.id === this.sharingId) ?? null
+		},
+
 		/**
 		 * The median onset: the honest answer to "am I dragging?". Below
 		 * 10 ms it is within the frame raster and reads as on time.
@@ -413,6 +512,35 @@ export default {
 	methods: {
 		t(text, vars) {
 			return translate('scoreview', text, vars)
+		},
+
+		toggleSharing(rec) {
+			if (this.sharingId === rec.id) {
+				this.sharingId = null
+				return
+			}
+			this.sharingId = rec.id
+			this.shareIds = (rec.sharedParts ?? []).map((p) => String(p.id))
+		},
+
+		toggleShareId(part) {
+			const id = String(part.id)
+			this.shareIds = this.shareIds.includes(id)
+				? this.shareIds.filter((x) => x !== id)
+				: [...this.shareIds, id]
+		},
+
+		confirmSharing() {
+			const targetParts = this.parts
+				.filter((part) => this.shareIds.includes(String(part.id)))
+				.map((part) => ({ id: String(part.id), name: part.name }))
+			this.$emit('share', { recording: this.sharingRecording, targetParts })
+			this.sharingId = null
+		},
+
+		stopSharing() {
+			this.$emit('share', { recording: this.sharingRecording, targetParts: null })
+			this.sharingId = null
 		},
 
 		formatDuration(ms) {
@@ -525,6 +653,18 @@ export default {
 
 .scoreview-recording--active {
 	font-weight: bold;
+}
+
+/* For another voice, shown to someone who has not chosen one (E21). */
+.scoreview-recording--dimmed {
+	opacity: 0.6;
+}
+
+.scoreview-practice-share {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-block: 8px;
 }
 
 .scoreview-recording-meta {

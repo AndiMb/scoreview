@@ -12,7 +12,8 @@ use OCP\IDBConnection;
 /**
  * Jede Abfrage ist an die Nutzerin gebunden, bis auf die des Aufraeum-Jobs:
  * Eine Aufnahme hoert nur, wer sie gemacht hat (S8 - fremd heisst 404, nicht
- * 403).
+ * 403). The one exception is what a leader released to parts (E21):
+ * findShared() and findListenable() also return those - and only those.
  *
  * @extends QBMapper<Recording>
  */
@@ -43,6 +44,45 @@ class RecordingMapper extends QBMapper {
 			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)));
+		try {
+			return $this->findEntity($qb);
+		} catch (DoesNotExistException) {
+			return null;
+		}
+	}
+
+	/**
+	 * Recordings of this score released to parts (E21), by anyone but
+	 * `$exceptUserId` - their own come with the own list already.
+	 *
+	 * @return Recording[] oldest first
+	 */
+	public function findShared(int $fileId, string $exceptUserId): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->isNotNull('shared_parts'))
+			->andWhere($qb->expr()->neq('user_id', $qb->createNamedParameter($exceptUserId)))
+			->orderBy('created_at', 'ASC')
+			->addOrderBy('id', 'ASC');
+		return $this->findEntities($qb);
+	}
+
+	/**
+	 * A recording someone may hear: their own, or one released to parts.
+	 * Who may see the score at all is the controller's check before this.
+	 */
+	public function findListenable(int $id, int $fileId, string $userId): ?Recording {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->orX(
+				$qb->expr()->eq('user_id', $qb->createNamedParameter($userId)),
+				$qb->expr()->isNotNull('shared_parts'),
+			));
 		try {
 			return $this->findEntity($qb);
 		} catch (DoesNotExistException) {

@@ -72,6 +72,11 @@ return [
 		['name' => 'practice_track#create', 'url' => '/api/scores/{fileId}/practice-tracks', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
 		// The PDF file next to the score, written in the browser (E16).
 		['name' => 'pdf#create', 'url' => '/api/scores/{fileId}/pdf', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		// Practice log and weekly goal (E20, Controller\PracticeLogController):
+		// read and added to only by the singer; the goal by leaders.
+		['name' => 'practice_log#show', 'url' => '/api/scores/{fileId}/practice-log', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'practice_log#create', 'url' => '/api/scores/{fileId}/practice-log', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'practice_log#updateGoal', 'url' => '/api/scores/{fileId}/practice-goal', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'my_part#updatePractice', 'url' => '/api/scores/{fileId}/practice', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
 
 		// Leitungen einer Partitur (B1, Controller\LeaderController). Die
@@ -103,6 +108,8 @@ return [
 		['name' => 'recording#index', 'url' => '/api/scores/{fileId}/recordings', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'recording#create', 'url' => '/api/scores/{fileId}/recordings', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'recording#show', 'url' => '/api/scores/{fileId}/recordings/{id}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+', 'id' => '\d+']],
+		// A leader releases an own recording to parts, or takes it back (E21).
+		['name' => 'recording#update', 'url' => '/api/scores/{fileId}/recordings/{id}', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+', 'id' => '\d+']],
 		['name' => 'recording#destroy', 'url' => '/api/scores/{fileId}/recordings/{id}', 'verb' => 'DELETE', 'requirements' => ['fileId' => '\d+', 'id' => '\d+']],
 
 		// Setlisten (E, Controller\SetlistController). Eine Setliste ist eine

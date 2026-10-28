@@ -141,6 +141,7 @@ class SettingsController extends Controller {
 		?int $maxRecordingMbTotal = null,
 		?bool $featurePracticeExport = null,
 		?bool $featureOffline = null,
+		?bool $featurePracticeLog = null,
 		?int $practiceTrackMaxMb = null,
 		?int $pdfMaxMb = null,
 		?string $sidecarRenderer = null,
@@ -233,6 +234,7 @@ class SettingsController extends Controller {
 			FeatureConfig::SCORE_FOLLOWER => $featureScoreFollower,
 			FeatureConfig::PRACTICE_EXPORT => $featurePracticeExport,
 			FeatureConfig::OFFLINE => $featureOffline,
+			FeatureConfig::PRACTICE_LOG => $featurePracticeLog,
 		] as $switch => $enabled) {
 			if ($enabled !== null) {
 				$this->features->setEnabled($switch, $enabled);

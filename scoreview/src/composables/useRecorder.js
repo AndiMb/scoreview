@@ -83,6 +83,9 @@ export function useRecorder({
 	referenceHz = () => 440,
 }) {
 	const recordings = ref([])
+	// Released by leaders to parts (E21) - unfiltered; who sees which is
+	// decided in the viewer (lib/sharedRecordings.js).
+	const sharedRecordings = ref([])
 	const error = ref('')
 	/** 'idle' | 'starting' | 'recording' | 'saving' */
 	const phase = ref('idle')
@@ -156,12 +159,14 @@ export function useRecorder({
 		const mine = ++generation
 		if (!enabled()) {
 			recordings.value = []
+			sharedRecordings.value = []
 			return
 		}
 		try {
 			const res = await axios.get(baseUrl())
 			if (mine === generation) {
 				recordings.value = res.data?.recordings ?? []
+				sharedRecordings.value = res.data?.shared ?? []
 			}
 		} catch (err) {
 			if (mine === generation) {
@@ -357,6 +362,23 @@ export function useRecorder({
 			await load()
 		} catch (err) {
 			error.value = messageOf(err, t('The recording could not be deleted.'))
+		}
+	}
+
+	/**
+	 * Releases an own recording to parts, or takes it back (E21). The server
+	 * checks the role; taking back needs none.
+	 *
+	 * @param {object} recording
+	 * @param {?Array<{id:string, name:string}>} targetParts null = private again
+	 */
+	async function share(recording, targetParts) {
+		error.value = ''
+		try {
+			await axios.put(`${baseUrl()}/${recording.id}`, { targetParts: targetParts && targetParts.length > 0 ? targetParts : null })
+			await load()
+		} catch (err) {
+			error.value = messageOf(err, t('The recording could not be shared.'))
 		}
 	}
 
@@ -596,6 +618,7 @@ export function useRecorder({
 		}
 		stopListening()
 		recordings.value = []
+		sharedRecordings.value = []
 		error.value = ''
 		confirmReplace.value = false
 		audioCache.clear()
@@ -621,6 +644,7 @@ export function useRecorder({
 
 	return {
 		recordings,
+		sharedRecordings,
 		error,
 		phase,
 		elapsedMs,
@@ -638,6 +662,7 @@ export function useRecorder({
 		discardPending,
 		answerReplace,
 		remove,
+		share,
 		listen,
 		stopListening,
 		loadAudio,

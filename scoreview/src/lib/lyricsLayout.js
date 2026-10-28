@@ -225,3 +225,139 @@ export function systemKeyFor(element, measureRectsByPage) {
 	}
 	return best ? `${element.page}:${Math.round(best.y)}` : `${element.page}`
 }
+
+/**
+ * Kennung einer Silbe in der Ansicht aller Stimmen - die Stelle allein ist
+ * dort nicht eindeutig: Alle Zeilen eines Systems teilen sich die Segmente.
+ *
+ * @param {number} staff
+ * @param {number} elid
+ * @param {number} verse
+ */
+export const choirSyllableId = (staff, elid, verse) => `${staff}:${elid}:${verse}`
+
+/**
+ * The lyrics of every part (E15, the "all parts" view): per system a row per
+ * staff that carries text there, labelled with its part. Which parts sing
+ * together is read from the rows, not guessed - a staff without text in a
+ * system has no row in it.
+ *
+ * Built from buildLyrics per staff, so a row reads exactly as that part's own
+ * view would; only the ids get the staff, and the word numbers run across
+ * all rows (the view looks words up by number).
+ *
+ * @param {object} input
+ * @param {Syllable[]} input.syllables
+ * @param {(elid:number) => (string|number)} [input.blockKeyOf]
+ * @param {(staff:number) => string} [input.labelOf] the part's name
+ * @return {{blocks: Array<{key:string|number, rows: Array<{staff:number, label:string, verses:Array<{verse:number, words:Word[]}>}>}>, staves: number[], verseCount: number}}
+ */
+export function buildChoirLyrics({ syllables, blockKeyOf = () => 0, labelOf = (staff) => String(staff + 1) }) {
+	const all = syllables ?? []
+	const staves = [...new Set(all.map((s) => s.staff))].sort((a, b) => a - b)
+	const blocks = new Map()
+	let wordIndex = 0
+	let verseCount = 0
+	for (const staff of staves) {
+		const own = buildLyrics({ syllables: all.filter((s) => s.staff === staff), staves: [staff], blockKeyOf })
+		verseCount = Math.max(verseCount, own.verses.length)
+		for (const block of own.blocks) {
+			const verses = block.verses.map((v) => ({
+				verse: v.verse,
+				words: v.words.map((w) => ({
+					...w,
+					index: wordIndex++,
+					staff,
+					syllables: w.syllables.map((r) => ({ ...r, id: choirSyllableId(staff, r.elid, v.verse) })),
+				})),
+			}))
+			const first = Math.min(...verses.flatMap((v) => v.words.map((w) => w.syllables[0].elid)))
+			const entry = blocks.get(block.key) ?? { key: block.key, first, rows: [] }
+			entry.first = Math.min(entry.first, first)
+			entry.rows.push({ staff, label: labelOf(staff), verses })
+			blocks.set(block.key, entry)
+		}
+	}
+	const ordered = [...blocks.values()]
+		.sort((a, b) => a.first - b.first)
+		.map(({ key, rows }) => ({ key, rows: rows.sort((a, b) => a.staff - b.staff) }))
+	return { blocks: ordered, staves, verseCount }
+}
+
+/**
+ * Je Notenzeile: Stelle -> Strophen mit Text (wie versesByElid, aber fuer die
+ * Ansicht aller Stimmen).
+ *
+ * @param {ReturnType<typeof buildChoirLyrics>['blocks']} blocks
+ * @return {Map<number, Map<number, number[]>>}
+ */
+export function choirVersesByElid(blocks) {
+	const byStaff = new Map()
+	for (const block of blocks) {
+		for (const row of block.rows) {
+			const map = byStaff.get(row.staff) ?? new Map()
+			for (const v of row.verses) {
+				for (const w of v.words) {
+					for (const s of w.syllables) {
+						const list = map.get(s.elid) ?? []
+						if (!list.includes(v.verse)) {
+							list.push(v.verse)
+							list.sort((a, b) => a - b)
+						}
+						map.set(s.elid, list)
+					}
+				}
+			}
+			byStaff.set(row.staff, map)
+		}
+	}
+	return byStaff
+}
+
+/**
+ * Who sings at an event: the syllable of every staff that has one at this
+ * place. The verse is chosen per staff the same way as in activeSyllable -
+ * the n-th time through sings verse n.
+ *
+ * @param {{byStaff: Map<number, Map<number, number[]>>, events: Array<{elid:number}>, occ: number[]}} index
+ * @param {number} eventIndex
+ * @return {Array<{staff:number, id:string}>} empty when nobody starts a syllable here
+ */
+export function choirActiveSyllables({ byStaff, events, occ }, eventIndex) {
+	const e = events?.[eventIndex]
+	if (!e) {
+		return []
+	}
+	const n = occ[eventIndex] ?? 1
+	const out = []
+	for (const [staff, verses] of byStaff) {
+		const list = verses.get(e.elid)
+		if (list && list.length > 0) {
+			out.push({ staff, id: choirSyllableId(staff, e.elid, list[Math.min(n, list.length) - 1]) })
+		}
+	}
+	return out
+}
+
+/**
+ * The part name for each staff with text - only where staves and parts
+ * match one to one. The count of staves comes from the engine's own lists
+ * (spellings and syllables name every staff with notes); a piano part with
+ * two staves breaks the count, and a wrong name is worse than "Staff 2".
+ *
+ * @param {Array<{name:string}>} parts the picture's parts (meta.parts)
+ * @param {Array<{staff:number}>} entries noteSpellings and lyricSyllables
+ * @return {?string[]} index = staff, or null when they cannot be matched
+ */
+export function staffPartNames(parts, entries) {
+	let max = -1
+	for (const e of entries ?? []) {
+		if (Number.isInteger(e?.staff) && e.staff > max) {
+			max = e.staff
+		}
+	}
+	if (!parts?.length || max + 1 !== parts.length) {
+		return null
+	}
+	return parts.map((part) => part.name ?? '')
+}

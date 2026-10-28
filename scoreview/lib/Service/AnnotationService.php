@@ -153,10 +153,15 @@ class AnnotationService {
 		if (!$this->mayWrite($annotation, $userId, $canWriteShared, $isLeader)) {
 			return null;
 		}
-		if ($annotation->getKind() !== Annotation::KIND_STAMP && trim($content) === '') {
-			throw new \InvalidArgumentException('A text annotation needs text.');
+		// A drawing's content is its strokes, checked when it was made - an
+		// edit can change whom it is for, not what it shows. Redrawing is
+		// deleting and drawing again.
+		if ($annotation->getKind() !== Annotation::KIND_DRAWING) {
+			if ($annotation->getKind() !== Annotation::KIND_STAMP && trim($content) === '') {
+				throw new \InvalidArgumentException('A text annotation needs text.');
+			}
+			$annotation->setContent($content);
 		}
-		$annotation->setContent($content);
 		if ($targetPartsJson !== null && $annotation->getVisibility() === Annotation::VISIBILITY_PARTS) {
 			$annotation->setTargetParts($targetPartsJson);
 		}

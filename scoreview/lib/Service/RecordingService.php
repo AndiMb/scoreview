@@ -20,6 +20,12 @@ use OCP\Files\SimpleFS\ISimpleFile;
  * antwortet 404, und niemand erfaehrt, ob es sie gibt. Das gilt auch fuer
  * Leitungen: Eine Aufnahme ist Uebematerial, keine Abgabe.
  *
+ * **Released by a leader** (E21): the one way out of that rule, and only
+ * from the author's side - a leader releases their OWN recording to parts
+ * (share()), everyone with access to the score may then hear it. Changing,
+ * releasing again or deleting stays with the author; nobody can release
+ * someone else's recording, leaders included.
+ *
  * **Grenzen in fester Reihenfolge**, die billigste zuerst, und alle VOR dem
  * Schreiben:
  *
@@ -51,6 +57,30 @@ class RecordingService {
 	 */
 	public function list(int $fileId, string $userId): array {
 		return $this->mapper->findByFileAndUser($fileId, $userId);
+	}
+
+	/**
+	 * Recordings of this score that leaders released to parts, not counting
+	 * the asking person's own (they are in list()).
+	 *
+	 * @return Recording[]
+	 */
+	public function listShared(int $fileId, string $userId): array {
+		return $this->mapper->findShared($fileId, $userId);
+	}
+
+	/**
+	 * Releases an own recording to parts, or takes it back (null). Whether
+	 * the author may release - the leader role - is the controller's
+	 * question; taking back is always allowed, also after the role is gone.
+	 *
+	 * @param ?string $sharedPartsJson checked JSON (TargetParts), null = private
+	 * @throws RecordingException NOT_FOUND - not one's own
+	 */
+	public function share(int $fileId, string $userId, int $id, ?string $sharedPartsJson): Recording {
+		$recording = $this->own($fileId, $userId, $id);
+		$recording->setSharedParts($sharedPartsJson);
+		return $this->mapper->update($recording);
 	}
 
 	/**
@@ -198,10 +228,16 @@ class RecordingService {
 	}
 
 	/**
-	 * @throws RecordingException NOT_FOUND - fremd, geloescht oder ohne Datei
+	 * The audio - for its author, and for everyone once a leader released it
+	 * to parts (E21).
+	 *
+	 * @throws RecordingException NOT_FOUND - fremd und nicht freigegeben, geloescht oder ohne Datei
 	 */
 	public function open(int $fileId, string $userId, int $id): ISimpleFile {
-		$recording = $this->own($fileId, $userId, $id);
+		$recording = $this->mapper->findListenable($id, $fileId, $userId);
+		if ($recording === null) {
+			throw new RecordingException(RecordingException::NOT_FOUND);
+		}
 		try {
 			return $this->storage->open($recording);
 		} catch (NotFoundException) {

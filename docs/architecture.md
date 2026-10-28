@@ -126,7 +126,7 @@ Route mit Token annimmt; Einzelheiten in
 | `GET /api/scores/{fileId}/variants/{key}` | Eine Darstellungsvariante ([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)): fertig mit `files` wie beim Status, sonst wird sie **in dieser Anfrage** gesetzt; `pending`, solange eine andere Anfrage sie setzt | ja |
 | `GET /api/scores/{fileId}/variants/{key}/artifact/{name}` | Ein Artefakt einer Variante (`page-N`, `timing`, `measures`, `meta`; kein `midi`) | ja |
 | `GET /api/soundfont` | Das SoundFont für die Browser-Wiedergabe | ja |
-| `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen und Stempel; Sichtbarkeit `parts` nur für Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | ja |
+| `GET\|POST\|PUT\|DELETE /api/scores/{fileId}/annotations[/{id}]` | Notizen, Stempel, gespeicherte Loops und Zeichnungen ([E22](#e22-freihand-als-notiz-in-linienabständen)); Sichtbarkeit `parts` nur für Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | ja |
 | `GET\|PUT /api/scores/{fileId}/my-part` | „Meine Stimme“ je Partitur und Nutzerin; `GET` liefert die Übe-Einstellungen (`practice`) mit | ja |
 | `PUT /api/scores/{fileId}/practice` | Übe-Einstellungen je Partitur und Nutzerin: Transposition, Coach, Pegel der übrigen Stimmen. Was fehlt, bleibt unverändert | ja |
 | `POST /api/scores/{fileId}/practice-tracks` | Einen im Browser gerenderten Übe-Track als MP3 in Files ablegen ([E13](#e13-übe-tracks-sind-dateien-in-files)) | Direct-Editing-Token nur neben die Partitur, Begleit-Token nein |
@@ -136,7 +136,10 @@ Route mit Token annimmt; Einzelheiten in
 | `GET\|POST\|PATCH\|DELETE /api/scores/{fileId}/follow`, `POST …/follow/join` | „Folgt mir“: Zustand lesen (alle mit Dateizugriff), Sitzung führen (Leitung), für Push anmelden ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | ja |
 | `POST /api/scores/{fileId}/follow/move` | Die Sitzung zum nächsten Stück mitnehmen (Leitung, E10) | ja |
 | `GET /api/scores/{fileId}/follow/companion?target=` | Begleit-Token für das Stück, zu dem eine Sitzung umgezogen ist ([S1](#s1-begleit-token-sind-an-zweck-datei-und-direct-editing-token-gebunden)) | **nur** Direct-Editing-Token |
-| `GET\|POST /api/scores/{fileId}/recordings`, `GET\|DELETE …/recordings/{id}` | Eigene Aufnahmen – nur die eigenen, fremde antworten 404 | ja |
+| `GET\|POST /api/scores/{fileId}/recordings`, `GET\|DELETE …/recordings/{id}` | Eigene Aufnahmen – nur die eigenen, fremde antworten 404; die Liste trägt zusätzlich, was Leitungen für Stimmen freigegeben haben (`shared`), und nur das lässt sich auch abspielen ([E21](#e21-aufnahmen-der-leitung-für-stimmen)) | ja |
+| `PUT /api/scores/{fileId}/recordings/{id}` | Eine eigene Aufnahme für Stimmen freigeben (nur Leitungen) oder die Freigabe zurücknehmen (immer) ([E21](#e21-aufnahmen-der-leitung-für-stimmen)) | ja |
+| `GET\|POST /api/scores/{fileId}/practice-log` | Das eigene Übetagebuch der Partitur lesen, gezählte Sekunden melden ([E20](#e20-übetagebuch-ohne-bestenliste)) | ja |
+| `PUT /api/scores/{fileId}/practice-goal` | Das Wochenziel der Partitur setzen oder mit 0 löschen (nur Leitungen, E20) | ja |
 | `GET\|PUT /api/setlists/{fileId}` | Setliste lesen (aufgelöst aus Sicht der Nutzerin) und schreiben ([E11](#e11-die-setliste-als-markdown-datei)) | Setlisten-Begleit-Token; schreibend nur mit Einträgen um die Partitur herum |
 | `POST /api/setlists` | Neue Setliste anlegen | nur im Ordner der Token-Datei, ohne Begleit-Token |
 | `GET /api/scores/{fileId}/setlists` | Setlisten im Ordner der Partitur, die sie enthalten | ja, ohne Begleit-Token |
@@ -256,7 +259,9 @@ Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 | `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag`, `kind`, `stamp`, `target_parts`, `by_leader`, `end_measure` |
 | `scoreview_leaders` | `file_id`, `user_id`, `appointed_by`, `created_at` – ernannte Leitungen; die Eigentümerin steht nie darin ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) |
 | `scoreview_follow` | `file_id` (Primärschlüssel: höchstens eine Sitzung je Datei), `leader_uid`, `started_at`, `heartbeat_at`, `version`, `state` ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) |
-| `scoreview_recordings` | `file_id`, `user_id`, `created_at`, `duration_ms`, `size_bytes`, `score_start_ms`, `tempo_factor`, `with_accompaniment`, `reference_hz` – die WAV selbst liegt in IAppData |
+| `scoreview_recordings` | `file_id`, `user_id`, `created_at`, `duration_ms`, `size_bytes`, `score_start_ms`, `tempo_factor`, `with_accompaniment`, `reference_hz`, `shared_parts` (Stimmen, für die eine Leitung sie freigegeben hat, [E21](#e21-aufnahmen-der-leitung-für-stimmen)) – die WAV selbst liegt in IAppData |
+| `scoreview_practice_log` | `user_id`, `file_id`, `day` (lokaler Kalendertag `YYYY-MM-DD`, eindeutig zusammen), `seconds` ([E20](#e20-übetagebuch-ohne-bestenliste)) |
+| `scoreview_practice_goals` | `file_id` (eindeutig), `minutes_per_week`, `user_id` (wer es gesetzt hat; `NULL`, wenn das Konto gelöscht ist), `updated_at` |
 | `scoreview_variants` | `file_id`, `etag`, `variant` (eindeutig zusammen – zugleich die Sperre eines Laufs), `status`, `error_code`, `error_message`, `format_version`, `engine`, `page_count`, `accessed_at` ([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)) |
 
 `backend` hält fest, welcher Konvertierungsweg **diese** Darstellung erzeugt hat
@@ -298,6 +303,9 @@ kein Notenanker. Eine vierte Art statt einer eigenen Tabelle, weil ein Loop
 genau das will, was eine Notiz hat – den musikalischen Anker, die drei
 Sichtbarkeiten samt Stimmen für Leitungen, die Obergrenze je Person, einen
 Löschort. Verwaist ist er, sobald sein *Ende* jenseits der Partitur liegt.
+Eine **Zeichnung** (`kind = drawing`) ist die fünfte Art: verankert wie ein
+Stempel über Takt und Anteil, ohne Notenanker, die Striche als JSON in
+`content` ([E22](#e22-freihand-als-notiz-in-linienabständen)).
 
 Aufnahmen liegen in IAppData unter `recordings/<uid>/<fileId>/<id>.wav`, nicht
 in Files: Nur die Aufnehmende hört sie, und in Files tauchten sie in Freigaben,
@@ -305,23 +313,26 @@ Suche und Kontingent der Partitur-Eigentümerin auf. Weil IAppData gegen **kein*
 Kontingent zählt, hat die App eigene Grenzen – je Partitur (Anzahl), je
 Aufnahme (Länge), je Person und für die ganze Instanz (Bytes); beim Erreichen
 antwortet der Server 409, 413 oder 507 mit einer lesbaren Meldung. Eine fremde
-Aufnahme antwortet 404, nicht 403.
+Aufnahme antwortet 404, nicht 403 – außer eine Leitung hat sie für Stimmen
+freigegeben ([E21](#e21-aufnahmen-der-leitung-für-stimmen)).
 
 ### Aufräumen
 
 `CleanupOrphansJob` räumt Cache-Einträge, Notizen, Leitungen, Folgesitzungen,
 Aufnahmen, die gemerkte Stimmwahl („Meine Stimme“, `my_part.<fileId>` in den
 Nutzereinstellungen) und die Übe-Einstellungen (`practice.<fileId>`)
-gelöschter Dateien ab. Das geschieht bewusst erst, wenn die Datei
+gelöschter Dateien ab, ebenso Übetagebuch und Wochenziel
+([E20](#e20-übetagebuch-ohne-bestenliste)). Das geschieht bewusst erst, wenn die Datei
 auch aus dem Papierkorb verschwunden ist – eine Wiederherstellung aus dem
 Papierkorb soll nichts davon verlieren. Nur den Cache nimmt schon
 `Listener\NodeDeletedListener` beim Verschieben in den Papierkorb weg: Er ist
 regenerierbar, das nächste Öffnen baut ihn neu auf. Folgesitzungen ohne
 Lebenszeichen der Leitung (30 min) entfernt `CleanupOrphansJob` unabhängig
-davon. Übe-Tracks räumt die App nicht: Sie sind gewöhnliche Dateien in Files
+davon, ebenso Tage im Übetagebuch, die älter als 400 Tage sind. Übe-Tracks räumt die App nicht: Sie sind gewöhnliche Dateien in Files
 ([E13](#e13-übe-tracks-sind-dateien-in-files)). `UserDeletedListener`
 löscht beim Löschen eines Kontos dessen Notizen, Ernennungen, geleitete
-Sitzungen und Aufnahmen. Zeilen und WAV-Dateien der Aufnahmen verschwinden
+Sitzungen, Aufnahmen und Übetagebuch; ein gesetztes Wochenziel bleibt, nur
+ohne Namen. Zeilen und WAV-Dateien der Aufnahmen verschwinden
 dabei immer zusammen (`RecordingStorage`), und ein leer gewordener Ordner
 `recordings/<uid>/` geht mit – entschieden an der Tabelle, weil `ISimpleFolder`
 keine Unterordner auflistet.
@@ -542,6 +553,9 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | Aufführungsmodus, Blättern per Taste/Pedal | `interactionPolicy.js`, `pagingPlan.js`, `keyMap.js` | `usePerformanceMode`, `usePaging`, `useWakeLock` | `ScoreLockButton.vue` |
 | Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | `leaders.js` | `useLeaders` | `LeaderPanel.vue` |
 | Stimmnotizen, Stempel, Studierbuchstaben | `annotationFilter.js`, `stampLayout.js`, `scoreFacts.js` | `useAnnotations`, `useScoreFacts` | `ScoreStamps.vue`, `StampSymbol.vue` |
+| Zeichnen in den Noten ([E22](#e22-freihand-als-notiz-in-linienabständen)) | `drawingLayout.js` | `useAnnotations` | `ScoreDrawings.vue` |
+| Übetagebuch ([E20](#e20-übetagebuch-ohne-bestenliste)) | `practiceLog.js` | `usePracticeLog` | `PracticeLogPanel.vue` |
+| Aufnahmen der Leitung für Stimmen ([E21](#e21-aufnahmen-der-leitung-für-stimmen)) | `sharedRecordings.js`, `annotationFilter.js` | `useRecorder` | `RecordingPanel.vue` |
 | Taktart, Zählzeiten, Loop-Fokus, gespeicherte Loops (1.17) | `scoreFacts.js` (`metersFromArtifacts`), `countLabels.js`, `countLayout.js`, `loopFocus.js` | `useScoreFacts`, `useMetronome`, `useAnnotations` | `NoteNameControls.vue`, `LoopSaveForm.vue`, Overlays in `ScorePage.vue` |
 | Drucken ([E16](#e16-drucken-aus-den-seiten-svgs)), Stimmgerät | `printLayout.js`, `tuner.js` | `useConversionStatus`, `useTuner` | `PrintApp.vue`, `PrintToolbar.vue`, `TunerPanel.vue`, `TunerNeedle.vue` |
 | PDF-Datei neben der Partitur (1.18, E16) | `svgToPdf.js`, `pdfWriter.js` | – | `PrintApp.vue`, `PrintToolbar.vue` |
@@ -689,7 +703,13 @@ ausgerollte Wiederholung ([M7](#m7-wiederholungen-rollen-sich-aus-dcdscoda-nicht
 Das n-te Auftreten einer `elid` im Timing singt Strophe n, gibt es weniger
 Strophen, bleibt es bei der letzten. Die gesungene Silbe leuchtet über eine
 Klasse am Knoten, nicht über eine Vue-Eigenschaft; ein Tipp auf ein Wort
-springt dorthin, Ziehen über mehrere Wörter setzt einen Loop.
+springt dorthin, Ziehen über mehrere Wörter setzt einen Loop. Mit **Alle
+Stimmen** steht je System eine Zeile je Notenzeile mit Text, beschriftet mit
+dem Namen ihrer Stimme, und es leuchten die Zeilen, die gerade eine Silbe
+beginnen (`buildChoirLyrics`, `choirActiveSyllables` in `lyricsLayout.js`).
+Den Namen trägt eine Zeile nur, wenn die Zahl der Notenzeilen der der Stimmen
+entspricht; sonst heißt sie „Notenzeile n“ – dieselbe Vorsicht wie bei
+den Stimmstempeln (`canMapStavesToParts` in `staffBands.js`).
 
 **Tonnamen und Note antippen.** Deutsch (H, B für Hes), Englisch, feste und
 relative Solmisation, wahlweise nur an der eigenen Stimme (Vorgabe). Der Name
@@ -1064,8 +1084,12 @@ nicht durch einen Fehler im Aufrufer.
 ### S8: 404 vor 403
 
 Wer eine Datei nicht sieht, bekommt auf jedem Endpunkt 404, auch beim Lesen;
-fremde Aufnahmen antworten ebenfalls 404. Erst wer sie sieht, aber nicht darf,
-bekommt 403. Sonst ließe sich abtasten, welche fileIds es gibt
+fremde Aufnahmen antworten ebenfalls 404. Die eine Ausnahme ist eine Aufnahme,
+die eine Leitung für Stimmen freigegeben hat: Sie ist nicht mehr fremd, sondern
+für alle mit Dateizugriff abrufbar
+([E21](#e21-aufnahmen-der-leitung-für-stimmen)) – fremd bleibt sie fürs
+Freigeben und Löschen, beides antwortet weiter 404. Erst wer sie sieht, aber
+nicht darf, bekommt 403. Sonst ließe sich abtasten, welche fileIds es gibt
 ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)).
 
 ### S9: Was Programme startet oder Adressen abruft, stellt nur ein voller Admin ein
@@ -1181,7 +1205,7 @@ Skript aus, und welche Flags gelten, ergibt sich erst aus seiner Antwort.
 ## Entwurfsentscheidungen
 
 Diese Entscheidungen tragen den Aufbau. Sie sind im Code an vielen Stellen als
-`E1`…`E15` referenziert und sollten nicht ohne erneute Bewertung revidiert
+`E1`…`E22` referenziert und sollten nicht ohne erneute Bewertung revidiert
 werden.
 
 ### E1: MIDI statt MP3 als Audioartefakt
@@ -2732,6 +2756,103 @@ Modells.
 **Nicht als Achse: weitere Stilschalter** (leere Notenzeilen, Liedtextgröße,
 Taktnummern). Jede Achse vervielfacht den Cache, und diese Schalter sind
 Sache der Datei; das Handyformat blendet leere Notenzeilen von sich aus aus.
+
+### E20: Übetagebuch ohne Bestenliste
+
+Das Übetagebuch zählt, wie lange jemand ein Stück geübt hat, und eine Leitung
+kann je Stück ein Wochenziel setzen. Zwei Entscheidungen tragen es.
+
+**Gezählt wird, was klingt.** Die Uhr läuft, während die Partitur spielt oder
+eine Aufnahme läuft – nicht, solange die Seite offen ist. Eine offene Seite
+auf dem Notenpult ist kein Üben, und Stillstand lässt sich nicht von
+Konzentration unterscheiden; Klang schon. Gemessen wird im Browser
+(`createPracticeMeter` in `practiceLog.js`; mehr als 120 s zwischen zwei
+Blicken auf die Uhr gelten als Schlaf des Geräts, nicht als Übung), gemeldet alle 60 s, beim Verstecken
+des Tabs und beim Verlassen der Seite (`keepalive`). Gespeichert wird je
+Person, Partitur und **lokalem Kalendertag** als Summe von Sekunden – der Tag
+kommt vom Gerät, weil „heute“ für die Sängerin dort endet, wo sie wohnt. Der
+Server glaubt ihm nur eingeschränkt: höchstens 300 s je Meldung, höchstens
+86 400 s je Tag, nur ein Tag, der höchstens einen Tag vom Serverdatum
+abweicht. Mehr als Selbstbetrug verhindert das nicht, und mehr ist nicht
+nötig – es sieht ja niemand außer ihr.
+
+**Nur die Person selbst sieht ihre Zeit – auch keine Leitung.** In einem
+selbst betriebenen Chorwerkzeug verglichen eine Bestenliste oder eine
+Leitungsübersicht Menschen, die dem nie zugestimmt haben, und machten aus
+einer Übehilfe eine Anwesenheitskontrolle. Das Wochenziel ist deshalb das
+Einzige, was eine Leitung beisteuert: eine Zahl für alle, gegen die jede
+Person nur ihre eigene Woche hält. Wer das Ziel gesetzt hat, steht dabei; mit
+dem Konto der Leitung verschwindet nur der Name, nicht das Ziel. Die
+Serie („Tage in Folge“) zählt über alle Stücke, denn geübt ist geübt.
+
+Aufbewahrt werden 400 Tage, damit ein Jahresvergleich möglich bliebe; die
+Ansicht liefert 56. Abschalten lässt es die Verwaltung über
+`feature_practice_log` (Vorgabe an: Es fällt nur bei der Person an, die übt,
+und zeigt nur ihr etwas).
+
+### E21: Aufnahmen der Leitung für Stimmen
+
+Eine Leitung kann eine **eigene** Aufnahme für bestimmte Stimmen freigeben –
+der vorgesungene Alt für den Alt. Es ist die einzige Ausnahme davon, dass
+eine Aufnahme nur der gehört, die sie gemacht hat ([S8](#s8-404-vor-403)).
+
+**Warum eine Aufnahme und keine Datei in Files.** Eine Aufnahme kennt ihre
+Stelle in der Partitur (`score_start_ms`, `tempo_factor`) und läuft deshalb
+synchron mit Cursor und Begleitung – genau das, was eine eingesungene Stimme
+zum Üben braucht. Als MP3 in Files wäre sie eine Datei neben anderen, ohne
+Bezug zum Takt; dafür gibt es die Übe-Tracks
+([E13](#e13-übe-tracks-sind-dateien-in-files)).
+
+**Wie Stimmnotizen.** Die Freigabe trägt die Zielstimmen als `[{id, name}]`
+(`shared_parts`, geprüft von `TargetParts` wie bei den Notizen), ausgeliefert
+wird an alle mit Dateizugriff, und welche Stimme sie hervorgehoben, gedimmt
+oder gar nicht sieht, entscheidet der Browser (`annotationFilter.js`) – ohne
+gewählte Stimme gedimmt mit dem Namen der Stimme. Abgespielt werden darf eine
+fremde Aufnahme nur, solange sie freigegeben ist
+(`RecordingMapper::findListenable`); alles andere an ihr bleibt fremd und
+antwortet 404.
+
+**Wer was darf.** Freigeben nur eine Leitung ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)),
+und nur die eigene Aufnahme. **Zurücknehmen** darf die Autorin immer, auch
+nach dem Verlust der Rolle – sonst bliebe ihre Stimme gegen ihren Willen
+hörbar. Löschen bleibt bei ihr, und der Speicher zählt weiter bei ihr
+([S5](#s5-aufnahmen-haben-eigene-speichergrenzen)): Eine Freigabe verschiebt
+keine Kosten auf die, die zuhören.
+
+### E22: Freihand als Notiz, in Linienabständen
+
+Zeichnen in den Noten – ein Bogen, ein Kreis um ein Intervall, ein Pfeil – ist
+eine fünfte Art von Notiz (`kind = drawing`), keine eigene Ebene mit eigenem
+Speicher. Damit gelten Sichtbarkeiten samt Stimmen, Obergrenze, Löschort und
+Rechte unverändert.
+
+**Verankert wie ein Stempel, gemessen in Linienabständen.** Gespeichert wird
+nicht das Bild, sondern Takt und Anteil, wo der erste Strich begann, und die
+Striche als Punkte in Linienabständen relativ zu diesem Ursprung – auf der
+obersten Linie der Notenzeile, auf der begonnen wurde, mit deren Stimme
+(`drawingLayout.js`). Pixel oder Seitenkoordinaten überstünden weder ein
+Neurendern noch Handyseiten oder einen Stimmenauszug
+([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)); so wandert
+der Ursprung mit dem Takt, und die Größe folgt der Notenzeile. Im Auszug
+einer anderen Stimme erscheint eine Zeichnung auf einer Stimmzeile nicht – sie
+landete auf fremden Noten. Wo sich Zeilen und Stimmen nicht zuordnen lassen,
+ist der Ursprung die Oberkante des Systems; das ist in der vollen Partitur
+richtig und im Auszug ungenau, und so steht es in den Grenzen.
+
+**Wenig Daten, voll geprüft.** Die Striche werden vor dem Speichern geglättet
+(Ramer-Douglas-Peucker, 0,12 Linienabstände) und auf eine Nachkommastelle
+gerundet; 40 Striche und 800 Punkte passen in die 10 000 Zeichen einer Notiz.
+Der Server prüft das JSON vollständig (`validateDrawing`): Es geht an alle
+Lesenden und wird dort zu SVG-Pfaden, also müssen es Zahlen sein, und wenige.
+Geändert wird eine Zeichnung nicht, sondern gelöscht und neu gezeichnet – ein
+Bearbeiten ihres Inhalts hieße, Striche einzeln anzufassen, und das lohnt bei
+ein paar Strichen nicht.
+
+**Gezeichnet wird auf den Seiten.** Der Zeichenmodus legt über jede Seite
+eine Ebene, die den Zeiger nimmt (`touch-action: none`: der Finger zeichnet,
+statt zu scrollen); ein zweiter Finger bricht den Strich ab. Systemband und
+Liedtext-Ansicht schalten beim Start auf Seiten um; angezeigt werden die
+Zeichnungen auch im Band.
 
 ## Formatgrundlagen
 

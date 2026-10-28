@@ -28,6 +28,7 @@ class FeatureConfig {
 	public const SCORE_FOLLOWER = 'feature_score_follower';
 	public const PRACTICE_EXPORT = 'feature_practice_export';
 	public const OFFLINE = 'feature_offline';
+	public const PRACTICE_LOG = 'feature_practice_log';
 
 	public const FOLLOW_POLL_MS = 'follow_poll_ms';
 	public const MAX_RECORDINGS_PER_SCORE = 'max_recordings_per_score';
@@ -51,6 +52,9 @@ class FeatureConfig {
 		// nur im eigenen Browser.
 		self::PRACTICE_EXPORT => true,
 		self::OFFLINE => true,
+		// The practice log (E20): on, because only the singer sees their own
+		// log - a leader sets a goal, but reads nobody's minutes.
+		self::PRACTICE_LOG => true,
 	];
 
 	/**
@@ -153,7 +157,7 @@ class FeatureConfig {
 	 * ueber eine eigene Anfrage (wer eine Funktion nicht nutzt, merkt
 	 * nichts davon, auch keine zusaetzliche Anfrage).
 	 *
-	 * @return array{followSession: bool, recording: bool, intonation: bool, scoreFollower: bool, practiceExport: bool, offline: bool, followPollMs: int, maxRecordingsPerScore: int, maxRecordingSeconds: int}
+	 * @return array{followSession: bool, recording: bool, intonation: bool, scoreFollower: bool, practiceExport: bool, offline: bool, practiceLog: bool, followPollMs: int, maxRecordingsPerScore: int, maxRecordingSeconds: int}
 	 */
 	public function forViewer(): array {
 		return [
@@ -163,6 +167,7 @@ class FeatureConfig {
 			'scoreFollower' => $this->isEnabled(self::SCORE_FOLLOWER),
 			'practiceExport' => $this->isEnabled(self::PRACTICE_EXPORT),
 			'offline' => $this->isEnabled(self::OFFLINE),
+			'practiceLog' => $this->isEnabled(self::PRACTICE_LOG),
 			'followPollMs' => $this->followPollMs(),
 			'maxRecordingsPerScore' => $this->maxRecordingsPerScore(),
 			'maxRecordingSeconds' => $this->maxRecordingSeconds(),

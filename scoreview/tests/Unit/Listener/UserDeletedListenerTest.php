@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Tests\Unit\Listener;
 use OCA\ScoreView\Db\AnnotationMapper;
 use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\LeaderMapper;
+use OCA\ScoreView\Db\PracticeLogMapper;
 use OCA\ScoreView\Listener\UserDeletedListener;
 use OCA\ScoreView\Service\RecordingStorage;
 use OCP\EventDispatcher\Event;
@@ -40,6 +41,7 @@ class UserDeletedListenerTest extends TestCase {
 			$this->leaders,
 			$this->follow,
 			$this->recordings,
+			$this->createMock(PracticeLogMapper::class),
 			$this->createMock(LoggerInterface::class),
 		);
 	}

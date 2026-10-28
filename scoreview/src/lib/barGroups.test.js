@@ -119,6 +119,12 @@ describe('barGroups', () => {
 		expect(barGroups(ctx())[0].items).not.toContain('tuner')
 		expect(barGroups(ctx({ intonationEnabled: true }))[0].items).toContain('tuner')
 		expect(barGroups(ctx({ intonationEnabled: true, offline: true }))[0].items).toContain('tuner')
+	})
+
+	it('offers the practice log only when switched on and online (E20)', () => {
+		expect(barGroups(ctx())[0].items).not.toContain('practiceLog')
+		expect(barGroups(ctx({ practiceLogEnabled: true }))[0].items).toContain('practiceLog')
+		expect(barGroups(ctx({ practiceLogEnabled: true, offline: true }))[0].items).not.toContain('practiceLog')
 		const performance = barGroups(ctx({ intonationEnabled: true, can: (a) => allowed(a, { performance: true }) }))
 		expect(performance.find((g) => g.id === 'practice')).toBeUndefined()
 	})

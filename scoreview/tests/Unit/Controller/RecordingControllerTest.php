@@ -8,6 +8,7 @@ use OCA\ScoreView\Controller\RecordingController;
 use OCA\ScoreView\Db\Recording;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\FeatureConfig;
+use OCA\ScoreView\Service\LeaderService;
 use OCA\ScoreView\Service\RecordingException;
 use OCA\ScoreView\Service\RecordingService;
 use OCA\ScoreView\Service\RequestBodyReader;
@@ -21,6 +22,8 @@ use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IAppConfig;
 use OCP\IL10N;
 use OCP\IRequest;
+use OCP\IUser;
+use OCP\IUserManager;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -33,12 +36,16 @@ use PHPUnit\Framework\TestCase;
  * 3. **Jede Ablehnung hat ihren Status**: 409 an der Obergrenze, 413 bei
  *    Ueberlaenge, 507 bei vollem Speicher - der Viewer verzweigt daran.
  * 4. **Zu grosse Rumpfe werden gar nicht erst gelesen.**
+ * 5. **Releasing to parts (E21)** is for leaders and their own recordings;
+ *    taking back needs no role.
  */
 class RecordingControllerTest extends TestCase {
 	private UserFileResolver&MockObject $fileResolver;
 	private RecordingService&MockObject $recordings;
 	private RequestBodyReader&MockObject $body;
 	private IRequest&MockObject $request;
+	private LeaderService&MockObject $leaders;
+	private IUserManager&MockObject $userManager;
 	/** @var array<string, bool> */
 	private array $bools = [];
 
@@ -47,6 +54,8 @@ class RecordingControllerTest extends TestCase {
 		$this->recordings = $this->createMock(RecordingService::class);
 		$this->body = $this->createMock(RequestBodyReader::class);
 		$this->request = $this->createMock(IRequest::class);
+		$this->leaders = $this->createMock(LeaderService::class);
+		$this->userManager = $this->createMock(IUserManager::class);
 	}
 
 	private function controller(): RecordingController {
@@ -57,7 +66,7 @@ class RecordingControllerTest extends TestCase {
 			fn (string $app, string $key, bool $default = false) => $this->bools[$key] ?? $default,
 		);
 		$appConfig->method('getValueInt')->willReturnArgument(2);
-		return new RecordingController($this->request, $this->fileResolver, $this->recordings, new FeatureConfig($appConfig), $this->body, $l);
+		return new RecordingController($this->request, $this->fileResolver, $this->recordings, new FeatureConfig($appConfig), $this->body, $l, $this->leaders, $this->userManager);
 	}
 
 	private function angemeldet(?Node $datei): void {
@@ -97,6 +106,7 @@ class RecordingControllerTest extends TestCase {
 			'tempoFactor' => 0.8,
 			'withAccompaniment' => true,
 			'referenceHz' => 442,
+			'sharedParts' => [],
 		], $daten['recordings'][0]);
 	}
 
@@ -228,5 +238,70 @@ class RecordingControllerTest extends TestCase {
 		$this->assertNotEmpty($r->getAttributes(PublicPage::class));
 		$this->assertNotEmpty($r->getAttributes(DirectTokenOrSession::class));
 		$this->assertSame('score', $r->getAttributes(DirectTokenOrSession::class)[0]->newInstance()->companion);
+	}
+
+	public function testListsWhatLeadersReleasedWithTheirName(): void {
+		$this->angemeldet($this->createMock(Node::class));
+		$this->recordings->method('list')->willReturn([]);
+		$shared = $this->aufnahme();
+		$shared->setUserId('lea');
+		$shared->setSharedParts('[{"id":"2","name":"Alt"}]');
+		$this->recordings->expects($this->once())->method('listShared')->with(42, 'anna')->willReturn([$shared]);
+		$user = $this->createMock(IUser::class);
+		$user->method('getDisplayName')->willReturn('Lea');
+		$this->userManager->method('get')->with('lea')->willReturn($user);
+
+		$daten = $this->controller()->index(42)->getData();
+
+		$this->assertSame('Lea', $daten['shared'][0]['authorName']);
+		$this->assertSame([['id' => '2', 'name' => 'Alt']], $daten['shared'][0]['sharedParts']);
+	}
+
+	public function testOnlyLeadersRelease(): void {
+		$this->angemeldet($this->createMock(Node::class));
+		$this->leaders->method('isLeader')->willReturn(false);
+		$this->recordings->expects($this->never())->method('share');
+
+		$antwort = $this->controller()->update(42, 3, [['id' => '2', 'name' => 'Alt']]);
+
+		$this->assertSame(Http::STATUS_FORBIDDEN, $antwort->getStatus());
+	}
+
+	public function testALeaderReleasesToParts(): void {
+		$this->angemeldet($this->createMock(Node::class));
+		$this->leaders->method('isLeader')->willReturn(true);
+		$released = $this->aufnahme();
+		$released->setSharedParts('[{"id":"2","name":"Alt"}]');
+		$this->recordings->expects($this->once())->method('share')
+			->with(42, 'anna', 3, '[{"id":"2","name":"Alt"}]')
+			->willReturn($released);
+
+		$daten = $this->controller()->update(42, 3, [['id' => 2, 'name' => 'Alt']])->getData();
+
+		$this->assertSame([['id' => '2', 'name' => 'Alt']], $daten['sharedParts']);
+	}
+
+	public function testTakingBackNeedsNoRole(): void {
+		$this->angemeldet($this->createMock(Node::class));
+		$this->leaders->expects($this->never())->method('isLeader');
+		$this->recordings->expects($this->once())->method('share')->with(42, 'anna', 3, null)->willReturn($this->aufnahme());
+
+		$this->assertSame(Http::STATUS_OK, $this->controller()->update(42, 3, null)->getStatus());
+	}
+
+	public function testReleasingSomeoneElsesIsNotFound(): void {
+		$this->angemeldet($this->createMock(Node::class));
+		$this->leaders->method('isLeader')->willReturn(true);
+		$this->recordings->method('share')->willThrowException(new RecordingException(RecordingException::NOT_FOUND));
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->update(42, 9, [['id' => '2', 'name' => 'Alt']])->getStatus());
+	}
+
+	public function testReleaseWithoutAValidPartIsABadRequest(): void {
+		$this->angemeldet($this->createMock(Node::class));
+		$this->leaders->method('isLeader')->willReturn(true);
+		$this->recordings->expects($this->never())->method('share');
+
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $this->controller()->update(42, 3, [['name' => 'ohne Kennung']])->getStatus());
 	}
 }

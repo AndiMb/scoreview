@@ -130,6 +130,19 @@
 			:viewBox="viewBox"
 			@stampClick="(id) => $emit('markerClick', id)" />
 		<!--
+			Freehand drawings (E22), and the pen while drawing - over the
+			stamps, because a drawing is the last thing put on the page.
+		-->
+		<ScoreDrawings
+			:drawings="pageDrawings"
+			:systems="staffSystems"
+			:mappable="staffMappingPossible"
+			:viewBox="viewBox"
+			:drawMode="drawMode && !printSheet"
+			:pendingStrokes="pagePendingStrokes"
+			@drawingClick="(id) => $emit('markerClick', id)"
+			@stroke="onStroke" />
+		<!--
 			Tonnamen (H3) links neben den Notenkoepfen. Nicht klickbar: Ein
 			Tipp soll die Note treffen, nicht ihr Etikett.
 		-->
@@ -220,6 +233,7 @@
 import axios from '@nextcloud/axios'
 import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
+import ScoreDrawings from './ScoreDrawings.vue'
 import ScoreStamps from './ScoreStamps.vue'
 import { placeCountLabels } from '../lib/countLayout.js'
 import { formatCents } from '../lib/intonation.js'
@@ -274,7 +288,7 @@ const LABEL_OBSTACLES = 'Accidental BarLine NoteDot Stem Hook Rest Clef KeySig T
 export default {
 	name: 'ScorePage',
 
-	components: { NcButton, ScoreStamps },
+	components: { NcButton, ScoreDrawings, ScoreStamps },
 
 	// The element the pages scroll in. The load/unload margins of the
 	// observers below only widen their ROOT; without one the root is the
@@ -328,6 +342,25 @@ export default {
 		// gesetzt wird hier bzw. in ScoreStamps.vue, weil erst die Seite ihre
 		// Notenzeilen kennt.
 		stamps: {
+			type: Array,
+			default: () => [],
+		},
+
+		// Freehand drawings (E22) of all pages from useAnnotations - placed
+		// here, because only the page knows its staves.
+		drawings: {
+			type: Array,
+			default: () => [],
+		},
+
+		// The pen is down (E22): pointer input on the page draws.
+		drawMode: {
+			type: Boolean,
+			default: false,
+		},
+
+		// Strokes drawn but not yet saved, of all pages: {page, points}.
+		pendingStrokes: {
 			type: Array,
 			default: () => [],
 		},
@@ -472,7 +505,7 @@ export default {
 		},
 	},
 
-	emits: ['noteClick', 'markerClick', 'loaded', 'staffMapping', 'indexed'],
+	emits: ['noteClick', 'markerClick', 'loaded', 'staffMapping', 'indexed', 'stroke'],
 
 	data() {
 		return {
@@ -683,6 +716,14 @@ export default {
 
 		pageStamps() {
 			return this.stamps.filter((s) => s.page === this.pageIndex)
+		},
+
+		pageDrawings() {
+			return this.drawings.filter((d) => d.page === this.pageIndex)
+		},
+
+		pagePendingStrokes() {
+			return this.pendingStrokes.filter((s) => s.page === this.pageIndex).map((s) => s.points)
 		},
 
 		/**
@@ -1210,8 +1251,24 @@ export default {
 			this.pointerDownAt = { x: event.clientX, y: event.clientY }
 		},
 
+		/**
+		 * A finished stroke, with what the page alone knows: its staves and
+		 * whether they map to parts - the anchor is computed from them when
+		 * the drawing is saved (lib/drawingLayout.js encodeDrawing).
+		 *
+		 * @param {Array<{x:number, y:number}>} points
+		 */
+		onStroke(points) {
+			this.$emit('stroke', {
+				page: this.pageIndex,
+				points,
+				systems: this.staffSystems,
+				mappable: this.staffMappingPossible,
+			})
+		},
+
 		onClick(event) {
-			if (!this.viewBox || this.printSheet) {
+			if (!this.viewBox || this.printSheet || this.drawMode) {
 				return
 			}
 			// Ein Klick, zwischen dessen Nieder- und Loslassen der Zeiger

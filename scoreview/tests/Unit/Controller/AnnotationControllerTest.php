@@ -522,4 +522,45 @@ class AnnotationControllerTest extends TestCase {
 
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $this->controller()->update(42, 7, 'x', [])->getStatus());
 	}
+
+	// --- Drawings (E22) ------------------------------------------------------
+
+	private const DRAWING = '{"v":1,"part":{"id":"2","name":"Bass"},"s":[[0,-0.4,2,-2,4,-0.4]]}';
+
+	public function testADrawingIsStoredWithoutANoteAnchor(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->once())->method('create')
+			->with(42, 'andreas', 2, 0.25, null, 'etag1', self::DRAWING, 'private', 'drawing', null, null, false, null)
+			->willReturn(new Annotation());
+
+		$response = $this->controller()->create(42, 2, 0.25, self::DRAWING, 7, 'etag1', 'private', 'drawing');
+		$this->assertSame(Http::STATUS_CREATED, $response->getStatus());
+	}
+
+	public static function invalidDrawings(): array {
+		$tooMany = '{"v":1,"part":null,"s":[' . implode(',', array_fill(0, 41, '[0,0,1,1]')) . ']}';
+		$tooFar = '{"v":1,"part":null,"s":[[0,0,401,1]]}';
+		$tooLong = '{"v":1,"part":null,"s":[[' . implode(',', array_fill(0, 2000, '1')) . ']]}';
+		return [
+			'no JSON' => ['<svg onload=alert(1)>'],
+			'other version' => ['{"v":2,"part":null,"s":[[0,0,1,1]]}'],
+			'no strokes' => ['{"v":1,"part":null,"s":[]}'],
+			'odd count' => ['{"v":1,"part":null,"s":[[0,0,1]]}'],
+			'text in a stroke' => ['{"v":1,"part":null,"s":[[0,0,"x",1]]}'],
+			'a stroke as an object' => ['{"v":1,"part":null,"s":[{"a":0,"b":0,"c":1,"d":1}]}'],
+			'too many strokes' => [$tooMany],
+			'too far from the anchor' => [$tooFar],
+			'too many points' => [$tooLong],
+			'a part without id' => ['{"v":1,"part":{"name":"Bass"},"s":[[0,0,1,1]]}'],
+		];
+	}
+
+	#[DataProvider('invalidDrawings')]
+	public function testAnInvalidDrawingIsABadRequest(string $content): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->expects($this->never())->method('create');
+
+		$response = $this->controller()->create(42, 2, 0.25, $content, null, null, 'private', 'drawing');
+		$this->assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+	}
 }

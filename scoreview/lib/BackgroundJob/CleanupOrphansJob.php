@@ -9,8 +9,11 @@ use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\FollowSession;
 use OCA\ScoreView\Db\LeaderMapper;
 use OCA\ScoreView\Db\MyPartPreferenceMapper;
+use OCA\ScoreView\Db\PracticeGoalMapper;
+use OCA\ScoreView\Db\PracticeLogMapper;
 use OCA\ScoreView\Db\ScoreConversionMapper;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\PracticeLogService;
 use OCA\ScoreView\Service\RecordingStorage;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\TimedJob;
@@ -58,6 +61,9 @@ class CleanupOrphansJob extends TimedJob {
 		private FollowMapper $followMapper,
 		private RecordingStorage $recordingStorage,
 		private MyPartPreferenceMapper $myPartPreferences,
+		private PracticeLogMapper $practiceLog,
+		private PracticeGoalMapper $practiceGoals,
+		private PracticeLogService $practiceLogService,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -69,6 +75,7 @@ class CleanupOrphansJob extends TimedJob {
 
 	protected function run($argument): void {
 		$this->removeExpiredFollowSessions();
+		$this->pruneOldPracticeDays();
 
 		$fileIds = array_unique(array_merge(
 			$this->conversionMapper->findAllFileIds(),
@@ -77,6 +84,8 @@ class CleanupOrphansJob extends TimedJob {
 			$this->followMapper->findAllFileIds(),
 			$this->recordingStorage->findAllFileIds(),
 			$this->myPartPreferences->findAllFileIds(),
+			$this->practiceLog->findAllFileIds(),
+			$this->practiceGoals->findAllFileIds(),
 		));
 
 		$caches = 0;
@@ -94,6 +103,8 @@ class CleanupOrphansJob extends TimedJob {
 				$others += $this->followMapper->deleteByFileId($fileId);
 				$others += $this->recordingStorage->deleteAllForFile($fileId);
 				$others += $this->myPartPreferences->deleteByFileId($fileId);
+				$others += $this->practiceLog->deleteByFileId($fileId);
+				$others += $this->practiceGoals->deleteByFileId($fileId);
 			} catch (\Throwable $e) {
 				// Eine einzelne kaputte fileId darf den Durchlauf nicht beenden -
 				// der naechste Lauf versucht es erneut.
@@ -110,6 +121,21 @@ class CleanupOrphansJob extends TimedJob {
 				'caches' => $caches,
 				'annotations' => $annotations,
 				'others' => $others,
+			]);
+		}
+	}
+
+	/**
+	 * Keeps the practice log bounded (PracticeLogService::KEEP_DAYS). Its own
+	 * try block for the same reason as the follow sessions below.
+	 */
+	private function pruneOldPracticeDays(): void {
+		try {
+			$this->practiceLogService->prune();
+		} catch (\Throwable $e) {
+			$this->logger->warning('ScoreView: old practice log days could not be removed: {message}', [
+				'message' => $e->getMessage(),
+				'exception' => $e,
 			]);
 		}
 	}

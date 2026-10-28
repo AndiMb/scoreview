@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
+#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeLogController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
 msgid "File not found or no access."
 msgstr "Datei nicht gefunden oder kein Zugriff."
 
@@ -20,7 +20,7 @@ msgstr "Du hast keine Berechtigung, geteilte Notizen für diese Datei anzulegen.
 msgid "Only leaders can address notes to voices."
 msgstr "Nur Leitungen können Notizen an Stimmen richten."
 
-#: lib/Controller/AnnotationController.php src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
+#: lib/Controller/AnnotationController.php lib/Controller/RecordingController.php src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
 msgid "Choose at least one voice."
 msgstr "Wähle mindestens eine Stimme."
 
@@ -47,6 +47,10 @@ msgstr "Notiz ist zu lang."
 #: lib/Controller/AnnotationController.php
 msgid "A loop needs an end measure at or after its start."
 msgstr "Ein Loop braucht einen Endtakt an oder nach seinem Anfang."
+
+#: lib/Controller/AnnotationController.php
+msgid "Invalid drawing."
+msgstr "Ungültige Zeichnung."
 
 #: lib/Controller/AnnotationController.php
 msgid "Unknown stamp."
@@ -140,6 +144,14 @@ msgstr "Ungültiger Dateiname oder Ordner."
 msgid "The PDF file is larger than allowed ({mb} MB)."
 msgstr "Die PDF-Datei ist größer als erlaubt ({mb} MB)."
 
+#: lib/Controller/PracticeLogController.php
+msgid "Invalid practice time."
+msgstr "Ungültige Übezeit."
+
+#: lib/Controller/PracticeLogController.php
+msgid "Only leaders can set a practice goal."
+msgstr "Nur Leitungen können ein Übeziel setzen."
+
 #: lib/Controller/PracticeTrackController.php
 msgid "This is not an MP3 file."
 msgstr "Das ist keine MP3-Datei."
@@ -151,6 +163,10 @@ msgstr "Der Übe-Track ist größer als erlaubt ({mb} MB)."
 #: lib/Controller/PreferenceController.php
 msgid "Not logged in."
 msgstr "Nicht angemeldet."
+
+#: lib/Controller/RecordingController.php
+msgid "Only leaders can share recordings with voices."
+msgstr "Nur Leitungen können Aufnahmen für Stimmen freigeben."
 
 #: lib/Controller/RecordingController.php
 msgid "The recording is longer than the %s minutes allowed on this server."
@@ -367,6 +383,10 @@ msgstr "Höchstgröße einer PDF-Datei (MB)"
 #: src/components/AdminSettings.vue
 msgid "Offline page (scores and setlists saved in the browser)"
 msgstr "Offline-Seite (Partituren und Setlisten im Browser gespeichert)"
+
+#: src/components/AdminSettings.vue
+msgid "Practice log (own practice time per score, weekly goal from the leaders)"
+msgstr "Übetagebuch (eigene Übezeit je Stück, Wochenziel der Leitungen)"
 
 #: src/components/AdminSettings.vue src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
 msgid "Save"
@@ -901,8 +921,16 @@ msgid "Cancel"
 msgstr "Abbrechen"
 
 #: src/components/LyricsView.vue
+msgid "All parts"
+msgstr "Alle Stimmen"
+
+#: src/components/LyricsView.vue
 msgid "This part has no lyrics."
 msgstr "Diese Stimme hat keinen Liedtext."
+
+#: src/components/LyricsView.vue
+msgid "Staff {n}"
+msgstr "Notenzeile {n}"
 
 #: src/components/MicIndicator.vue src/components/RecordingPanel.vue
 msgid "Recording"
@@ -1156,6 +1184,58 @@ msgstr "Ordner wählen"
 msgid "Choose"
 msgstr "Wählen"
 
+#: src/components/PracticeLogPanel.vue
+msgid "{minutes} min this week"
+msgstr "{minutes} Min. diese Woche"
+
+#: src/components/PracticeLogPanel.vue
+msgid "Last week: {minutes} min"
+msgstr "Letzte Woche: {minutes} Min."
+
+#: src/components/PracticeLogPanel.vue
+msgid "{day}: {minutes} min"
+msgstr "{day}: {minutes} Min."
+
+#: src/components/PracticeLogPanel.vue
+msgid "{days} days in a row"
+msgstr "{days} Tage in Folge"
+
+#: src/components/PracticeLogPanel.vue
+msgid "Goal: {minutes} min per week, set by {name}"
+msgstr "Ziel: {minutes} Min. pro Woche, gesetzt von {name}"
+
+#: src/components/PracticeLogPanel.vue
+msgid "Goal: {minutes} min per week"
+msgstr "Ziel: {minutes} Min. pro Woche"
+
+#: src/components/PracticeLogPanel.vue
+msgid "{percent} % of the weekly goal"
+msgstr "{percent} % des Wochenziels"
+
+#: src/components/PracticeLogPanel.vue
+msgid "Goal reached this week."
+msgstr "Ziel diese Woche erreicht."
+
+#: src/components/PracticeLogPanel.vue
+msgid "No practice goal for this piece."
+msgstr "Für dieses Stück gibt es kein Übeziel."
+
+#: src/components/PracticeLogPanel.vue
+msgid "Weekly goal for everyone (minutes)"
+msgstr "Wochenziel für alle (Minuten)"
+
+#: src/components/PracticeLogPanel.vue
+msgid "0 removes the goal. Nobody sees anyone else's time - not even leaders."
+msgstr "0 entfernt das Ziel. Niemand sieht die Zeit anderer – auch Leitungen nicht."
+
+#: src/components/PracticeLogPanel.vue
+msgid "Set goal"
+msgstr "Ziel setzen"
+
+#: src/components/PracticeLogPanel.vue
+msgid "Counted while the score plays or you record. Only you see your practice time."
+msgstr "Gezählt wird, während die Partitur spielt oder du aufnimmst. Deine Übezeit siehst nur du."
+
 #: src/components/PrintToolbar.vue src/components/ScoreViewer.vue
 msgid "Print"
 msgstr "Drucken"
@@ -1289,6 +1369,14 @@ msgid "Listen along with the score"
 msgstr "Mit der Partitur abhören"
 
 #: src/components/RecordingPanel.vue
+msgid "Share with voices"
+msgstr "Für Stimmen freigeben"
+
+#: src/components/RecordingPanel.vue
+msgid "Shared with {voices}"
+msgstr "Freigegeben für {voices}"
+
+#: src/components/RecordingPanel.vue
 msgid "Check intonation"
 msgstr "Intonation prüfen"
 
@@ -1299,6 +1387,34 @@ msgstr "Aufnahme löschen"
 #: src/components/RecordingPanel.vue
 msgid "No recordings of this score yet."
 msgstr "Noch keine Aufnahmen dieser Partitur."
+
+#: src/components/RecordingPanel.vue
+msgid "Share this recording with voices"
+msgstr "Diese Aufnahme für Stimmen freigeben"
+
+#: src/components/RecordingPanel.vue
+msgid "Singers of these voices can listen to it along with the score. It still counts towards your storage, and you can take it back at any time."
+msgstr "Wer diese Stimmen singt, kann sie synchron zur Partitur anhören. Sie zählt weiter zu deinem Speicher, und du kannst die Freigabe jederzeit zurücknehmen."
+
+#: src/components/RecordingPanel.vue
+msgid "Share"
+msgstr "Freigeben"
+
+#: src/components/RecordingPanel.vue
+msgid "Stop sharing"
+msgstr "Freigabe zurücknehmen"
+
+#: src/components/RecordingPanel.vue
+msgid "Sung by your leaders"
+msgstr "Von der Leitung vorgesungen"
+
+#: src/components/RecordingPanel.vue
+msgid "All voices"
+msgstr "Alle Stimmen"
+
+#: src/components/RecordingPanel.vue
+msgid "by {name}, {date}"
+msgstr "von {name}, {date}"
 
 #: src/components/RecordingPanel.vue
 msgid "Volume of the recording"
@@ -1433,6 +1549,10 @@ msgid "Stamps"
 msgstr "Stempel"
 
 #: src/components/ScoreAnnotations.vue
+msgid "Draw in the score"
+msgstr "In die Noten zeichnen"
+
+#: src/components/ScoreAnnotations.vue
 msgid "Only mine"
 msgstr "Nur meine"
 
@@ -1476,6 +1596,10 @@ msgstr "Stimme nicht mehr in der Partitur ({voices}) – für alle sichtbar"
 msgid "For {voices}"
 msgstr "Für {voices}"
 
+#: src/components/ScoreAnnotations.vue src/components/ScoreDrawings.vue
+msgid "Drawing"
+msgstr "Zeichnung"
+
 #: src/components/ScoreAnnotations.vue
 msgid "Edit"
 msgstr "Bearbeiten"
@@ -1495,6 +1619,10 @@ msgstr "Abspielsteuerung einblenden"
 #: src/components/ScoreBar.vue
 msgid "Tools"
 msgstr "Werkzeuge"
+
+#: src/components/ScoreDrawings.vue
+msgid "Drawing for {voices}"
+msgstr "Zeichnung für {voices}"
 
 #: src/components/ScoreLockButton.vue
 msgid "Performance mode is on – hold for one second to leave"
@@ -1761,6 +1889,10 @@ msgid "Recording and intonation"
 msgstr "Aufnahme und Intonation"
 
 #: src/components/ScoreViewer.vue
+msgid "Practice log"
+msgstr "Übetagebuch"
+
+#: src/components/ScoreViewer.vue
 msgid "From measure"
 msgstr "Von Takt"
 
@@ -1887,6 +2019,18 @@ msgstr "Systemband ausprobieren"
 #: src/components/ScoreViewer.vue
 msgid "Lyrics view is not available: {reason} Showing the pages instead."
 msgstr "Die Liedtext-Ansicht ist nicht verfügbar: {reason} Stattdessen werden die Seiten gezeigt."
+
+#: src/components/ScoreViewer.vue
+msgid "Draw on the music with finger, pen or mouse."
+msgstr "Mit Finger, Stift oder Maus in die Noten zeichnen."
+
+#: src/components/ScoreViewer.vue
+msgid "Undo"
+msgstr "Rückgängig"
+
+#: src/components/ScoreViewer.vue
+msgid "Done"
+msgstr "Fertig"
 
 #: src/components/ScoreViewer.vue
 msgid "Tap the score where the {stamp} belongs."
@@ -2220,6 +2364,10 @@ msgstr "Standardgröße"
 msgid "Too many changes in a short time. Please wait a moment and try again."
 msgstr "Zu viele Änderungen in kurzer Zeit. Bitte einen Moment warten und es erneut versuchen."
 
+#: src/composables/useAnnotations.js
+msgid "A drawing beside the music was not saved. Start it on the staff."
+msgstr "Eine Zeichnung neben den Noten wurde nicht gespeichert. Beginne sie auf der Notenzeile."
+
 #: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
 msgid "The conversion service could not be reached."
 msgstr "Der Konvertierungsdienst konnte nicht erreicht werden."
@@ -2352,6 +2500,10 @@ msgstr "Ausschnitt"
 msgid "The sound is not loaded yet."
 msgstr "Der Klang ist noch nicht geladen."
 
+#: src/composables/usePracticeLog.js
+msgid "The practice goal could not be saved."
+msgstr "Das Übeziel konnte nicht gespeichert werden."
+
 #: src/composables/useRecorder.js
 msgid "The recordings could not be loaded."
 msgstr "Die Aufnahmen konnten nicht geladen werden."
@@ -2363,6 +2515,10 @@ msgstr "Die Aufnahme konnte nicht gespeichert werden."
 #: src/composables/useRecorder.js
 msgid "The recording could not be deleted."
 msgstr "Die Aufnahme konnte nicht gelöscht werden."
+
+#: src/composables/useRecorder.js
+msgid "The recording could not be shared."
+msgstr "Die Aufnahme konnte nicht freigegeben werden."
 
 #: src/composables/useRecorder.js
 msgid "The recording could not be played."

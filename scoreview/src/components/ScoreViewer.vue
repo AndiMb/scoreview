@@ -340,6 +340,16 @@
 										<SineWave :size="20" />
 									</template>
 								</ToolRow>
+								<!-- The practice log (E20). -->
+								<ToolRow
+									v-if="has(group, 'practiceLog')"
+									:pressed="showPracticeLog"
+									:label="t('Practice log')"
+									@click="showPracticeLog = !showPracticeLog; close()">
+									<template #icon>
+										<ChartBar :size="20" />
+									</template>
+								</ToolRow>
 								<ToolRow
 									v-if="has(group, 'export')"
 									page
@@ -868,6 +878,7 @@
 						:follow="followCursor"
 						:syllables="pictureMeta?.lyricSyllables ?? []"
 						:staves="myStaves"
+						:partNames="lyricsPartNames"
 						:timeline="timeline"
 						:measureRectsByPage="systemRectsByPage"
 						:focusKeys="loopFocusKeys"
@@ -917,6 +928,9 @@
 							:zoom="zoom"
 							:markers="annotationMarkers"
 							:stamps="annotationStamps"
+							:drawings="annotationDrawings"
+							:drawMode="drawSpec !== null"
+							:pendingStrokes="drawStrokes"
 							:loopMarkers="loopMarkers"
 							:systemRects="systemRectsByPage[i] ?? NO_RECTS"
 							:loopDimRects="loopDimRectsByPage[i] ?? NO_RECTS"
@@ -939,6 +953,7 @@
 							@noteClick="onNoteClick"
 							@markerClick="onMarkerClick"
 							@staffMapping="onStaffMapping"
+							@stroke="addStroke"
 							@loaded="onPageLoaded" />
 					</div>
 				</div>
@@ -949,13 +964,39 @@
 					nichts, wenn sie zu sind, und bleiben erreichbar, wo immer man
 					gerade liest.
 				-->
-				<div v-if="showMixerPanel || showMyPartPanel || showAnnotations || showRehearsal || showPractice || showTuner || armedStamp || setlistEditorMode" class="scoreview-panels">
+				<div v-if="showMixerPanel || showMyPartPanel || showAnnotations || showRehearsal || showPractice || showTuner || showPracticeLog || armedStamp || drawSpec || setlistEditorMode" class="scoreview-panels">
 					<!--
 						Ein Stempel wartet auf den Tipp ins Notenbild. Das
 						Notizen-Panel ist dafuer zu - es laege sonst ueber den Noten,
 						in die getippt werden soll -, und dieser Hinweis sagt, was
 						der naechste Tipp tut und wie man es laesst.
 					-->
+					<!--
+						The pen is down (E22): the notes panel is closed, so it
+						does not lie over the music being drawn on, and this bar
+						says how drawing ends.
+					-->
+					<ScorePanel v-if="drawSpec" class="scoreview-armed">
+						<span>{{ t('Draw on the music with finger, pen or mouse.') }}</span>
+						<NcButton :disabled="drawStrokes.length === 0" @click="undoStroke">
+							<template #icon>
+								<Undo :size="20" />
+							</template>
+							{{ t('Undo') }}
+						</NcButton>
+						<NcButton variant="primary" :disabled="drawStrokes.length === 0" @click="saveDrawing">
+							<template #icon>
+								<Check :size="20" />
+							</template>
+							{{ t('Done') }}
+						</NcButton>
+						<NcButton :aria-label="t('Cancel')" @click="cancelDrawing">
+							<template #icon>
+								<Close :size="20" />
+							</template>
+							{{ t('Cancel') }}
+						</NcButton>
+					</ScorePanel>
 					<ScorePanel v-if="armedStamp" class="scoreview-armed">
 						<span>{{ t('Tap the score where the {stamp} belongs.', { stamp: armedStampName }) }}</span>
 						<NcButton :aria-label="t('Cancel')" @click="disarmStamp">
@@ -1023,7 +1064,8 @@
 							@update="onAnnotationUpdate"
 							@delete="onAnnotationDelete"
 							@jumpTo="onAnnotationJumpToOwn"
-							@armStamp="onArmStamp" />
+							@armStamp="onArmStamp"
+							@startDrawing="onStartDrawing" />
 					</ScorePanel>
 					<!--
 						Eigene Aufnahmen und Intonation. Bleibt waehrend
@@ -1040,6 +1082,9 @@
 							:referenceHz="referencePitch"
 							:hasRealPlayer="hasRealPlayer"
 							:recordings="recordings"
+							:sharedRecordings="visibleSharedRecordings"
+							:isLeader="isLeader"
+							:parts="scoreParts"
 							:phase="recordPhase"
 							:elapsedMs="recordElapsedMs"
 							:confirmReplace="recordConfirmReplace"
@@ -1066,11 +1111,22 @@
 							@listen="onListenRecording"
 							@stopListening="stopListeningRecording"
 							@delete="removeRecording"
+							@share="({ recording, targetParts }) => shareRecording(recording, targetParts)"
 							@analyze="onAnalyzeRecording"
 							@toggleLive="onToggleLiveIntonation"
 							@toggleWaitMode="onToggleWaitMode"
 							@clearAnalysis="clearIntonationAnalysis"
 							@jump="onPracticeJump" />
+					</ScorePanel>
+					<!-- The practice log (E20): only the singer's own time. -->
+					<ScorePanel v-if="showPracticeLog" :title="t('Practice log')" @close="showPracticeLog = false">
+						<PracticeLogPanel
+							:summary="practiceLogSummary"
+							:goal="practiceLogGoal"
+							:isLeader="isLeader"
+							:savingGoal="practiceLogSaving"
+							:error="practiceLogError"
+							@setGoal="setPracticeGoal" />
 					</ScorePanel>
 					<!-- The tuner (B3): closing the card stops the microphone. -->
 					<ScorePanel v-if="showTuner" :title="t('Tuner')" @close="closeTuner">
@@ -1134,6 +1190,8 @@ import AccountGroup from 'vue-material-design-icons/AccountGroup.vue'
 import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
 import Alphabetical from 'vue-material-design-icons/Alphabetical.vue'
 import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
+import ChartBar from 'vue-material-design-icons/ChartBar.vue'
+import Check from 'vue-material-design-icons/Check.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import CloudDownloadOutline from 'vue-material-design-icons/CloudDownloadOutline.vue'
 import ContentSave from 'vue-material-design-icons/ContentSave.vue'
@@ -1156,6 +1214,7 @@ import SineWave from 'vue-material-design-icons/SineWave.vue'
 import Speedometer from 'vue-material-design-icons/Speedometer.vue'
 import SwapVertical from 'vue-material-design-icons/SwapVertical.vue'
 import Tune from 'vue-material-design-icons/Tune.vue'
+import Undo from 'vue-material-design-icons/Undo.vue'
 import ViewColumn from 'vue-material-design-icons/ViewColumn.vue'
 import AppearanceControls from './AppearanceControls.vue'
 import CoachControls from './CoachControls.vue'
@@ -1170,6 +1229,7 @@ import MyPartControls from './MyPartControls.vue'
 import NoteNameControls from './NoteNameControls.vue'
 import PinControls from './PinControls.vue'
 import PracticeExportControls from './PracticeExportControls.vue'
+import PracticeLogPanel from './PracticeLogPanel.vue'
 import RecordingPanel from './RecordingPanel.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
 import ScoreBar from './ScoreBar.vue'
@@ -1212,6 +1272,7 @@ import { usePaging } from '../composables/usePaging.js'
 import { usePerformanceMode } from '../composables/usePerformanceMode.js'
 import { usePlayback } from '../composables/usePlayback.js'
 import { usePracticeExport } from '../composables/usePracticeExport.js'
+import { usePracticeLog } from '../composables/usePracticeLog.js'
 import { useRecorder } from '../composables/useRecorder.js'
 import { useScoreFacts } from '../composables/useScoreFacts.js'
 import { NO_RECTS, useScoreSession } from '../composables/useScoreSession.js'
@@ -1231,6 +1292,7 @@ import { countLabels } from '../lib/countLabels.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
 import { resolveKey } from '../lib/keyMap.js'
 import { loopDimRects, loopMeasureRects, loopSystemKeys } from '../lib/loopFocus.js'
+import { staffPartNames } from '../lib/lyricsLayout.js'
 import { browserFileUrl } from '../lib/micAccess.js'
 import { nameOf } from '../lib/noteNames.js'
 import { spellingMap } from '../lib/noteSpellingIndex.js'
@@ -1243,6 +1305,7 @@ import {
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
 import { revealsCursor } from '../lib/scrollPlan.js'
+import { visibleSharedRecordings } from '../lib/sharedRecordings.js'
 import { MIN_SPREAD_WIDTH_PX, spreadMode as spreadModeOf } from '../lib/spreadLayout.js'
 import { MODE_TONIC, MODE_VOICE } from '../lib/startTone.js'
 import { formatTime, progressPercent, seekValue } from '../lib/viewerFormat.js'
@@ -1276,6 +1339,7 @@ export default {
 	components: {
 		AppearanceControls,
 		BookmarkOutline,
+		ChartBar,
 		FollowBadge,
 		LeaderPanel,
 		LiveValue,
@@ -1283,6 +1347,7 @@ export default {
 		Microphone,
 		MyPartControls,
 		AccountVoice,
+		PracticeLogPanel,
 		RecordingPanel,
 		ScorePage,
 		ScorePanel,
@@ -1305,7 +1370,9 @@ export default {
 		CloudDownloadOutline,
 		ContentSave,
 		PinControls,
+		Check,
 		Close,
+		Undo,
 		Repeat,
 		Fullscreen,
 		FullscreenExit,
@@ -1838,6 +1905,14 @@ export default {
 			referenceHz: () => preferences.referencePitch.value,
 		})
 
+		// The practice log (E20): practising is the score sounding or the
+		// singer recording - not the notes merely being open.
+		const practiceLog = usePracticeLog({
+			fileId: () => activeFileId.value,
+			enabled: () => features.practiceLog && !props.offline,
+			active: () => playback.isPlaying.value || recorder.phase.value === 'recording',
+		})
+
 		// Ob sich die Notenzeilen ueberhaupt Stimmen zuordnen lassen -
 		// gemeldet von der ersten geladenen Seite (ScorePage.vue).
 		const staffMappingOk = ref(false)
@@ -2212,7 +2287,16 @@ export default {
 			micConsumers: microphone.consumers,
 			micError: microphone.error,
 			turnMicOff: microphone.turnOff,
+			practiceLogEnabled: features.practiceLog,
+			practiceLogSummary: practiceLog.summary,
+			practiceLogGoal: practiceLog.goal,
+			practiceLogError: practiceLog.error,
+			practiceLogSaving: practiceLog.savingGoal,
+			setPracticeGoal: practiceLog.setGoal,
 			recordings: recorder.recordings,
+			// Released by leaders (E21), filtered by part like part notes.
+			visibleSharedRecordings: computed(() => visibleSharedRecordings(recorder.sharedRecordings.value, myPart.myPartId.value, session.scoreParts.value, leaders.isLeader.value)),
+			shareRecording: recorder.share,
 			recordPhase: recorder.phase,
 			recordElapsedMs: recorder.elapsedMs,
 			sessionOnFrame: session.onFrame,
@@ -2335,6 +2419,14 @@ export default {
 			showAnnotations: annotations.visible,
 			annotationMarkers: annotations.markers,
 			annotationStamps: annotations.stamps,
+			annotationDrawings: annotations.drawings,
+			drawSpec: annotations.drawSpec,
+			drawStrokes: annotations.drawStrokes,
+			startDrawing: annotations.startDrawing,
+			addStroke: annotations.addStroke,
+			undoStroke: annotations.undoStroke,
+			cancelDrawing: annotations.cancelDrawing,
+			saveDrawing: annotations.saveDrawing,
 			armedStamp: annotations.armedStamp,
 			armStamp: annotations.armStamp,
 			disarmStamp: annotations.disarmStamp,
@@ -2367,6 +2459,8 @@ export default {
 			// Der Aufklapper „Aufnahme und Intonation".
 			showPractice: false,
 			showTuner: false,
+			// The practice log card (E20).
+			showPracticeLog: false,
 			// Focus on the loop (B4) - a session switch, it dies with the loop.
 			loopFocus: false,
 			// The save form of the running loop (B5) is open.
@@ -2487,6 +2581,7 @@ export default {
 				isLeader: this.isLeader,
 				exportEnabled: this.exportEnabled,
 				offlineEnabled: this.offlineEnabled,
+				practiceLogEnabled: this.practiceLogEnabled,
 				offline: this.offline,
 				standalone: this.standalonePage,
 			})
@@ -2501,6 +2596,7 @@ export default {
 				showMixer: this.showMixer,
 				showPractice: this.showPractice,
 				showTuner: this.showTuner,
+				showPracticeLog: this.showPracticeLog,
 				coachActive: this.practice.coach,
 				transposed: this.effectiveTranspose !== 0,
 				focusMyPart: this.focusMyPart,
@@ -2577,6 +2673,12 @@ export default {
 		},
 
 		/** Die Notenzeilen der eigenen Stimme, wo sie sich zuordnen lassen. */
+		/** Part names for the rows of the all-parts lyrics (lyricsLayout.staffPartNames). */
+		lyricsPartNames() {
+			const meta = this.pictureMeta
+			return staffPartNames(this.pictureParts, [...(meta?.noteSpellings ?? []), ...(meta?.lyricSyllables ?? [])])
+		},
+
 		myStaves() {
 			return this.myPartIndex !== null && this.staffMappingOk ? [this.myPartIndex] : null
 		},
@@ -2600,6 +2702,7 @@ export default {
 			return {
 				markers: this.annotationMarkers,
 				stamps: this.annotationStamps,
+				drawings: this.annotationDrawings,
 				loopMarkers: this.loopMarkers,
 				myPartIndex: this.myPartIndex,
 				focusMyPart: this.focusMyPart,
@@ -2958,8 +3061,10 @@ export default {
 			this.showMyPart = false
 			this.showAnnotations = false
 			this.disarmStamp()
+			this.cancelDrawing()
 			this.showRehearsal = false
 			this.showPractice = false
+			this.showPracticeLog = false
 			this.setlistEditorMode = null
 			this.toolsOpen = false
 			this.releaseStartTone()
@@ -3097,6 +3202,25 @@ export default {
 				return
 			}
 			this.armStamp(spec)
+			this.showAnnotations = false
+		},
+
+		/**
+		 * Takes up the pen (E22). Drawing happens on pages: in the band and
+		 * the lyrics view the pages are not there to draw on, so the view
+		 * switches to pages - and stays there, like any other choice of the
+		 * view; the drawings show in the band all the same.
+		 *
+		 * @param {{visibility:string, targetParts:?Array}} spec
+		 */
+		onStartDrawing(spec) {
+			if (!this.can('annotate')) {
+				return
+			}
+			if (this.activeLayout !== 'pages') {
+				this.layout = 'pages'
+			}
+			this.startDrawing(spec)
 			this.showAnnotations = false
 		},
 

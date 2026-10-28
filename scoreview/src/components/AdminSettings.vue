@@ -207,6 +207,9 @@
 				<NcCheckboxRadioSwitch v-model="form.featureOffline" type="switch" class="scoreview-field">
 					{{ t('Offline page (scores and setlists saved in the browser)') }}
 				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch v-model="form.featurePracticeLog" type="switch" class="scoreview-field">
+					{{ t('Practice log (own practice time per score, weekly goal from the leaders)') }}
+				</NcCheckboxRadioSwitch>
 
 				<div class="scoreview-actions">
 					<NcButton variant="primary" type="submit" :disabled="saving">
@@ -338,6 +341,7 @@ export default {
 				featureIntonation: initial.featureIntonation ?? true,
 				featurePracticeExport: initial.featurePracticeExport ?? true,
 				featureOffline: initial.featureOffline ?? true,
+				featurePracticeLog: initial.featurePracticeLog ?? true,
 				practiceTrackMaxMb: initial.practiceTrackMaxMb?.value ?? 60,
 				pdfMaxMb: initial.pdfMaxMb?.value ?? 50,
 				followPollMs: initial.followPollMs ?? 800,

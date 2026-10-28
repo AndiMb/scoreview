@@ -11,6 +11,7 @@ use OCA\ScoreView\Service\AnnotationLimitException;
 use OCA\ScoreView\Service\AnnotationService;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LeaderService;
+use OCA\ScoreView\Service\TargetParts;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -51,20 +52,16 @@ class AnnotationController extends Controller {
 	 */
 	private const MAX_CONTENT_LENGTH = 10000;
 
+	/**
+	 * Bounds of a drawing (E22), the same as src/lib/drawingLayout.js: a few
+	 * marks, not a picture.
+	 */
+	private const MAX_DRAWING_STROKES = 40;
+	private const MAX_DRAWING_POINTS = 800;
+	private const MAX_DRAWING_OFFSET = 400;
+
 	/** Die Breite der Spalte - siehe validateAnchorEtag(). */
 	private const MAX_ANCHOR_ETAG_LENGTH = 64;
-
-	/**
-	 * Grenzen fuer die Zielstimmen einer Stimmnotiz. Die Spalte ist TEXT und
-	 * wird wie `content` bei jedem Oeffnen mit ausgeliefert; ohne Grenze
-	 * truege eine einzelne Notiz beliebig viel. 64 Stimmen deckt jede
-	 * Chor- und Orchesterpartitur; MuseScore vergibt Stimmen-IDs als kurze
-	 * Zahlen, 64 Zeichen sind dafuer reichlich, 128 fuer einen Stimmnamen
-	 * ebenfalls.
-	 */
-	private const MAX_TARGET_PARTS = 64;
-	private const MAX_PART_ID_LENGTH = 64;
-	private const MAX_PART_NAME_LENGTH = 128;
 
 	public function __construct(
 		IRequest $request,
@@ -125,10 +122,11 @@ class AnnotationController extends Controller {
 		// Ein unbekannter Typ wird zur Textnotiz - der engere Fall: Sie
 		// braucht Text, ein Tippfehler endet also als 400 statt als Stempel
 		// ohne Bild.
-		$kind = in_array($kind, [Annotation::KIND_STAMP, Annotation::KIND_LOOP], true) ? $kind : Annotation::KIND_TEXT;
+		$kind = in_array($kind, [Annotation::KIND_STAMP, Annotation::KIND_LOOP, Annotation::KIND_DRAWING], true) ? $kind : Annotation::KIND_TEXT;
 		$fehler = match ($kind) {
 			Annotation::KIND_STAMP => $this->validateStamp($stamp, $content),
 			Annotation::KIND_LOOP => $this->validateLoop($measureNumber, $endMeasure, $content),
+			Annotation::KIND_DRAWING => $this->validateDrawing($content),
 			default => $this->validateContent($content),
 		} ?? $this->validateAnchorEtag($anchorEtag);
 		if ($fehler !== null) {
@@ -146,6 +144,11 @@ class AnnotationController extends Controller {
 			$anchorEtag = null;
 		} else {
 			$endMeasure = null;
+		}
+		if ($kind === Annotation::KIND_DRAWING) {
+			// Anchored by measure and fraction alone, like a stamp: its
+			// strokes are relative to that point (drawingLayout.js).
+			$elid = null;
 		}
 		// Unbekannte Werte defensiv auf 'private' abbilden statt sie
 		// ungeprueft in die Spalte zu schreiben - visibility steuert
@@ -301,6 +304,56 @@ class AnnotationController extends Controller {
 	}
 
 	/**
+	 * A drawing (E22) is JSON `{v: 1, part: ?{id, name}, s: [[x, y, ...], ...]}`
+	 * with coordinates in staff spaces. Checked in full here: the content
+	 * goes to every reader of the score and is turned into SVG paths there,
+	 * so it has to be numbers - and few of them. The bounds are the client's
+	 * (src/lib/drawingLayout.js); the overall length is that of every note.
+	 *
+	 * @return ?JSONResponse null when the drawing is in order
+	 */
+	private function validateDrawing(string $content): ?JSONResponse {
+		$invalid = new JSONResponse(['error' => $this->l->t('Invalid drawing.')], Http::STATUS_BAD_REQUEST);
+		$length = $this->validateContentLength($content);
+		if ($length !== null) {
+			return $length;
+		}
+		try {
+			$data = json_decode($content, true, 8, JSON_THROW_ON_ERROR);
+		} catch (\JsonException) {
+			return $invalid;
+		}
+		if (!is_array($data) || ($data['v'] ?? null) !== 1 || !is_array($data['s'] ?? null)) {
+			return $invalid;
+		}
+		$strokes = $data['s'];
+		if (count($strokes) === 0 || count($strokes) > self::MAX_DRAWING_STROKES) {
+			return $invalid;
+		}
+		$numbers = 0;
+		foreach ($strokes as $stroke) {
+			if (!is_array($stroke) || count($stroke) < 4 || count($stroke) % 2 !== 0 || !array_is_list($stroke)) {
+				return $invalid;
+			}
+			foreach ($stroke as $value) {
+				if (!(is_int($value) || is_float($value)) || abs($value) > self::MAX_DRAWING_OFFSET) {
+					return $invalid;
+				}
+			}
+			$numbers += count($stroke);
+		}
+		// Two numbers a point, plus the doubled point of a single dot.
+		if ($numbers > 2 * self::MAX_DRAWING_POINTS + 2 * self::MAX_DRAWING_STROKES) {
+			return $invalid;
+		}
+		$part = $data['part'] ?? null;
+		if ($part !== null && TargetParts::normalize([$part]) === null) {
+			return $invalid;
+		}
+		return null;
+	}
+
+	/**
 	 * Ein Stempel braucht einen Code aus der festen Liste; sein Text ist ein
 	 * freiwilliger Zusatz und nur in der Laenge begrenzt.
 	 *
@@ -314,44 +367,15 @@ class AnnotationController extends Controller {
 	}
 
 	/**
-	 * Die Zielstimmen als geprueftes JSON `[{id, name}]`.
-	 *
-	 * Jede Stimme kommt mit ID UND Namen: Ob MuseScores Stimmen-ID einen
-	 * Re-Upload uebersteht, ist nicht belegt - der Client ordnet zuerst ueber
-	 * die ID, dann ueber den Namen zu (lib/annotationFilter.js). Doppelte
-	 * Eintraege fallen weg, damit die Grenze nicht mit Wiederholungen
-	 * ausgeschoepft wird.
+	 * Die Zielstimmen als geprueftes JSON `[{id, name}]` - dieselbe Regel wie
+	 * fuer die Aufnahmen der Leitung (Service\TargetParts).
 	 *
 	 * @param mixed $targetParts
 	 * @return ?string null, wenn keine gueltige Stimme uebrig bleibt oder die
 	 *                 Liste die Grenzen sprengt
 	 */
 	private function normalizeTargetParts(mixed $targetParts): ?string {
-		if (!is_array($targetParts) || count($targetParts) === 0 || count($targetParts) > self::MAX_TARGET_PARTS) {
-			return null;
-		}
-		$result = [];
-		$seen = [];
-		foreach ($targetParts as $part) {
-			if (!is_array($part)) {
-				return null;
-			}
-			$id = $part['id'] ?? null;
-			$name = $part['name'] ?? '';
-			if (is_int($id)) {
-				$id = (string)$id;
-			}
-			if (!is_string($id) || $id === '' || mb_strlen($id) > self::MAX_PART_ID_LENGTH
-				|| !is_string($name) || mb_strlen($name) > self::MAX_PART_NAME_LENGTH) {
-				return null;
-			}
-			if (isset($seen[$id])) {
-				continue;
-			}
-			$seen[$id] = true;
-			$result[] = ['id' => $id, 'name' => $name];
-		}
-		return json_encode($result, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+		return TargetParts::normalize($targetParts);
 	}
 
 	/**

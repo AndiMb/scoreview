@@ -62,6 +62,12 @@ class Annotation extends Entity implements \JsonSerializable {
 	 * target parts, the anchor surviving a re-upload - a loop has too.
 	 */
 	public const KIND_LOOP = 'loop';
+	/**
+	 * A freehand drawing (E22): measure_number/fraction anchor it like a
+	 * stamp, content holds its strokes as JSON in staff spaces from that
+	 * anchor (AnnotationController::validateDrawing, src/lib/drawingLayout.js).
+	 */
+	public const KIND_DRAWING = 'drawing';
 
 	/**
 	 * Die Stempel als feste Liste: Der Client zeichnet jedes Symbol

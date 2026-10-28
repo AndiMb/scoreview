@@ -23,6 +23,8 @@
  * @property {boolean} isLeader Leitung dieser Partitur (E9)
  * @property {boolean} [exportEnabled] Uebe-Tracks von der Administration an (E13)
  * @property {boolean} [offlineEnabled] Offline-Seite von der Administration an (E14)
+ * @property {boolean} [practiceLogEnabled] practice log switched on by the
+ *   administration (E20)
  * @property {boolean} [offline] der Viewer laeuft auf der Offline-Seite: Was
  *   den Server braucht, entfaellt - ein Kontextwert, keine Weiche im Viewer
  * @property {boolean} [standalone] Direct Editing der mobilen Apps (E8) -
@@ -61,6 +63,9 @@ export function barGroups(ctx) {
 			// same microphone question. It needs no server, so it stays offline.
 			tuner: ctx.intonationEnabled === true && settings,
 			export: ctx.exportEnabled === true && ctx.hasRealPlayer && settings && online,
+			// Practising is counted on the server; a page without one has
+			// nothing to show (E20).
+			practiceLog: ctx.practiceLogEnabled === true && settings && online,
 		}),
 		view: pick({
 			// Zoom zuerst und ohne Unterseite: Im Auffuehrungsmodus ist es
@@ -130,7 +135,7 @@ export function groupActive(id, s) {
 			// Eine Transposition gehoert dazu: Wer vergisst, dass alles einen
 			// Ton tiefer klingt, singt in der Probe falsch an.
 			return Boolean(s.metronomeEnabled || s.loopActive || s.trainerActive || s.showMixer || s.showPractice
-				|| s.showTuner || s.coachActive || s.transposed)
+				|| s.showTuner || s.showPracticeLog || s.coachActive || s.transposed)
 		case 'view':
 			return Boolean(s.focusMyPart || s.showNoteNames || s.showNoteText || s.showAnnotations)
 		case 'rehearsal':

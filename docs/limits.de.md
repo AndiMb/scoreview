@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:00e09c4bd0fd -->
+<!-- translation-of: limits.md sha256:803b59791f1c -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -422,6 +422,19 @@ Daraus folgt für den Betrieb:
   dem Loop.
 - **Anlegen und Ändern sind auf je 60 Aufrufe je Minute begrenzt** – wer
   Stempel sehr schnell hintereinander setzt, bekommt kurz „Zu viele Änderungen“.
+- **Eine Zeichnung ist ein paar Striche, kein Bild:** höchstens 40 Striche und
+  800 Punkte nach dem Glätten, jeder Punkt höchstens 400 Linienabstände von
+  dort, wo die Zeichnung begann. Sie zählt als eine Notiz und wird geändert,
+  indem man sie löscht und neu zeichnet.
+- **Eine Zeichnung gehört zu der Notenzeile, auf der sie begann.** Wo sich
+  Zeilen und Stimmen nicht zuordnen lassen, gehört sie stattdessen zum
+  System; dann bleibt sie in der Partitur, wo sie gezeichnet wurde, landet
+  aber im Stimmenauszug über der falschen Zeile. Eine Zeichnung auf der Zeile
+  einer Stimme erscheint im Auszug einer anderen Stimme nicht. Striche, die
+  neben allen Takten beginnen, werden nicht gespeichert.
+- **Gezeichnet wird auf den Seiten.** Wer im Systemband oder in der
+  Liedtext-Ansicht zu zeichnen beginnt, kommt auf die Seiten; im Band
+  erscheinen die Zeichnungen trotzdem.
 
 ### Setliste
 
@@ -595,6 +608,34 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
 - **Mit MuseScore selbst auf dem Sidecar keine Liedtext-Ansicht und keine
   Tonnamen.** Beides braucht Listen, die nur die Engine schreibt; siehe
   [Darstellungen](#darstellungen).
+
+### Übetagebuch
+
+- **Gezählt wird, was klingt:** die Wiedergabe der Partitur oder eine
+  laufende Aufnahme, je Person, Partitur und lokalem Kalendertag. Üben mit dem
+  Stimmgerät oder mit einem Übe-Track außerhalb des Viewers zählt nicht.
+- **Die eigene Zeit sieht nur man selbst** – auch Leitungen und Verwaltung
+  sehen in der App nichts davon; eine Rangliste gibt es nicht. Das Wochenziel
+  einer Partitur gilt für alle gleich und wird von ihren Leitungen gesetzt
+  (5–1200 Minuten).
+- **Grenzen:** Ein Gerät meldet höchstens 300 Sekunden auf einmal, höchstens
+  einen Tag pro Tag, und nur für einen Tag, der höchstens einen Tag vom
+  Serverdatum abweicht. Ein Gerät ohne Netz verliert, was es gezählt hat,
+  während die Seite geschlossen wurde; ein Tab, der in den Hintergrund geht,
+  meldet vorher noch.
+- **Aufbewahrt 400 Tage**, danach entfernt sie das tägliche Aufräumen; die
+  Ansicht zeigt diese Woche, die letzte Woche und die Tage in Folge. Wer sein
+  Konto löscht, löscht sein Tagebuch; ein Ziel bleibt, wenn das Konto seiner
+  Leitung geht.
+
+### Für Stimmen freigegebene Aufnahmen
+
+- **Nur Leitungen geben frei, und nur ihre eigenen Aufnahmen.** Zurücknehmen
+  geht immer, auch nach dem Verlust der Rolle; Löschen bleibt bei der Person,
+  die aufgenommen hat. Die Aufnahme zählt weiter gegen deren Speichergrenzen.
+- **Freigegeben heißt: alle mit Zugriff auf die Datei können sie abrufen.**
+  Welche Stimmen sie sehen, entscheidet der Browser wie bei Stimmnotizen –
+  wer keine Stimme gewählt hat, sieht sie gedimmt, mit dem Namen der Stimme.
 
 ### Mobil
 
@@ -980,10 +1021,15 @@ Beides ist MuseScores Satz des Rahmens auf kleinem Papier.
   der Liedtext-Ansicht.
 - **Kein Bearbeiten von Partituren.** ScoreView zeigt und spielt; es korrigiert
   nichts in der `.mscz`.
-- **Keine Aufnahmen für andere.** Eine Aufnahme hört nur, wer sie gemacht hat;
-  sie liegt in den App-Daten, nicht in Files, und lässt sich nicht teilen.
+- **Keine Aufnahmen für andere – außer der Leitung, für Stimmen
+  vorgesungen.** Eine Aufnahme hört nur, wer sie gemacht hat; sie liegt in den
+  App-Daten, nicht in Files. Der einzige Weg hinaus ist eine Leitung, die eine
+  eigene Aufnahme für Stimmen freigibt
+  ([E21](architecture.md#e21-aufnahmen-der-leitung-für-stimmen)).
   Übe-Tracks sind dagegen synthetisiert und bewusst Dateien in Files
   ([E13](architecture.md#e13-übe-tracks-sind-dateien-in-files)).
+- **Keine Rangliste der Übezeit.** Das Übetagebuch zeigt jeder Person nur die
+  eigene Zeit ([E20](architecture.md#e20-übetagebuch-ohne-bestenliste)).
 - **Kein Long-Polling für „Folgt mir“.** Jedes wartende Gerät belegte einen
   PHP-Worker; abgefragt wird kurz, beschleunigt durch `notify_push`, wo es
   eingerichtet ist ([E10](architecture.md#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)).

@@ -71,6 +71,7 @@ class AdminSettings implements ISettings {
 			'featureScoreFollower' => $this->features->isEnabled(FeatureConfig::SCORE_FOLLOWER),
 			'featurePracticeExport' => $this->features->isEnabled(FeatureConfig::PRACTICE_EXPORT),
 			'featureOffline' => $this->features->isEnabled(FeatureConfig::OFFLINE),
+			'featurePracticeLog' => $this->features->isEnabled(FeatureConfig::PRACTICE_LOG),
 			'practiceTrackMaxMb' => self::limit(FeatureConfig::PRACTICE_TRACK_MAX_MB, intdiv($this->features->practiceTrackMaxBytes(), self::MB), 1),
 			'pdfMaxMb' => self::limit(FeatureConfig::PDF_MAX_MB, intdiv($this->features->pdfMaxBytes(), self::MB), 1),
 			'followPollMs' => $this->features->followPollMs(),

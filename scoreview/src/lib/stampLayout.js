@@ -52,7 +52,7 @@ const SYMBOL_SPACES = 2.6
  * umfasst das ganze System, bei fuenf Stimmen waere ein Stempel fuenfmal zu
  * gross.
  */
-const DEFAULT_SPACE = (1.75 / 25.4) * 1200
+export const DEFAULT_SPACE = (1.75 / 25.4) * 1200
 
 /**
  * Der Anker eines Stempels aus einem Tipp ins Notenbild: Takt und
@@ -89,7 +89,7 @@ export function anchorFromTap(measureElements, page, x, y) {
  * @param {{y:number,h:number}} rect
  * @return {?object}
  */
-function systemOf(systems, rect) {
+export function systemOf(systems, rect) {
 	// Dieselbe Ueberlappungsregel wie beim Cursor (ScorePage cursorRects).
 	return (systems ?? []).find((s) => rect.y < s.bottom + 1 && rect.y + rect.h > s.top - 1) ?? null
 }

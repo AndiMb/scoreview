@@ -13,6 +13,7 @@ use OCA\ScoreView\Service\RecordingService;
 use OCA\ScoreView\Service\RecordingStorage;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\NotFoundException;
+use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IAppConfig;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -196,6 +197,8 @@ class RecordingServiceTest extends TestCase {
 
 	public function testFremdeAufnahmeIstNichtDa(): void {
 		$this->mapper->method('findOwn')->with(7, 42, 'ben')->willReturn(null);
+		// Not released either: the listenable query finds nothing.
+		$this->mapper->method('findListenable')->with(7, 42, 'ben')->willReturn(null);
 		$this->storage->expects($this->never())->method('open');
 		$this->storage->expects($this->never())->method('delete');
 
@@ -204,7 +207,7 @@ class RecordingServiceTest extends TestCase {
 	}
 
 	public function testZeileOhneDateiIstNichtDa(): void {
-		$this->mapper->method('findOwn')->willReturn(new Recording());
+		$this->mapper->method('findListenable')->willReturn(new Recording());
 		$this->storage->method('open')->willThrowException(new NotFoundException());
 
 		$this->assertSame(RecordingException::NOT_FOUND, $this->grund(fn () => $this->service()->open(42, 'anna', 7)));
@@ -324,5 +327,38 @@ class RecordingServiceTest extends TestCase {
 		$wav = WavFormatTest::wav(16000);
 
 		$this->assertSame(strlen($wav), $this->erzeugen($wav)->getSizeBytes());
+	}
+
+	public function testAReleasedRecordingCanBeHeardByOthers(): void {
+		$released = new Recording();
+		$released->setUserId('lea');
+		$released->setSharedParts('[{"id":"2","name":"Alt"}]');
+		$this->mapper->method('findListenable')->with(7, 42, 'ben')->willReturn($released);
+		$file = $this->createMock(ISimpleFile::class);
+		$this->storage->expects($this->once())->method('open')->with($released)->willReturn($file);
+
+		$this->assertSame($file, $this->service()->open(42, 'ben', 7));
+	}
+
+	public function testOnlyTheAuthorReleases(): void {
+		$this->mapper->method('findOwn')->with(7, 42, 'ben')->willReturn(null);
+		$this->mapper->expects($this->never())->method('update');
+
+		$this->assertSame(RecordingException::NOT_FOUND, $this->grund(fn () => $this->service()->share(42, 'ben', 7, '[{"id":"2","name":"Alt"}]')));
+	}
+
+	public function testReleasingStoresTheParts(): void {
+		$own = new Recording();
+		$this->mapper->method('findOwn')->with(7, 42, 'lea')->willReturn($own);
+		$this->mapper->expects($this->once())->method('update')->with($own)->willReturnArgument(0);
+
+		$this->assertSame('[{"id":"2","name":"Alt"}]', $this->service()->share(42, 'lea', 7, '[{"id":"2","name":"Alt"}]')->getSharedParts());
+	}
+
+	public function testDeletingAReleasedRecordingStaysWithTheAuthor(): void {
+		$this->mapper->method('findOwn')->with(7, 42, 'ben')->willReturn(null);
+		$this->storage->expects($this->never())->method('delete');
+
+		$this->assertSame(RecordingException::NOT_FOUND, $this->grund(fn () => $this->service()->delete(42, 'ben', 7)));
 	}
 }

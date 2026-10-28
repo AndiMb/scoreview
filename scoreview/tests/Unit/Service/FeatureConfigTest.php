@@ -125,6 +125,7 @@ class FeatureConfigTest extends TestCase {
 			'scoreFollower' => false,
 			'practiceExport' => true,
 			'offline' => true,
+			'practiceLog' => true,
 			'followPollMs' => 1000,
 			'maxRecordingsPerScore' => 5,
 			'maxRecordingSeconds' => 600,

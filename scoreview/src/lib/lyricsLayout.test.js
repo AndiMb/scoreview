@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeSyllable, buildLyrics, occurrences, seekTimeFor, syllableId, systemKeyFor, versesByElid } from './lyricsLayout.js'
+import { activeSyllable, buildChoirLyrics, buildLyrics, choirActiveSyllables, choirVersesByElid, occurrences, seekTimeFor, staffPartNames, syllableId, systemKeyFor, versesByElid } from './lyricsLayout.js'
 
 // Nachgebaut nach lyrics-test.mscz (spike/messung-h/mb/gen.py): Sopran
 // (Zeile 0) und Bass (Zeile 1); Takt 1-2 = elid 0-7, dreimal wiederholt mit
@@ -120,5 +120,51 @@ describe('systemKeyFor', () => {
 	it('nimmt ohne Rechtecke die Seite', () => {
 		expect(systemKeyFor({ page: 2, y: 5 }, rects)).toBe('2')
 		expect(systemKeyFor(null, rects)).toBe('x')
+	})
+})
+
+describe('buildChoirLyrics', () => {
+	// Bass enters only at the "Amen" (elid 8-11): before that, one row.
+	const choir = () => syllables().filter((s) => s.staff === 0 || s.elid >= 8)
+	const blockKeyOf = (elid) => (elid < 8 ? 'a' : 'b')
+
+	it('gives each system a row per part that sings there', () => {
+		const { blocks, staves } = buildChoirLyrics({ syllables: choir(), blockKeyOf, labelOf: (s) => ['S', 'B'][s] })
+		expect(staves).toEqual([0, 1])
+		expect(blocks.map((b) => b.key)).toEqual(['a', 'b'])
+		expect(blocks[0].rows.map((r) => r.label)).toEqual(['S'])
+		expect(blocks[1].rows.map((r) => r.label)).toEqual(['S', 'B'])
+		expect(blocks[1].rows[1].verses[0].words.map((w) => w.text)).toEqual(['A', 'men', 'Amen'])
+	})
+
+	it('numbers words across rows and keeps ids apart per staff', () => {
+		const { blocks } = buildChoirLyrics({ syllables: choir(), blockKeyOf })
+		const words = blocks.flatMap((b) => b.rows.flatMap((r) => r.verses.flatMap((v) => v.words)))
+		expect(new Set(words.map((w) => w.index)).size).toBe(words.length)
+		const ids = words.flatMap((w) => w.syllables.map((s) => s.id))
+		expect(new Set(ids).size).toBe(ids.length)
+		expect(blocks[1].rows[1].verses[0].words[0].syllables[0].id).toBe('1:8:0')
+	})
+
+	it('lights every part that starts a syllable, in the verse of this pass', () => {
+		const { blocks } = buildChoirLyrics({ syllables: choir(), blockKeyOf })
+		const index = { byStaff: choirVersesByElid(blocks), events, occ: occurrences(events) }
+		// second pass, elid 0: only the soprano, verse 1
+		expect(choirActiveSyllables(index, 8)).toEqual([{ staff: 0, id: '0:0:1' }])
+		// the Amen: both
+		expect(choirActiveSyllables(index, 24).map((a) => a.id)).toEqual(['0:8:0', '1:8:0'])
+	})
+})
+
+describe('staffPartNames', () => {
+	const parts = [{ name: 'Sopran' }, { name: 'Bass' }]
+
+	it('names staves when there is one per part', () => {
+		expect(staffPartNames(parts, [{ staff: 0 }, { staff: 1 }])).toEqual(['Sopran', 'Bass'])
+	})
+
+	it('refuses when the count does not match (a piano part with two staves)', () => {
+		expect(staffPartNames(parts, [{ staff: 0 }, { staff: 2 }])).toBeNull()
+		expect(staffPartNames([], [{ staff: 0 }])).toBeNull()
 	})
 })

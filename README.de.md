@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:ed21be210312 -->
+<!-- translation-of: README.md sha256:aff5177132b9 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -49,7 +49,10 @@ Tipp wieder setzen.
 
 **Notizen machen.** Privat oder mit allen geteilt, die die Datei sehen. Sie
 hängen an einer musikalischen Position statt an Pixeln und überstehen deshalb
-ein Neurendern und einen Re-Upload derselben Partitur.
+ein Neurendern und einen Re-Upload derselben Partitur. Wo kein Stempel passt,
+lässt sich mit Finger, Stift oder Maus **in die Noten zeichnen** – ein Bogen,
+ein Kreis um ein Intervall; die Zeichnung hält sich an ihren Takt und an die
+Notenzeile ihrer Stimme, auch auf Handyseiten und im Stimmenauszug.
 
 ![Notiz an Takt 5, verankert an der musikalischen Position](docs/img/annotations.de.png)
 
@@ -86,7 +89,8 @@ alle Stimmen**. Zum Lesen auf dem Telefon setzen **Handyseiten** die Partitur au
 Seiten in Bildschirmgröße, mit größeren Noten; das **Systemband** stellt die Systeme
 nebeneinander, jedes so hoch wie der Bildschirm, und die **Liedtext-Ansicht**
 zeigt nur den Text der eigenen Stimme mit allen Strophen, die gesungene Silbe
-hervorgehoben. **Tonnamen** stehen auf Wunsch neben den Notenköpfen – deutsch,
+hervorgehoben – oder mit **Alle Stimmen** den Text jeder Stimme Zeile für
+Zeile, und es leuchtet, wer gerade singt. **Tonnamen** stehen auf Wunsch neben den Notenköpfen – deutsch,
 englisch oder als Solmisation –, und ein Tipp auf eine Note spielt ihren Ton;
 **Zählzeiten** („1 + 2 +“) stehen auf Wunsch über der eigenen Notenzeile.
 Mit **„Offline vormerken“** liegen ein Stück oder eine ganze Setliste samt
@@ -113,7 +117,10 @@ Im Viewer geht es von Stück zu Stück, ohne dass Aufführungsmodus, Zoom oder
 SoundFont neu geladen werden.
 
 **Sich selbst hören.** **Eigene Aufnahmen**, synchron zu Cursor und Begleitung
-abspielbar, hört nur, wer sie gemacht hat. Die **Rückmeldung zur Intonation**
+abspielbar, hört nur, wer sie gemacht hat – es sei denn, eine Leitung **gibt**
+eine ihrer Aufnahmen **für Stimmen frei**: Dann hören die Sängerinnen und
+Sänger dieser Stimmen ihre Stimme von der Leitung vorgesungen, synchron zur
+Partitur. Die **Rückmeldung zur Intonation**
 zeigt beim Singen eine Nadel am Cursor und danach die Stellen, die zu hoch oder
 zu tief, zu früh oder zu spät oder zu kurz waren. Zum Töne-Lernen hält der
 **Warte-Modus** vor jeder Note der eigenen Stimme an, bis sie gesungen wird.
@@ -122,13 +129,18 @@ Abweichung in Cent, geschrieben nach der Tonart an der aktuellen Stelle; sein
 Stimmton a′ (420–460 Hz) stimmt auch Intonation und Wiedergabe.
 Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt zeigt wofür.
 
+**Dranbleiben.** Das **Übetagebuch** zählt die Minuten, in denen eine
+Partitur spielt oder man aufnimmt – je Tag und je Stück, mit Tagen in Folge.
+Leitungen können für ein Stück ein Wochenziel setzen. Die eigene Zeit sieht
+nur man selbst: keine Leitung, keine Bestenliste.
+
 Das geht auch in den mobilen Nextcloud-Apps, mit wenigen Einschränkungen: Das
 Mikrofon gibt die Android-App nicht frei, dort führt „Im Browser öffnen“ weiter.
 Und eine Setliste öffnet sich mobil über eine ihrer Partituren statt über die
 Datei selbst. Die Offline-Seite gibt es nur im Browser, nicht in den Apps.
 Liedtext-Ansicht und Tonnamen brauchen den lokalen Konvertierungsweg (siehe
-unten). Die Verwaltung kann „Folgt mir“, Aufnahme, Intonation, Übe-Tracks und
-die Offline-Seite einzeln abschalten; was die Funktionen kosten und wo sie
+unten). Die Verwaltung kann „Folgt mir“, Aufnahme, Intonation, Übe-Tracks, das
+Übetagebuch und die Offline-Seite einzeln abschalten; was die Funktionen kosten und wo sie
 enden, steht in docs/limits.de.md unter
 [Probe- und Konzertfunktionen](docs/limits.de.md#probe--und-konzertfunktionen)
 und [Üben und Lesen auf dem Handy](docs/limits.de.md#üben-und-lesen-auf-dem-handy).

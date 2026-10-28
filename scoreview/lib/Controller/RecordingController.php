@@ -8,9 +8,11 @@ use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\Recording;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\FeatureConfig;
+use OCA\ScoreView\Service\LeaderService;
 use OCA\ScoreView\Service\RecordingException;
 use OCA\ScoreView\Service\RecordingService;
 use OCA\ScoreView\Service\RequestBodyReader;
+use OCA\ScoreView\Service\TargetParts;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\ViewerPreferences;
 use OCA\ScoreView\Service\WavFormat;
@@ -26,6 +28,7 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\IL10N;
 use OCP\IRequest;
+use OCP\IUserManager;
 
 /**
  * Eigene Aufnahmen (Regeln in Service\RecordingService).
@@ -35,6 +38,9 @@ use OCP\IRequest;
  * - **Ohne Dateizugriff 404**, damit sich fileIds nicht abtasten lassen.
  * - **Fremde Aufnahme 404** (S8), auch fuer Leitungen und die Eigentuemerin
  *   der Partitur: Die Kennung einer fremden Aufnahme verraet nichts.
+ * - **Except what a leader released to parts** (E21): listed under
+ *   `shared` for everyone with access to the score, and playable. Releasing
+ *   is for leaders, and only their own recordings (update()).
  *
  * Der Upload kommt **roh** (`Content-Type: audio/wav`), die Angaben zum
  * Zeitabgleich stehen in der Query. Ein Multipart-Formular haette die
@@ -53,6 +59,8 @@ class RecordingController extends Controller {
 		private FeatureConfig $features,
 		private RequestBodyReader $body,
 		private IL10N $l,
+		private LeaderService $leaders,
+		private IUserManager $userManager,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -68,6 +76,12 @@ class RecordingController extends Controller {
 		}
 		$response = new JSONResponse([
 			'recordings' => array_map(fn (Recording $r) => $this->serialize($r), $this->recordings->list($fileId, $userId)),
+			// Released by leaders to parts (E21) - filtered by part in the
+			// viewer, like part annotations: "for the altos" is a matter of
+			// display, not of access.
+			'shared' => array_map(fn (Recording $r) => $this->serialize($r) + [
+				'authorName' => $this->userManager->get($r->getUserId())?->getDisplayName(),
+			], $this->recordings->listShared($fileId, $userId)),
 			'maxPerScore' => $this->features->maxRecordingsPerScore(),
 			'maxSeconds' => $this->features->maxRecordingSeconds(),
 		]);
@@ -147,7 +161,45 @@ class RecordingController extends Controller {
 	}
 
 	/**
-	 * Die WAV selbst - nur fuer die Aufnehmende.
+	 * Releases an own recording to parts, or takes it back (E21).
+	 *
+	 * @param ?array $targetParts `[{id, name}]`; null or empty = private again
+	 */
+	#[NoAdminRequired]
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession]
+	#[UserRateLimit(limit: 30, period: 60)]
+	#[AnonRateLimit(limit: 30, period: 60)]
+	public function update(int $fileId, int $id, ?array $targetParts = null): JSONResponse {
+		$userId = $this->resolve($fileId);
+		if ($userId === null) {
+			return $this->notFound();
+		}
+		$json = null;
+		if ($targetParts !== null && $targetParts !== []) {
+			// Releasing needs the role now; taking back never does - a
+			// revoked leader must be able to withdraw what they released.
+			$node = $this->fileResolver->resolveOwnNode($fileId);
+			if ($node === null || !$this->leaders->isLeader($node, $userId)) {
+				return new JSONResponse(['error' => $this->l->t('Only leaders can share recordings with voices.')], Http::STATUS_FORBIDDEN);
+			}
+			$json = TargetParts::normalize($targetParts);
+			if ($json === null) {
+				return new JSONResponse(['error' => $this->l->t('Choose at least one voice.')], Http::STATUS_BAD_REQUEST);
+			}
+		}
+		try {
+			$recording = $this->recordings->share($fileId, $userId, $id, $json);
+		} catch (RecordingException $e) {
+			return $this->refused($e);
+		}
+		return new JSONResponse($this->serialize($recording));
+	}
+
+	/**
+	 * Die WAV selbst - fuer die Aufnehmende, und fuer alle, sobald eine
+	 * Leitung sie fuer Stimmen freigegeben hat (E21).
 	 */
 	#[NoAdminRequired]
 	#[PublicPage]
@@ -216,6 +268,8 @@ class RecordingController extends Controller {
 			'tempoFactor' => $recording->getTempoFactor(),
 			'withAccompaniment' => (bool)$recording->getWithAccompaniment(),
 			'referenceHz' => $recording->getReferenceHz(),
+			// Empty = private (S8); otherwise released to these parts (E21).
+			'sharedParts' => TargetParts::decode($recording->getSharedParts()),
 		];
 	}
 

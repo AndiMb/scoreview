@@ -410,8 +410,8 @@ automatically. An empty field means: the app delivers it itself.
 
 ## Rehearsal and concert
 
-Leaders, "Follow me", own recordings, intonation feedback, practice tracks
-and the offline page are switched on after installation and need nothing
+Leaders, "Follow me", own recordings, intonation feedback, practice tracks,
+the practice log and the offline page are switched on after installation and need nothing
 further. Under **Settings → Administration → ScoreView**, sections
 **Rehearsal and concert** and **Practising on the go**, they can be switched
 off individually; a switched-off feature disappears from the viewer, and its
@@ -558,6 +558,7 @@ allows its origin in its own CSP.
 | `feature_intonation` | Administration | Intonation feedback (default on) |
 | `feature_score_follower` | `occ` only | Intended for score following via microphone, not functional yet (default off) |
 | `feature_practice_export` | Administration | Practice tracks as MP3 in Files (default on) |
+| `feature_practice_log` | Administration | Practice log: own practice time per score, weekly goal from the leaders (default on) |
 | `practice_track_max_mb` | Administration | Maximum size of a practice track in MB (default 60, 5–500) |
 | `feature_offline` | Administration | Offline page and "Save for offline use" (default on) |
 | `follow_poll_ms` | Administration | Polling interval of "Follow me" without push, in ms (default 800, allowed 500–3000) |

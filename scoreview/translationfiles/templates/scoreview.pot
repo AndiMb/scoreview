@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
+#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeLogController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
 msgid "File not found or no access."
 msgstr ""
 
@@ -20,7 +20,7 @@ msgstr ""
 msgid "Only leaders can address notes to voices."
 msgstr ""
 
-#: lib/Controller/AnnotationController.php src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
+#: lib/Controller/AnnotationController.php lib/Controller/RecordingController.php src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
 msgid "Choose at least one voice."
 msgstr ""
 
@@ -46,6 +46,10 @@ msgstr ""
 
 #: lib/Controller/AnnotationController.php
 msgid "A loop needs an end measure at or after its start."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "Invalid drawing."
 msgstr ""
 
 #: lib/Controller/AnnotationController.php
@@ -140,6 +144,14 @@ msgstr ""
 msgid "The PDF file is larger than allowed ({mb} MB)."
 msgstr ""
 
+#: lib/Controller/PracticeLogController.php
+msgid "Invalid practice time."
+msgstr ""
+
+#: lib/Controller/PracticeLogController.php
+msgid "Only leaders can set a practice goal."
+msgstr ""
+
 #: lib/Controller/PracticeTrackController.php
 msgid "This is not an MP3 file."
 msgstr ""
@@ -150,6 +162,10 @@ msgstr ""
 
 #: lib/Controller/PreferenceController.php
 msgid "Not logged in."
+msgstr ""
+
+#: lib/Controller/RecordingController.php
+msgid "Only leaders can share recordings with voices."
 msgstr ""
 
 #: lib/Controller/RecordingController.php
@@ -366,6 +382,10 @@ msgstr ""
 
 #: src/components/AdminSettings.vue
 msgid "Offline page (scores and setlists saved in the browser)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Practice log (own practice time per score, weekly goal from the leaders)"
 msgstr ""
 
 #: src/components/AdminSettings.vue src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
@@ -901,7 +921,15 @@ msgid "Cancel"
 msgstr ""
 
 #: src/components/LyricsView.vue
+msgid "All parts"
+msgstr ""
+
+#: src/components/LyricsView.vue
 msgid "This part has no lyrics."
+msgstr ""
+
+#: src/components/LyricsView.vue
+msgid "Staff {n}"
 msgstr ""
 
 #: src/components/MicIndicator.vue src/components/RecordingPanel.vue
@@ -1156,6 +1184,58 @@ msgstr ""
 msgid "Choose"
 msgstr ""
 
+#: src/components/PracticeLogPanel.vue
+msgid "{minutes} min this week"
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "Last week: {minutes} min"
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "{day}: {minutes} min"
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "{days} days in a row"
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "Goal: {minutes} min per week, set by {name}"
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "Goal: {minutes} min per week"
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "{percent} % of the weekly goal"
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "Goal reached this week."
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "No practice goal for this piece."
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "Weekly goal for everyone (minutes)"
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "0 removes the goal. Nobody sees anyone else's time - not even leaders."
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "Set goal"
+msgstr ""
+
+#: src/components/PracticeLogPanel.vue
+msgid "Counted while the score plays or you record. Only you see your practice time."
+msgstr ""
+
 #: src/components/PrintToolbar.vue src/components/ScoreViewer.vue
 msgid "Print"
 msgstr ""
@@ -1289,6 +1369,14 @@ msgid "Listen along with the score"
 msgstr ""
 
 #: src/components/RecordingPanel.vue
+msgid "Share with voices"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Shared with {voices}"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
 msgid "Check intonation"
 msgstr ""
 
@@ -1298,6 +1386,34 @@ msgstr ""
 
 #: src/components/RecordingPanel.vue
 msgid "No recordings of this score yet."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Share this recording with voices"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Singers of these voices can listen to it along with the score. It still counts towards your storage, and you can take it back at any time."
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Share"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Stop sharing"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "Sung by your leaders"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "All voices"
+msgstr ""
+
+#: src/components/RecordingPanel.vue
+msgid "by {name}, {date}"
 msgstr ""
 
 #: src/components/RecordingPanel.vue
@@ -1433,6 +1549,10 @@ msgid "Stamps"
 msgstr ""
 
 #: src/components/ScoreAnnotations.vue
+msgid "Draw in the score"
+msgstr ""
+
+#: src/components/ScoreAnnotations.vue
 msgid "Only mine"
 msgstr ""
 
@@ -1476,6 +1596,10 @@ msgstr ""
 msgid "For {voices}"
 msgstr ""
 
+#: src/components/ScoreAnnotations.vue src/components/ScoreDrawings.vue
+msgid "Drawing"
+msgstr ""
+
 #: src/components/ScoreAnnotations.vue
 msgid "Edit"
 msgstr ""
@@ -1494,6 +1618,10 @@ msgstr ""
 
 #: src/components/ScoreBar.vue
 msgid "Tools"
+msgstr ""
+
+#: src/components/ScoreDrawings.vue
+msgid "Drawing for {voices}"
 msgstr ""
 
 #: src/components/ScoreLockButton.vue
@@ -1761,6 +1889,10 @@ msgid "Recording and intonation"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
+msgid "Practice log"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
 msgid "From measure"
 msgstr ""
 
@@ -1886,6 +2018,18 @@ msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "Lyrics view is not available: {reason} Showing the pages instead."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Draw on the music with finger, pen or mouse."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Undo"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Done"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
@@ -2220,6 +2364,10 @@ msgstr ""
 msgid "Too many changes in a short time. Please wait a moment and try again."
 msgstr ""
 
+#: src/composables/useAnnotations.js
+msgid "A drawing beside the music was not saved. Start it on the staff."
+msgstr ""
+
 #: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
 msgid "The conversion service could not be reached."
 msgstr ""
@@ -2352,6 +2500,10 @@ msgstr ""
 msgid "The sound is not loaded yet."
 msgstr ""
 
+#: src/composables/usePracticeLog.js
+msgid "The practice goal could not be saved."
+msgstr ""
+
 #: src/composables/useRecorder.js
 msgid "The recordings could not be loaded."
 msgstr ""
@@ -2362,6 +2514,10 @@ msgstr ""
 
 #: src/composables/useRecorder.js
 msgid "The recording could not be deleted."
+msgstr ""
+
+#: src/composables/useRecorder.js
+msgid "The recording could not be shared."
 msgstr ""
 
 #: src/composables/useRecorder.js

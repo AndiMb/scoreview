@@ -91,6 +91,21 @@
 				</svg>
 			</button>
 		</div>
+		<!--
+			Freehand (E22): for what no stamp exists - a slur, a circle round
+			an interval, an arrow to the next system. For the same audience as
+			chosen above.
+		-->
+		<NcButton
+			class="scoreview-annotations-draw"
+			:disabled="!audienceComplete"
+			:aria-label="t('Draw in the score')"
+			@click="startDrawing">
+			<template #icon>
+				<Draw :size="20" />
+			</template>
+			{{ t('Draw in the score') }}
+		</NcButton>
 		<NcNoteCard v-if="error" type="error" class="scoreview-annotations-error">
 			{{ error }}
 		</NcNoteCard>
@@ -149,6 +164,7 @@
 						aria-hidden="true">
 						<StampSymbol :stamp="a.stamp" />
 					</svg>
+					<Draw v-else-if="a.kind === 'drawing'" :size="16" class="scoreview-annotation-stamp" />
 					{{ t('Measure {n}', { n: a.measureNumber }) }}
 					<em v-if="a.orphaned">{{ t('(orphaned)') }}</em>
 					<span v-if="a.visibility === 'shared'" class="scoreview-annotation-badge" :title="t('Shared with everyone who has access to this file')">
@@ -198,11 +214,16 @@
 							– {{ a.content }}
 						</template>
 					</p>
+					<!-- Its content is strokes, not text. -->
+					<p v-else-if="a.kind === 'drawing'" class="scoreview-annotation-content">
+						{{ t('Drawing') }}
+					</p>
 					<p v-else class="scoreview-annotation-content">
 						{{ a.content }}
 					</p>
 					<div v-if="canChange(a)" class="scoreview-annotation-actions">
-						<NcButton :aria-label="t('Edit')" @click="startEdit(a)">
+						<!-- A drawing is redrawn, not edited: delete and draw again. -->
+						<NcButton v-if="a.kind !== 'drawing'" :aria-label="t('Edit')" @click="startEdit(a)">
 							<template #icon>
 								<Pencil :size="20" />
 							</template>
@@ -277,6 +298,7 @@ import AccountStar from 'vue-material-design-icons/AccountStar.vue'
 import Check from 'vue-material-design-icons/Check.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import Delete from 'vue-material-design-icons/Delete.vue'
+import Draw from 'vue-material-design-icons/Draw.vue'
 import LockOutline from 'vue-material-design-icons/LockOutline.vue'
 import Pencil from 'vue-material-design-icons/Pencil.vue'
 import PlusCircleOutline from 'vue-material-design-icons/PlusCircleOutline.vue'
@@ -309,7 +331,7 @@ const MAX_CONTENT_LENGTH = 10000
 export default {
 	name: 'ScoreAnnotations',
 
-	components: { NcButton, NcCheckboxRadioSwitch, NcNoteCard, PlusCircleOutline, Check, Close, Pencil, Delete, AccountGroup, AccountMusic, AccountStar, LockOutline, StampSymbol },
+	components: { NcButton, NcCheckboxRadioSwitch, NcNoteCard, PlusCircleOutline, Check, Close, Pencil, Delete, Draw, AccountGroup, AccountMusic, AccountStar, LockOutline, StampSymbol },
 
 	props: {
 		// Die Notizen, die diese Person sieht - bereits eingeordnet
@@ -357,7 +379,7 @@ export default {
 		},
 	},
 
-	emits: ['create', 'update', 'delete', 'jumpTo', 'armStamp'],
+	emits: ['create', 'update', 'delete', 'jumpTo', 'armStamp', 'startDrawing'],
 
 	data() {
 		return {
@@ -469,6 +491,16 @@ export default {
 			}
 			this.$emit('armStamp', {
 				stamp: code,
+				visibility: this.audience,
+				targetParts: this.audience === 'parts' ? this.targetParts : null,
+			})
+		},
+
+		startDrawing() {
+			if (!this.audienceComplete) {
+				return
+			}
+			this.$emit('startDrawing', {
 				visibility: this.audience,
 				targetParts: this.audience === 'parts' ? this.targetParts : null,
 			})
