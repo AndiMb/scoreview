@@ -1,8 +1,8 @@
 <template>
 	<!--
 		Die Hervorhebungsfarbe haengt als CSS-Variable an der Wurzel, nicht an
-		jeder Seite: ScorePage.vue erbt sie ueber die Kaskade, auch in das per
-		v-html eingesetzte SVG hinein (Scoped-CSS greift dort nicht, geerbte
+		jeder Seite: ScorePage.vue erbt sie ueber die Kaskade, auch in das SVG
+		im Shadow-Root der Seite hinein (Stylesheets greifen dort nicht, geerbte
 		Custom Properties schon). Aendert die Nutzerin die Farbe, faerbt sich
 		damit alles Gefaerbte in einem Rutsch um - ohne dass eine einzige Seite
 		neu rendern muss.

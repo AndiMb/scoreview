@@ -739,6 +739,14 @@ plays with controls. A lock lasting several minutes has not been measured.
   passage sings verse n. Where a score distributes verses across jumps that are
   not unrolled (D.C./D.S., see [Known gaps](#known-gaps)), the wrong verse
   lights up.
+- **Style cost of the notation:** each page SVG sits in a shadow root of its
+  own, out of reach of Nextcloud's ~1,900 global selectors, and on a
+  compositor layer of its own. Measured with four pages of a choral piece
+  (14,100 SVG nodes) on the desktop: one style recalculation 228 ms before,
+  56 ms now; opening and closing a toolbar menu at 4× CPU throttling cost
+  3.3 s of style time, now 0.6–0.8 s. During playback the main thread was
+  busy 490–560 ms per second, mostly re-layerizing the notation in every
+  frame, now 130–180 ms.
 - **System band:** measured on a choral piece with 10 systems, scrolling at
   about 60 fps on the desktop. On the Galaxy S23 (Chrome, without power saving
   mode) during playback: pages 49 fps (10 % of frames over 33 ms), system band

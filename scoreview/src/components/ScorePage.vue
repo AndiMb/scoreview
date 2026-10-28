@@ -61,25 +61,24 @@
 				:height="band.h" />
 		</svg>
 		<!--
-			v-html ist hier unvermeidbar: das MuseScore-SVG soll als echtes DOM
-			im Dokument liegen, damit Zoom, Scoped-CSS (siehe :deep(svg) unten)
-			und das Koordinaten-Overlay darauf greifen - ein <img>/<object> waere
-			eine eigene Ressource ohne Zugriff darauf. Die Quelle ist ein
-			Nutzer-Upload, MuseScore rendert Titel, Liedtext und freie Textfelder
-			aus der Partitur hinein: `svgMarkup` ist deshalb IMMER durch
-			lib/svgSanitizer.js (DOMPurify) gegangen, nie roher Antworttext -
-			siehe load() unten. Wird diese Regel je gelockert, muss die Zeile
-			hier wieder auffallen, darum nur diese eine Zeile ausgenommen statt
-			der Datei.
+			The notation lives in a shadow root on this element, filled by
+			renderSvg() - not v-html. Nextcloud's ~1,900 global selectors
+			(core/css/server.css) do not reach into a shadow tree, and the page
+			SVG is thousands of nodes: in the document, every style change
+			anywhere (a menu opening, focus moving) re-matched all of them
+			against those rules. Measured with four pages, 14,100 SVG nodes:
+			228 ms per recalc at the desktop, 56 ms from the shadow root; opening
+			and closing a menu at 4x CPU throttling 3.3 s instead of 0.6 s.
+			Vue never patches the children of this element, so the shadow root
+			survives every re-render.
 		-->
-		<!-- eslint-disable-next-line vue/no-v-html -->
-		<div v-if="svgMarkup" class="score-page-svg" v-html="svgMarkup" />
+		<div ref="svgHost" class="score-page-svg" />
 		<!--
 			Sichtbarer Fehlerzustand statt weisser Flaeche. Die
 			Seite behaelt ihre reservierte Hoehe, das Notenbild rutscht also
 			nicht - nur diese eine Seite fehlt, und man sieht, dass sie fehlt.
 		-->
-		<div v-else-if="loadError" class="score-page-error">
+		<div v-if="!svgMarkup && loadError" class="score-page-error">
 			<p>{{ t('This page could not be loaded ({error}).', { error: loadError }) }}</p>
 			<NcButton :disabled="loading" @click.stop="retry">
 				{{ t('Try again') }}
@@ -245,6 +244,7 @@ import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLa
 import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, stavesOfPart } from '../lib/staffBands.js'
 import { buildNoteIndex, buildSegmentIndex, pickNoteheads, setHighlight } from '../lib/svgIndex.js'
 import { sanitizeSvg } from '../lib/svgSanitizer.js'
+import { SCORE_SVG_STYLE } from './scorePageSvgStyle.js'
 
 // Sanitized pages, shared by all ScorePages. Page URLs carry the conversion
 // version (`?v=`), so an entry never goes stale. A few pages are enough: the
@@ -841,6 +841,10 @@ export default {
 			// Die Schriftgroesse der Tonnamen folgt dem Notenbild.
 			this.updateNoteLabels()
 		},
+
+		noteTheme() {
+			this.applyNoteTheme()
+		},
 	},
 
 	created() {
@@ -864,9 +868,13 @@ export default {
 		// Hindernisse fuer die Tonnamen, gemessen beim ersten Bedarf.
 		this.labelObstacles = null
 		this.tapTimer = null
+		// The element inside the shadow root that holds the page SVG (see
+		// the template and attachSvgRoot()) - a DOM node, so not in data().
+		this.svgRoot = null
 	},
 
 	mounted() {
+		this.attachSvgRoot()
 		if (this.printSheet) {
 			// A sheet is printed whole or not at all: no observers, the page
 			// loads now and stays.
@@ -983,8 +991,7 @@ export default {
 				return this.labelObstacles
 			}
 			const out = this.noteItems.map((item, id) => ({ box: item.box, id }))
-			const svg = this.$refs.root?.querySelector('.score-page-svg')
-			for (const node of svg?.querySelectorAll(LABEL_OBSTACLES) ?? []) {
+			for (const node of this.svgRoot?.querySelectorAll(LABEL_OBSTACLES) ?? []) {
 				try {
 					const b = node.getBBox()
 					if (b.width > 0 || b.height > 0) {
@@ -1082,6 +1089,7 @@ export default {
 				this.viewBox = page.viewBox
 				this.sizeMm = page.sizeMm
 				this.svgMarkup = page.markup
+				this.renderSvg()
 				// Für die Zoom-Presets ("Seitenbreite/ganze Seite/100%") -
 				// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
 				// jeweils geladene ScorePage.
@@ -1095,7 +1103,8 @@ export default {
 				if (this.staffSystems.length > 0) {
 					this.$emit('staffMapping', this.staffMappingPossible)
 				}
-				// Und erst nach dem naechsten Rendern haengt es im Dokument.
+				// The SVG is in the document now; the overlays that index it
+				// render on the next tick.
 				this.$nextTick(() => this.indexSegments())
 			} catch (err) {
 				this.loadError = err.response?.status
@@ -1103,6 +1112,43 @@ export default {
 					: err.message
 			} finally {
 				this.loading = false
+			}
+		},
+
+		/**
+		 * The shadow root for the notation (see the template for why) with
+		 * its own style sheet - the page's scoped CSS does not reach in.
+		 */
+		attachSvgRoot() {
+			const shadow = this.$refs.svgHost.attachShadow({ mode: 'open' })
+			const style = document.createElement('style')
+			style.textContent = SCORE_SVG_STYLE
+			this.svgRoot = document.createElement('div')
+			shadow.append(style, this.svgRoot)
+			this.applyNoteTheme()
+		},
+
+		applyNoteTheme() {
+			this.svgRoot?.classList.toggle('dark', this.noteTheme === 'dark')
+		},
+
+		/**
+		 * Puts the page SVG into the shadow root, or empties it.
+		 *
+		 * innerHTML is the one place markup enters the document here. The
+		 * source is a user upload - MuseScore renders title, lyrics and free
+		 * text from the score into it - so `svgMarkup` has ALWAYS been through
+		 * lib/svgSanitizer.js (DOMPurify), never raw response text: see load().
+		 * If that rule is ever relaxed, this line must stand out again.
+		 */
+		renderSvg() {
+			if (!this.svgRoot) {
+				return
+			}
+			if (this.svgMarkup) {
+				this.svgRoot.innerHTML = this.svgMarkup
+			} else {
+				this.svgRoot.replaceChildren()
 			}
 		},
 
@@ -1120,10 +1166,9 @@ export default {
 		 * Schalter, keine Einstellung: was da ist, wird benutzt.
 		 */
 		indexSegments() {
-			const svg = this.$refs.root?.querySelector('.score-page-svg')
-			this.segmentIndex = buildSegmentIndex(svg)
+			this.segmentIndex = buildSegmentIndex(this.svgRoot)
 			this.highlighted = []
-			this.noteIndex = buildNoteIndex(svg)
+			this.noteIndex = buildNoteIndex(this.svgRoot)
 			this.marked = []
 			this.liveMarked = []
 			this.indexSpellings()
@@ -1225,6 +1270,7 @@ export default {
 				return
 			}
 			this.svgMarkup = null
+			this.renderSvg()
 			// Die Karte zeigt auf Knoten, die es gleich nicht mehr gibt.
 			this.segmentIndex = null
 			this.highlighted = []
@@ -1398,76 +1444,21 @@ export default {
 	z-index: 1;
 	width: 100%;
 	height: 100%;
+	/*
+	 * A compositor layer of its own. During playback the cursor, the seek
+	 * slider and the progress line repaint every frame; sharing a layer with
+	 * the notation, each frame re-layerized all its paint chunks - 8,100 of
+	 * 14,100 SVG elements carry a transform. Measured during playback:
+	 * main thread 490-560 ms/s, with the layer 177 ms/s. Opacity rather
+	 * than transform, which measured the same but lets Chrome keep the
+	 * layer's raster scale - the notation could stay blurry after a zoom.
+	 */
+	will-change: opacity;
 }
 
-/*
- * :deep() ist hier zwingend, nicht nur Stil: v-html fügt das <svg> als
- * rohes DOM ein, ohne Vues Scoped-CSS-Attribut (data-v-xxxx) - ein
- * gewöhnliches ".score-page-svg svg { ... }" kompiliert zu
- * ".score-page-svg svg[data-v-xxxx]" (das Attribut landet auf dem
- * RECHTEN/inneren Selektor) und traf das <svg> dadurch nie. Ohne diese
- * Regel rendert das SVG stattdessen in seiner eigenen mm-Bemaßung statt
- * auf 100% der Containerbreite - das Cursor-Overlay (Prozentwerte relativ
- * zum Container) und die tatsächlich sichtbare Note driften dann
- * auseinander (gemessen: SVG 793.9px statt Container-Breite 900px).
- */
-.score-page-svg :deep(svg) {
-	width: 100%;
-	height: auto;
-	display: block;
-}
-
-/*
- * MuseScore rendert als allererstes Element ein deckendes weißes
- * Hintergrundrechteck über die volle viewBox (siehe docs/architecture.md
- * M9) - ohne diese Regel würde es den dahinterliegenden Cursor vollständig
- * verdecken. :deep() aus demselben Grund wie oben (v-html, kein
- * Scoped-Attribut).
- *
- * Zwei Selektoren, weil die beiden Konvertierungswege es unterschiedlich
- * schreiben (E3, beide an ausgelieferten Seiten nachgesehen):
- *
- * - Sidecar: `<path class="">` - laut M9 im ganzen Dokument eindeutig nur
- *   dieses eine Element (kein id-Attribut vorhanden, das sich sonst
- *   anbieten würde).
- * - scoreview-engine: `<path fill="#ffffff">` ganz ohne class-Attribut,
- *   als direktes Kind des <svg>. Beide Merkmale zusammen sind nötig: Ein
- *   Bogen ist ebenfalls ein classloses <path>, liegt aber in einer Gruppe;
- *   und ein weiß gefülltes Element innerhalb der Notation (etwa ein hohler
- *   Notenkopf) dürfte nicht mit verschwinden. Gemessen: genau ein Treffer
- *   je Seite.
- */
-.score-page-svg :deep(path[class=""]),
-.score-page-svg :deep(svg > path[fill="#ffffff"]) {
-	fill: none;
-}
-
-/*
- * Dunkelmodus der Noten: Die Druckfarbe wird umgefaerbt, das SVG selbst
- * bleibt unangetastet. Bewusst KEIN `filter: invert()` - das machte aus einem
- * eingebetteten Foto (`<image>`) ein Negativ. Umgefaerbt wird nur,
- * was MuseScore schwarz bzw. weiss zeichnet; Elemente ohne eigene Fuellung
- * erben sie vom `<svg>`, farbige Elemente der Partitur bleiben farbig.
- *
- * `:where()` haelt die Spezifitaet bei null Zusatzpunkten: Die Hervorhebung
- * weiter unten (`path.scoreview-sounding` usw.) und das Ausblenden des
- * weissen Hintergrundrechtecks oben muessen gegen diese Regeln gewinnen,
- * sonst leuchtete im Dunkeln keine Note mehr auf.
- */
-.score-page--dark .score-page-svg :deep(svg) {
-	fill: var(--scoreview-ink);
-}
-
-.score-page--dark .score-page-svg :deep(:where([fill="#000000"])) {
-	fill: var(--scoreview-ink);
-}
-
-.score-page--dark .score-page-svg :deep(:where([stroke="#000000"])) {
-	stroke: var(--scoreview-ink);
-}
-
-.score-page--dark .score-page-svg :deep(:where([fill="#ffffff"])) {
-	fill: var(--scoreview-page);
+/* Printing composites nothing, and a sheet layer per page buys nothing. */
+.score-page--static .score-page-svg {
+	will-change: auto;
 }
 
 /*
@@ -1516,69 +1507,6 @@ export default {
  */
 .score-page-cursor--hidden {
 	fill: transparent;
-}
-
-/*
- * Der klingende Notenkopf selbst - moeglich, seit das SVG seine
- * Segmentkennung mitbringt (M10, siehe lib/svgIndex.js). Sobald hier etwas
- * leuchtet, tritt das Cursor-Band zurueck (siehe .score-page-cursor--hidden)
- * - beides zusammen markierte dieselbe Stelle doppelt.
- *
- * Zwei Regelbloecke mit je drei Selektoren, weil zwei Unterschiede
- * zusammenkommen.
- *
- * Erstens malt MuseScore Flaechen und Striche unterschiedlich: Notenkopf,
- * Pause und Balken sind gefuellt, Hals und Hilfslinie gestrichen. Eine
- * gemeinsame fill-Regel liesse die Notenhaelse schwarz.
- *
- * Zweitens haengt die Klasse je nach Konvertierungsweg an einer anderen
- * Stelle (E3, an ausgelieferten Seiten beider Wege nachgesehen):
- *
- * - Sidecar: am gezeichneten Element selbst - `<path class="Note seg-7 …">`
- *   bzw. `<polyline class="Stem …" fill="none" stroke="#000000">`.
- * - scoreview-engine: an einer Gruppe darum, gezeichnet wird darin -
- *   `<g class="Note seg-7 …"><g transform><use fill="#000000"/></g></g>`,
- *   Haelse als `<polyline fill="none" stroke="#000000">`. `fill` an der
- *   Gruppe traegt hier nicht: Das `fill`-Attribut am `<use>` gewinnt
- *   gegen einen geerbten Wert, und die Note bliebe schwarz.
- *
- * Die Nachfahren-Regeln faerben deshalb genau das um, was ueberhaupt Farbe
- * traegt - `fill="none"`/`stroke="none"` bleiben ausgenommen, sonst wuerde
- * ein Notenhals als Flaeche ausgemalt.
- *
- * :deep() ist zwingend: die Knoten kommen aus v-html und tragen deshalb kein
- * scoped-Attribut. Kein transition - bei acht Ereignissen je Sekunde soll die
- * Farbe stehen, nicht nachlaufen.
- */
-.score-page-svg :deep(path.scoreview-sounding),
-.score-page-svg :deep(text.scoreview-sounding),
-.score-page-svg :deep(.scoreview-sounding [fill]:not([fill="none"])) {
-	fill: var(--scoreview-highlight, #d32f2f);
-}
-
-/*
- * Intonation: gruen, gelb, rot, und grau fuer „nicht auswertbar".
- * Nach der Hervorhebung des Klingenden notiert, damit eine bewertete Note
- * ihre Farbe auch dann behaelt, wenn der Cursor darueber laeuft.
- */
-.score-page-svg :deep(path.scoreview-intonation-green),
-.score-page-svg :deep(.scoreview-intonation-green [fill]:not([fill="none"])) {
-	fill: var(--scoreview-intonation-green, #2e7d32);
-}
-
-.score-page-svg :deep(path.scoreview-intonation-yellow),
-.score-page-svg :deep(.scoreview-intonation-yellow [fill]:not([fill="none"])) {
-	fill: var(--scoreview-intonation-yellow, #f9a825);
-}
-
-.score-page-svg :deep(path.scoreview-intonation-red),
-.score-page-svg :deep(.scoreview-intonation-red [fill]:not([fill="none"])) {
-	fill: var(--scoreview-intonation-red, #d32f2f);
-}
-
-.score-page-svg :deep(path.scoreview-intonation-na),
-.score-page-svg :deep(.scoreview-intonation-na [fill]:not([fill="none"])) {
-	fill: var(--scoreview-intonation-na, #9e9e9e);
 }
 
 .score-page-note-name {
@@ -1653,12 +1581,6 @@ export default {
 .score-page-needle--na .score-page-needle-text,
 .score-page-needle--rest .score-page-needle-text {
 	color: var(--color-text-maxcontrast);
-}
-
-.score-page-svg :deep(polyline.scoreview-sounding),
-.score-page-svg :deep(line.scoreview-sounding),
-.score-page-svg :deep(.scoreview-sounding [stroke]:not([stroke="none"])) {
-	stroke: var(--scoreview-highlight, #d32f2f);
 }
 
 /*

@@ -370,7 +370,15 @@ Aufbau:
   Konzertfunktionen (Tabelle unten). `LiveValue.vue` liest die
   Wiedergabezeit an Stelle des Viewers: Was sich mit jedem Frame ändert, hängt
   nur an diesem kleinen Teilbaum, der Viewer selbst rendert beim Abspielen
-  nicht mit.
+  nicht mit. `ScorePage.vue` hängt das Seiten-SVG in ein **Shadow-Root** mit
+  eigenem Stylesheet (`scorePageSvgStyle.js`): Nextclouds globale Selektoren
+  reichen nicht hinein, und die tausenden SVG-Knoten einer Seite werden bei
+  einer Stiländerung irgendwo im Dokument – ein Menü geht auf, der Fokus
+  wandert – nicht mehr gegen sie geprüft. Dazu liegt das Notenbild auf einer
+  **eigenen Compositor-Ebene** (`will-change: opacity`), damit Cursor und
+  Positionsregler beim Abspielen nicht in jedem Bild die Ebene des Notenbilds
+  neu aufteilen. Messwerte in den
+  [Grenzwerten](limits.de.md#darstellungen).
 - `src/directives/` – `nodeText.js` (`v-node-text`) für Text, der sich
   während der Wiedergabe laufend ändert: Es ändert den Wert des vorhandenen
   Textknotens, statt ihn wie Vue über `textContent` zu ersetzen. Ersetzte
@@ -519,9 +527,9 @@ das Dokument zu durchsuchen.
   deshalb ein Umschalter und kein Nebeneinander. „Notenköpfe" bleibt der
   Standard und fällt auf das Band zurück, wo das SVG keine Kennungen trägt.
 - **Farbe:** sechs Vorschläge plus freie Wahl. Sie steht als CSS-Variable an der
-  Wurzel des Viewers; alles Gefärbte erbt sie über die Kaskade, auch das per
-  `v-html` eingesetzte SVG. Eine Farbänderung rendert deshalb keine einzige
-  Seite neu.
+  Wurzel des Viewers; alles Gefärbte erbt sie über die Kaskade, auch das SVG
+  im Shadow-Root der Seite – Custom Properties erben über dessen Grenze. Eine
+  Farbänderung rendert deshalb keine einzige Seite neu.
 
 Beides ist **je Nutzerin serverseitig** gespeichert (`ViewerPreferences`), nicht
 im `localStorage`: Vorbereitet wird am Rechner, gelesen am Tablet auf dem

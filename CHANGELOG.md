@@ -6,6 +6,13 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Toolbar menus open and close without the long pause: the notation no
+  longer sits where Nextcloud's style rules re-check it on every change in
+  the page (measured: 3.3 s of style time per menu at phone-like CPU speed,
+  now under 1 s). Playback keeps the main thread about a third as busy.
+
 ## [1.26.0] – 2026-10-27
 
 ### Added

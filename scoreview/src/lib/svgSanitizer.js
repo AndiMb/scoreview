@@ -1,4 +1,4 @@
-// Echte SVG-Bereinigung vor dem Einbetten ins DOM (v-html in ScorePage.vue).
+// Echte SVG-Bereinigung vor dem Einbetten ins DOM (ScorePage.vue, renderSvg()).
 //
 // DOMPurify statt einer Regex-Bereinigung. Das ist NICHT kosmetisch, sondern
 // das Ergebnis einer Messung: eine Regex-Fassung liess 9 von 15 geprüften Umgehungsmustern durch, darunter
