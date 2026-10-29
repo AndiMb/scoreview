@@ -6,6 +6,8 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.26.2] – 2026-10-29
+
 ### Fixed
 
 - The viewer keeps up on phones: menus open in about half the time, a note
@@ -1621,6 +1623,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.26.2]: https://github.com/AndiMb/scoreview/compare/v1.26.1...v1.26.2
 [1.26.1]: https://github.com/AndiMb/scoreview/compare/v1.26.0...v1.26.1
 [1.26.0]: https://github.com/AndiMb/scoreview/compare/v1.25.3...v1.26.0
 [1.25.3]: https://github.com/AndiMb/scoreview/compare/v1.25.2...v1.25.3
