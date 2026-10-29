@@ -1668,7 +1668,7 @@ msgstr ""
 msgid "This page could not be loaded ({error})."
 msgstr ""
 
-#: src/components/ScorePage.vue
+#: src/components/ScorePage.vue src/components/ScoreViewer.vue
 msgid "Try again"
 msgstr ""
 
@@ -2000,6 +2000,10 @@ msgstr ""
 msgid "Engraving the chosen part or page format …"
 msgstr ""
 
+#: src/components/ScoreViewer.vue src/components/SetlistBar.vue
+msgid "Dismiss"
+msgstr ""
+
 #: src/components/ScoreViewer.vue
 msgid "This score can be engraved on pages the size of a phone screen, with larger notes."
 msgstr ""
@@ -2142,10 +2146,6 @@ msgstr ""
 
 #: src/components/SetlistBar.vue
 msgid "Choose setlist"
-msgstr ""
-
-#: src/components/SetlistBar.vue
-msgid "Dismiss"
 msgstr ""
 
 #: src/components/SetlistBar.vue

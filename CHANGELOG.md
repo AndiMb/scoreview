@@ -6,6 +6,18 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.26.3] – 2026-10-29
+
+### Fixed
+
+- The name of a tapped note is shown over the notation, not behind it – in a
+  chord the neighbouring heads painted through it.
+- When a part or the phone page format cannot be engraved, the hint offers
+  to try again or to dismiss it; before, it stayed until the choice changed
+  and took a good part of a phone screen.
+- Switching scores while a part or page format was still loading no longer
+  leaves that hint over the next score.
+
 ## [1.26.2] – 2026-10-29
 
 ### Fixed

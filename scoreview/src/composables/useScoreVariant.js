@@ -135,6 +135,12 @@ export function useScoreVariant(deps) {
 			}
 			return
 		}
+		// A score switch while the picture was loading makes applyPicture
+		// answer false - that is no failure of the variant, and an error
+		// set now would stand over the next score.
+		if (mine !== request) {
+			return
+		}
 		status.value = 'error'
 		errorCode.value = answer.errorCode || 'unknown'
 		// Back to the base rather than keep a picture the choice no longer means.
@@ -196,6 +202,22 @@ export function useScoreVariant(deps) {
 		return texts[errorCode.value] ?? t('This part or page format could not be engraved. The score is shown as the file has it.')
 	})
 
+	/**
+	 * The person has read the hint. It goes until the choice changes; on a
+	 * phone it would otherwise keep a good part of the screen for good.
+	 */
+	function dismissError() {
+		if (status.value === 'error') {
+			status.value = 'idle'
+		}
+	}
+
+	/** A failed variant again - most failures on a phone are a lost connection. */
+	function retry() {
+		clearTimeout(pending)
+		return show()
+	}
+
 	/** On a score switch: nothing is shown or loading for the next one yet. */
 	function reset() {
 		clearTimeout(pending)
@@ -223,6 +245,8 @@ export function useScoreVariant(deps) {
 		setConcert,
 		setTransposeNotation,
 		show,
+		retry,
+		dismissError,
 		reset,
 	}
 }

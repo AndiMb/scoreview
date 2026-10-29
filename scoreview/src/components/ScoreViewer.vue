@@ -844,6 +844,14 @@
 					</NcNoteCard>
 					<NcNoteCard v-else-if="variant.status === 'error'" type="warning" class="scoreview-hint">
 						{{ variant.errorText }}
+						<div class="scoreview-hint-actions">
+							<NcButton @click="variant.retry()">
+								{{ t('Try again') }}
+							</NcButton>
+							<NcButton @click="variant.dismissError()">
+								{{ t('Dismiss') }}
+							</NcButton>
+						</div>
 					</NcNoteCard>
 					<NcNoteCard v-if="variant.offerPhonePages" type="info" class="scoreview-hint">
 						{{ t('This score can be engraved on pages the size of a phone screen, with larger notes.') }}

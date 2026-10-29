@@ -1615,8 +1615,13 @@ export default {
 	text-shadow: 0 0 2px var(--color-main-background, #fff), 0 0 2px var(--color-main-background, #fff);
 }
 
+/* Above everything on the page, the notation included: the bubble sits right
+   over the tapped head, and in a chord the neighbouring heads would otherwise
+   paint through it - .score-page-svg has z-index 1, a positioned element
+   without one paints below it. */
 .score-page-tap-bubble {
 	position: absolute;
+	z-index: 5;
 	transform: translate(-50%, calc(-100% - 6px));
 	pointer-events: none;
 	padding: 2px 8px;

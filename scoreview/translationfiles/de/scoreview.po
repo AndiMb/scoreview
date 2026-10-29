@@ -1668,7 +1668,7 @@ msgstr "Diese Setliste enthält noch keine Partitur, die du öffnen kannst. Füg
 msgid "This page could not be loaded ({error})."
 msgstr "Diese Seite konnte nicht geladen werden ({error})."
 
-#: src/components/ScorePage.vue
+#: src/components/ScorePage.vue src/components/ScoreViewer.vue
 msgid "Try again"
 msgstr "Erneut versuchen"
 
@@ -2000,6 +2000,10 @@ msgstr "Der Notenansicht-Cursor läuft unabhängig davon mit."
 msgid "Engraving the chosen part or page format …"
 msgstr "Die gewählte Stimme bzw. das Seitenformat wird gesetzt …"
 
+#: src/components/ScoreViewer.vue src/components/SetlistBar.vue
+msgid "Dismiss"
+msgstr "Ausblenden"
+
 #: src/components/ScoreViewer.vue
 msgid "This score can be engraved on pages the size of a phone screen, with larger notes."
 msgstr "Diese Partitur lässt sich auf Seiten in Handygröße setzen, mit größeren Noten."
@@ -2143,10 +2147,6 @@ msgstr "Diese Partitur steht in {n} Setlisten."
 #: src/components/SetlistBar.vue
 msgid "Choose setlist"
 msgstr "Setliste wählen"
-
-#: src/components/SetlistBar.vue
-msgid "Dismiss"
-msgstr "Ausblenden"
 
 #: src/components/SetlistBar.vue
 msgid "Piece {n}/{total} · {title}"

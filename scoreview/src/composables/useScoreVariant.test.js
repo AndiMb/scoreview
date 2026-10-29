@@ -15,7 +15,7 @@ const meta = {
  * A viewer around the composable: the base arrives, the person chooses,
  * the picture follows - or stays, with a reason.
  */
-function viewer({ supported = true, answer = (key) => ({ status: 'ready', variant: key, files: {} }) } = {}) {
+function viewer({ supported = true, answer = (key) => ({ status: 'ready', variant: key, files: {} }), apply = null } = {}) {
 	const state = {
 		meta: ref(null),
 		practice: ref({ source: 'full', concert: false, transposeNotation: false }),
@@ -36,11 +36,11 @@ function viewer({ supported = true, answer = (key) => ({ status: 'ready', varian
 			state.requests.push(key)
 			return answer(key)
 		},
-		applyPicture: async (a) => {
+		applyPicture: apply ?? (async (a) => {
 			state.applied.push(a?.variant ?? null)
 			state.shown.value = a?.variant ?? null
 			return true
-		},
+		}),
 		shownKey: () => state.shown.value,
 		viewportWidth: () => 1200,
 	})
@@ -129,6 +129,43 @@ describe('useScoreVariant', () => {
 		expect(variant.errorText.value).toMatch(/Too many/)
 		expect(state.shown.value).toBeNull()
 		expect(state.practice.value.source).toBe('part3')
+	})
+
+	it('lets the hint be dismissed and tried again', async () => {
+		let fail = true
+		const { state, variant } = viewer({
+			answer: (key) => (fail
+				? { status: 'error', variant: key, errorCode: 'unknown' }
+				: { status: 'ready', variant: key, files: {} }),
+		})
+		state.meta.value = meta
+		variant.setSource('part3')
+		await settle()
+		variant.dismissError()
+		expect(variant.status.value).toBe('idle')
+		expect(state.practice.value.source).toBe('part3')
+
+		fail = false
+		await variant.retry()
+		expect(variant.status.value).toBe('idle')
+		expect(state.shown.value).toBe(state.requests.at(-1))
+	})
+
+	it('says nothing when the score was switched while the picture loaded', async () => {
+		let release
+		// The session drops the picture once the score has changed meanwhile.
+		const { state, variant } = viewer({
+			apply: () => new Promise((resolve) => {
+				release = resolve
+			}),
+		})
+		state.meta.value = meta
+		variant.setSource('part3')
+		await settle()
+		variant.reset()
+		release(false)
+		await vi.advanceTimersByTimeAsync(0)
+		expect(variant.status.value).toBe('idle')
 	})
 
 	it('only says it is unavailable where the server cannot', async () => {
