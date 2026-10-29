@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:5ef091cf7c97 -->
+<!-- translation-of: troubleshooting.md sha256:f8dbba1d8f89 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -212,7 +212,7 @@ Cron spielt hier **keine** Rolle – alles läuft in den Anfragen selbst.
 
 **Alles klingt höher oder tiefer als notiert:** Eine Transposition ist
 gesetzt – von der Person selbst (je Partitur gespeichert) oder von einer
-Leitung für alle. Die Gruppe „Üben“ trägt dann einen Punkt; unter
+Leitung für alle. Die Gruppe „Wiedergabe und Üben“ trägt dann einen Punkt; unter
 „Transponieren“ steht der Wert und lässt sich zurücksetzen. Wer einer Leitung
 folgt und selbst transponiert, folgt danach nicht mehr.
 
@@ -334,7 +334,7 @@ Genau deshalb lässt ein Update bestehende Sidecar-Installationen bei MuseScore.
 
 ## Stimmen, Handyseiten oder „klingend“ sind nicht wählbar
 
-Unter **Ansicht → Darstellung der Noten** nennen „Fassung“ und „Seitenformat“ den Grund, wenn
+Unter **Ansicht → Seiten und Fassung** nennen „Fassung“ und „Seitenformat“ den Grund, wenn
 sie ausgegraut sind:
 
 - **„Dieser Server setzt keine Stimmen und keine Handyseiten …“** – die Instanz
@@ -383,7 +383,7 @@ teilen sich die wenige Höhe, die es gibt. Die Bedienleiste fährt während der
 Wiedergabe, im Aufführungsmodus und beim Folgen einer Leitung von selbst zu
 einer dünnen Linie ein; ein Tipp auf die Linie holt sie zurück. Darüber hinaus:
 
-- **Das Systemband nehmen** (Ansicht → Darstellung der Noten). Jedes System ist dort so
+- **Das Systemband nehmen** (Ansicht → Seiten und Fassung). Jedes System ist dort so
   hoch, wie der Platz erlaubt, die Höhe, die die Leiste abgibt, kommt also
   direkt den Noten zugute. In der Seitenansicht macht „Breite einpassen“ die
   Seite breiter, als der Bildschirm hoch ist.
@@ -580,7 +580,7 @@ aus der Automatik, bei unangetastetem Regler).
 
 Bleibt trotzdem ein Versatz, nennt der Kopfhörer seine Verzögerung nicht
 selbst, und genau dieser Anteil fehlt der Automatik. Abhilfe:
-**Üben → Tempo und Metronom → „Bild und Ton abgleichen"**. Den Regler bei laufender
+**Wiedergabe und Üben → Tempo → „Bild und Ton abgleichen"**. Den Regler bei laufender
 Wiedergabe verschieben, bis die hervorgehobene Note zum Gehörten passt. Der
 Wert wird pro Gerät gemerkt – am Telefon mit Kopfhörern also ein anderer als am
 Rechner.
@@ -591,7 +591,7 @@ Gerät, mit denselben Kopfhörern. Ist es lippensynchron, kennt der Audio-Stack
 die Latenz und die Automatik trägt sie; ist es das nicht, weiß der Browser es
 selbst nicht und der Regler trägt die Hauptlast.
 
-**Ansicht → Darstellung → Diagnose der Wiedergabe** zeigt die Zahlen dazu: „gemessen"
+**Partitur → Info und Diagnose** zeigt die Zahlen dazu: „gemessen"
 stammt aus `getOutputTimestamp()`, „gemeldet" aus `baseLatency + outputLatency`,
 „von Hand" ist der Regler. Ein Strich statt einer Zahl heißt, dass der Browser
 dazu nichts sagt.
@@ -600,7 +600,7 @@ dazu nichts sagt.
 
 Etwas anderes als der Fall darüber, auch wenn es sich ähnlich anfühlt: Hier
 stimmt die Zeitrechnung, aber die Synthese kommt auf dem Gerät nicht mit. Zu
-sehen unter **Ansicht → Darstellung → Diagnose der Wiedergabe** an der Zeile
+sehen unter **Partitur → Info und Diagnose** an der Zeile
 **„Aussetzer"** – steht dort eine wachsende Zahl, ist es die Rechenlast; bleibt
 sie bei 0, liegt es an der Latenz und der Abschnitt darüber gilt.
 
@@ -635,7 +635,7 @@ Zwei Ursachen, die sich ähnlich anfühlen und getrennt zu behandeln sind.
 **Serverseitig** bleibt eine fertige Konvertierung liegen, solange niemand die
 Datei anfasst – auch wenn eine neuere Fassung der App sie besser setzen würde
 oder die Herkunft noch „unbekannt" meldet. Der Knopf **„Neu konvertieren"** unter
-**Ansicht → Darstellung** verwirft sie und lässt sie neu erzeugen; er
+**Partitur → Info und Diagnose** verwirft sie und lässt sie neu erzeugen; er
 erscheint nur mit Schreibrecht auf die Datei. Für alle Partituren einer Instanz
 auf einmal ist `CURRENT_FORMAT_VERSION` der Hebel (siehe
 [Architektur](architecture.md#konvertierung-und-cache)).

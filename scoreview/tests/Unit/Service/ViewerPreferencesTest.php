@@ -247,6 +247,45 @@ class ViewerPreferencesTest extends TestCase {
 		$this->assertSame([], $preferences->setReferencePitch('anna', null));
 	}
 
+	public function testBarPinsKeepKnownIdsOnceAndAtMostFour(): void {
+		$this->assertSame(['mixer', 'loop'], ViewerPreferences::normalizeBarPins(['mixer', 'nonsense', 'loop', 'mixer', 3]));
+		$this->assertSame(['loop', 'tempo', 'mixer', 'tuner'], ViewerPreferences::normalizeBarPins(['loop', 'tempo', 'mixer', 'tuner', 'coach']));
+		$this->assertSame([], ViewerPreferences::normalizeBarPins([]));
+	}
+
+	public function testBarPinsAreNullUntilChosen(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnArgument(3);
+		$preferences = new ViewerPreferences($config);
+		$this->assertNull($preferences->get('anna')['barPins']);
+		$this->assertNull($preferences->defaults()['barPins']);
+	}
+
+	public function testReadsStoredBarPinsAndIgnoresGarbage(): void {
+		$stored = '["loop","bogus"]';
+		$config = $this->createMock(IConfig::class);
+		$config->method('getUserValue')->willReturnCallback(
+			function (string $u, string $a, string $key, string $default) use (&$stored): string {
+				return $key === ViewerPreferences::KEY_BAR_PINS ? $stored : $default;
+			},
+		);
+		$preferences = new ViewerPreferences($config);
+		$this->assertSame(['loop'], $preferences->get('anna')['barPins']);
+		$stored = '[]';
+		$this->assertSame([], $preferences->get('anna')['barPins']);
+		$stored = '{not json';
+		$this->assertNull($preferences->get('anna')['barPins']);
+	}
+
+	public function testStoresBarPinsOnlyWhenSent(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->expects($this->once())->method('setUserValue')
+			->with('anna', Application::APP_ID, ViewerPreferences::KEY_BAR_PINS, '["mixer"]');
+		$preferences = new ViewerPreferences($config);
+		$this->assertSame(['barPins' => ['mixer']], $preferences->setBarPins('anna', ['mixer', 'mixer']));
+		$this->assertSame([], $preferences->setBarPins('anna', null));
+	}
+
 	public function testReadsSwitchedOffAutoScroll(): void {
 		$config = $this->createMock(IConfig::class);
 		$config->method('getUserValue')->willReturnCallback(

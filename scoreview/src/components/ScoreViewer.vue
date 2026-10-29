@@ -12,6 +12,190 @@
 		:class="{ 'scoreview-viewer--page-fullscreen': pageFullscreen }"
 		:style="highlightStyle">
 		<!--
+			The pages of the bar's tools, written once (reusableTemplate.js):
+			they open inside their group and, pinned (E23), in a popover of
+			their own. Rendered only where a page is shown.
+		-->
+		<component :is="DefineToolPage" v-slot="{ id }">
+			<div v-if="id === 'loop'" class="scoreview-controls">
+				<div class="scoreview-popover-row">
+					<NcTextField
+						v-model.number="loopFromMeasure"
+						type="number"
+						min="1"
+						:label="t('From measure')" />
+					<NcTextField
+						v-model.number="loopToMeasure"
+						type="number"
+						min="1"
+						:label="t('To measure')" />
+				</div>
+				<NcButton wide :aria-label="t('Loop from current measure')" @click="setLoopFromMeasure(currentAnchor?.measureNumber)">
+					<template #icon>
+						<CrosshairsGps :size="20" />
+					</template>
+					{{ t('Loop from current measure') }}
+				</NcButton>
+				<NcButton
+					wide
+					:pressed="loopActive"
+					:aria-label="loopActive ? t('Loop on') : t('Loop off')"
+					@click="onToggleLoop">
+					<template #icon>
+						<Repeat :size="20" />
+					</template>
+					{{ loopActive ? t('Loop on') : t('Loop off') }}
+				</NcButton>
+				<!-- Focus (B4): only while a loop runs, gone with it. -->
+				<NcCheckboxRadioSwitch
+					v-if="loopActive"
+					v-model="loopFocus"
+					type="switch">
+					{{ t('Show only the loop') }}
+				</NcCheckboxRadioSwitch>
+				<ScoreSpeedTrainer
+					v-if="loopActive && hasRealPlayer"
+					v-model:startBpm="trainerStartBpm"
+					v-model:targetBpm="trainerTargetBpm"
+					v-model:stepBpm="trainerStepBpm"
+					:minBpm="minTempoBpm"
+					:maxBpm="maxTempoBpm"
+					:active="trainerActive"
+					:passes="trainerPasses"
+					:currentBpm="effectiveTempoBpm"
+					@toggle="toggleSpeedTrainer" />
+				<!--
+					Saved loops (B5): kept like notes, so a
+					leader can save "Alto: 12-20" for the altos
+					and everyone else sees it dimmed.
+				-->
+				<fieldset v-if="savedLoops.length > 0" class="scoreview-popover-group">
+					<legend>{{ t('Saved loops') }}</legend>
+					<button
+						v-for="savedLoop in savedLoops"
+						:key="savedLoop.id"
+						type="button"
+						class="scoreview-saved-loop"
+						:class="{ 'scoreview-saved-loop--dimmed': savedLoop.dimmed }"
+						:disabled="savedLoop.orphaned || !can('loop')"
+						@click="applySavedLoop(savedLoop)">
+						<span class="scoreview-saved-loop-name">{{ savedLoop.name || t('Measures {from}–{to}', { from: savedLoop.from, to: savedLoop.to }) }}</span>
+						<span class="scoreview-saved-loop-meta">{{ savedLoopMeta(savedLoop) }}</span>
+					</button>
+				</fieldset>
+				<NcButton
+					v-if="loopActive && can('annotate') && !loopSaving"
+					wide
+					:aria-label="t('Save this loop…')"
+					@click="loopSaving = true">
+					<template #icon>
+						<ContentSave :size="20" />
+					</template>
+					{{ t('Save this loop…') }}
+				</NcButton>
+				<LoopSaveForm
+					v-if="loopSaving && loopActive"
+					:from="Number(loopFromMeasure)"
+					:to="Number(loopToMeasure)"
+					:isLeader="isLeader"
+					:parts="scoreParts"
+					:error="annotationError"
+					@save="saveLoop"
+					@cancel="loopSaving = false" />
+			</div>
+			<TempoControls
+				v-else-if="id === 'tempo'"
+				v-model:metronomeBeats="metronomeBeats"
+				:hasRealPlayer="hasRealPlayer"
+				:effectiveTempoBpm="effectiveTempoBpm"
+				:tempoGuessed="tempoGuessed"
+				:minTempoBpm="minTempoBpm"
+				:maxTempoBpm="maxTempoBpm"
+				:audioOffsetMs="audioOffsetMs"
+				:readAutomaticLatencyMs="readAutomaticLatencyMs"
+				@tempoInput="onTempoBpmInput"
+				@audioOffsetInput="onAudioOffsetInput" />
+			<TransposeControls
+				v-else-if="id === 'transpose'"
+				:semitones="effectiveTranspose"
+				:startKey="startKey"
+				:fromLeader="sessionTranspose !== null"
+				:notationAvailable="variantsSupported"
+				:transposeNotation="variant.transposeNotation"
+				@update:semitones="onTransposeInput"
+				@update:transposeNotation="variant.setTransposeNotation" />
+			<CoachControls
+				v-else-if="id === 'coach'"
+				:coach="practice.coach"
+				:othersLevel="practice.othersLevel"
+				:hasMyPart="myPartId !== null"
+				@update:coach="setPractice({ coach: $event })"
+				@update:othersLevel="setPractice({ othersLevel: $event })" />
+			<NoteNameControls
+				v-else-if="id === 'noteNames'"
+				v-model:system="noteNames"
+				v-model:onlyMine="noteNamesMine"
+				v-model:counts="beatCounts"
+				:hasMyPart="myPartId !== null"
+				:transpose="effectiveTranspose"
+				:unavailable="noteNamesUnavailable"
+				:countsUnavailable="countsUnavailable" />
+			<LayoutControls
+				v-else-if="id === 'layout'"
+				v-model:layout="layout"
+				v-model:doublePage="doublePage"
+				:spreadUnavailable="spreadUnavailable"
+				:lyricsUnavailable="lyricsUnavailable"
+				:variantSources="variantSourceChoices"
+				:variantSource="variant.source"
+				:variantFormat="variant.format"
+				:variantConcert="variant.concert"
+				:showConcert="variant.hasTransposingParts"
+				:variantUnavailable="variant.unavailableReason"
+				@update:variantSource="variant.setSource"
+				@update:variantFormat="variant.setFormat"
+				@update:variantConcert="variant.setConcert" />
+			<AppearanceControls
+				v-else-if="id === 'appearance'"
+				v-model:highlightMode="highlightMode"
+				v-model:highlightColor="highlightColor"
+				v-model:noteTheme="noteTheme" />
+			<PracticeExportControls
+				v-else-if="id === 'export'"
+				:running="practiceExport.running.value"
+				:progress="practiceExport.progress.value"
+				:error="practiceExport.error.value"
+				:conflict="practiceExport.conflict.value"
+				:saved="practiceExport.saved.value"
+				:loopRange="exportLoopRange"
+				:canWriteFolder="canWriteFolder"
+				:standalone="standalonePage"
+				:metronomeMode="metronomeBeats"
+				@export="practiceExport.exportOne"
+				@exportAll="practiceExport.exportAllParts"
+				@cancel="practiceExport.cancel"
+				@resolveConflict="practiceExport.resolveConflict" />
+			<PinControls
+				v-else-if="id === 'offline'"
+				:fileId="activeFileId"
+				:setlistId="setlistActive ? (setlist?.id ?? null) : null"
+				:title="pinTitle"
+				:setlistTitle="setlistTitle"
+				:estimate="offlineStore.estimate"
+				:busy="offlineStore.busy.value"
+				:progress="offlineStore.progress.value"
+				:done="offlineStore.done.value"
+				:error="offlineStore.error.value"
+				@pin="offlineStore.pin($event)" />
+			<ScoreInfoControls
+				v-else-if="id === 'info'"
+				:rendererBackend="rendererBackend"
+				:mscoreVersion="mscoreVersion"
+				:canReconvert="canReconvert"
+				:readDiagnostics="readAudioDiagnostics"
+				@reconvert="reconvertScore" />
+		</component>
+		<!--
 			Die Setliste steht ueber allem, auch ueber „Wird konvertiert…" und
 			einem Fehler: Im Konzert muss es auch an einem Stueck vorbei
 			weitergehen, das gerade nicht geht.
@@ -213,490 +397,125 @@
 				</template>
 				<template #tools>
 					<!--
+						Pinned tools first (E23): what someone uses all the time,
+						one tap away instead of two or three. The same rule as
+						the groups decides what is visible (lib/barGroups.js
+						barPins) - a pinned mixer without sound disappears.
+					-->
+					<template v-for="pin in barPins" :key="'pin-' + pin.id">
+						<ToolGroup
+							v-if="pin.kind === 'page'"
+							class="scoreview-pinned"
+							:label="toolLabel(pin.id)"
+							:pressed="toolOn(pin.id)"
+							:fixedPage="{ id: pin.id, title: toolLabel(pin.id) }">
+							<template #icon>
+								<component :is="toolIcon(pin.id)" :size="20" />
+							</template>
+							<template #page="{ id }">
+								<component :is="ReuseToolPage" :id="id" />
+							</template>
+						</ToolGroup>
+						<NcButton
+							v-else
+							class="scoreview-pinned"
+							:pressed="pin.kind === 'action' ? undefined : toolOn(pin.id)"
+							:aria-label="toolLabel(pin.id)"
+							:title="toolLabel(pin.id)"
+							@click="onToolTap(pin.id)">
+							<template #icon>
+								<component :is="toolIcon(pin.id)" :size="20" />
+							</template>
+						</NcButton>
+					</template>
+					<!--
 						Die Werkzeuge in drei Gruppen (lib/barGroups.js - dort
 						steht auch, was wann sichtbar ist). Im Aufführungsmodus
 						bleibt nur „Ansicht" mit dem Zoom; was gesperrt ist,
 						verschwindet, statt ausgegraut dazustehen - ein grauer
-						Knopf laedt zum Antippen ein.
+						Knopf laedt zum Antippen ein. Within a group the
+						sections are divided by a line: the frequent tools
+						first, what is set once below.
 					-->
-					<template v-for="group in barGroups" :key="group.id">
-						<ToolGroup
-							v-if="group.id === 'practice'"
-							:label="t('Practice')"
-							:active="groupActive('practice')">
-							<template #icon>
-								<Metronome :size="20" />
-							</template>
-							<template #default="{ openPage, close }">
-								<ToolRow
-									v-if="has(group, 'loop')"
-									page
-									:label="t('Loop')"
-									:value="loopLabel"
-									@click="openPage('loop', t('Loop'))">
-									<template #icon>
-										<Repeat :size="20" />
-									</template>
-								</ToolRow>
-								<ToolRow
-									v-if="has(group, 'tempo')"
-									page
-									:label="t('Tempo and metronome')"
-									:value="tempoLabel"
-									@click="openPage('tempo', t('Tempo and metronome'))">
-									<template #icon>
-										<Speedometer :size="20" />
-									</template>
-								</ToolRow>
-								<NcCheckboxRadioSwitch
-									v-if="has(group, 'metronome')"
-									v-model="metronomeEnabled"
-									type="switch">
-									{{ t('Metronome') }}
-								</NcCheckboxRadioSwitch>
-								<!--
-									Welcher Ton der Anfangston ist: der eigene
-									oder der Grundton. Beide Moeglichkeiten
-									beschriftet nebeneinander - an dieser Wahl
-									entscheidet sich, was man gleich hoert.
-								-->
-								<fieldset v-if="has(group, 'toneMode')" class="scoreview-popover-group">
-									<legend>{{ t('Starting note') }}</legend>
-									<div class="scoreview-tone-modes">
-										<NcCheckboxRadioSwitch
-											:modelValue="startToneMode"
-											type="radio"
-											:value="MODE_TONIC"
-											name="scoreview-tone-mode"
-											buttonVariant
-											buttonVariantGrouped="horizontal"
-											:title="t('Key note of the current key')"
-											@update:modelValue="setStartToneMode">
-											{{ t('Key note') }}
-										</NcCheckboxRadioSwitch>
-										<NcCheckboxRadioSwitch
-											:modelValue="startToneMode"
-											type="radio"
-											:value="MODE_VOICE"
-											name="scoreview-tone-mode"
-											buttonVariant
-											buttonVariantGrouped="horizontal"
-											:title="t('The first note of my voice')"
-											@update:modelValue="setStartToneMode">
-											{{ t('My note') }}
-										</NcCheckboxRadioSwitch>
-									</div>
-								</fieldset>
-								<ToolRow
-									v-if="has(group, 'mixer')"
-									:pressed="showMixer"
-									:label="t('Mixer')"
-									@click="showMixer = !showMixer; close()">
-									<template #icon>
-										<Tune :size="20" />
-									</template>
-								</ToolRow>
-								<ToolRow
-									v-if="has(group, 'coach')"
-									page
-									:label="t('Coach')"
-									:value="practice.coach ? t('On') : ''"
-									@click="openPage('coach', t('Coach'))">
-									<template #icon>
-										<Piano :size="20" />
-									</template>
-								</ToolRow>
-								<ToolRow
-									v-if="has(group, 'transpose')"
-									page
-									:label="t('Transpose')"
-									:value="transposeLabel"
-									@click="openPage('transpose', t('Transpose'))">
-									<template #icon>
-										<SwapVertical :size="20" />
-									</template>
-								</ToolRow>
-								<!-- Nur, wenn die Administration Aufnahme oder
-									Intonation eingeschaltet hat. -->
-								<ToolRow
-									v-if="has(group, 'practice')"
-									:pressed="showPractice"
-									:label="t('Recording and intonation')"
-									@click="showPractice = !showPractice; close()">
-									<template #icon>
-										<Microphone :size="20" />
-									</template>
-								</ToolRow>
-								<!-- The tuner hangs on the same administration
-									switch as the intonation: same analysis,
-									same microphone question. -->
-								<ToolRow
-									v-if="has(group, 'tuner')"
-									:pressed="showTuner"
-									:label="t('Tuner')"
-									@click="showTuner = !showTuner; close()">
-									<template #icon>
-										<SineWave :size="20" />
-									</template>
-								</ToolRow>
-								<!-- The practice log (E20). -->
-								<ToolRow
-									v-if="has(group, 'practiceLog')"
-									:pressed="showPracticeLog"
-									:label="t('Practice log')"
-									@click="showPracticeLog = !showPracticeLog; close()">
-									<template #icon>
-										<ChartBar :size="20" />
-									</template>
-								</ToolRow>
-								<ToolRow
-									v-if="has(group, 'export')"
-									page
-									:label="t('Save as audio file')"
-									:value="practiceExport.running.value ? '…' : ''"
-									@click="openPage('export', t('Save as audio file'))">
-									<template #icon>
-										<Download :size="20" />
-									</template>
-								</ToolRow>
-							</template>
-							<template #page-loop>
-								<div class="scoreview-controls">
-									<div class="scoreview-popover-row">
-										<NcTextField
-											v-model.number="loopFromMeasure"
-											type="number"
-											min="1"
-											:label="t('From measure')" />
-										<NcTextField
-											v-model.number="loopToMeasure"
-											type="number"
-											min="1"
-											:label="t('To measure')" />
-									</div>
-									<NcButton wide :aria-label="t('Loop from current measure')" @click="setLoopFromMeasure(currentAnchor?.measureNumber)">
-										<template #icon>
-											<CrosshairsGps :size="20" />
-										</template>
-										{{ t('Loop from current measure') }}
-									</NcButton>
-									<NcButton
-										wide
-										:pressed="loopActive"
-										:aria-label="loopActive ? t('Loop on') : t('Loop off')"
-										@click="onToggleLoop">
-										<template #icon>
-											<Repeat :size="20" />
-										</template>
-										{{ loopActive ? t('Loop on') : t('Loop off') }}
-									</NcButton>
-									<!-- Focus (B4): only while a loop runs, gone with it. -->
-									<NcCheckboxRadioSwitch
-										v-if="loopActive"
-										v-model="loopFocus"
-										type="switch">
-										{{ t('Show only the loop') }}
-									</NcCheckboxRadioSwitch>
-									<ScoreSpeedTrainer
-										v-if="loopActive && hasRealPlayer"
-										v-model:startBpm="trainerStartBpm"
-										v-model:targetBpm="trainerTargetBpm"
-										v-model:stepBpm="trainerStepBpm"
-										:minBpm="minTempoBpm"
-										:maxBpm="maxTempoBpm"
-										:active="trainerActive"
-										:passes="trainerPasses"
-										:currentBpm="effectiveTempoBpm"
-										@toggle="toggleSpeedTrainer" />
-									<!--
-										Saved loops (B5): kept like notes, so a
-										leader can save "Alto: 12-20" for the altos
-										and everyone else sees it dimmed.
-									-->
-									<fieldset v-if="savedLoops.length > 0" class="scoreview-popover-group">
-										<legend>{{ t('Saved loops') }}</legend>
-										<button
-											v-for="savedLoop in savedLoops"
-											:key="savedLoop.id"
-											type="button"
-											class="scoreview-saved-loop"
-											:class="{ 'scoreview-saved-loop--dimmed': savedLoop.dimmed }"
-											:disabled="savedLoop.orphaned || !can('loop')"
-											@click="applySavedLoop(savedLoop)">
-											<span class="scoreview-saved-loop-name">{{ savedLoop.name || t('Measures {from}–{to}', { from: savedLoop.from, to: savedLoop.to }) }}</span>
-											<span class="scoreview-saved-loop-meta">{{ savedLoopMeta(savedLoop) }}</span>
-										</button>
+					<ToolGroup
+						v-for="group in barGroups"
+						:key="group.id"
+						:label="groupLabel(group.id)"
+						:active="groupActive(group.id)">
+						<template #icon>
+							<component :is="groupIcon(group.id)" :size="20" />
+						</template>
+						<template #default="{ openPage, close }">
+							<template v-for="(section, index) in group.sections" :key="index">
+								<hr v-if="index > 0" class="scoreview-group-divider">
+								<template v-for="id in section" :key="id">
+									<ZoomControls
+										v-if="id === 'zoom'"
+										v-bind="zoomView"
+										@input="onZoomControlInput"
+										@preset="onZoomControlPreset" />
+									<fieldset v-else-if="id === 'toneMode'" class="scoreview-popover-group">
+										<!--
+											Welcher Ton der Anfangston ist: der eigene
+											oder der Grundton. Beide Moeglichkeiten
+											beschriftet nebeneinander - an dieser Wahl
+											entscheidet sich, was man gleich hoert.
+											Right below "my part": "my note" is its
+											first note.
+										-->
+										<legend>{{ t('Starting note') }}</legend>
+										<div class="scoreview-tone-modes">
+											<NcCheckboxRadioSwitch
+												:modelValue="startToneMode"
+												type="radio"
+												:value="MODE_TONIC"
+												name="scoreview-tone-mode"
+												buttonVariant
+												buttonVariantGrouped="horizontal"
+												:title="t('Key note of the current key')"
+												@update:modelValue="setStartToneMode">
+												{{ t('Key note') }}
+											</NcCheckboxRadioSwitch>
+											<NcCheckboxRadioSwitch
+												:modelValue="startToneMode"
+												type="radio"
+												:value="MODE_VOICE"
+												name="scoreview-tone-mode"
+												buttonVariant
+												buttonVariantGrouped="horizontal"
+												:title="t('The first note of my voice')"
+												@update:modelValue="setStartToneMode">
+												{{ t('My note') }}
+											</NcCheckboxRadioSwitch>
+										</div>
 									</fieldset>
-									<NcButton
-										v-if="loopActive && can('annotate') && !loopSaving"
-										wide
-										:aria-label="t('Save this loop…')"
-										@click="loopSaving = true">
+									<ToolSwitch
+										v-else-if="toolKind(id) === 'switch'"
+										:label="toolLabel(id)"
+										:modelValue="toolOn(id)"
+										v-bind="pinProps(id)"
+										@update:modelValue="setSwitch(id, $event)"
+										@pin="flipPin(id)" />
+									<ToolRow
+										v-else
+										:page="toolKind(id) === 'page'"
+										:pressed="toolKind(id) !== 'page' && toolOn(id)"
+										:label="toolLabel(id)"
+										:value="toolValue(id)"
+										v-bind="pinProps(id)"
+										@click="onToolTap(id, { openPage, close })"
+										@pin="flipPin(id)">
 										<template #icon>
-											<ContentSave :size="20" />
+											<component :is="toolIcon(id)" :size="20" />
 										</template>
-										{{ t('Save this loop…') }}
-									</NcButton>
-									<LoopSaveForm
-										v-if="loopSaving && loopActive"
-										:from="Number(loopFromMeasure)"
-										:to="Number(loopToMeasure)"
-										:isLeader="isLeader"
-										:parts="scoreParts"
-										:error="annotationError"
-										@save="saveLoop"
-										@cancel="loopSaving = false" />
-								</div>
+									</ToolRow>
+								</template>
 							</template>
-							<template #page-coach>
-								<CoachControls
-									:coach="practice.coach"
-									:othersLevel="practice.othersLevel"
-									:hasMyPart="myPartId !== null"
-									@update:coach="setPractice({ coach: $event })"
-									@update:othersLevel="setPractice({ othersLevel: $event })" />
-							</template>
-							<template #page-transpose>
-								<TransposeControls
-									:semitones="effectiveTranspose"
-									:startKey="startKey"
-									:fromLeader="sessionTranspose !== null"
-									:notationAvailable="variantsSupported"
-									:transposeNotation="variant.transposeNotation"
-									@update:semitones="onTransposeInput"
-									@update:transposeNotation="variant.setTransposeNotation" />
-							</template>
-							<template #page-export>
-								<PracticeExportControls
-									:running="practiceExport.running.value"
-									:progress="practiceExport.progress.value"
-									:error="practiceExport.error.value"
-									:conflict="practiceExport.conflict.value"
-									:saved="practiceExport.saved.value"
-									:loopRange="exportLoopRange"
-									:canWriteFolder="canWriteFolder"
-									:standalone="standalonePage"
-									:metronomeMode="metronomeBeats"
-									@export="practiceExport.exportOne"
-									@exportAll="practiceExport.exportAllParts"
-									@cancel="practiceExport.cancel"
-									@resolveConflict="practiceExport.resolveConflict" />
-							</template>
-							<template #page-tempo>
-								<TempoControls
-									v-model:metronomeBeats="metronomeBeats"
-									:hasRealPlayer="hasRealPlayer"
-									:effectiveTempoBpm="effectiveTempoBpm"
-									:tempoGuessed="tempoGuessed"
-									:minTempoBpm="minTempoBpm"
-									:maxTempoBpm="maxTempoBpm"
-									:audioOffsetMs="audioOffsetMs"
-									:readAutomaticLatencyMs="readAutomaticLatencyMs"
-									@tempoInput="onTempoBpmInput"
-									@audioOffsetInput="onAudioOffsetInput" />
-							</template>
-						</ToolGroup>
-						<ToolGroup
-							v-else-if="group.id === 'view'"
-							:label="t('View')"
-							:active="groupActive('view')">
-							<template #icon>
-								<EyeOutline :size="20" />
-							</template>
-							<template #default="{ openPage, close }">
-								<ZoomControls
-									v-if="has(group, 'zoom')"
-									v-bind="zoomView"
-									@input="onZoomControlInput"
-									@preset="onZoomControlPreset" />
-								<ToolRow
-									v-if="has(group, 'appearance')"
-									page
-									:label="t('Appearance')"
-									@click="openPage('appearance', t('Appearance'))">
-									<template #icon>
-										<Palette :size="20" />
-									</template>
-								</ToolRow>
-								<!--
-									Without sound too: the highlight, note names,
-									beat counts and the print page use the choice
-									as well (issue #18).
-								-->
-								<ToolRow
-									v-if="has(group, 'partChoice')"
-									:pressed="showMyPart"
-									:label="t('My part')"
-									:value="myPartLabel"
-									@click="showMyPart = !showMyPart; close()">
-									<template #icon>
-										<AccountVoice :size="20" />
-									</template>
-								</ToolRow>
-								<!--
-									„Nur meine Zeile" erscheint nur, wenn eine
-									Stimme als „meine" gewaehlt ist UND sich die
-									Notenzeilen den Stimmen zuordnen lassen - sonst
-									waere es ein Schalter, der nichts tut oder,
-									schlimmer, die falsche Zeile markiert (siehe
-									lib/staffBands.js und canFocusMyPart).
-								-->
-								<NcCheckboxRadioSwitch
-									v-if="has(group, 'myPart')"
-									v-model="focusMyPart"
-									type="switch">
-									{{ t('Show only my part') }}
-								</NcCheckboxRadioSwitch>
-								<NcCheckboxRadioSwitch
-									v-if="has(group, 'autoScroll')"
-									v-model="autoScroll"
-									type="switch">
-									{{ t('Scroll along with playback') }}
-								</NcCheckboxRadioSwitch>
-								<ToolRow
-									v-if="has(group, 'layout')"
-									page
-									:label="t('Layout')"
-									:value="layoutShort"
-									@click="openPage('layout', t('Layout'))">
-									<template #icon>
-										<ViewColumn :size="20" />
-									</template>
-								</ToolRow>
-								<ToolRow
-									v-if="has(group, 'noteNames')"
-									page
-									:label="t('Note names and counting')"
-									:value="noteNameRowValue"
-									@click="openPage('noteNames', t('Note names and counting'))">
-									<template #icon>
-										<Alphabetical :size="20" />
-									</template>
-								</ToolRow>
-								<NcCheckboxRadioSwitch
-									v-if="has(group, 'noteText')"
-									v-model="showNoteText"
-									type="switch">
-									{{ t('Show notes in the score') }}
-								</NcCheckboxRadioSwitch>
-								<ToolRow
-									v-if="has(group, 'annotations')"
-									:pressed="showAnnotations"
-									:label="t('Notes')"
-									@click="showAnnotations = !showAnnotations; close()">
-									<template #icon>
-										<NotebookOutline :size="20" />
-									</template>
-								</ToolRow>
-								<ToolRow
-									v-if="has(group, 'print')"
-									:label="t('Print')"
-									@click="openPrintPage(); close()">
-									<template #icon>
-										<Printer :size="20" />
-									</template>
-								</ToolRow>
-								<ToolRow
-									v-if="has(group, 'pin')"
-									page
-									:label="t('Save for offline use')"
-									@click="openPage('pin', t('Save for offline use'))">
-									<template #icon>
-										<CloudDownloadOutline :size="20" />
-									</template>
-								</ToolRow>
-							</template>
-							<template #page-pin>
-								<PinControls
-									:fileId="activeFileId"
-									:setlistId="setlistActive ? (setlist?.id ?? null) : null"
-									:title="pinTitle"
-									:setlistTitle="setlistTitle"
-									:estimate="offlineStore.estimate"
-									:busy="offlineStore.busy.value"
-									:progress="offlineStore.progress.value"
-									:done="offlineStore.done.value"
-									:error="offlineStore.error.value"
-									@pin="offlineStore.pin($event)" />
-							</template>
-							<template #page-layout>
-								<LayoutControls
-									v-model:layout="layout"
-									v-model:doublePage="doublePage"
-									:spreadUnavailable="spreadUnavailable"
-									:lyricsUnavailable="lyricsUnavailable"
-									:variantSources="variantSourceChoices"
-									:variantSource="variant.source"
-									:variantFormat="variant.format"
-									:variantConcert="variant.concert"
-									:showConcert="variant.hasTransposingParts"
-									:variantUnavailable="variant.unavailableReason"
-									@update:variantSource="variant.setSource"
-									@update:variantFormat="variant.setFormat"
-									@update:variantConcert="variant.setConcert" />
-							</template>
-							<template #page-noteNames>
-								<NoteNameControls
-									v-model:system="noteNames"
-									v-model:onlyMine="noteNamesMine"
-									v-model:counts="beatCounts"
-									:hasMyPart="myPartId !== null"
-									:transpose="effectiveTranspose"
-									:unavailable="noteNamesUnavailable"
-									:countsUnavailable="countsUnavailable" />
-							</template>
-							<template #page-appearance>
-								<AppearanceControls
-									v-model:highlightMode="highlightMode"
-									v-model:highlightColor="highlightColor"
-									v-model:noteTheme="noteTheme"
-									:rendererBackend="rendererBackend"
-									:mscoreVersion="mscoreVersion"
-									:canReconvert="canReconvert"
-									:readDiagnostics="readAudioDiagnostics"
-									@reconvert="reconvertScore" />
-							</template>
-						</ToolGroup>
-						<ToolGroup
-							v-else-if="group.id === 'rehearsal'"
-							:label="t('Rehearsal')"
-							:active="groupActive('rehearsal')">
-							<template #icon>
-								<AccountGroup :size="20" />
-							</template>
-							<template #default="{ close }">
-								<!--
-									Unter 'settings', weil Ernennen und Abberufen
-									verwalten und nichts mit dem Musizieren selbst
-									zu tun haben - im Aufführungsmodus also
-									gesperrt wie die anderen Werkzeuge.
-								-->
-								<ToolRow
-									v-if="has(group, 'rehearsal')"
-									:pressed="showRehearsal"
-									:label="t('Leaders and “Follow me”')"
-									@click="showRehearsal = !showRehearsal; close()">
-									<template #icon>
-										<AccountGroup :size="20" />
-									</template>
-								</ToolRow>
-								<!--
-									„Neue Setliste" im Ordner der offenen Partitur
-									(E11) - nur, wo dort angelegt werden darf.
-									Bearbeiten sitzt an der Setlisten-Leiste selbst.
-								-->
-								<ToolRow
-									v-if="has(group, 'newSetlist')"
-									:pressed="setlistEditorMode === 'new'"
-									:label="t('New setlist')"
-									@click="openSetlistEditor('new'); close()">
-									<template #icon>
-										<PlaylistPlus :size="20" />
-									</template>
-								</ToolRow>
-							</template>
-						</ToolGroup>
-					</template>
+						</template>
+						<template #page="{ id }">
+							<component :is="ReuseToolPage" :id="id" />
+						</template>
+					</ToolGroup>
 					<!--
 						Vollbild steht ausserhalb der Gruppen: Es wird am
 						Notenstaender gebraucht, nicht eingerichtet. In der
@@ -1210,20 +1029,27 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcPopover from '@nextcloud/vue/components/NcPopover'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import AccountGroup from 'vue-material-design-icons/AccountGroup.vue'
+import AccountTieVoiceOutline from 'vue-material-design-icons/AccountTieVoiceOutline.vue'
 import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
 import Alphabetical from 'vue-material-design-icons/Alphabetical.vue'
 import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
+import BookMusicOutline from 'vue-material-design-icons/BookMusicOutline.vue'
+import BookOpenPageVariantOutline from 'vue-material-design-icons/BookOpenPageVariantOutline.vue'
 import ChartBar from 'vue-material-design-icons/ChartBar.vue'
 import Check from 'vue-material-design-icons/Check.vue'
+import ChevronDoubleDown from 'vue-material-design-icons/ChevronDoubleDown.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import CloudDownloadOutline from 'vue-material-design-icons/CloudDownloadOutline.vue'
 import ContentSave from 'vue-material-design-icons/ContentSave.vue'
 import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
-import Download from 'vue-material-design-icons/Download.vue'
 import EyeOutline from 'vue-material-design-icons/EyeOutline.vue'
+import FileMusicOutline from 'vue-material-design-icons/FileMusicOutline.vue'
+import FocusFieldHorizontal from 'vue-material-design-icons/FocusFieldHorizontal.vue'
 import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
 import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
+import HeadphonesSettings from 'vue-material-design-icons/HeadphonesSettings.vue'
+import InformationOutline from 'vue-material-design-icons/InformationOutline.vue'
+import MessageTextOutline from 'vue-material-design-icons/MessageTextOutline.vue'
 import Metronome from 'vue-material-design-icons/Metronome.vue'
 import Microphone from 'vue-material-design-icons/Microphone.vue'
 import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
@@ -1237,9 +1063,8 @@ import Repeat from 'vue-material-design-icons/Repeat.vue'
 import SineWave from 'vue-material-design-icons/SineWave.vue'
 import Speedometer from 'vue-material-design-icons/Speedometer.vue'
 import SwapVertical from 'vue-material-design-icons/SwapVertical.vue'
-import Tune from 'vue-material-design-icons/Tune.vue'
+import TuneVertical from 'vue-material-design-icons/TuneVertical.vue'
 import Undo from 'vue-material-design-icons/Undo.vue'
-import ViewColumn from 'vue-material-design-icons/ViewColumn.vue'
 import AppearanceControls from './AppearanceControls.vue'
 import CoachControls from './CoachControls.vue'
 import FollowBadge from './FollowBadge.vue'
@@ -1257,6 +1082,7 @@ import PracticeLogPanel from './PracticeLogPanel.vue'
 import RecordingPanel from './RecordingPanel.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
 import ScoreBar from './ScoreBar.vue'
+import ScoreInfoControls from './ScoreInfoControls.vue'
 import ScoreLockButton from './ScoreLockButton.vue'
 import ScoreMixer from './ScoreMixer.vue'
 import ScorePage from './ScorePage.vue'
@@ -1271,6 +1097,7 @@ import SystemBand from './SystemBand.vue'
 import TempoControls from './TempoControls.vue'
 import ToolGroup from './ToolGroup.vue'
 import ToolRow from './ToolRow.vue'
+import ToolSwitch from './ToolSwitch.vue'
 import TransposeControls from './TransposeControls.vue'
 import TunerPanel from './TunerPanel.vue'
 import ZoomControls from './ZoomControls.vue'
@@ -1311,7 +1138,7 @@ import { useWakeLock } from '../composables/useWakeLock.js'
 import { useZoom } from '../composables/useZoom.js'
 import nodeText from '../directives/nodeText.js'
 import { translate } from '../l10n.js'
-import { anyGroupActive, groupActive as isGroupActive, barGroups as visibleBarGroups } from '../lib/barGroups.js'
+import { anyGroupActive, groupActive as isGroupActive, isPinned, pinLimitReached, PINNABLE, togglePin, barGroups as visibleBarGroups, barPins as visibleBarPins } from '../lib/barGroups.js'
 import { capabilitiesOf, unavailableReason } from '../lib/capabilities.js'
 import { countLabels } from '../lib/countLabels.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
@@ -1334,6 +1161,7 @@ import { visibleSharedRecordings } from '../lib/sharedRecordings.js'
 import { MIN_SPREAD_WIDTH_PX, spreadMode as spreadModeOf } from '../lib/spreadLayout.js'
 import { MODE_TONIC, MODE_VOICE } from '../lib/startTone.js'
 import { formatTime, progressPercent, seekValue } from '../lib/viewerFormat.js'
+import { createReusableTemplate } from './reusableTemplate.js'
 
 // MuseScores eigene Vorgabe für Partituren ohne Tempoangabe (docs/architecture.md
 // M8: metadata.tempo kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als
@@ -1356,6 +1184,56 @@ function readInitialState(key) {
 	}
 }
 
+// The icons of the bar's tools and groups (lib/barGroups.js has the ids).
+// One map for the row in the group and the pinned button (E23), so the two
+// never show different icons for the same tool.
+const TOOL_ICONS = Object.freeze({
+	loop: Repeat,
+	metronome: Metronome,
+	tempo: Speedometer,
+	mixer: TuneVertical,
+	transpose: SwapVertical,
+	coach: Piano,
+	recording: Microphone,
+	tuner: SineWave,
+	practiceLog: ChartBar,
+	autoScroll: ChevronDoubleDown,
+	myPart: FocusFieldHorizontal,
+	noteNames: Alphabetical,
+	annotations: NotebookOutline,
+	noteText: MessageTextOutline,
+	layout: BookOpenPageVariantOutline,
+	appearance: Palette,
+	partChoice: AccountVoice,
+	rehearsal: AccountTieVoiceOutline,
+	newSetlist: PlaylistPlus,
+	print: Printer,
+	export: FileMusicOutline,
+	offline: CloudDownloadOutline,
+	info: InformationOutline,
+})
+
+// The viewer state behind the panels and switches of the bar, by tool id.
+const TOOL_STATE = Object.freeze({
+	mixer: 'showMixer',
+	recording: 'showPractice',
+	tuner: 'showTuner',
+	practiceLog: 'showPracticeLog',
+	annotations: 'showAnnotations',
+	rehearsal: 'showRehearsal',
+	partChoice: 'showMyPart',
+	metronome: 'metronomeEnabled',
+	autoScroll: 'autoScroll',
+	myPart: 'focusMyPart',
+	noteText: 'showNoteText',
+})
+
+const GROUP_ICONS = Object.freeze({
+	playback: HeadphonesSettings,
+	view: EyeOutline,
+	score: BookMusicOutline,
+})
+
 export default {
 	name: 'ScoreViewer',
 
@@ -1364,14 +1242,11 @@ export default {
 	components: {
 		AppearanceControls,
 		BookmarkOutline,
-		ChartBar,
 		FollowBadge,
 		LeaderPanel,
 		LiveValue,
 		MicIndicator,
-		Microphone,
 		MyPartControls,
-		AccountVoice,
 		PracticeLogPanel,
 		RecordingPanel,
 		ScorePage,
@@ -1390,9 +1265,6 @@ export default {
 		NcCheckboxRadioSwitch,
 		Play,
 		Pause,
-		Tune,
-		NotebookOutline,
-		CloudDownloadOutline,
 		ContentSave,
 		PinControls,
 		Check,
@@ -1401,27 +1273,14 @@ export default {
 		Repeat,
 		Fullscreen,
 		FullscreenExit,
-		Metronome,
 		CrosshairsGps,
-		AccountGroup,
-		PlaylistPlus,
 		SetlistBar,
 		SetlistEditor,
-		SineWave,
-		Speedometer,
-		EyeOutline,
-		Palette,
-		Alphabetical,
-		Download,
 		LayoutControls,
 		LoopSaveForm,
 		LyricsView,
 		NoteNameControls,
 		SystemBand,
-		ViewColumn,
-		Piano,
-		Printer,
-		SwapVertical,
 		CoachControls,
 		PracticeExportControls,
 		TempoControls,
@@ -1430,6 +1289,8 @@ export default {
 		ToolRow,
 		TunerPanel,
 		ZoomControls,
+		ScoreInfoControls,
+		ToolSwitch,
 	},
 
 	// The scrolling container for the pages' load/unload observers
@@ -2113,7 +1974,12 @@ export default {
 			].join('|'),
 		})
 
+		// The tool pages, once for group and pinned popover (reusableTemplate.js).
+		const toolPage = createReusableTemplate()
+
 		return {
+			DefineToolPage: toolPage.Define,
+			ReuseToolPage: toolPage.Reuse,
 			root,
 			scroll,
 			showMixer,
@@ -2287,6 +2153,8 @@ export default {
 			bandOffered: preferences.bandOffered,
 			autoScroll: preferences.autoScroll,
 			referencePitch: preferences.referencePitch,
+			// The stored list; `barPins` (computed) is what the bar shows.
+			storedBarPins: preferences.barPins,
 			cursorForced: session.cursorForced,
 			pagesCursorOutOfView: autoScroll.cursorOutOfView,
 			sessionTranspose,
@@ -2610,6 +2478,11 @@ export default {
 				offline: this.offline,
 				standalone: this.standalonePage,
 			})
+		},
+
+		/** The pinned tools on the bar now (E23, lib/barGroups.js). */
+		barPins() {
+			return visibleBarPins(this.barGroups, this.storedBarPins, this.isLeader)
 		},
 
 		/** Was in den Gruppen eingeschaltet ist - fuer die Punkte. */
@@ -3048,8 +2921,175 @@ export default {
 		 * @param {string} id
 		 * @return {boolean} ob das Werkzeug in dieser Gruppe sichtbar ist
 		 */
-		has(group, id) {
-			return group.items.includes(id)
+		// --- Werkzeuge der Leiste (E23) ----------------------------------
+
+		/**
+		 * @param {string} id a group of lib/barGroups.js
+		 * @return {string}
+		 */
+		groupLabel(id) {
+			return {
+				playback: this.t('Playback and practice'),
+				view: this.t('View'),
+				score: this.t('Score'),
+			}[id]
+		},
+
+		groupIcon(id) {
+			return GROUP_ICONS[id]
+		},
+
+		/**
+		 * @param {string} id a tool of lib/barGroups.js
+		 * @return {string} 'panel' | 'switch' | 'page' | 'action'
+		 */
+		toolKind(id) {
+			return PINNABLE[id]
+		},
+
+		toolIcon(id) {
+			return TOOL_ICONS[id]
+		},
+
+		/**
+		 * The name of a tool - the same in its group and on its pinned button.
+		 *
+		 * @param {string} id
+		 * @return {string}
+		 */
+		toolLabel(id) {
+			switch (id) {
+				case 'loop': return this.t('Loop')
+				case 'metronome': return this.t('Metronome')
+				case 'tempo': return this.t('Tempo')
+				case 'mixer': return this.t('Mixer')
+				case 'transpose': return this.t('Transpose')
+				case 'coach': return this.t('Coach')
+				case 'recording': return this.t('Recording and intonation')
+				case 'tuner': return this.t('Tuner')
+				case 'practiceLog': return this.t('Practice log')
+				case 'autoScroll': return this.t('Scroll along with playback')
+				case 'myPart': return this.t('Show only my part')
+				case 'noteNames': return this.t('Note names and counting')
+				case 'annotations': return this.t('Notes')
+				case 'noteText': return this.t('Show notes in the score')
+				case 'layout': return this.t('Pages and edition')
+				case 'appearance': return this.t('Colours')
+				case 'partChoice': return this.t('My part')
+				case 'rehearsal': return this.t('Leaders and “Follow me”')
+				case 'newSetlist': return this.t('New setlist')
+				case 'print': return this.t('Print')
+				case 'export': return this.t('Save as audio file')
+				case 'offline': return this.t('Save for offline use')
+				case 'info': return this.t('Info and diagnostics')
+				default: return id
+			}
+		},
+
+		/**
+		 * The current value at the end of a row (ToolRow.vue): "♩ 80", "12–16".
+		 *
+		 * @param {string} id
+		 * @return {string}
+		 */
+		toolValue(id) {
+			switch (id) {
+				case 'loop': return this.loopLabel
+				case 'tempo': return this.tempoLabel
+				case 'transpose': return this.transposeLabel
+				case 'coach': return this.practice.coach ? this.t('On') : ''
+				case 'noteNames': return this.noteNameRowValue
+				case 'layout': return this.layoutShort
+				case 'partChoice': return this.myPartLabel
+				case 'export': return this.practiceExport.running.value ? '…' : ''
+				default: return ''
+			}
+		},
+
+		/**
+		 * Whether a tool is on: an open panel, a switch, and for the pinned
+		 * button of a page tool whether it is doing something (a running
+		 * loop, a transposition) - the same things the group's dot counts.
+		 *
+		 * @param {string} id
+		 * @return {boolean}
+		 */
+		toolOn(id) {
+			if (id in TOOL_STATE) {
+				return Boolean(this[TOOL_STATE[id]])
+			}
+			switch (id) {
+				case 'newSetlist': return this.setlistEditorMode === 'new'
+				case 'loop': return this.loopActive
+				case 'transpose': return this.effectiveTranspose !== 0
+				case 'coach': return this.practice.coach
+				case 'noteNames': return this.barState.showNoteNames
+				default: return false
+			}
+		},
+
+		/**
+		 * @param {string} id a tool of kind 'switch'
+		 * @param {boolean} on
+		 */
+		setSwitch(id, on) {
+			if (PINNABLE[id] === 'switch') {
+				this[TOOL_STATE[id]] = on
+			}
+		},
+
+		/**
+		 * A tap on a tool, in its group or pinned. In a group, a page opens
+		 * there and a panel or action closes the group - the card it opens
+		 * is what someone wants to see next. Pinned buttons have no group.
+		 *
+		 * @param {string} id
+		 * @param {{openPage: (id: string, title: string) => void, close: () => void}} [group]
+		 */
+		onToolTap(id, group) {
+			const kind = PINNABLE[id]
+			if (kind === 'page') {
+				group?.openPage(id, this.toolLabel(id))
+				return
+			}
+			if (kind === 'switch') {
+				this.setSwitch(id, !this.toolOn(id))
+				return
+			}
+			if (id === 'tuner' && this.showTuner) {
+				// Closing the tuner also lets go of the microphone.
+				this.closeTuner()
+			} else if (id === 'newSetlist') {
+				this.openSetlistEditor('new')
+			} else if (id === 'print') {
+				this.openPrintPage()
+			} else if (id in TOOL_STATE) {
+				this[TOOL_STATE[id]] = !this[TOOL_STATE[id]]
+			}
+			group?.close()
+		},
+
+		/**
+		 * The pin of a row (ToolPin.vue). Not on the offline page: nothing
+		 * can be stored there, and a pin that forgets itself on the next
+		 * visit is worse than none.
+		 *
+		 * @param {string} id
+		 * @return {{pinnable: boolean, pinned?: boolean, pinDisabled?: boolean}}
+		 */
+		pinProps(id) {
+			if (this.offline || !(id in PINNABLE)) {
+				return { pinnable: false }
+			}
+			return {
+				pinnable: true,
+				pinned: isPinned(this.storedBarPins, id, this.isLeader),
+				pinDisabled: pinLimitReached(this.storedBarPins, this.isLeader),
+			}
+		},
+
+		flipPin(id) {
+			this.storedBarPins = togglePin(this.storedBarPins, id, this.isLeader)
 		},
 
 		/**
@@ -3931,6 +3971,25 @@ export default {
 /* Grundton | Meine Stimme als zusammenhaengende Knopfgruppe. */
 .scoreview-tone-modes {
 	display: flex;
+}
+
+/*
+ * A little room between the pinned buttons and the groups: both are icon
+ * buttons, and without it the pinned mixer reads as one more group.
+ */
+.scoreview-pinned + :not(.scoreview-pinned) {
+	margin-inline-start: 8px;
+}
+
+/*
+ * The line between the sections of a group: frequent tools above, what is
+ * set once below. A rule, not a heading - the names of the rows already say
+ * what they are, and a heading would cost a row on a phone held sideways.
+ */
+.scoreview-group-divider {
+	margin: 4px 8px;
+	border: none;
+	border-block-start: 1px solid var(--color-border);
 }
 
 /*

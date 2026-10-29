@@ -211,7 +211,7 @@ Cron plays **no** part here – everything runs within the requests themselves.
 
 **Everything sounds higher or lower than written:** a transposition is
 set – by the person themselves (stored per score) or by a
-leader for everyone. The “Practice” group then shows a dot; under
+leader for everyone. The “Playback and practice” group then shows a dot; under
 “Transpose” the value is shown and can be reset. Anyone who follows a leader
 and then transposes on their own stops following.
 
@@ -333,7 +333,7 @@ installations on MuseScore for exactly this reason.
 
 ## Parts, phone pages or concert pitch cannot be selected
 
-Under **View → Layout**, “Edition” and “Page format” name the reason when they
+Under **View → Pages and edition**, “Edition” and “Page format” name the reason when they
 are greyed out:
 
 - **“This server engraves no parts or phone pages …”** – the instance converts
@@ -378,7 +378,7 @@ little height there is. The control bar retracts to a thin line by itself
 during playback, in performance mode and while following a leader; tap the
 line to bring it back. Beyond that:
 
-- **Use the system band** (View → Layout). Each system there is as tall as the
+- **Use the system band** (View → Pages and edition). Each system there is as tall as the
   space allows, so the height the bar gives up goes straight to the music. In
   the page view, “Fit width” makes the page wider than the screen is tall.
 - **Add the offline page to the home screen** for a concert or rehearsal
@@ -571,7 +571,7 @@ from the automatic compensation, with the slider untouched).
 
 If an offset remains anyway, the headphones do not report their delay
 themselves, and exactly that share is missing from the automatic compensation. Remedy:
-**Practice → Tempo and metronome → “Sync picture and sound”**. Move the slider during
+**Playback and practice → Tempo → “Sync picture and sound”**. Move the slider during
 playback until the highlighted note matches what you hear. The
 value is remembered per device – so on the phone with headphones it is a different one than on the
 computer.
@@ -582,7 +582,7 @@ device, with the same headphones. If it is lip-synchronous, the audio stack know
 the latency and the automatic compensation handles it; if it is not, the browser itself does not
 know it and the slider does most of the work.
 
-**View → Appearance → Playback diagnostics** shows the numbers for this: “measured”
+**Score → Info and diagnostics** shows the numbers for this: “measured”
 comes from `getOutputTimestamp()`, “reported” from `baseLatency + outputLatency`,
 “by hand” is the slider. A dash instead of a number means that the browser
 says nothing about it.
@@ -591,7 +591,7 @@ says nothing about it.
 
 Something different from the case above, even if it feels similar: here
 the timing is right, but the synthesis cannot keep up on the device. You can
-see it under **View → Appearance → Playback diagnostics** in the
+see it under **Score → Info and diagnostics** in the
 **“Dropouts”** row – if a growing number appears there, it is the processing load; if it stays
 at 0, it is the latency, and the section above applies.
 
@@ -626,7 +626,7 @@ Two causes that feel similar and have to be handled separately.
 **On the server**, a finished conversion stays in place as long as nobody touches the
 file – even if a newer version of the app would set it better
 or the origin still reports “Unknown”. The **“Convert again”** button under
-**View → Appearance** discards it and has it generated again; it
+**Score → Info and diagnostics** discards it and has it generated again; it
 only appears with write permission on the file. For all scores of an instance
 at once, `CURRENT_FORMAT_VERSION` is the lever (see
 [Architecture](architecture.md#konvertierung-und-cache) (German)).

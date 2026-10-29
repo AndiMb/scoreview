@@ -104,6 +104,16 @@ class PreferenceControllerTest extends TestCase {
 		$this->assertSame(420, $response->getData()['referencePitch']);
 	}
 
+	public function testStoresThePinnedToolsNormalised(): void {
+		$response = $this->controller('anna')->update('#00ff00', 'notes', barPins: ['loop', 'bogus', 'mixer']);
+		$this->assertSame(['loop', 'mixer'], $response->getData()['barPins']);
+		$this->assertSame('["loop","mixer"]', $this->gespeichert[ViewerPreferences::KEY_BAR_PINS]);
+
+		// Not sent: nothing stored, the default stays in force.
+		$response = $this->controller('anna')->update('#00ff00', 'notes');
+		$this->assertArrayNotHasKey('barPins', $response->getData());
+	}
+
 	public function testNormalisiertEinenUnbekanntenDunkelmodus(): void {
 		$antwort = $this->controller('anna')->update('#00ff00', 'notes', false, 'sepia;x');
 

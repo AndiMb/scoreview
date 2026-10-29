@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:a9c841ab47f9 -->
+<!-- translation-of: limits.md sha256:854af01b63aa -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -289,8 +289,8 @@ Dinge, die auf dem Desktop unsichtbar bleiben:
   ausfahrende Browserleiste gilt nicht als Eingriff.
 - Die Transportleiste bleibt auf Telefonbreite einzeilig.
 
-**Gemessene Ausgabelatenz**, abgelesen an der Diagnose im Aufklapper
-„Darstellung":
+**Gemessene Ausgabelatenz**, abgelesen an der Diagnose unter
+„Info und Diagnose“:
 
 | Gerät | Ausgabe | Ausgeglichen |
 |---|---|---|

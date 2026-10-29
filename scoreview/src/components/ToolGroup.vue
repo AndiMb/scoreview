@@ -9,6 +9,9 @@
 
 		Wie ScoreBar nur Gestalt: Was in der Gruppe steht und was es tut,
 		verdrahtet der Viewer ueber die Slots.
+
+		With `fixedPage` it is the popover of ONE pinned tool (E23): it opens
+		straight onto that tool's page, the same page slot as in the group.
 	-->
 	<!-- autoBoundaryMaxSize (floating-vue, passed through to its Dropdown):
 		the popover is at most as tall as the room below or above its button,
@@ -21,7 +24,7 @@
 		:container="container"
 		:autoBoundaryMaxSize="true">
 		<template #trigger>
-			<NcButton :aria-label="label" :title="label">
+			<NcButton :aria-label="label" :title="label" :pressed="pressed">
 				<template #icon>
 					<span class="scoreview-group-icon">
 						<slot name="icon" />
@@ -38,7 +41,9 @@
 				</template>
 				<template v-else>
 					<div class="scoreview-group-head">
+						<!-- A pinned page (fixedPage) has nowhere to go back to. -->
 						<NcButton
+							v-if="!fixedPage"
 							variant="tertiary"
 							:aria-label="t('Back')"
 							:title="t('Back')"
@@ -55,7 +60,7 @@
 						group, see .scoreview-group - a second scroll area
 						inside it is hard to work by touch. -->
 					<div class="scoreview-group-page">
-						<slot :name="'page-' + page" :close="close" />
+						<slot :id="page" name="page" :close="close" />
 					</div>
 				</template>
 			</div>
@@ -91,6 +96,18 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		// A pinned tool with a page: {id, title}; the popover shows only it.
+		fixedPage: {
+			type: Object,
+			default: null,
+		},
+
+		// The pinned tool is on (a running loop, a transposition).
+		pressed: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
 	// Popovers into the viewer while it is fullscreen (useFullscreenContainer.js).
@@ -110,10 +127,20 @@ export default {
 	watch: {
 		// Wer die Gruppe wieder oeffnet, sucht in der Liste - nicht auf der
 		// Unterseite, auf der er sie zuletzt verlassen hat.
+		// A pinned page stays put: emptied while the popover fades out, it
+		// would leave the focus trap without anything to hold on to.
 		shown(isShown) {
-			if (!isShown) {
+			if (!isShown && !this.fixedPage) {
 				this.page = null
 			}
+		},
+
+		fixedPage: {
+			immediate: true,
+			handler(fixed) {
+				this.page = fixed?.id ?? null
+				this.pageTitle = fixed?.title ?? ''
+			},
 		},
 	},
 
@@ -126,7 +153,7 @@ export default {
 		 * Eine Unterseite oeffnen. Der Fokus geht auf ihre Ueberschrift,
 		 * damit Tastatur und Vorlesewerkzeug mitkommen.
 		 *
-		 * @param {string} id Name des Slots `page-<id>`
+		 * @param {string} id the page, passed to the `page` slot
 		 * @param {string} title
 		 */
 		async openPage(id, title) {

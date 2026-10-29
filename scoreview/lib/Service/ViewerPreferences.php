@@ -69,6 +69,19 @@ class ViewerPreferences {
 	public const KEY_REFERENCE_PITCH = 'reference_pitch';
 	public const DEFAULT_REFERENCE_PITCH = 440;
 	/**
+	 * The tools pinned to the bar (E23), a JSON list. Unset means "never
+	 * chosen" and lets the viewer apply its default (src/lib/barGroups.js),
+	 * which differs for a leader - an empty list is a choice of its own.
+	 */
+	public const KEY_BAR_PINS = 'bar_pins';
+	/** As PINNABLE in src/lib/barGroups.js. */
+	public const BAR_PIN_IDS = [
+		'loop', 'metronome', 'tempo', 'mixer', 'transpose', 'coach', 'recording', 'tuner', 'practiceLog',
+		'autoScroll', 'myPart', 'noteNames', 'annotations', 'noteText', 'layout', 'appearance',
+		'partChoice', 'rehearsal', 'newSetlist', 'print', 'export', 'offline', 'info',
+	];
+	public const MAX_BAR_PINS = 4;
+	/**
 	 * Whole Hz within the synthesizer's global fine tune of ±100 cents
 	 * (415.3 … 466.1 Hz). Baroque 415 lies just outside; it is a semitone
 	 * down at 440 (docs/limits.md).
@@ -123,7 +136,7 @@ class ViewerPreferences {
 	}
 
 	/**
-	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string, doublePage: string, referencePitch: int}
+	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string, doublePage: string, referencePitch: int, barPins: ?list<string>}
 	 */
 	public function get(?string $userId): array {
 		if ($userId === null) {
@@ -150,7 +163,51 @@ class ViewerPreferences {
 			'beatCounts' => self::oneOf($this->config->getUserValue($userId, Application::APP_ID, self::KEY_BEAT_COUNTS, 'off'), self::BEAT_COUNTS),
 			'doublePage' => self::doublePage($this->config->getUserValue($userId, Application::APP_ID, self::KEY_DOUBLE_PAGE, self::DEFAULT_DOUBLE_PAGE)),
 			'referencePitch' => self::normalizeReferencePitch($this->config->getUserValue($userId, Application::APP_ID, self::KEY_REFERENCE_PITCH, (string)self::DEFAULT_REFERENCE_PITCH)),
+			'barPins' => self::decodeBarPins($this->config->getUserValue($userId, Application::APP_ID, self::KEY_BAR_PINS, '')),
 		];
+	}
+
+	/**
+	 * The pinned tools, only when they come along (as setDisplay()).
+	 *
+	 * @param ?array<mixed> $barPins
+	 * @return array{barPins?: list<string>}
+	 */
+	public function setBarPins(string $userId, ?array $barPins): array {
+		if ($barPins === null) {
+			return [];
+		}
+		$wert = self::normalizeBarPins($barPins);
+		$this->config->setUserValue($userId, Application::APP_ID, self::KEY_BAR_PINS, json_encode($wert));
+		return ['barPins' => $wert];
+	}
+
+	/**
+	 * Known ids only, each once, at most MAX_BAR_PINS, in the order given -
+	 * the order is the order on the bar.
+	 *
+	 * @param array<mixed> $value
+	 * @return list<string>
+	 */
+	public static function normalizeBarPins(array $value): array {
+		$pins = [];
+		foreach ($value as $id) {
+			if (is_string($id) && in_array($id, self::BAR_PIN_IDS, true) && !in_array($id, $pins, true)) {
+				$pins[] = $id;
+			}
+		}
+		return array_slice($pins, 0, self::MAX_BAR_PINS);
+	}
+
+	/**
+	 * @return ?list<string> null for "never chosen" and for anything unreadable
+	 */
+	private static function decodeBarPins(string $stored): ?array {
+		if ($stored === '') {
+			return null;
+		}
+		$decoded = json_decode($stored, true);
+		return is_array($decoded) ? self::normalizeBarPins($decoded) : null;
 	}
 
 	/**
@@ -415,6 +472,7 @@ class ViewerPreferences {
 			'beatCounts' => 'off',
 			'doublePage' => self::DEFAULT_DOUBLE_PAGE,
 			'referencePitch' => self::DEFAULT_REFERENCE_PITCH,
+			'barPins' => null,
 		];
 	}
 

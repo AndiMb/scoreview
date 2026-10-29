@@ -364,9 +364,10 @@ Aufbau:
   `ScorePage.vue`, `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreStamps.vue`,
   `ScoreModal.vue`, `StandaloneFrame.vue`, `AdminSettings.vue`, die Teile der
   Oberfläche des Viewers (`ScoreBar.vue` für die Gestalt der Leiste,
-  `ToolGroup.vue` und `ToolRow.vue` für ihre Werkzeuggruppen,
+  `ToolGroup.vue`, `ToolRow.vue`, `ToolSwitch.vue` und `ToolPin.vue` für ihre
+  Werkzeuggruppen und das Anheften,
   `ScoreStatus.vue`, `ScorePanel.vue` als Rahmen der Seitenkarten, die
-  Bedienfelder für Tempo, Zoom und Darstellung) und die Bedienteile der Probe- und
+  Bedienfelder für Tempo, Zoom, Farben und Info) und die Bedienteile der Probe- und
   Konzertfunktionen (Tabelle unten). `LiveValue.vue` liest die
   Wiedergabezeit, den Cursor und die klingende Note an Stelle des Viewers:
   Was sich mit jedem Frame oder jeder Note ändert, hängt nur an diesem kleinen
@@ -568,7 +569,7 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | Anfangston der eigenen Stimme oder Grundton | `midiNotes.js`, `scoreFacts.js`, `startTone.js` | `useStartTone`, `useScoreFacts` | `ScoreStartTone.vue` |
 | „Meine Stimme“ je Partitur, eigene Stimme im Stereobild | `mixState.js`, `panLayout.js` | `useMyPart`, `useMix`, `useMyPartSound` | `MyPartControls.vue`, im Mixer |
 | Speed-Trainer im Loop | `speedTrainer.js` | `useSpeedTrainer` | `ScoreSpeedTrainer.vue` |
-| Helle Noten auf dunklem Grund | `noteTheme.js` | `useViewerPreferences` | Aufklapper „Darstellung“ |
+| Helle Noten auf dunklem Grund | `noteTheme.js` | `useViewerPreferences` | Unterseite „Farben“ |
 | Aufführungsmodus, Blättern per Taste/Pedal | `interactionPolicy.js`, `pagingPlan.js`, `keyMap.js` | `usePerformanceMode`, `usePaging`, `useWakeLock` | `ScoreLockButton.vue` |
 | Leitungen ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) | `leaders.js` | `useLeaders` | `LeaderPanel.vue` |
 | Stimmnotizen, Stempel, Studierbuchstaben | `annotationFilter.js`, `stampLayout.js`, `scoreFacts.js` | `useAnnotations`, `useScoreFacts` | `ScoreStamps.vue`, `StampSymbol.vue` |
@@ -1226,7 +1227,7 @@ Skript aus, und welche Flags gelten, ergibt sich erst aus seiner Antwort.
 ## Entwurfsentscheidungen
 
 Diese Entscheidungen tragen den Aufbau. Sie sind im Code an vielen Stellen als
-`E1`…`E22` referenziert und sollten nicht ohne erneute Bewertung revidiert
+`E1`…`E23` referenziert und sollten nicht ohne erneute Bewertung revidiert
 werden.
 
 ### E1: MIDI statt MP3 als Audioartefakt
@@ -1959,18 +1960,26 @@ ihre JS-Brücke (`DirectEditingMobileInterface`) kennt nur `close`, `share`,
 
 **Die Leiste.** Draußen steht, was während des Singens gebraucht wird: der
 Transport (Play, Suchlauf, Zeit, Taktfeld, Studierbuchstaben, Anfangston,
-Schloss, Mikrofonanzeige) und Vollbild. Alle übrigen Werkzeuge stehen in drei
-Gruppen – Üben, Ansicht, Probe –, jede ein Knopf mit einem einzigen
-Aufklapper (`ToolGroup.vue`). Werkzeuge mit eigenem Bedienfeld (Loop, Tempo,
-Darstellung) öffnen darin eine Unterseite, keinen zweiten Aufklapper; der Zoom
-steht ohne Unterseite oben in „Ansicht“, weil er im Aufführungsmodus dort das
-einzige Werkzeug ist. Was wann sichtbar ist und in welcher Gruppe, steht allein
-in `lib/barGroups.js`: Leere Gruppen entfallen, für die Leitung steht die
-Probe vorn, für alle anderen zuletzt – aber sie steht da, denn die Liste der
-Leitungen sehen alle ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)).
-Ist in einer Gruppe etwas eingeschaltet (Metronom, Loop, Coach, eine
-Transposition, Tonnamen, ein offenes Panel), trägt ihr Knopf einen Punkt –
-eine vergessene Transposition hieße in der Probe falsch ansingen. Die Folgen-Anzeige steht nicht in der Leiste,
+Schloss, Mikrofonanzeige) und Vollbild. Davor stehen die angehefteten Werkzeuge
+([E23](#e23-anheften-statt-umsortieren)). Alle übrigen Werkzeuge stehen in drei
+Gruppen, jede ein Knopf mit einem einzigen Aufklapper (`ToolGroup.vue`):
+**Wiedergabe und Üben** (was ich höre und wie ich übe: Loop, Metronom, Tempo,
+Mixer, Transponieren, Coach; dann die Mikrofonwerkzeuge; dann das
+Übetagebuch), **Ansicht** (Zoom, Mitscrollen, nur meine Zeile, Tonnamen,
+Notizen; dann Seiten und Fassung, Farben) und **Partitur** (meine Stimme mit
+der Wahl des Anfangstons, Leitung, neue Setliste; dann Drucken, Audiodatei,
+Offline, Info und Diagnose). In jeder Gruppe steht das Häufige oben, was einmal
+eingestellt wird, unter einer Trennlinie. Werkzeuge mit eigenem Bedienfeld
+öffnen darin eine Unterseite, keinen zweiten Aufklapper; der Zoom steht ohne
+Unterseite oben in „Ansicht“, weil er im Aufführungsmodus dort das einzige
+Werkzeug ist. Die Wahl des Anfangstons steht unter „Meine Stimme“ und nicht am
+Anfangston-Knopf: Dessen langer Druck heißt schon „Ton klingt“, und „mein Ton“
+ist der erste Ton der gewählten Stimme. Was wann sichtbar ist und in welcher
+Gruppe, steht allein in `lib/barGroups.js`: Leere Gruppen entfallen, die
+Reihenfolge ist für alle gleich. Ist in einer Gruppe etwas eingeschaltet
+(Metronom, Loop, Coach, eine Transposition, Tonnamen, ein offenes Panel), trägt
+ihr Knopf einen Punkt – eine vergessene Transposition hieße in der Probe falsch
+ansingen. Die Folgen-Anzeige steht nicht in der Leiste,
 sondern über den Noten (`FollowBadge.vue`) – dort kostet sie keine Höhe und
 bleibt im Aufführungsmodus sichtbar.
 
@@ -2874,6 +2883,42 @@ eine Ebene, die den Zeiger nimmt (`touch-action: none`: der Finger zeichnet,
 statt zu scrollen); ein zweiter Finger bricht den Strich ab. Systemband und
 Liedtext-Ansicht schalten beim Start auf Seiten um; angezeigt werden die
 Zeichnungen auch im Band.
+
+### E23: Anheften statt umsortieren
+
+Welches Werkzeug ständig gebraucht wird, hängt an der Person: Wer leitet,
+braucht „Folgt mir“, wer allein übt, den Loop, wer im Chor singt, den Mixer.
+Eine feste Auswahl in der Leiste passte für keine dieser Rollen ganz, und mehr
+Knöpfe trägt die Leiste auf dem Tablet nicht. Deshalb trägt jede Zeile einer
+Gruppe eine Nadel: Angeheftete Werkzeuge stehen zusätzlich als Symbolknopf vor
+den Gruppen, auf dem Telefon vorn im Werkzeugstreifen. Ein Tipp statt zwei
+oder drei.
+
+**Höchstens vier.** Mehr verdrängte die Gruppen und brächte die Leiste auf dem
+Tablet in den kompakten Modus. Gezählt wird die gespeicherte Liste, auch was
+gerade nicht sichtbar ist – sonst ließe sich auf einer Partitur ohne Ton ein
+fünftes Werkzeug anheften, und auf der nächsten stünden fünf da.
+
+**Die Vorgabe ist der Mixer, für die Leitung dazu „Leitung und Folgt mir“.**
+Sie gilt, solange jemand nie selbst angeheftet hat (`bar_pins` nicht gesetzt);
+eine leere Liste ist eine eigene Wahl. Die Leitung kommt so über die Vorgabe
+nach vorn, nicht über eine Gruppenreihenfolge, die je nach Rolle wechselt.
+
+**Dieselbe Regel wie die Gruppen.** Ein angeheftetes Werkzeug steht nur da,
+wenn es auch in seiner Gruppe steht (`barPins` in `lib/barGroups.js`) – ein
+angehefteter Mixer verschwindet ohne Ton und im Aufführungsmodus wie das
+Werkzeug selbst. Was der Knopf tut, folgt der Art des Werkzeugs: Panel und
+Schalter schalten direkt, ein Werkzeug mit Unterseite öffnet einen eigenen
+Aufklapper gleich auf dieser Seite, eine Aktion läuft. Die Unterseiten stehen
+dafür nur einmal im Template (`reusableTemplate.js`) und werden an beiden
+Stellen gerendert. Zoom und die Wahl des Anfangstons sind nicht anheftbar: Der
+Zoom ist ein Regler und steht schon zuoberst in „Ansicht“, der Anfangston hat
+seinen Knopf im Transport.
+
+**Je Nutzerin auf dem Server**, wie die übrigen Anzeigeeinstellungen
+(`Service\ViewerPreferences`, nur bekannte Kennungen, höchstens vier): Am
+Rechner eingerichtet, gilt die Leiste auch am Tablet. Auf der Offline-Seite
+gibt es keine Nadeln – dort lässt sich nichts speichern.
 
 ## Formatgrundlagen
 

@@ -4,28 +4,40 @@
 		der aktuelle Wert („♩ 80", „12–16") und bei Unterseiten ein Pfeil.
 		Der Wert steht in der Zeile, weil er vorher auf dem Knopf in der
 		Leiste stand - wer die Gruppe oeffnet, sieht ihn ohne weiteren Tipp.
+		The pin (E23) sits next to the row, not inside it: a button inside a
+		button is not allowed, and it is a second, separate target.
 	-->
-	<button
-		type="button"
-		class="scoreview-tool-row"
-		:class="{ 'scoreview-tool-row--pressed': pressed }"
-		:aria-pressed="page ? undefined : String(pressed)"
-		@click="$emit('click', $event)">
-		<span class="scoreview-tool-row-icon"><slot name="icon" /></span>
-		<span class="scoreview-tool-row-label">{{ label }}</span>
-		<span v-if="value" class="scoreview-tool-row-value">{{ value }}</span>
-		<ChevronRight v-if="page" class="scoreview-tool-row-chevron" :size="20" />
-	</button>
+	<div class="scoreview-tool-row-wrap">
+		<button
+			type="button"
+			class="scoreview-tool-row"
+			:class="{ 'scoreview-tool-row--pressed': pressed }"
+			:aria-pressed="page ? undefined : String(pressed)"
+			@click="$emit('click', $event)">
+			<span class="scoreview-tool-row-icon"><slot name="icon" /></span>
+			<span class="scoreview-tool-row-label">{{ label }}</span>
+			<span v-if="value" class="scoreview-tool-row-value">{{ value }}</span>
+			<ChevronRight v-if="page" class="scoreview-tool-row-chevron" :size="20" />
+		</button>
+		<ToolPin
+			v-if="pinnable"
+			:label="label"
+			:pinned="pinned"
+			:disabled="pinDisabled"
+			@pin="$emit('pin')" />
+	</div>
 </template>
 
 <script>
 import ChevronRight from 'vue-material-design-icons/ChevronRight.vue'
+import ToolPin from './ToolPin.vue'
 
 export default {
 	name: 'ToolRow',
 
 	components: {
 		ChevronRight,
+		ToolPin,
 	},
 
 	props: {
@@ -51,18 +63,42 @@ export default {
 			type: Boolean,
 			default: false,
 		},
+
+		// The pin (ToolPin.vue): whether the row offers one, its state, and
+		// whether the limit is reached.
+		pinnable: {
+			type: Boolean,
+			default: false,
+		},
+
+		pinned: {
+			type: Boolean,
+			default: false,
+		},
+
+		pinDisabled: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
-	emits: ['click'],
+	emits: ['click', 'pin'],
 }
 </script>
 
 <style scoped>
+.scoreview-tool-row-wrap {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
 .scoreview-tool-row {
 	display: flex;
 	align-items: center;
 	gap: 10px;
-	inline-size: 100%;
+	flex: 1 1 auto;
+	min-inline-size: 0;
 	min-block-size: var(--default-clickable-area);
 	margin: 0;
 	padding: 0 8px;

@@ -613,50 +613,6 @@ msgid "Light notes on dark"
 msgstr ""
 
 #: src/components/AppearanceControls.vue
-msgid "Rendered by"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "Score written with MuseScore {version}"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "Discards the stored conversion and renders the score again with the current version of the app."
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "Convert again"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "Playback diagnostics"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "Output latency"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "measured {measured}, reported {reported}, by hand {manual}"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "Audio output"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "Dropouts"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "none – the score cursor runs without sound"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
-msgid "Frame rate"
-msgstr ""
-
-#: src/components/AppearanceControls.vue
 msgid "Red"
 msgstr ""
 
@@ -736,7 +692,7 @@ msgstr ""
 msgid "Page format"
 msgstr ""
 
-#: src/components/LayoutControls.vue src/components/ScoreViewer.vue
+#: src/components/LayoutControls.vue
 msgid "Layout"
 msgstr ""
 
@@ -1624,6 +1580,50 @@ msgstr ""
 msgid "Drawing for {voices}"
 msgstr ""
 
+#: src/components/ScoreInfoControls.vue
+msgid "Rendered by"
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "Score written with MuseScore {version}"
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "Discards the stored conversion and renders the score again with the current version of the app."
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "Convert again"
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "Playback diagnostics"
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "Output latency"
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "measured {measured}, reported {reported}, by hand {manual}"
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "Audio output"
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "Dropouts"
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "none – the score cursor runs without sound"
+msgstr ""
+
+#: src/components/ScoreInfoControls.vue
+msgid "Frame rate"
+msgstr ""
+
 #: src/components/ScoreLockButton.vue
 msgid "Performance mode is on – hold for one second to leave"
 msgstr ""
@@ -1809,94 +1809,6 @@ msgid "Technical detail"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "Pause"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Playback position"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Measure"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Measure – enter a number or a rehearsal mark (C, C+3) and press Enter to jump there"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Measure – enter a number and press Enter to jump there"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Rehearsal marks"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Go to rehearsal mark {mark} (measure {n})"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Practice"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Loop"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Tempo and metronome"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/TempoControls.vue
-msgid "Metronome"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Starting note"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Key note of the current key"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Key note"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "The first note of my voice"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "My note"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Mixer"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/composables/usePracticeExport.js
-msgid "Coach"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "On"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Transpose"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Recording and intonation"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Practice log"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
 msgid "From measure"
 msgstr ""
 
@@ -1925,43 +1837,51 @@ msgid "Save this loop…"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "View"
+msgid "Pause"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "Appearance"
+msgid "Playback position"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "Show only my part"
+msgid "Measure"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "Scroll along with playback"
+msgid "Measure – enter a number or a rehearsal mark (C, C+3) and press Enter to jump there"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "Note names and counting"
+msgid "Measure – enter a number and press Enter to jump there"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "Show notes in the score"
+msgid "Rehearsal marks"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "Notes"
+msgid "Go to rehearsal mark {mark} (measure {n})"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "Rehearsal"
+msgid "Starting note"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "Leaders and “Follow me”"
+msgid "Key note of the current key"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "New setlist"
+msgid "Key note"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "The first note of my voice"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "My note"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
@@ -2044,12 +1964,20 @@ msgstr ""
 msgid "Tap the score where the {stamp} belongs."
 msgstr ""
 
+#: src/components/ScoreViewer.vue
+msgid "New setlist"
+msgstr ""
+
 #: src/components/ScoreViewer.vue src/components/SetlistBar.vue
 msgid "Edit setlist"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "Choose your part first."
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Mixer"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
@@ -2062,6 +1990,22 @@ msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "My voice on the right, the others on the left"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Notes"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Recording and intonation"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Practice log"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Rehearsal"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
@@ -2098,6 +2042,70 @@ msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "Text"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Playback and practice"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "View"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Loop"
+msgstr ""
+
+#: src/components/ScoreViewer.vue src/components/TempoControls.vue
+msgid "Metronome"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Tempo"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Transpose"
+msgstr ""
+
+#: src/components/ScoreViewer.vue src/composables/usePracticeExport.js
+msgid "Coach"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Scroll along with playback"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Show only my part"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Note names and counting"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Show notes in the score"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Pages and edition"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Colours"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Leaders and “Follow me”"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Info and diagnostics"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "On"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
@@ -2262,6 +2270,18 @@ msgstr ""
 
 #: src/components/ToolGroup.vue
 msgid "Back"
+msgstr ""
+
+#: src/components/ToolPin.vue
+msgid "Unpin {tool} from the bar"
+msgstr ""
+
+#: src/components/ToolPin.vue
+msgid "At most {n} tools can be pinned to the bar"
+msgstr ""
+
+#: src/components/ToolPin.vue
+msgid "Pin {tool} to the bar"
 msgstr ""
 
 #: src/components/TransposeControls.vue

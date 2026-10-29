@@ -289,8 +289,8 @@ and Opera, sound via Bluetooth headphones):
   sliding in and out does not count as an intervention.
 - The transport bar stays a single row at phone width.
 
-**Measured output latency**, read from the diagnostics in the “Appearance”
-section:
+**Measured output latency**, read from the diagnostics under “Info and
+diagnostics”:
 
 | Device | Output | Compensated |
 |---|---|---|

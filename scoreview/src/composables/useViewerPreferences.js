@@ -64,6 +64,9 @@ export function useViewerPreferences() {
 	// a' for tuner, intonation and playback (lib/referencePitch.js); 440 from
 	// a server that does not know it yet.
 	const referencePitch = ref(normalizeReferencePitch(anfang.referencePitch))
+	// The tools pinned to the bar (E23); null = never chosen, the default
+	// applies (lib/barGroups.js). The server has already normalised the list.
+	const barPins = ref(Array.isArray(anfang.barPins) ? anfang.barPins : null)
 
 	// Ob das Nextcloud-Theme gerade dunkel ist - gelesen am Grund selbst
 	// (lib/noteTheme.js). Nachgelesen, wenn das Betriebssystem umschaltet:
@@ -96,7 +99,7 @@ export function useViewerPreferences() {
 	// (Controller\PreferenceController, E8). Wer am Telefon den
 	// Dunkelmodus waehlt, soll ihn beim naechsten Oeffnen wiederfinden.
 	let saveTimer = null
-	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts, doublePage, referencePitch], () => {
+	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts, doublePage, referencePitch, barPins], () => {
 		if (saveTimer) {
 			clearTimeout(saveTimer)
 		}
@@ -119,6 +122,7 @@ export function useViewerPreferences() {
 				beatCounts: beatCounts.value,
 				doublePage: doublePage.value,
 				referencePitch: referencePitch.value,
+				barPins: barPins.value,
 			})
 		} catch (err) {
 			// Bewusst nur ins Log: Die Einstellung wirkt im geoeffneten Viewer
@@ -131,7 +135,7 @@ export function useViewerPreferences() {
 		}
 	}
 
-	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts, doublePage, referencePitch }
+	return { highlightColor, highlightMode, stereoMyPart, noteTheme, resolvedNoteTheme, highlightStyle, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts, doublePage, referencePitch, barPins }
 }
 
 /**
