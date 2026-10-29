@@ -161,10 +161,10 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
+import { translate } from '../l10n.js'
 import { HIGHLIGHT_PRESETS, normalizeHighlightColor } from '../lib/highlightStyle.js'
 import { formatMs } from '../lib/viewerFormat.js'
 import { rendererText } from '../lib/viewerTexts.js'

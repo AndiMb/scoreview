@@ -1,14 +1,14 @@
-// The style sheet of the shadow root that holds a page's notation
-// (ScorePage.vue, attachSvgRoot()). Neither the page's scoped CSS nor
-// Nextcloud's reach into it; custom properties do, they inherit across the
-// shadow boundary - which is how the highlight and note colours set on the
-// viewer's root (ScoreViewer.vue) still arrive here.
+// The style sheet of the document that holds a page's notation
+// (scorePageFrame.js, used by ScorePage.vue). Neither the page's scoped CSS
+// nor Nextcloud's reach into it, and custom properties do not inherit across
+// the document boundary either: the highlight and note colours are copied
+// onto the frame's root (ScorePage.vue, `svgVars`).
 //
-// `.dark` sits on the container inside the shadow root, set from the
-// `noteTheme` prop. Specificity matters below: the dark recolouring is
-// (0,1,0) through :where(), so the highlight and intonation rules (0,1,1 and
-// up) and hiding the white background rectangle win against it - otherwise no
-// note would light up in the dark.
+// `.dark` sits on the container inside the frame, set from the `noteTheme`
+// prop. Specificity matters below: the dark recolouring is (0,1,0) through
+// :where(), so the highlight and intonation rules (0,1,1 and up) and hiding
+// the white background rectangle win against it - otherwise no note would
+// light up in the dark.
 
 export const SCORE_SVG_STYLE = `
 /*

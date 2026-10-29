@@ -288,7 +288,6 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -304,6 +303,7 @@ import Pencil from 'vue-material-design-icons/Pencil.vue'
 import PlusCircleOutline from 'vue-material-design-icons/PlusCircleOutline.vue'
 import { stampName } from './ScoreStamps.vue'
 import StampSymbol from './StampSymbol.vue'
+import { translate } from '../l10n.js'
 import { isWithoutVoice } from '../lib/annotationFilter.js'
 import { STAMP_CODES } from '../lib/stampLayout.js'
 

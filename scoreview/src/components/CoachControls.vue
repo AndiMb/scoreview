@@ -30,8 +30,8 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'CoachControls',

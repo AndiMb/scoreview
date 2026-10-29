@@ -37,11 +37,11 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
 import LanConnect from 'vue-material-design-icons/LanConnect.vue'
 import LanDisconnect from 'vue-material-design-icons/LanDisconnect.vue'
+import { translate } from '../l10n.js'
 
 /**
  * „Folgt: Name · verbunden/getrennt" (E10). Nur Darstellung - der

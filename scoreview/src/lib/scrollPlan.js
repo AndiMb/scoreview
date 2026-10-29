@@ -206,3 +206,26 @@ export function revealsCursor(kind) {
 export function spanInView({ start, size, viewStart, viewSize }) {
 	return start < viewStart + viewSize && start + Math.max(size, 0) > viewStart
 }
+
+/**
+ * Where the cursor stands in the scroll container's content, from the page's
+ * box in that content and the cursor's share of the page. Both are known
+ * without asking the browser: the page boxes are measured once and kept until
+ * something moves (useAutoScroll.js), the share comes from the page's viewBox
+ * (ScorePage.vue#getCursorBox). Asking per note change instead - a
+ * getBoundingClientRect() right after the highlight classes changed - forced
+ * a style and layout pass each time: a quarter of all script time during
+ * playback, measured on a phone profile.
+ *
+ * @param {{top:number,left:number,width:number,height:number}} page the page box in content px
+ * @param {{top:number,left:number,width:number,height:number}} share the cursor as fractions of the page
+ * @return {{top:number,left:number,width:number,height:number}} the cursor in content px
+ */
+export function cursorInContent(page, share) {
+	return {
+		top: page.top + share.top * page.height,
+		left: page.left + share.left * page.width,
+		width: share.width * page.width,
+		height: share.height * page.height,
+	}
+}

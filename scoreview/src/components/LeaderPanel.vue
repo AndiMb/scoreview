@@ -190,7 +190,6 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -205,6 +204,7 @@ import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
 import MusicNote from 'vue-material-design-icons/MusicNote.vue'
 import Repeat from 'vue-material-design-icons/Repeat.vue'
 import StopCircle from 'vue-material-design-icons/StopCircle.vue'
+import { translate } from '../l10n.js'
 import { candidateQuery } from '../lib/leaders.js'
 
 /**

@@ -91,10 +91,10 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import DotsHorizontal from 'vue-material-design-icons/DotsHorizontal.vue'
 import LiveValue from './LiveValue.vue'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'ScoreBar',

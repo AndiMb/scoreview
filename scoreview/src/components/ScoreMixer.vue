@@ -53,13 +53,13 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
 import Headphones from 'vue-material-design-icons/Headphones.vue'
 import VolumeOff from 'vue-material-design-icons/VolumeOff.vue'
 import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
+import { translate } from '../l10n.js'
 import { groupPrograms, resolveMixerGroups } from '../lib/mixerLayout.js'
 
 /**

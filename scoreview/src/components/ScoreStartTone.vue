@@ -27,9 +27,9 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import MusicNote from 'vue-material-design-icons/MusicNote.vue'
 import MusicNoteWhole from 'vue-material-design-icons/MusicNoteWhole.vue'
+import { translate } from '../l10n.js'
 
 /**
  * Der Knopf fuer den Anfangston: klingt, solange er gedrueckt ist.

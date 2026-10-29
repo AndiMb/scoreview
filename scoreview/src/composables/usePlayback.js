@@ -1,6 +1,6 @@
 import axios from '@nextcloud/axios'
-import { translate } from '@nextcloud/l10n'
 import { computed, ref, shallowRef } from 'vue'
+import { translate } from '../l10n.js'
 import { createDropoutCounter, createFrameRateMeter } from '../lib/audioHealth.js'
 import { audioSession } from '../lib/audioSession.js'
 import { readTrackLayout } from '../lib/midiNotes.js'

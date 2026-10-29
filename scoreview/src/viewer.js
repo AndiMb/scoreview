@@ -1,8 +1,8 @@
 import axios from '@nextcloud/axios'
 import { DefaultType, registerFileAction } from '@nextcloud/files'
-import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { createApp, h, nextTick } from 'vue'
+import { translate } from './l10n.js'
 import { isSetlistFile, MSCZ_MIME, needsOwnFileAction } from './lib/scoreFile.js'
 import { firstPlayableIndex } from './lib/setlistNav.js'
 

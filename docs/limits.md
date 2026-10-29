@@ -739,14 +739,19 @@ plays with controls. A lock lasting several minutes has not been measured.
   passage sings verse n. Where a score distributes verses across jumps that are
   not unrolled (D.C./D.S., see [Known gaps](#known-gaps)), the wrong verse
   lights up.
-- **Style cost of the notation:** each page SVG sits in a shadow root of its
-  own, out of reach of Nextcloud's ~1,900 global selectors, and on a
-  compositor layer of its own. Measured with four pages of a choral piece
-  (14,100 SVG nodes) on the desktop: one style recalculation 228 ms before,
-  56 ms now; opening and closing a toolbar menu at 4× CPU throttling cost
-  3.3 s of style time, now 0.6–0.8 s. During playback the main thread was
-  busy 490–560 ms per second, mostly re-layerizing the notation in every
-  frame, now 130–180 ms.
+- **Style cost of the notation:** each page SVG sits in a document of its
+  own (a frame without a source), out of reach of Nextcloud's ~1,900 global
+  selectors, and on a compositor layer of its own. Measured with four pages
+  of a choral piece (14,100 SVG nodes): a change in the toolbar restyles
+  about 650–930 elements instead of 17,300. In a phone-sized window at 4×
+  CPU throttling, opening the Tools menu takes 240–420 ms (with the notation
+  in a shadow root: 580–1,080 ms), closing it about 200 ms (500–550 ms).
+  During playback the main thread is busy about 110 ms per second on the
+  desktop and 300–320 ms in the phone-sized window (pages 430, band 480 ms
+  before). Pinch zoom shows a scaled preview while the fingers move and lays
+  the pages out once, when they let go. On a Galaxy S23 (Chrome, power
+  saving mode on) a pinch runs at 50 fps on the pages and 39 fps in the
+  system band (with the layout per frame: 37 and 27 fps).
 - **System band:** measured on a choral piece with 10 systems, scrolling at
   about 60 fps on the desktop. On the Galaxy S23 (Chrome, without power saving
   mode) during playback: pages 49 fps (10 % of frames over 33 ms), system band

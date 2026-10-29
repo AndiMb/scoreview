@@ -52,8 +52,8 @@
 
 <script>
 import axios from '@nextcloud/axios'
-import { translate } from '@nextcloud/l10n'
 import ScorePage from './ScorePage.vue'
+import { translate } from '../l10n.js'
 import { pageForCursor, pageStep, planBandPage } from '../lib/bandPaging.js'
 import { cropsInLoop } from '../lib/loopFocus.js'
 import { BASE_PAGE_WIDTH_PX, parseViewBox } from '../lib/scoreLayout.js'
@@ -174,6 +174,9 @@ export default {
 			// `current` - see rendered().
 			windowFrom: 0,
 			windowTo: 1,
+			// The frame after the next one, mounted ahead in idle time - see
+			// rendered().
+			ahead: -1,
 			loading: false,
 			// The band turns a page itself: no snapping meanwhile, see pageTo().
 			paging: false,
@@ -222,6 +225,18 @@ export default {
 	},
 
 	watch: {
+		// After a turn, the frame after the next one is built while the band
+		// rests - not at the next turn, where its page (fetch from cache,
+		// sanitize, clone, index) took a frame of its own on a phone right
+		// when the band jumps. Right away as well: the first turn needs it.
+		current: {
+			handler() {
+				this.scheduleAhead()
+			},
+
+			immediate: true,
+		},
+
 		// A loop focus adds or removes frames: measure them again, like
 		// after a load.
 		crops() {
@@ -267,6 +282,8 @@ export default {
 		this.scrollPending = 0
 		// Last touch, click or wheel on the band - its own scrolling is none.
 		this.lastGestureAt = null
+		// Pending idle callback for `ahead` (scheduleAhead()).
+		this.aheadHandle = null
 		// Last visibility reported (reportVisibility) - an event per change,
 		// not per note.
 		this.cursorShown = true
@@ -288,6 +305,7 @@ export default {
 		this.resize?.disconnect()
 		cancelAnimationFrame(this.scrollPending)
 		clearTimeout(this.pagingTimer)
+		this.cancelAhead()
 		this.loadGeneration++
 	},
 
@@ -560,7 +578,33 @@ export default {
 		 */
 		rendered(index) {
 			return Math.abs(index - this.current) <= 1
+				|| index === this.ahead
 				|| (index >= this.windowFrom && index <= this.windowTo)
+		},
+
+		/** Mounts the frame after the next one once the main thread is idle. */
+		scheduleAhead() {
+			this.cancelAhead()
+			const target = this.current + 2
+			const run = () => {
+				this.aheadHandle = null
+				this.ahead = target
+			}
+			// At the latest after a second - a band that keeps playing has no
+			// idle time on a slow phone, and then the frame is built anyway,
+			// still well before the next turn.
+			this.aheadHandle = typeof requestIdleCallback === 'function'
+				? { idle: requestIdleCallback(run, { timeout: 1000 }) }
+				: { timer: setTimeout(run, 200) }
+		},
+
+		cancelAhead() {
+			if (this.aheadHandle?.idle !== undefined) {
+				cancelIdleCallback(this.aheadHandle.idle)
+			} else if (this.aheadHandle?.timer !== undefined) {
+				clearTimeout(this.aheadHandle.timer)
+			}
+			this.aheadHandle = null
 		},
 
 		/** Reads the frames' positions - after a load or a resize only. */

@@ -87,7 +87,6 @@
 
 <script>
 import { loadState } from '@nextcloud/initial-state'
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -95,6 +94,7 @@ import ArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
 import Delete from 'vue-material-design-icons/Delete.vue'
 import ScoreViewer from './ScoreViewer.vue'
 import { offlineSupported, useOffline } from '../composables/useOffline.js'
+import { translate } from '../l10n.js'
 import { withAppVersion } from '../lib/assetVersion.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)

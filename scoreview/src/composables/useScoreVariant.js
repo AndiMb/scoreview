@@ -1,5 +1,5 @@
-import { translate } from '@nextcloud/l10n'
 import { computed, ref, watch } from 'vue'
+import { translate } from '../l10n.js'
 import { availableSource, FORMATS, keyForChoice, sourceOptions } from '../lib/variantChoice.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)

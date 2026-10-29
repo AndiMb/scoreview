@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
-import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, ref } from 'vue'
+import { translate } from '../l10n.js'
 import { classify, DIM, HIDE, resolveTarget, resolveTargets, targetNames } from '../lib/annotationFilter.js'
 import { decodeDrawing, encodeDrawing } from '../lib/drawingLayout.js'
 import { measurePositionToTimeMs } from '../lib/scoreLayout.js'

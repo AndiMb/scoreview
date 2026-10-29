@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
-import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref, shallowRef, watch } from 'vue'
+import { translate } from '../l10n.js'
 import { createAudioContext } from '../lib/audioSession.js'
 import { createGeneration } from '../lib/generation.js'
 import { captureToScoreMs, playbackSchedule, tempoAfterListening } from '../lib/recordingAlign.js'

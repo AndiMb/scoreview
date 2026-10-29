@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isManualScrollEnd, planAutoScroll, planHorizontalScroll, revealsCursor, shouldSuppressAutoScroll, spanInView } from './scrollPlan.js'
+import { cursorInContent, isManualScrollEnd, planAutoScroll, planHorizontalScroll, revealsCursor, shouldSuppressAutoScroll, spanInView } from './scrollPlan.js'
 
 describe('planAutoScroll', () => {
 	// Viewport 1000px hoch, Default-Rand 24px.
@@ -164,5 +164,13 @@ describe('spanInView', () => {
 		expect(spanInView({ start: 0, size: 100, ...view })).toBe(false)
 		expect(spanInView({ start: 300, size: 50, ...view })).toBe(false)
 		expect(spanInView({ start: 500, size: 50, ...view })).toBe(false)
+	})
+})
+
+describe('cursorInContent', () => {
+	it('rechnet den Anteil der Seite in Inhaltspixel um', () => {
+		const page = { top: 1000, left: 20, width: 800, height: 1200 }
+		expect(cursorInContent(page, { top: 0.5, left: 0.25, width: 0.1, height: 0.05 }))
+			.toEqual({ top: 1600, left: 220, width: 80, height: 60 })
 	})
 })

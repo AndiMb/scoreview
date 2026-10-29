@@ -44,8 +44,8 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import StampSymbol from './StampSymbol.vue'
+import { translate } from '../l10n.js'
 import { layoutStamps } from '../lib/stampLayout.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)

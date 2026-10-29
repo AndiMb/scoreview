@@ -90,10 +90,10 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcSelect from '@nextcloud/vue/components/NcSelect'
 import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'LayoutControls',

@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
-import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue'
+import { translate } from '../l10n.js'
 import { createPracticeMeter, localDay, MAX_REPORT_SECONDS, REPORT_INTERVAL_MS, summarize } from '../lib/practiceLog.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)

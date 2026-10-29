@@ -64,11 +64,11 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcPopover from '@nextcloud/vue/components/NcPopover'
 import ArrowLeft from 'vue-material-design-icons/ArrowLeft.vue'
 import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'ToolGroup',

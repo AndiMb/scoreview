@@ -84,8 +84,8 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import { translate } from '../l10n.js'
 import { MAX_MANUAL_OFFSET_MS, MIN_MANUAL_OFFSET_MS } from '../lib/playbackTime.js'
 
 export default {

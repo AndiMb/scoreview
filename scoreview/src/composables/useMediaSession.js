@@ -1,6 +1,6 @@
 import { showInfo } from '@nextcloud/dialogs'
-import { translate } from '@nextcloud/l10n'
 import { watch } from 'vue'
+import { translate } from '../l10n.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 

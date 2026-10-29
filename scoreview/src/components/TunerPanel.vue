@@ -56,11 +56,11 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import Microphone from 'vue-material-design-icons/Microphone.vue'
 import MicrophoneOff from 'vue-material-design-icons/MicrophoneOff.vue'
 import TunerNeedle from './TunerNeedle.vue'
+import { translate } from '../l10n.js'
 import { classify, formatCents } from '../lib/intonation.js'
 import { nameOf } from '../lib/noteNames.js'
 import { normalizeReferencePitch, REFERENCE_PITCH_MAX, REFERENCE_PITCH_MIN } from '../lib/referencePitch.js'

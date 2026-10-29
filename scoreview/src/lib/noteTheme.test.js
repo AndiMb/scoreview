@@ -8,6 +8,7 @@ import {
 	noteThemeCssVars,
 	parseCssColor,
 	resolveNoteTheme,
+	themeIsDarkFromIds,
 } from './noteTheme.js'
 
 describe('noteTheme.isDarkBackground', () => {
@@ -158,5 +159,25 @@ describe('noteTheme.ensureContrast', () => {
 		expect(ergebnis).not.toBe('#7b1fa2')
 		expect(ergebnis).not.toBe('#ffffff')
 		expect(contrastRatio(parseCssColor(ergebnis), parseCssColor('#1c1c1c'))).toBeGreaterThanOrEqual(3)
+	})
+})
+
+describe('themeIsDarkFromIds', () => {
+	it('liest dunkle und helle Themes direkt', () => {
+		expect(themeIsDarkFromIds('dark', false)).toBe(true)
+		expect(themeIsDarkFromIds('dark-highcontrast,opendyslexic', false)).toBe(true)
+		expect(themeIsDarkFromIds('light', true)).toBe(false)
+		expect(themeIsDarkFromIds('light-highcontrast', true)).toBe(false)
+	})
+
+	it('folgt beim Standard-Theme dem System', () => {
+		expect(themeIsDarkFromIds('default', true)).toBe(true)
+		expect(themeIsDarkFromIds('default,opendyslexic', false)).toBe(false)
+		expect(themeIsDarkFromIds('', true)).toBe(true)
+	})
+
+	it('weiss es ohne Attribut nicht', () => {
+		expect(themeIsDarkFromIds(undefined, true)).toBeNull()
+		expect(themeIsDarkFromIds(null, false)).toBeNull()
 	})
 })

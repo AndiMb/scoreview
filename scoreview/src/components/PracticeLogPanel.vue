@@ -79,9 +79,10 @@
 </template>
 
 <script>
-import { getLanguage, translate } from '@nextcloud/l10n'
+import { getLanguage } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
+import { translate } from '../l10n.js'
 import { minutesOf } from '../lib/practiceLog.js'
 
 export default {

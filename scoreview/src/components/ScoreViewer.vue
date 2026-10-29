@@ -1,11 +1,10 @@
 <template>
 	<!--
-		Die Hervorhebungsfarbe haengt als CSS-Variable an der Wurzel, nicht an
-		jeder Seite: ScorePage.vue erbt sie ueber die Kaskade, auch in das SVG
-		im Shadow-Root der Seite hinein (Stylesheets greifen dort nicht, geerbte
-		Custom Properties schon). Aendert die Nutzerin die Farbe, faerbt sich
-		damit alles Gefaerbte in einem Rutsch um - ohne dass eine einzige Seite
-		neu rendern muss.
+		The highlight and note colours hang as CSS custom properties on the
+		root: the overlays of every page (cursor, own-part band, markers)
+		inherit them through the cascade. The notation itself sits in a
+		document of its own (ScorePage.vue, scorePageFrame.js), where nothing
+		inherits; it receives the same object as `svgVars`.
 	-->
 	<div
 		ref="root"
@@ -888,74 +887,91 @@
 						@seek="onLyricsSeek"
 						@loop="onLyricsLoop"
 						@cursorVisible="layoutCursorShown = $event" />
-					<SystemBand
+					<!--
+						The cursor, the sounding element and the intonation
+						needle change with every note. Read in the template of the
+						viewer, each change re-rendered all of it - toolbar,
+						panels, a hundred t() calls. LiveValue reads them itself
+						(readLive()), so a note change re-renders only the band or
+						the page list.
+					-->
+					<LiveValue
 						v-else-if="activeLayout === 'band'"
-						ref="band"
-						:pageUrls="pageUrls"
-						:systemRectsByPage="systemRectsByPage"
-						:pageProps="bandPageProps"
-						:loopRects="loopMeasureRects"
-						:loopDimRectsByPage="loopDimRectsByPage"
-						:cursorRect="cursorRect"
-						:cursorElid="currentElid"
-						:needle="intonationNeedle"
-						:follow="followCursor"
-						:forced="cursorForced"
-						:zoom="bandZoomValue"
-						@touchstart.passive="bandZoom.onTouchStart"
-						@touchmove.passive="bandZoom.onTouchMove"
-						@touchend.passive="bandZoom.onTouchEnd"
-						@touchcancel.passive="bandZoom.onTouchEnd"
-						@noteClick="onNoteClick"
-						@markerClick="onMarkerClick"
-						@indexed="onPageIndexed"
-						@cursorVisible="layoutCursorShown = $event" />
-					<div
-						v-else
-						class="scoreview-pages"
-						:class="spreadClasses"
-						@touchstart.passive="onTouchStart"
-						@touchmove.passive="onTouchMove"
-						@touchend.passive="onTouchEnd">
-						<ScorePage
-							v-for="(url, i) in pageUrls"
-							:key="url"
-							:ref="(el) => setPageRef(el, i)"
-							:svgUrl="url"
-							:pageIndex="i"
-							:cursorRect="onCursorPage(i, cursorRect)"
-							:cursorElid="onCursorPage(i, currentElid)"
-							:zoom="zoom"
-							:markers="annotationMarkers"
-							:stamps="annotationStamps"
-							:drawings="annotationDrawings"
-							:drawMode="drawSpec !== null"
-							:pendingStrokes="drawStrokes"
-							:loopMarkers="loopMarkers"
-							:systemRects="systemRectsByPage[i] ?? NO_RECTS"
-							:loopDimRects="loopDimRectsByPage[i] ?? NO_RECTS"
-							:myPartIndex="myPartIndex"
-							:focusMyPart="focusMyPart"
-							:partCount="partCount"
-							:showNoteText="showNoteText"
-							:highlightMode="highlightMode"
-							:noteTheme="resolvedNoteTheme"
-							:noteMarks="intonationMarks"
-							:liveNoteMarks="intonationLiveMarks"
-							:needle="onCursorPage(i, intonationNeedle)"
-							:spellings="spellings"
-							:noteNameSystem="noteNameSystem"
-							:noteNameStaves="noteNameStaves"
-							:keyOfElid="keyOfElid"
-							:countOfElid="countOfElid"
-							:countStaves="countStaves"
-							@indexed="onPageIndexed"
+						v-slot="{ value: live }"
+						:get="readLive">
+						<SystemBand
+							ref="band"
+							:pageUrls="pageUrls"
+							:systemRectsByPage="systemRectsByPage"
+							:pageProps="bandPageProps"
+							:loopRects="loopMeasureRects"
+							:loopDimRectsByPage="loopDimRectsByPage"
+							:cursorRect="live.cursorRect"
+							:cursorElid="live.cursorElid"
+							:needle="live.needle"
+							:follow="followCursor"
+							:forced="cursorForced"
+							:zoom="bandZoomValue"
+							@touchstart.passive="bandZoom.onTouchStart"
+							@touchmove.passive="bandZoom.onTouchMove"
+							@touchend.passive="bandZoom.onTouchEnd"
+							@touchcancel.passive="bandZoom.onTouchEnd"
 							@noteClick="onNoteClick"
 							@markerClick="onMarkerClick"
-							@staffMapping="onStaffMapping"
-							@stroke="addStroke"
-							@loaded="onPageLoaded" />
-					</div>
+							@indexed="onPageIndexed"
+							@cursorVisible="layoutCursorShown = $event" />
+					</LiveValue>
+					<LiveValue
+						v-else
+						v-slot="{ value: live }"
+						:get="readLive">
+						<div
+							class="scoreview-pages"
+							:class="spreadClasses"
+							@touchstart.passive="onTouchStart"
+							@touchmove.passive="onTouchMove"
+							@touchend.passive="onTouchEnd">
+							<ScorePage
+								v-for="(url, i) in pageUrls"
+								:key="url"
+								:ref="pageRef(i)"
+								:svgUrl="url"
+								:pageIndex="i"
+								:cursorRect="onCursorPage(i, live.cursorRect, live.cursorRect)"
+								:cursorElid="onCursorPage(i, live.cursorElid, live.cursorRect)"
+								:zoom="zoom"
+								:markers="annotationMarkers"
+								:stamps="annotationStamps"
+								:drawings="annotationDrawings"
+								:drawMode="drawSpec !== null"
+								:pendingStrokes="drawStrokes"
+								:loopMarkers="loopMarkers"
+								:systemRects="systemRectsByPage[i] ?? NO_RECTS"
+								:loopDimRects="loopDimRectsByPage[i] ?? NO_RECTS"
+								:myPartIndex="myPartIndex"
+								:focusMyPart="focusMyPart"
+								:partCount="partCount"
+								:showNoteText="showNoteText"
+								:highlightMode="highlightMode"
+								:noteTheme="resolvedNoteTheme"
+								:svgVars="highlightStyle"
+								:noteMarks="intonationMarks"
+								:liveNoteMarks="live.liveNoteMarks"
+								:needle="onCursorPage(i, live.needle, live.cursorRect)"
+								:spellings="spellings"
+								:noteNameSystem="noteNameSystem"
+								:noteNameStaves="noteNameStaves"
+								:keyOfElid="keyOfElid"
+								:countOfElid="countOfElid"
+								:countStaves="countStaves"
+								@indexed="onPageIndexed"
+								@noteClick="onNoteClick"
+								@markerClick="onMarkerClick"
+								@staffMapping="onStaffMapping"
+								@stroke="addStroke"
+								@loaded="onPageLoaded" />
+						</div>
+					</LiveValue>
 				</div>
 				<!--
 					Mixer und Notizen liegen als Karten UEBER dem Notenbild statt
@@ -1178,7 +1194,7 @@
 
 <script>
 import { loadState } from '@nextcloud/initial-state'
-import { getLanguage, translate } from '@nextcloud/l10n'
+import { getLanguage } from '@nextcloud/l10n'
 import { generateUrl, getRootUrl } from '@nextcloud/router'
 import { computed, getCurrentInstance, inject, nextTick, reactive, ref, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
@@ -1286,6 +1302,7 @@ import { useWaitMode } from '../composables/useWaitMode.js'
 import { useWakeLock } from '../composables/useWakeLock.js'
 import { useZoom } from '../composables/useZoom.js'
 import nodeText from '../directives/nodeText.js'
+import { translate } from '../l10n.js'
 import { anyGroupActive, groupActive as isGroupActive, barGroups as visibleBarGroups } from '../lib/barGroups.js'
 import { capabilitiesOf, unavailableReason } from '../lib/capabilities.js'
 import { countLabels } from '../lib/countLabels.js'
@@ -2165,7 +2182,7 @@ export default {
 			onTouchMove: zoomApi.onTouchMove,
 			onTouchEnd: zoomApi.onTouchEnd,
 			resetZoom: zoomApi.reset,
-			setPageRef: autoScroll.setPageRef,
+			pageRef: autoScroll.pageRef,
 			updateAutoScroll: autoScroll.update,
 			onScrollGestureStart: autoScroll.onUserGestureStart,
 			onScrollGestureEnd: autoScroll.onUserGestureEnd,
@@ -2710,6 +2727,7 @@ export default {
 				showNoteText: this.showNoteText,
 				highlightMode: this.highlightMode,
 				noteTheme: this.resolvedNoteTheme,
+				svgVars: this.highlightStyle,
 				noteMarks: this.intonationMarks,
 				liveNoteMarks: this.intonationLiveMarks,
 				spellings: this.spellings,
@@ -2965,6 +2983,21 @@ export default {
 
 	methods: {
 		/**
+		 * What changes with every note, read by LiveValue around the band
+		 * and the page list instead of by this template (see there).
+		 *
+		 * @return {{cursorRect: ?object, cursorElid: ?number, needle: ?object, liveNoteMarks: Array}}
+		 */
+		readLive() {
+			return {
+				cursorRect: this.cursorRect,
+				cursorElid: this.currentElid,
+				needle: this.intonationNeedle,
+				liveNoteMarks: this.intonationLiveMarks,
+			}
+		},
+
+		/**
 		 * A value that only the page under the cursor needs (cursor, sounding
 		 * elid, live needle) - every other page gets null. Vue re-renders a
 		 * child whenever one of its props changes, so handing the cursor to
@@ -2973,10 +3006,12 @@ export default {
 		 *
 		 * @param {number} pageIndex
 		 * @param {?(object|number)} value
+		 * @param {?object} [cursorRect] the cursor to compare against - the
+		 *   one LiveValue read (see readLive())
 		 * @return {?(object|number)}
 		 */
-		onCursorPage(pageIndex, value) {
-			return this.cursorRect?.page === pageIndex ? value : null
+		onCursorPage(pageIndex, value, cursorRect = this.cursorRect) {
+			return cursorRect?.page === pageIndex ? value : null
 		},
 
 		/**

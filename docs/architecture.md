@@ -368,17 +368,26 @@ Aufbau:
   `ScoreStatus.vue`, `ScorePanel.vue` als Rahmen der Seitenkarten, die
   Bedienfelder für Tempo, Zoom und Darstellung) und die Bedienteile der Probe- und
   Konzertfunktionen (Tabelle unten). `LiveValue.vue` liest die
-  Wiedergabezeit an Stelle des Viewers: Was sich mit jedem Frame ändert, hängt
-  nur an diesem kleinen Teilbaum, der Viewer selbst rendert beim Abspielen
-  nicht mit. `ScorePage.vue` hängt das Seiten-SVG in ein **Shadow-Root** mit
-  eigenem Stylesheet (`scorePageSvgStyle.js`): Nextclouds globale Selektoren
-  reichen nicht hinein, und die tausenden SVG-Knoten einer Seite werden bei
-  einer Stiländerung irgendwo im Dokument – ein Menü geht auf, der Fokus
-  wandert – nicht mehr gegen sie geprüft. Dazu liegt das Notenbild auf einer
-  **eigenen Compositor-Ebene** (`will-change: opacity`), damit Cursor und
-  Positionsregler beim Abspielen nicht in jedem Bild die Ebene des Notenbilds
-  neu aufteilen. Messwerte in den
+  Wiedergabezeit, den Cursor und die klingende Note an Stelle des Viewers:
+  Was sich mit jedem Frame oder jeder Note ändert, hängt nur an diesem kleinen
+  Teilbaum (Positionsanzeige, Seitenliste, Band), der Viewer selbst mit Leiste
+  und Bedienfeldern rendert beim Abspielen nicht mit. `ScorePage.vue` hängt
+  das Seiten-SVG in ein **eigenes Dokument**, einen quellenlosen `iframe`
+  (`scorePageFrame.js`) mit eigenem Stylesheet (`scorePageSvgStyle.js`):
+  Nextclouds globale Selektoren reichen nicht hinein, und keine Stiländerung
+  im Files-Dokument – ein Menü geht auf, der Fokus wandert – prüft die
+  tausenden SVG-Knoten einer Seite. Ein Shadow-Root reichte dafür nicht: Am
+  schmalen Bildschirm gilt in Nextcloud eine `:has()`-Regel der
+  Kopfzeilen-Suche, unter der jede Änderung den ganzen Baum samt
+  Shadow-Inhalt neu prüft; erst ein eigenes Dokument liegt außerhalb jeder
+  Kaskade. Das Notenbild liegt auf einer **eigenen Compositor-Ebene**
+  (`will-change: opacity`), damit Cursor und Positionsregler beim Abspielen
+  nicht in jedem Bild die Ebene des Notenbilds neu aufteilen. Messwerte in den
   [Grenzwerten](limits.de.md#darstellungen).
+- `src/l10n.js` – `translate()` mit Ergebnis-Cache
+  (`lib/translateCache.js`): Nextclouds `translate()` reinigt jedes Ergebnis
+  mit DOMPurify, beim Abspielen am Handy gemessen gut ein Drittel der
+  Skriptzeit. Gecacht werden nur Aufrufe ohne Platzhalter.
 - `src/directives/` – `nodeText.js` (`v-node-text`) für Text, der sich
   während der Wiedergabe laufend ändert: Es ändert den Wert des vorhandenen
   Textknotens, statt ihn wie Vue über `textContent` zu ersetzen. Ersetzte
@@ -527,9 +536,11 @@ das Dokument zu durchsuchen.
   deshalb ein Umschalter und kein Nebeneinander. „Notenköpfe" bleibt der
   Standard und fällt auf das Band zurück, wo das SVG keine Kennungen trägt.
 - **Farbe:** sechs Vorschläge plus freie Wahl. Sie steht als CSS-Variable an der
-  Wurzel des Viewers; alles Gefärbte erbt sie über die Kaskade, auch das SVG
-  im Shadow-Root der Seite – Custom Properties erben über dessen Grenze. Eine
-  Farbänderung rendert deshalb keine einzige Seite neu.
+  Wurzel des Viewers; alles Gefärbte erbt sie über die Kaskade. Ins eigene
+  Dokument einer Seite (`scorePageFrame.js`) erbt nichts – dorthin reicht
+  der Viewer dieselben Variablen als `svgVars` weiter, und die Seite setzt sie
+  an die Wurzel ihres Rahmens. Eine Farbänderung rendert deshalb keine
+  einzige Seite neu.
 
 Beides ist **je Nutzerin serverseitig** gespeichert (`ViewerPreferences`), nicht
 im `localStorage`: Vorbereitet wird am Rechner, gelesen am Tablet auf dem
@@ -649,7 +660,9 @@ gewöhnliche `ScorePage` mit einem Ausschnitt (`crop`) ihrer Seite, die Grenzen
 kommen aus den Notenlinien (`staffBands.js`), Liedtext darunter zählt zum
 System. Cursor, Stempel, Notizen, Loop und Tonnamen liegen in Prozent der
 Seite und funktionieren deshalb unverändert. Gerendert werden nur das
-sichtbare System und seine Nachbarn. Am Handy ist ein System leicht zwei bis
+sichtbare System und seine Nachbarn; das übernächste baut das Band im
+Leerlauf vor (`requestIdleCallback`), damit beim Systemwechsel keine Seite
+erst gereinigt und eingelesen werden muss. Am Handy ist ein System leicht zwei bis
 fünf Bildschirme breit; darin blättert das Band **seitenweise** statt zu
 gleiten (`bandPaging.js`): Erreicht der Cursor 85 % der Breite, springt es so
 weit, dass er bei 15 % steht – das zuletzt Gelesene bleibt links stehen, das

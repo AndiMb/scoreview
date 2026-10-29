@@ -12,9 +12,7 @@
 			die Notenköpfe selbst leuchten (M10), malt es nichts mehr - zwei
 			Anzeigen derselben Stelle sind eine zu viel. Sichtbar bleibt es, wo
 			das SVG keine Kennungen trägt (MuseScore auf dem Sidecar, siehe
-			docs/architecture.md M9/M10). Im DOM bleibt es in beiden Fällen: Das
-			Autoscroll misst seine Bildschirmposition (ref="cursor", siehe
-			getCursorClientRect()). Die Stapelreihenfolge kommt aus dem CSS
+			docs/architecture.md M9/M10). Die Stapelreihenfolge kommt aus dem CSS
 			(.score-page-svg bekommt ein explizites z-index), nicht aus dieser
 			Template-Reihenfolge - siehe Kommentar dort.
 		-->
@@ -52,7 +50,6 @@
 			<rect
 				v-for="(band, i) in cursorRects"
 				:key="`cursor-${i}`"
-				ref="cursor"
 				class="score-page-cursor"
 				:class="{ 'score-page-cursor--hidden': notesHighlighted }"
 				:x="band.x"
@@ -61,16 +58,15 @@
 				:height="band.h" />
 		</svg>
 		<!--
-			The notation lives in a shadow root on this element, filled by
-			renderSvg() - not v-html. Nextcloud's ~1,900 global selectors
-			(core/css/server.css) do not reach into a shadow tree, and the page
-			SVG is thousands of nodes: in the document, every style change
-			anywhere (a menu opening, focus moving) re-matched all of them
-			against those rules. Measured with four pages, 14,100 SVG nodes:
-			228 ms per recalc at the desktop, 56 ms from the shadow root; opening
-			and closing a menu at 4x CPU throttling 3.3 s instead of 0.6 s.
-			Vue never patches the children of this element, so the shadow root
-			survives every re-render.
+			The notation lives in a document of its own: a source-less iframe
+			in this element, filled by renderSvg() - not v-html. The page SVG
+			is thousands of nodes, and in the Files page every style change
+			anywhere (a menu opening, Play turning into Pause) recomputed all
+			of them - against Nextcloud's ~1,900 global selectors, and even
+			from a shadow root through a :has() rule of the unified search.
+			Measured figures and the details in scorePageFrame.js. Vue never
+			patches the children of this element, so the frame survives every
+			re-render.
 		-->
 		<div ref="svgHost" class="score-page-svg" />
 		<!--
@@ -230,10 +226,10 @@
 
 <script>
 import axios from '@nextcloud/axios'
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import ScoreDrawings from './ScoreDrawings.vue'
 import ScoreStamps from './ScoreStamps.vue'
+import { translate } from '../l10n.js'
 import { placeCountLabels } from '../lib/countLayout.js'
 import { formatCents } from '../lib/intonation.js'
 import { createLru } from '../lib/lruCache.js'
@@ -243,14 +239,17 @@ import { hitNotehead, matchNoteheads } from '../lib/noteSpellingIndex.js'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
 import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, stavesOfPart } from '../lib/staffBands.js'
 import { buildNoteIndex, buildSegmentIndex, pickNoteheads, setHighlight } from '../lib/svgIndex.js'
-import { sanitizeSvg } from '../lib/svgSanitizer.js'
-import { SCORE_SVG_STYLE } from './scorePageSvgStyle.js'
+import { sanitizeSvgPage } from '../lib/svgSanitizer.js'
+import { yieldToMain } from '../lib/yieldToMain.js'
+import { createScoreFrame } from './scorePageFrame.js'
 
 // Sanitized pages, shared by all ScorePages. Page URLs carry the conversion
 // version (`?v=`), so an entry never goes stale. A few pages are enough: the
 // system band mounts several frames of the same page and re-mounts them when
-// they scroll back into reach (SystemBand.vue).
-const svgCache = createLru(4)
+// they scroll back into reach (SystemBand.vue), and the page view unloads a
+// page 2,400 px away and loads it again on the way back. Each entry holds
+// the text and the parsed nodes (lib/svgSanitizer.js#sanitizeSvgPage).
+const svgCache = createLru(6)
 
 // Wie weit der Zeiger zwischen pointerdown und click wandern darf, damit es
 // noch als Klick gilt. Grosszuegig genug fuer das Zittern eines
@@ -421,6 +420,15 @@ export default {
 		noteTheme: {
 			type: String,
 			default: 'light',
+		},
+
+		// The notation's colours as CSS custom properties (`--scoreview-ink`,
+		// `--scoreview-highlight`, ...; lib/noteTheme.js). They no longer
+		// inherit from the viewer: the SVG sits in a document of its own
+		// (scorePageFrame.js), so they are copied onto it.
+		svgVars: {
+			type: Object,
+			default: null,
 		},
 
 		// Intonation: Notenkoepfe, die dreifarbig markiert werden -
@@ -845,6 +853,10 @@ export default {
 		noteTheme() {
 			this.applyNoteTheme()
 		},
+
+		svgVars() {
+			this.frame?.setVars(this.svgVars)
+		},
 	},
 
 	created() {
@@ -863,14 +875,20 @@ export default {
 		this.marked = []
 		this.liveMarked = []
 		// Notenkoepfe mit Tonhoehe und Schreibweise (lib/noteSpellingIndex.js)
-		// - DOM-Knoten, also ebenfalls nicht reaktiv.
+		// - DOM-Knoten, also ebenfalls nicht reaktiv. Gemessen erst bei
+		// Bedarf (measuredNoteItems()), `noteItemsMeasured` sagt, ob schon.
 		this.noteItems = []
+		this.noteItemsMeasured = false
 		// Hindernisse fuer die Tonnamen, gemessen beim ersten Bedarf.
 		this.labelObstacles = null
 		this.tapTimer = null
-		// The element inside the shadow root that holds the page SVG (see
-		// the template and attachSvgRoot()) - a DOM node, so not in data().
+		// The frame with the page SVG and the element in it that holds the
+		// SVG (see the template and attachSvgRoot()) - DOM nodes, so not in
+		// data(). `svgSource` is the sanitized page as nodes, cloned in by
+		// renderSvg().
+		this.frame = null
 		this.svgRoot = null
+		this.svgSource = null
 	},
 
 	mounted() {
@@ -908,16 +926,39 @@ export default {
 		this.loadObserver?.disconnect()
 		this.unloadObserver?.disconnect()
 		clearTimeout(this.tapTimer)
+		this.frame?.destroy()
+		this.frame = null
+		this.svgRoot = null
 	},
 
 	methods: {
 		/**
 		 * Notenkoepfe dieser Seite mit Tonhoehe und Schreibweise verbinden
-		 * (E15). Die Boxen werden einmal hier gemessen - getBBox() ist eine
-		 * Layoutabfrage, je Rahmen waere sie zu teuer.
+		 * (E15). Only marks the list as stale: the boxes are measured when
+		 * something needs them (measuredNoteItems()).
 		 */
 		indexSpellings() {
 			this.labelObstacles = null
+			this.noteItems = []
+			this.noteItemsMeasured = false
+			this.updateNoteLabels()
+			this.updateCountLabels()
+		},
+
+		/**
+		 * The noteheads with their boxes, measured on first use. getBBox() on
+		 * every head of a page is the dearest step of loading one - measured
+		 * at 4x CPU throttling: about 790 ms for three pages - and only note
+		 * names, beat counts and tapping a note use the boxes. Without those,
+		 * a page never pays for it.
+		 *
+		 * @return {Array<object>}
+		 */
+		measuredNoteItems() {
+			if (this.noteItemsMeasured) {
+				return this.noteItems
+			}
+			this.noteItemsMeasured = true
 			this.noteItems = []
 			if (this.spellings && this.noteIndex) {
 				this.noteItems = matchNoteheads(this.noteIndex, this.spellings).map((item) => {
@@ -931,19 +972,18 @@ export default {
 					return { ...item, box }
 				}).filter((item) => item.box !== null)
 			}
-			this.updateNoteLabels()
-			this.updateCountLabels()
+			return this.noteItems
 		},
 
 		updateCountLabels() {
-			this.countLabels = this.viewBox
-				? placeCountLabels(this.noteItems, this.staffSystems, this.countOfElid, this.countStaves)
+			this.countLabels = this.viewBox && this.countOfElid?.size > 0
+				? placeCountLabels(this.measuredNoteItems(), this.staffSystems, this.countOfElid, this.countStaves)
 				: []
 		},
 
 		updateNoteLabels() {
 			const box = this.viewBox
-			if (!this.noteNameSystem || !box || this.noteItems.length === 0) {
+			if (!this.noteNameSystem || !box || this.measuredNoteItems().length === 0) {
 				this.noteLabels = []
 				return
 			}
@@ -990,7 +1030,7 @@ export default {
 			if (this.labelObstacles) {
 				return this.labelObstacles
 			}
-			const out = this.noteItems.map((item, id) => ({ box: item.box, id }))
+			const out = this.measuredNoteItems().map((item, id) => ({ box: item.box, id }))
 			for (const node of this.svgRoot?.querySelectorAll(LABEL_OBSTACLES) ?? []) {
 				try {
 					const b = node.getBBox()
@@ -1014,11 +1054,12 @@ export default {
 		 * @return {?{pitch: number, tpc: number, elid: number, left: number, top: number}}
 		 */
 		hitNote(x, y) {
-			if (this.noteItems.length === 0 || !this.viewBox) {
+			const items = this.measuredNoteItems()
+			if (items.length === 0 || !this.viewBox) {
 				return null
 			}
-			const height = this.noteItems[0].box.height
-			const hit = hitNotehead(this.noteItems, x, y, height * 0.8)
+			const height = items[0].box.height
+			const hit = hitNotehead(items, x, y, height * 0.8)
 			if (!hit) {
 				return null
 			}
@@ -1075,20 +1116,29 @@ export default {
 				let page = svgCache.get(key)
 				if (!page) {
 					const res = await axios.get(this.svgUrl, { responseType: 'text' })
+					// Der Praefix macht die Glyph-Kennungen dieser Seite im
+					// Dokument eindeutig - ohne ihn greift die zweite Seite auf
+					// die Glyphen der ersten zu, solange beide geladen sind
+					// (siehe namespaceIds()).
+					const { markup, source } = sanitizeSvgPage(res.data, `p${this.pageIndex}-`)
 					page = {
 						viewBox: parseViewBox(res.data),
 						sizeMm: parseSvgSizeMm(res.data),
-						// Der Praefix macht die Glyph-Kennungen dieser Seite im
-						// Dokument eindeutig - ohne ihn greift die zweite Seite auf
-						// die Glyphen der ersten zu, solange beide geladen sind
-						// (siehe namespaceIds()).
-						markup: sanitizeSvg(res.data, `p${this.pageIndex}-`),
+						markup,
+						source,
 					}
 					svgCache.set(key, page)
+					// Sanitizing was one long stretch; a tap or a frame goes
+					// first before the page is put in.
+					await yieldToMain()
+					if (!this.svgRoot) {
+						return
+					}
 				}
 				this.viewBox = page.viewBox
 				this.sizeMm = page.sizeMm
 				this.svgMarkup = page.markup
+				this.svgSource = page.source
 				this.renderSvg()
 				// Für die Zoom-Presets ("Seitenbreite/ganze Seite/100%") -
 				// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
@@ -1103,9 +1153,14 @@ export default {
 				if (this.staffSystems.length > 0) {
 					this.$emit('staffMapping', this.staffMappingPossible)
 				}
-				// The SVG is in the document now; the overlays that index it
-				// render on the next tick.
-				this.$nextTick(() => this.indexSegments())
+				// The SVG is in the document now. Indexing it is the next long
+				// stretch, so the main thread is given back first; the overlays
+				// have rendered by then. If the page was unloaded meanwhile,
+				// there is nothing to index.
+				await yieldToMain()
+				if (this.svgMarkup === page.markup && this.svgRoot) {
+					this.indexSegments()
+				}
 			} catch (err) {
 				this.loadError = err.response?.status
 					? `HTTP ${err.response.status}`
@@ -1116,15 +1171,24 @@ export default {
 		},
 
 		/**
-		 * The shadow root for the notation (see the template for why) with
-		 * its own style sheet - the page's scoped CSS does not reach in.
+		 * The frame for the notation (see the template for why) with its own
+		 * style sheet - neither the page's scoped CSS nor its custom
+		 * properties reach in, the colours come through `svgVars`.
 		 */
 		attachSvgRoot() {
-			const shadow = this.$refs.svgHost.attachShadow({ mode: 'open' })
-			const style = document.createElement('style')
-			style.textContent = SCORE_SVG_STYLE
-			this.svgRoot = document.createElement('div')
-			shadow.append(style, this.svgRoot)
+			this.frame = createScoreFrame(this.$refs.svgHost, {
+				title: this.t('Score page {n}', { n: this.pageIndex + 1 }),
+				onReset: () => {
+					this.svgRoot = this.frame.root
+					this.applyNoteTheme()
+					this.renderSvg()
+					if (this.svgMarkup) {
+						this.indexSegments()
+					}
+				},
+			})
+			this.svgRoot = this.frame.root
+			this.frame.setVars(this.svgVars)
 			this.applyNoteTheme()
 		},
 
@@ -1133,19 +1197,24 @@ export default {
 		},
 
 		/**
-		 * Puts the page SVG into the shadow root, or empties it.
+		 * Puts the page SVG into the frame, or empties it.
 		 *
-		 * innerHTML is the one place markup enters the document here. The
-		 * source is a user upload - MuseScore renders title, lyrics and free
-		 * text from the score into it - so `svgMarkup` has ALWAYS been through
+		 * This is the one place the notation enters a document. The source is
+		 * a user upload - MuseScore renders title, lyrics and free text from
+		 * the score into it - so what goes in has ALWAYS been through
 		 * lib/svgSanitizer.js (DOMPurify), never raw response text: see load().
-		 * If that rule is ever relaxed, this line must stand out again.
+		 * The sanitized nodes are cloned in (`svgSource`); the sanitized text is
+		 * parsed only where no nodes are kept. If that rule is ever relaxed,
+		 * this method must stand out again.
 		 */
 		renderSvg() {
 			if (!this.svgRoot) {
 				return
 			}
-			if (this.svgMarkup) {
+			if (this.svgMarkup && this.svgSource) {
+				const copy = this.svgRoot.ownerDocument.importNode(this.svgSource, true)
+				this.svgRoot.replaceChildren(...copy.childNodes)
+			} else if (this.svgMarkup) {
 				this.svgRoot.innerHTML = this.svgMarkup
 			} else {
 				this.svgRoot.replaceChildren()
@@ -1270,6 +1339,7 @@ export default {
 				return
 			}
 			this.svgMarkup = null
+			this.svgSource = null
 			this.renderSvg()
 			// Die Karte zeigt auf Knoten, die es gleich nicht mehr gibt.
 			this.segmentIndex = null
@@ -1279,6 +1349,7 @@ export default {
 			this.marked = []
 			this.liveMarked = []
 			this.noteItems = []
+			this.noteItemsMeasured = false
 			this.noteLabels = []
 			this.countLabels = []
 			this.labelObstacles = null
@@ -1347,29 +1418,34 @@ export default {
 			})
 		},
 
-		// Für den Autoscroll (src/lib/scrollPlan.js): der Aufrufer
-		// (ScoreViewer.vue) kennt nur ein SVG-Rechteck (page/x/y/w/h), nicht die
-		// tatsächliche Bildschirmposition des gerenderten Cursor-Overlays -
-		// getBoundingClientRect() liefert genau die, inklusive Zoom/Scroll, ohne
-		// dass ScoreViewer.vue selbst rechnen müsste. null, solange kein Cursor
-		// auf dieser Seite gerendert ist (siehe cursorStyle).
-		getCursorClientRect() {
-			// Seit der Cursor in Baender je Notenzeile zerfaellt, liefert Vue
-			// hier ein Array. Das Autoscroll will das ganze System im Blick
-			// behalten, nicht nur die oberste Zeile - deshalb die Huelle ueber
-			// alle Baender statt des ersten. Every band carries the ref for
-			// that: with it on the first band only, autoscroll placed the top
-			// staff and let the lower ones run off the bottom edge.
-			const baender = [this.$refs.cursor].flat().filter(Boolean)
-			if (baender.length === 0) {
+		/**
+		 * Where the cursor stands on this page, as fractions of the page box -
+		 * for the autoscroll (useAutoScroll.js), which places it with the
+		 * page boxes it keeps. Computed from the cursor bands and the viewBox,
+		 * which the cursor layer maps exactly onto the page (inset 0,
+		 * preserveAspectRatio none): no DOM read, so no forced layout per note
+		 * change. The hull over all bands, not the first: autoscroll keeps the
+		 * whole system in view, otherwise the lower staves ran off the bottom
+		 * edge. null while this page shows no cursor (see cursorRects).
+		 *
+		 * @return {?{top:number,left:number,width:number,height:number}}
+		 */
+		getCursorBox() {
+			const box = this.viewBox
+			const bands = this.cursorRects
+			if (!box || bands.length === 0) {
 				return null
 			}
-			const rechtecke = baender.map((el) => el.getBoundingClientRect())
-			const top = Math.min(...rechtecke.map((r) => r.top))
-			const bottom = Math.max(...rechtecke.map((r) => r.bottom))
-			const left = Math.min(...rechtecke.map((r) => r.left))
-			const right = Math.max(...rechtecke.map((r) => r.right))
-			return new DOMRect(left, top, right - left, bottom - top)
+			const top = Math.min(...bands.map((b) => b.y))
+			const bottom = Math.max(...bands.map((b) => b.y + b.h))
+			const left = Math.min(...bands.map((b) => b.x))
+			const right = Math.max(...bands.map((b) => b.x + b.w))
+			return {
+				top: (top - box.minY) / box.height,
+				left: (left - box.minX) / box.width,
+				width: (right - left) / box.width,
+				height: (bottom - top) / box.height,
+			}
 		},
 
 		/**
@@ -1456,6 +1532,25 @@ export default {
 	will-change: opacity;
 }
 
+/*
+ * The frame with the notation (scorePageFrame.js) covers the page. No
+ * pointer events: clicks, taps, pinches and the wheel belong to the page
+ * element behind it. `color-scheme` must equal the one inside the frame,
+ * otherwise Chrome paints an opaque backdrop over the cursor and the page
+ * colour.
+ */
+.score-page-svg :deep(.score-page-frame) {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	border: 0;
+	background: transparent;
+	color-scheme: normal;
+	pointer-events: none;
+}
+
 /* Printing composites nothing, and a sheet layer per page buys nothing. */
 .score-page--static .score-page-svg {
 	will-change: auto;
@@ -1501,9 +1596,9 @@ export default {
  * Leuchten die Notenkoepfe selbst (M10), malt das Band nichts mehr - eine
  * Anzeige der klingenden Stelle genuegt. Genau das ist der Umschalter:
  * `highlightMode` entscheidet, ob ueberhaupt eingefaerbt wird, und damit,
- * welche der beiden Anzeigen uebrig bleibt. Das Band bleibt im DOM und
- * behaelt seine Groesse: Das Autoscroll misst genau dieses Element
- * (getCursorClientRect()), mit display:none oder v-if haette es keine.
+ * welche der beiden Anzeigen uebrig bleibt. Ausgeblendet wird durch die
+ * Fuellung, nicht durch display:none oder v-if: Das Band behaelt so seine
+ * Groesse und seinen Platz in der Stapelfolge.
  */
 .score-page-cursor--hidden {
 	fill: transparent;

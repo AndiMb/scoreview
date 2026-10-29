@@ -85,8 +85,8 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import { translate } from '../l10n.js'
 import { activeSyllable, buildChoirLyrics, buildLyrics, choirActiveSyllables, choirVersesByElid, occurrences, seekTimeFor, systemKeyFor, versesByElid } from '../lib/lyricsLayout.js'
 import { spanInView } from '../lib/scrollPlan.js'
 import { findStepIndex } from '../lib/timingSync.js'

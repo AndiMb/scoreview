@@ -36,9 +36,9 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import Lock from 'vue-material-design-icons/Lock.vue'
 import LockOpenVariantOutline from 'vue-material-design-icons/LockOpenVariantOutline.vue'
+import { translate } from '../l10n.js'
 
 const RADIUS = 16
 

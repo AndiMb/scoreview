@@ -55,9 +55,10 @@
 </template>
 
 <script>
-import { getLanguage, translate } from '@nextcloud/l10n'
+import { getLanguage } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import { translate } from '../l10n.js'
 import { keyTonicName, transposeKey } from '../lib/noteNames.js'
 
 export default {

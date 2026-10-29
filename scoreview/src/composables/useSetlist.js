@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
-import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, ref, shallowRef } from 'vue'
+import { translate } from '../l10n.js'
 import { firstPlayableIndex, indexOfFile, nextIndex, positionOf, previousIndex } from '../lib/setlistNav.js'
 
 /**

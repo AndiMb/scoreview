@@ -48,10 +48,10 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import Speedometer from 'vue-material-design-icons/Speedometer.vue'
+import { translate } from '../l10n.js'
 
 /**
  * Die Eingabe fuer den Speed-Trainer im Loop-Aufklapper. Nur

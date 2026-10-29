@@ -18,8 +18,8 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import MicrophoneOff from 'vue-material-design-icons/MicrophoneOff.vue'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'MicIndicator',

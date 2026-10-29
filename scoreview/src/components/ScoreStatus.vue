@@ -32,10 +32,10 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import AlertCircleOutline from 'vue-material-design-icons/AlertCircleOutline.vue'
+import { translate } from '../l10n.js'
 import { conversionProgressText } from '../lib/viewerTexts.js'
 
 export default {

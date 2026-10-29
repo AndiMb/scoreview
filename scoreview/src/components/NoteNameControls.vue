@@ -67,9 +67,9 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'NoteNameControls',

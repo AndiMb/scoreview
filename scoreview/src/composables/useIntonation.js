@@ -1,5 +1,5 @@
-import { translate } from '@nextcloud/l10n'
 import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
+import { translate } from '../l10n.js'
 import { createGeneration } from '../lib/generation.js'
 import {
 	classify,

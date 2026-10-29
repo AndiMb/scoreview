@@ -79,13 +79,13 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import FilePdfBox from 'vue-material-design-icons/FilePdfBox.vue'
 import Printer from 'vue-material-design-icons/Printer.vue'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'PrintToolbar',

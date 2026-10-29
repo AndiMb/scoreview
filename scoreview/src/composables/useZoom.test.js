@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { BASE_PAGE_WIDTH_PX } from '../lib/scoreLayout.js'
 import { SPREAD_GAP_PX } from '../lib/spreadLayout.js'
 import { useZoom } from './useZoom.js'
@@ -76,5 +76,30 @@ describe('fullscreen inside the page (issue #20)', () => {
 		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
 		await new Promise((resolve) => setTimeout(resolve))
 		expect(zoom.isFullscreen.value).toBe(false)
+	})
+})
+
+describe('useZoom pinch', () => {
+	it('previews the pinch and sets the zoom once, when the fingers let go', () => {
+		const frames = []
+		vi.stubGlobal('requestAnimationFrame', (cb) => frames.push(cb))
+		vi.stubGlobal('cancelAnimationFrame', () => {})
+		try {
+			const animation = { effect: { setKeyframes: vi.fn() }, cancel: vi.fn() }
+			const target = { animate: vi.fn(() => animation), getBoundingClientRect: () => ({ left: 0, top: 0 }) }
+			const touches = (distance) => ({ currentTarget: target, touches: [{ clientX: 100, clientY: 100 }, { clientX: 100 + distance, clientY: 100 }] })
+			const zoom = useZoom({ rootEl: () => null, scrollEl: () => dom(1280, 800) })
+			zoom.set(1)
+			zoom.onTouchStart(touches(100))
+			zoom.onTouchMove(touches(200))
+			frames.shift()()
+			expect(zoom.zoom.value).toBe(1)
+			expect(target.animate.mock.calls[0][0][0].transform).toBe('scale(2)')
+			zoom.onTouchEnd({ currentTarget: target, touches: [] })
+			expect(animation.cancel).toHaveBeenCalled()
+			expect(zoom.zoom.value).toBeCloseTo(2)
+		} finally {
+			vi.unstubAllGlobals()
+		}
 	})
 })

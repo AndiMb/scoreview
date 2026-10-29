@@ -159,7 +159,6 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcPopover from '@nextcloud/vue/components/NcPopover'
 import ChevronLeft from 'vue-material-design-icons/ChevronLeft.vue'
@@ -168,6 +167,7 @@ import Close from 'vue-material-design-icons/Close.vue'
 import Pencil from 'vue-material-design-icons/Pencil.vue'
 import PlaylistMusic from 'vue-material-design-icons/PlaylistMusic.vue'
 import { useFullscreenContainer } from '../composables/useFullscreenContainer.js'
+import { translate } from '../l10n.js'
 
 /**
  * Nur Darstellung - Zustand und Blättern stehen in useSetlist.js und

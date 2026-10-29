@@ -8,7 +8,7 @@ import {
 	normalizeHighlightColor,
 	normalizeHighlightMode,
 } from '../lib/highlightStyle.js'
-import { isDarkBackground, normalizeNoteTheme, noteThemeCssVars, resolveNoteTheme } from '../lib/noteTheme.js'
+import { isDarkBackground, normalizeNoteTheme, noteThemeCssVars, resolveNoteTheme, themeIsDarkFromIds } from '../lib/noteTheme.js'
 import { normalizeReferencePitch } from '../lib/referencePitch.js'
 import { SPREAD_PREFS } from '../lib/spreadLayout.js'
 
@@ -148,6 +148,13 @@ function oneOf(value, allowed) {
  */
 function leseThemeDunkel() {
 	try {
+		const ausIds = themeIsDarkFromIds(
+			document.body?.dataset?.themes,
+			window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false,
+		)
+		if (ausIds !== null) {
+			return ausIds
+		}
 		const wert = getComputedStyle(document.body).getPropertyValue('--color-main-background')
 		return isDarkBackground(wert)
 	} catch {

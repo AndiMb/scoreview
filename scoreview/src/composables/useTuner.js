@@ -1,5 +1,5 @@
-import { translate } from '@nextcloud/l10n'
 import { getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
+import { translate } from '../l10n.js'
 import { createGeneration } from '../lib/generation.js'
 import { A4_HZ } from '../lib/intonation.js'
 import { nearest, smooth } from '../lib/tuner.js'

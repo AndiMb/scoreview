@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
-import { translate } from '@nextcloud/l10n'
 import { generateOcsUrl, generateUrl } from '@nextcloud/router'
 import { ref } from 'vue'
+import { translate } from '../l10n.js'
 import {
 	apiUrlsFor,
 	DATA_CACHE,

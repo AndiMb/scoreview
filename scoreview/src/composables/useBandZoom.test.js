@@ -85,6 +85,28 @@ describe('useBandZoom', () => {
 			expect(frames).toHaveLength(0)
 		})
 
+		it('previews on the compositor and sets the zoom once, when the fingers let go', () => {
+			const animation = { effect: { setKeyframes: vi.fn() }, cancel: vi.fn() }
+			const target = {
+				animate: vi.fn(() => animation),
+				getBoundingClientRect: () => ({ left: 0, top: 0 }),
+			}
+			const withTarget = (event) => ({ ...event, currentTarget: target })
+			const z = useBandZoom()
+			z.onTouchStart(withTarget(touches(100)))
+			z.onTouchMove(withTarget(touches(150)))
+			frames.shift()()
+			z.onTouchMove(withTarget(touches(200)))
+			frames.shift()()
+			expect(z.zoom.value).toBe(1)
+			expect(target.animate).toHaveBeenCalledTimes(1)
+			expect(target.animate.mock.calls[0][0][0].transform).toBe('scale(1.5)')
+			expect(animation.effect.setKeyframes.mock.calls[0][0][0].transform).toBe('scale(2)')
+			z.onTouchEnd(withTarget({ touches: [] }))
+			expect(animation.cancel).toHaveBeenCalled()
+			expect(z.zoom.value).toBeCloseTo(2)
+		})
+
 		it('drops a pending frame on stop', () => {
 			const z = useBandZoom()
 			z.onTouchStart(touches(100))

@@ -138,7 +138,6 @@
 <script>
 import axios from '@nextcloud/axios'
 import { getFilePickerBuilder } from '@nextcloud/dialogs'
-import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -150,6 +149,7 @@ import Delete from 'vue-material-design-icons/Delete.vue'
 import DragVertical from 'vue-material-design-icons/DragVertical.vue'
 import FolderOpen from 'vue-material-design-icons/FolderOpen.vue'
 import Plus from 'vue-material-design-icons/Plus.vue'
+import { translate } from '../l10n.js'
 import { addScore, moveRow, payloadFor, removeRow, rowsFromSetlist } from '../lib/setlistEdit.js'
 
 import '@nextcloud/dialogs/style.css'

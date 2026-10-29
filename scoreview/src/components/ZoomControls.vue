@@ -39,12 +39,12 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import ArrowExpandHorizontal from 'vue-material-design-icons/ArrowExpandHorizontal.vue'
 import FitToPage from 'vue-material-design-icons/FitToPage.vue'
 import Magnify from 'vue-material-design-icons/Magnify.vue'
 import Restore from 'vue-material-design-icons/Restore.vue'
+import { translate } from '../l10n.js'
 
 /**
  * Der Zoom der Bedienleiste: Regler und die drei Voreinstellungen, direkt

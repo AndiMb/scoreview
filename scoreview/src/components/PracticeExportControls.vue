@@ -95,7 +95,6 @@
 
 <script>
 import { getFilePickerBuilder } from '@nextcloud/dialogs'
-import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
@@ -103,6 +102,7 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcProgressBar from '@nextcloud/vue/components/NcProgressBar'
 import AccountMultiple from 'vue-material-design-icons/AccountMultiple.vue'
 import Download from 'vue-material-design-icons/Download.vue'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'PracticeExportControls',

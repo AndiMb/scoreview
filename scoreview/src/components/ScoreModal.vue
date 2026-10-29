@@ -55,11 +55,11 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcModal from '@nextcloud/vue/components/NcModal'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import ScoreViewer from './ScoreViewer.vue'
 import SetlistEditor from './SetlistEditor.vue'
+import { translate } from '../l10n.js'
 import { firstPlayableIndex } from '../lib/setlistNav.js'
 
 export default {

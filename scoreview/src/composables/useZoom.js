@@ -8,6 +8,7 @@ import {
 	MIN_ZOOM,
 } from '../lib/scoreLayout.js'
 import { fitSpreadPageZoom, fitSpreadWidthZoom } from '../lib/spreadLayout.js'
+import { createPinchPreview } from './pinchPreview.js'
 
 // Zoomschritt fuer Tastatur (+/-) und Strg+Mausrad - multiplikativ, damit sich
 // die gefuehlte Schrittweite ueber den ganzen Bereich (0,25-4) gleich anfuehlt.
@@ -88,6 +89,10 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 	let pinchZoom = null
 	let pinchStartDistance = 0
 	let pinchStartZoom = 1
+	// While two fingers move, a scale on the compositor; the zoom itself is
+	// set when they let go (pinchPreview.js).
+	const preview = createPinchPreview()
+	let previewing = false
 
 	/**
 	 * Einziger Weg, `zoom` zu setzen, außer der Fensterbreiten-Automatik
@@ -344,6 +349,11 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 			isPinching = true
 			pinchStartDistance = touchDistance(event.touches)
 			pinchStartZoom = zoom.value
+			pinchZoom = null
+			previewing = preview.supported(event.currentTarget)
+			if (previewing) {
+				preview.start(event.currentTarget, event.touches)
+			}
 		}
 	}
 
@@ -353,7 +363,11 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 			if (pinchFrame === null) {
 				pinchFrame = requestAnimationFrame(() => {
 					pinchFrame = null
-					set(pinchZoom)
+					if (previewing) {
+						preview.show(pinchZoom / pinchStartZoom)
+					} else {
+						set(pinchZoom)
+					}
 				})
 			}
 		}
@@ -367,15 +381,31 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 	}
 
 	function onTouchEnd(event) {
-		if (event.touches.length < 2) {
+		if (event.touches.length < 2 && isPinching) {
 			isPinching = false
+			endPinch()
 		}
+	}
+
+	/** Commits the previewed zoom: one layout for the whole gesture. */
+	function endPinch() {
+		cancelPinchFrame()
+		if (previewing) {
+			preview.end()
+			previewing = false
+			if (pinchZoom !== null) {
+				set(pinchZoom)
+			}
+		}
+		pinchZoom = null
 	}
 
 	function stop() {
 		viewportObserver?.disconnect()
 		viewportObserver = null
 		cancelPinchFrame()
+		preview.end()
+		previewing = false
 	}
 
 	/**

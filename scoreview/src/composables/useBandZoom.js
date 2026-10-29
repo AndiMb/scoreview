@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { computePinchZoom } from '../lib/scoreLayout.js'
 import { BAND_ZOOM_MAX, BAND_ZOOM_MIN } from '../lib/systemBand.js'
+import { createPinchPreview } from './pinchPreview.js'
 
 /** The size that suits a screen belongs to the device, not to the person. */
 const STORAGE_KEY = 'scoreview-band-zoom'
@@ -73,6 +74,11 @@ export function useBandZoom() {
 		return Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY)
 	}
 
+	// While the fingers move, a scale on the compositor; the zoom is set when
+	// they let go (pinchPreview.js).
+	const preview = createPinchPreview()
+	let previewing = false
+
 	// Two fingers zoom the band as they zoom the pages (useZoom.js); the
 	// browser's own pinch zoom is off there by touch-action.
 	function onTouchStart(event) {
@@ -80,33 +86,58 @@ export function useBandZoom() {
 			pinching = true
 			pinchStartDistance = touchDistance(event.touches)
 			pinchStartZoom = zoom.value
+			pinchZoom = null
+			previewing = preview.supported(event.currentTarget)
+			if (previewing) {
+				preview.start(event.currentTarget, event.touches)
+			}
 		}
 	}
 
 	function onTouchMove(event) {
 		if (pinching && event.touches.length === 2) {
 			pinchZoom = computePinchZoom(pinchStartDistance, touchDistance(event.touches), pinchStartZoom, { min: BAND_ZOOM_MIN, max: BAND_ZOOM_MAX })
-			// One change per frame: every change lays the frames out anew.
+			// One change per frame: every change lays the frames out anew -
+			// which is why, where it can, the band only shows a preview.
 			if (pinchFrame === null) {
 				pinchFrame = requestAnimationFrame(() => {
 					pinchFrame = null
-					set(pinchZoom)
+					if (previewing) {
+						preview.show(pinchZoom / pinchStartZoom)
+					} else {
+						set(pinchZoom)
+					}
 				})
 			}
 		}
 	}
 
 	function onTouchEnd(event) {
-		if (event.touches.length < 2) {
+		if (event.touches.length < 2 && pinching) {
 			pinching = false
+			cancelFrame()
+			if (previewing) {
+				preview.end()
+				previewing = false
+				if (pinchZoom !== null) {
+					set(pinchZoom)
+				}
+			}
+			pinchZoom = null
 		}
 	}
 
-	function stop() {
+	function cancelFrame() {
 		if (pinchFrame !== null) {
 			cancelAnimationFrame(pinchFrame)
 			pinchFrame = null
 		}
+	}
+
+	function stop() {
+		cancelFrame()
+		preview.end()
+		previewing = false
 		pinching = false
 	}
 

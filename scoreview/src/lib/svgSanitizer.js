@@ -181,6 +181,23 @@ function namespaceIds(fragment, prefix) {
  * @return {string}
  */
 export function sanitizeSvg(svgText, idPrefix = '') {
+	return sanitizeSvgPage(svgText, idPrefix).markup
+}
+
+/**
+ * Like sanitizeSvg(), and keeps the parsed result as well: `source` is an
+ * element whose children are the sanitized nodes, `markup` their text. A
+ * page clones `source` into its document (ScorePage.vue#renderSvg) instead
+ * of parsing `markup` a second time - cloning a tree is cheaper than
+ * tokenizing half a megabyte of SVG, and loading a page was one long task
+ * on a phone. The text stays for what reads the SVG as text
+ * (lib/staffBands.js).
+ *
+ * @param {string} svgText
+ * @param {string} idPrefix see sanitizeSvg()
+ * @return {{markup: string, source: HTMLElement}}
+ */
+export function sanitizeSvgPage(svgText, idPrefix = '') {
 	// RETURN_DOM_FRAGMENT statt der Zeichenkette: `namespaceIds()` braucht das
 	// geparste Ergebnis, und ein zweiter Parserlauf ueber ein halbes Megabyte
 	// SVG je Seite waere dafuer verschenkt. Serialisiert wird unten von Hand -
@@ -210,5 +227,5 @@ export function sanitizeSvg(svgText, idPrefix = '') {
 	}
 	const container = document.createElement('div')
 	container.appendChild(fragment)
-	return container.innerHTML
+	return { markup: container.innerHTML, source: container }
 }

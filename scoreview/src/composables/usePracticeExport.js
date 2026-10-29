@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
-import { translate } from '@nextcloud/l10n'
 import { generateFilePath, generateUrl } from '@nextcloud/router'
 import { ref, shallowRef } from 'vue'
+import { translate } from '../l10n.js'
 import { withAppVersion } from '../lib/assetVersion.js'
 import { buildExportPlan, plansForAllParts } from '../lib/exportPlan.js'
 import { practiceTrackName } from '../lib/practiceTrackName.js'

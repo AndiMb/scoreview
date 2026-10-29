@@ -20,9 +20,9 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import Close from 'vue-material-design-icons/Close.vue'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'ScorePanel',

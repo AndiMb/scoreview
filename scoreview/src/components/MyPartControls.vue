@@ -25,8 +25,8 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
+import { translate } from '../l10n.js'
 
 // Radio values are text; "none" cannot clash with a part id, which is a number
 // in meta.json and its text on the server.

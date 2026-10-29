@@ -78,7 +78,6 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
@@ -88,6 +87,7 @@ import AccountMusic from 'vue-material-design-icons/AccountMusic.vue'
 import Check from 'vue-material-design-icons/Check.vue'
 import Close from 'vue-material-design-icons/Close.vue'
 import LockOutline from 'vue-material-design-icons/LockOutline.vue'
+import { translate } from '../l10n.js'
 
 export default {
 	name: 'LoopSaveForm',

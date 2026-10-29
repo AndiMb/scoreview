@@ -23,9 +23,7 @@ function setup({ enabled, cursorTop }) {
 		getBoundingClientRect: () => ({ top: 0, left: 0 }),
 		scrollTo: vi.fn(),
 	}
-	const page = {
-		getCursorClientRect: () => ({ top: cursorTop, left: 100, height: 80, width: 50 }),
-	}
+	const page = pageAt(cursorTop)
 	const on = { value: enabled }
 	const scroll = useAutoScroll({ scrollEl: () => el, enabled: () => on.value })
 	scroll.setPageRef(page, 0)
@@ -33,6 +31,19 @@ function setup({ enabled, cursorTop }) {
 }
 
 const RECT = { page: 0, x: 0, y: 0, w: 1, h: 1 }
+
+/**
+ * A page 800 x 1000 px whose top edge sits at `cursorTop` in viewport
+ * coordinates, with the cursor at its top edge, 100 px in, 50 x 80 px.
+ *
+ * @param {number} cursorTop
+ */
+function pageAt(cursorTop) {
+	return {
+		$el: { getBoundingClientRect: () => ({ top: cursorTop, left: 0, width: 800, height: 1000 }) },
+		getCursorBox: () => ({ top: 0, left: 100 / 800, width: 50 / 800, height: 80 / 1000 }),
+	}
+}
 
 describe('useAutoScroll', () => {
 	it('follows the playback while switched on', () => {
@@ -68,10 +79,37 @@ describe('useAutoScroll', () => {
 		scroll.update(RECT)
 		expect(scroll.cursorOutOfView.value).toBe(false)
 		// The cursor did not move, the view did: scrolled away by hand.
-		scroll.setPageRef({ getCursorClientRect: () => ({ top: -900, left: 100, height: 80, width: 50 }) }, 0)
+		scroll.setPageRef(pageAt(-900), 0)
 		scroll.onUserGestureStart()
 		scroll.onUserGestureEnd()
 		scroll.onScrollEnd()
 		expect(scroll.cursorOutOfView.value).toBe(true)
+	})
+
+	it('measures the layout once, not per note change', () => {
+		const { scroll } = setup({ enabled: true, cursorTop: 200 })
+		const page = pageAt(200)
+		const read = vi.spyOn(page.$el, 'getBoundingClientRect')
+		scroll.setPageRef(page, 0)
+		scroll.update(RECT)
+		scroll.update(RECT)
+		scroll.update(RECT)
+		expect(read).toHaveBeenCalledTimes(1)
+	})
+
+	it('measures afresh for a forced update', () => {
+		const { scroll } = setup({ enabled: true, cursorTop: 200 })
+		const page = pageAt(200)
+		const read = vi.spyOn(page.$el, 'getBoundingClientRect')
+		scroll.setPageRef(page, 0)
+		scroll.update(RECT)
+		scroll.update(RECT, true)
+		expect(read).toHaveBeenCalledTimes(2)
+	})
+
+	it('hands out the same ref callback for a page on every render', () => {
+		const { scroll } = setup({ enabled: true, cursorTop: 200 })
+		expect(scroll.pageRef(3)).toBe(scroll.pageRef(3))
+		expect(scroll.pageRef(3)).not.toBe(scroll.pageRef(4))
 	})
 })

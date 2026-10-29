@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { isManualScrollEnd, planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll, spanInView } from '../lib/scrollPlan.js'
+import { cursorInContent, isManualScrollEnd, planAutoScroll, planHorizontalScroll, shouldSuppressAutoScroll, spanInView } from '../lib/scrollPlan.js'
 
 // Pausendauer für das Nachführen nach manuellem Scrollen (siehe
 // scrollPlan.js) - lang genug, um in Ruhe zu lesen, kurz genug, um nicht wie
@@ -28,8 +28,16 @@ const RETRY_MAX = 20
  * bleibt in `scrollPlan.js`, wo sie ohne Browser getestet wird.
  *
  * Auch die Referenzen auf die Seitenkomponenten leben hier: sie werden nur
- * gebraucht, um den Cursor auf dem Bildschirm zu messen
- * (`getCursorClientRect()`), und gehören damit zu dieser Aufgabe.
+ * gebraucht, um den Cursor auf dem Bildschirm zu finden, und gehören damit
+ * zu dieser Aufgabe.
+ *
+ * The measuring happens rarely, not per note change: the page boxes, the
+ * container's size and its scroll position are kept (`geometry`) until a
+ * ResizeObserver or MutationObserver reports that something in the scroll
+ * area moved, and the cursor's place on its page comes from the page itself
+ * without a DOM read (ScorePage.vue#getCursorBox, scrollPlan.js#cursorInContent).
+ * A forced update (an own jump, a zoom) always measures afresh - the
+ * observers report only after the next layout.
  *
  * @param {object} deps
  * @param {() => HTMLElement|null} deps.scrollEl das scrollende Element
@@ -56,13 +64,153 @@ export function useAutoScroll({ scrollEl, enabled = () => true }) {
 	// button back to it. Only measured while switched off - switched on, the
 	// view brings the cursor back by itself.
 	const cursorOutOfView = ref(false)
+	// Measured layout of the scroll area, or null when it has to be read
+	// again (see the header): {scrollTop, scrollLeft, clientHeight,
+	// clientWidth, scrollWidth, pages: [{top, left, width, height}] in
+	// content px}.
+	let geometry = null
+	let watchedEl = null
+	let resizeObserver = null
+	let mutationObserver = null
+
+	function invalidate() {
+		geometry = null
+	}
+
+	function onScroll() {
+		if (geometry && watchedEl) {
+			geometry.scrollTop = watchedEl.scrollTop
+			geometry.scrollLeft = watchedEl.scrollLeft
+		}
+	}
+
+	/**
+	 * Watches the scroll area for anything that moves a page: a size change
+	 * of the container, of what sits in it (a hint above the pages) or of a
+	 * page (zoom, load), and added, removed or restyled elements. The
+	 * attribute filter leaves out the cursor's geometry, which changes per
+	 * note and moves nothing else.
+	 *
+	 * @param {HTMLElement} el
+	 */
+	function watch(el) {
+		if (el === watchedEl) {
+			return
+		}
+		unwatch()
+		watchedEl = el
+		el.addEventListener?.('scroll', onScroll, { passive: true })
+		if (typeof ResizeObserver !== 'undefined') {
+			resizeObserver = new ResizeObserver(invalidate)
+		}
+		if (typeof MutationObserver !== 'undefined' && typeof Node !== 'undefined' && el instanceof Node) {
+			mutationObserver = new MutationObserver(invalidate)
+			mutationObserver.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style'] })
+		}
+	}
+
+	function unwatch() {
+		watchedEl?.removeEventListener?.('scroll', onScroll)
+		resizeObserver?.disconnect()
+		mutationObserver?.disconnect()
+		resizeObserver = null
+		mutationObserver = null
+		watchedEl = null
+		geometry = null
+	}
+
+	/**
+	 * Reads the layout of the scroll area - the one forced layout, now only
+	 * after something moved.
+	 *
+	 * @param {HTMLElement} el
+	 * @return {object}
+	 */
+	function measure(el) {
+		watch(el)
+		const box = el.getBoundingClientRect()
+		const next = {
+			scrollTop: el.scrollTop,
+			scrollLeft: el.scrollLeft,
+			clientHeight: el.clientHeight,
+			clientWidth: el.clientWidth,
+			scrollWidth: el.scrollWidth,
+			pages: [],
+		}
+		// observe() is idempotent: elements that came in since are added here.
+		resizeObserver?.observe(el)
+		for (const child of el.children ?? []) {
+			resizeObserver?.observe(child)
+		}
+		pageRefs.forEach((page, index) => {
+			const pageEl = page?.$el
+			if (!pageEl?.getBoundingClientRect) {
+				return
+			}
+			resizeObserver?.observe(pageEl)
+			const r = pageEl.getBoundingClientRect()
+			next.pages[index] = {
+				top: next.scrollTop + r.top - box.top,
+				left: next.scrollLeft + r.left - box.left,
+				width: r.width,
+				height: r.height,
+			}
+		})
+		geometry = next
+		return next
+	}
+
+	/**
+	 * The cursor in content px and the layout it was placed in, or null
+	 * while its page has no cursor yet (not loaded).
+	 *
+	 * @param {HTMLElement} el
+	 * @param {{page: number}} rect
+	 * @param {boolean} fresh measure even if the kept layout looks valid
+	 * @return {?{cursor: object, geo: object}}
+	 */
+	function locate(el, rect, fresh) {
+		const share = pageRefs[rect.page]?.getCursorBox?.()
+		if (!share) {
+			return null
+		}
+		let geo = fresh || el !== watchedEl ? null : geometry
+		if (!geo?.pages[rect.page]) {
+			geo = measure(el)
+		}
+		const page = geo.pages[rect.page]
+		return page ? { cursor: cursorInContent(page, share), geo } : null
+	}
 
 	function setPageRef(el, index) {
 		if (el) {
+			if (pageRefs[index] !== el) {
+				geometry = null
+			}
 			pageRefs[index] = el
-		} else {
+		} else if (index in pageRefs) {
 			delete pageRefs[index]
+			geometry = null
 		}
+	}
+
+	// One callback per page index, the same on every render. An inline
+	// `(el) => setPageRef(el, i)` in the template is a new function per
+	// render, and Vue answers that by unsetting and setting every page ref -
+	// which here would also throw away the kept layout once per note.
+	const pageRefCallbacks = new Map()
+
+	/**
+	 * @param {number} index
+	 * @return {(el: ?object) => void} a function ref for the page `index`
+	 */
+	function pageRef(index) {
+		let callback = pageRefCallbacks.get(index)
+		if (!callback) {
+			callback = (el) => setPageRef(el, index)
+			pageRefCallbacks.set(index, callback)
+		}
+		return callback
 	}
 
 	function scrollTo(targetScrollTop, targetScrollLeft = null) {
@@ -94,6 +242,16 @@ export function useAutoScroll({ scrollEl, enabled = () => true }) {
 			ownScrollAt = Date.now()
 		}
 		el.scrollTo(options)
+		// A jump is there at once, before any `scroll` event; a glide
+		// reports its way through them (onScroll).
+		if (geometry && options.behavior === 'auto') {
+			if (top !== null) {
+				geometry.scrollTop = top
+			}
+			if (left !== null) {
+				geometry.scrollLeft = left
+			}
+		}
 	}
 
 	/**
@@ -127,9 +285,8 @@ export function useAutoScroll({ scrollEl, enabled = () => true }) {
 			return
 		}
 		const pageEl = pageRefs[rect.page]
-		const containerRect = el.getBoundingClientRect()
-		const cursorClientRect = pageEl?.getCursorClientRect?.()
-		if (!cursorClientRect) {
+		const found = locate(el, rect, force)
+		if (!found) {
 			// Die Zielseite ist noch nicht geladen (IntersectionObserver hat sie
 			// noch nicht ausgelöst, siehe ScorePage.vue) - kommt bei einem weiten
 			// Sprung vor (z.B. "springe zu Takt 60"), bei dem noch nie in die Nähe
@@ -144,7 +301,7 @@ export function useAutoScroll({ scrollEl, enabled = () => true }) {
 			// sofort wieder unterdrücken.
 			const pageClientRect = pageEl?.$el?.getBoundingClientRect?.()
 			if (pageClientRect) {
-				scrollTo(el.scrollTop + (pageClientRect.top - containerRect.top))
+				scrollTo(el.scrollTop + (pageClientRect.top - el.getBoundingClientRect().top))
 			}
 			// Im Stillstand kommt kein naechster Notenwechsel - nach einem
 			// Sprung der Leitung oder ins Taktfeld bliebe die Ansicht am
@@ -157,22 +314,23 @@ export function useAutoScroll({ scrollEl, enabled = () => true }) {
 			}
 			return
 		}
+		const { cursor, geo } = found
 		const target = planAutoScroll({
-			cursorTop: el.scrollTop + (cursorClientRect.top - containerRect.top),
-			cursorHeight: cursorClientRect.height,
-			scrollTop: el.scrollTop,
-			viewportHeight: el.clientHeight,
+			cursorTop: cursor.top,
+			cursorHeight: cursor.height,
+			scrollTop: geo.scrollTop,
+			viewportHeight: geo.clientHeight,
 		})
 		// Waagerecht nur, wenn die Seite überhaupt breiter als das Bild ist
 		// (siehe ScorePage.vue) - sonst wäre jeder Aufruf eine überflüssige
 		// DOM-Schreiboperation.
 		let targetLeft = null
-		if (el.scrollWidth > el.clientWidth) {
+		if (geo.scrollWidth > geo.clientWidth) {
 			targetLeft = planHorizontalScroll({
-				cursorLeft: el.scrollLeft + (cursorClientRect.left - containerRect.left),
-				cursorWidth: cursorClientRect.width,
-				scrollLeft: el.scrollLeft,
-				viewportWidth: el.clientWidth,
+				cursorLeft: cursor.left,
+				cursorWidth: cursor.width,
+				scrollLeft: geo.scrollLeft,
+				viewportWidth: geo.clientWidth,
 			})
 		}
 		if (target !== null || targetLeft !== null) {
@@ -193,16 +351,16 @@ export function useAutoScroll({ scrollEl, enabled = () => true }) {
 			cursorOutOfView.value = false
 			return
 		}
-		const cursorClientRect = pageRefs[rect.page]?.getCursorClientRect?.()
-		if (!cursorClientRect) {
+		const found = locate(el, rect, false)
+		if (!found) {
 			// Page not loaded yet: it is far away from what is on screen.
 			cursorOutOfView.value = true
 			return
 		}
-		const box = el.getBoundingClientRect()
+		const { cursor, geo } = found
 		cursorOutOfView.value = !(
-			spanInView({ start: cursorClientRect.top, size: cursorClientRect.height, viewStart: box.top, viewSize: el.clientHeight })
-			&& spanInView({ start: cursorClientRect.left, size: cursorClientRect.width, viewStart: box.left, viewSize: el.clientWidth })
+			spanInView({ start: cursor.top, size: cursor.height, viewStart: geo.scrollTop, viewSize: geo.clientHeight })
+			&& spanInView({ start: cursor.left, size: cursor.width, viewStart: geo.scrollLeft, viewSize: geo.clientWidth })
 		)
 	}
 
@@ -269,6 +427,7 @@ export function useAutoScroll({ scrollEl, enabled = () => true }) {
 			retryTimer = null
 		}
 		pageRefs.length = 0
+		unwatch()
 		lastManualScrollAt = null
 		gestureActive = false
 		ownScrollAt = null
@@ -287,5 +446,5 @@ export function useAutoScroll({ scrollEl, enabled = () => true }) {
 		return pageRefs
 	}
 
-	return { setPageRef, pages, update, cursorOutOfView, onUserGestureStart, onUserGestureEnd, noteManualScroll, onScrollEnd, reset }
+	return { setPageRef, pageRef, pages, update, cursorOutOfView, onUserGestureStart, onUserGestureEnd, noteManualScroll, onScrollEnd, reset }
 }

@@ -5,7 +5,7 @@
 // damit ein kuenftiger Umbau nicht unbemerkt dorthin zurueckfaellt. Braucht
 // ein DOM, deshalb die jsdom-Umgebung oben.
 import { describe, expect, it } from 'vitest'
-import { sanitizeSvg } from './svgSanitizer.js'
+import { sanitizeSvg, sanitizeSvgPage } from './svgSanitizer.js'
 
 /**
  * Enthaelt das Ergebnis noch einen ausfuehrbaren/nachladenden Vektor?
@@ -185,5 +185,15 @@ describe('sanitizeSvg - Kennungen je Seite eindeutig machen', () => {
 
 	it('laesst ohne Praefix alles unveraendert', () => {
 		expect(sanitizeSvg(seite)).toMatch(/id="g0"/)
+	})
+})
+
+describe('sanitizeSvgPage - geparstes Ergebnis zum Klonen', () => {
+	it('liefert denselben Inhalt als Text und als Knoten', () => {
+		const { markup, source } = sanitizeSvgPage('<svg><script>x()</script><defs><path id="g0" d="M0 0"/></defs><use href="#g0"/></svg>', 'p0-')
+		expect(source.innerHTML).toBe(markup)
+		expect(markup).not.toMatch(/script/i)
+		expect(source.querySelector('#p0-g0')).not.toBeNull()
+		expect(source.firstElementChild.namespaceURI).toBe('http://www.w3.org/2000/svg')
 	})
 })

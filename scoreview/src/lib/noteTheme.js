@@ -138,6 +138,36 @@ export function contrastRatio(a, b) {
 }
 
 /**
+ * Whether the Nextcloud theme is dark, from the theme ids Nextcloud writes
+ * onto `<body data-themes="...">` (core/templates/layout.user.php). Reading
+ * the attribute costs nothing; reading the theme's colour through
+ * getComputedStyle() instead forced a style pass over the whole Files page
+ * when the viewer opened - measured 147 ms at 4x CPU throttling.
+ *
+ * A `dark…` theme is dark, a `light…` one light; without either the
+ * default theme follows the system (`prefers-color-scheme`). null where the
+ * attribute is missing (a page without Nextcloud's theming) - then the
+ * caller falls back to the colour.
+ *
+ * @param {?string} dataThemes the attribute's value, e.g. `default,opendyslexic`
+ * @param {boolean} prefersDark whether the system asks for a dark scheme
+ * @return {?boolean}
+ */
+export function themeIsDarkFromIds(dataThemes, prefersDark) {
+	if (typeof dataThemes !== 'string') {
+		return null
+	}
+	const ids = dataThemes.split(',').map((id) => id.trim()).filter(Boolean)
+	if (ids.some((id) => id.startsWith('dark'))) {
+		return true
+	}
+	if (ids.some((id) => id.startsWith('light'))) {
+		return false
+	}
+	return prefersDark
+}
+
+/**
  * Ob ein Grund dunkel ist: Schwarze Schrift haette darauf weniger Kontrast
  * als weisse. Unlesbares gilt als hell - so sieht der Viewer ohne Dunkelmodus aus, und
  * ein falsch dunkles Notenbild waere der schlimmere Fehler.

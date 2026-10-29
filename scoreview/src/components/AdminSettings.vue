@@ -279,7 +279,6 @@
 <script>
 import axios from '@nextcloud/axios'
 import { loadState } from '@nextcloud/initial-state'
-import { translate } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
@@ -291,6 +290,7 @@ import NcTextField from '@nextcloud/vue/components/NcTextField'
 import ContentSave from 'vue-material-design-icons/ContentSave.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import Stethoscope from 'vue-material-design-icons/Stethoscope.vue'
+import { translate } from '../l10n.js'
 
 /**
  * Admin-Einstellungen, auf `@nextcloud/vue` statt auf handgeschriebenem DOM -

@@ -1,5 +1,5 @@
-import { translate } from '@nextcloud/l10n'
 import { computed, ref } from 'vue'
+import { translate } from '../l10n.js'
 import { transposeKey } from '../lib/noteNames.js'
 import { channelsOfPart } from '../lib/panLayout.js'
 import { keyAt } from '../lib/scoreFacts.js'

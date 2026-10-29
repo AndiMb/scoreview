@@ -6,6 +6,20 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- The viewer keeps up on phones: menus open in about half the time, a note
+  change during playback no longer re-renders the toolbar and its panels,
+  and following the cursor reads no layout. The notation now sits in a
+  document of its own, where none of Nextcloud's style rules reach it – on
+  narrow screens one of them still re-checked every note of a score sitting
+  in a shadow root.
+- Pinch zoom follows the fingers: while they move the score is only scaled,
+  and laid out anew once they let go.
+- Opening a score and turning to a page block the screen less: note
+  positions are measured when note names or counts first need them, and
+  the system band prepares the system after the next one while it is idle.
+
 ## [1.26.1] – 2026-10-28
 
 ### Fixed

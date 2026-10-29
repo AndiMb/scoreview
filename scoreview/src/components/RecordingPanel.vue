@@ -365,7 +365,6 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -378,6 +377,7 @@ import Play from 'vue-material-design-icons/Play.vue'
 import RecordRec from 'vue-material-design-icons/RecordRec.vue'
 import StopIcon from 'vue-material-design-icons/Stop.vue'
 import Waveform from 'vue-material-design-icons/Waveform.vue'
+import { translate } from '../l10n.js'
 import { formatCents } from '../lib/intonation.js'
 
 /** Der Ausschnitt der Kurve: ±100 Cent, darueber wird am Rand gekappt. */

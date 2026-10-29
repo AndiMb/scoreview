@@ -43,7 +43,7 @@
 </template>
 
 <script>
-import { translate } from '@nextcloud/l10n'
+import { translate } from '../l10n.js'
 import { formatCents } from '../lib/intonation.js'
 
 export default {

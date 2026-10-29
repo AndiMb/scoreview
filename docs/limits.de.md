@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:b94affbe5416 -->
+<!-- translation-of: limits.md sha256:a9c841ab47f9 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -754,14 +754,19 @@ mehrere Minuten ist nicht gemessen.
   Sprünge verteilt, die nicht ausgerollt werden (D.C./D.S., siehe
   [Bekannte Lücken](#bekannte-lücken)), leuchtet die falsche Strophe.
 - **Stilkosten des Notenbilds:** Jedes Seiten-SVG liegt in einem eigenen
-  Shadow-Root, außer Reichweite von Nextclouds rund 1900 globalen Selektoren,
-  und auf einer eigenen Compositor-Ebene. Gemessen an vier Seiten eines
-  Chorsatzes (14 100 SVG-Knoten) am Desktop: eine Stil-Neuberechnung vorher
-  228 ms, jetzt 56 ms; ein Menü der Leiste öffnen und schließen kostete bei
-  vierfach gedrosselter CPU 3,3 s Stilzeit, jetzt 0,6–0,8 s. Während der
-  Wiedergabe war der Hauptthread 490–560 ms je Sekunde belegt, überwiegend
-  damit, das Notenbild in jedem Bild neu in Ebenen aufzuteilen, jetzt
-  130–180 ms.
+  Dokument (einem Rahmen ohne Quelle), außer Reichweite von Nextclouds rund
+  1900 globalen Selektoren, und auf einer eigenen Compositor-Ebene. Gemessen
+  an vier Seiten eines Chorsatzes (14 100 SVG-Knoten): Eine Änderung in der
+  Leiste prüft rund 650–930 Elemente neu statt 17 300. In einem Fenster in
+  Handygröße bei vierfach gedrosselter CPU öffnet das Menü „Tools“ in
+  240–420 ms (mit dem Notenbild in einem Shadow-Root: 580–1080 ms) und
+  schließt in rund 200 ms (500–550 ms). Während der Wiedergabe ist der
+  Hauptthread am Desktop rund 110 ms je Sekunde belegt, im Fenster in
+  Handygröße 300–320 ms (vorher Seiten 430, Band 480 ms). Der Pinch-Zoom
+  zeigt, solange sich die Finger bewegen, eine skalierte Vorschau und setzt
+  die Seiten erst beim Loslassen einmal neu. Am Galaxy S23 (Chrome,
+  Energiesparmodus an) läuft ein Pinch auf den Seiten mit 50 fps und im
+  Systemband mit 39 fps (mit Layout in jedem Bild: 37 und 27 fps).
 - **Systemband:** gemessen an einem Chorsatz mit 10 Systemen, Scrollen mit
   rund 60 fps am Desktop. Am Galaxy S23 (Chrome, ohne Energiesparmodus)
   während der Wiedergabe: Seiten 49 fps (10 % der Bilder über 33 ms),
