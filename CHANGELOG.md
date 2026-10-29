@@ -6,6 +6,29 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.27.0] – 2026-10-29
+
+### Added
+
+- Pin the tools you use all the time to the bar: every row in a menu has a
+  pin, and pinned tools sit as buttons next to the menus – one tap instead of
+  two or three, on a phone right at the front of the tools strip. Up to four,
+  stored with your account. By default the mixer is pinned, and for a leader
+  also “Leaders and Follow me”.
+
+### Changed
+
+- The menus of the bar are sorted by what a tool is about: **Playback and
+  practice** (loop, metronome, tempo, mixer, transpose, coach, microphone
+  tools, practice log), **View** (zoom, scrolling, note names, notes, pages
+  and edition, colours) and **Score** (my part with the starting note, leaders,
+  new setlist, print, audio file, offline, info). Frequent tools come first,
+  settings below a line. The mixer is no longer hidden behind a metronome
+  icon, and the rehearsal menu with its two entries is gone.
+- “Appearance” and “Layout” are now **Colours** and **Pages and edition**;
+  the renderer, “Convert again” and the playback diagnostics moved to their
+  own page, **Score → Info and diagnostics**.
+
 ## [1.26.3] – 2026-10-29
 
 ### Fixed
@@ -1635,6 +1658,8 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.27.0]: https://github.com/AndiMb/scoreview/compare/v1.26.3...v1.27.0
+[1.26.3]: https://github.com/AndiMb/scoreview/compare/v1.26.2...v1.26.3
 [1.26.2]: https://github.com/AndiMb/scoreview/compare/v1.26.1...v1.26.2
 [1.26.1]: https://github.com/AndiMb/scoreview/compare/v1.26.0...v1.26.1
 [1.26.0]: https://github.com/AndiMb/scoreview/compare/v1.25.3...v1.26.0
