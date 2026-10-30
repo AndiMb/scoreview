@@ -8,7 +8,7 @@
 	},
 	"require-dev": {
 		"nextcloud/coding-standard": "^1.3",
-		"nextcloud/ocp": "^31.0",
+		"nextcloud/ocp": "^35.0",
 		"phpunit/phpunit": "^10.5"
 	},
 	"autoload": {
