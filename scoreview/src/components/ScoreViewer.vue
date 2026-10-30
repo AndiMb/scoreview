@@ -4227,4 +4227,20 @@ export default {
 .viewer.modal-mask .modal-wrapper .modal-container:has(> .modal-container__content .scoreview-viewer) {
 	bottom: 0;
 }
+
+/*
+ * @nextcloud/dialogs 8 moves its toasts past the app navigation while it
+ * believes that is open, and believes so unless it finds
+ * `.app-navigation--closed`. Files on a phone marks its collapsed navigation
+ * `app-navigation--close`, so the lock-screen hint (useMediaSession.js) sat
+ * 300 px in and ran off a 412 px screen. Below Nextcloud's mobile breakpoint
+ * the navigation always overlays the content, so the offset is never right
+ * there. The class is a CSS-module name; matching its stable part keeps this
+ * working across dialogs builds, and `body` outranks the module's own rule.
+ */
+@media (max-width: 1024px) {
+	body [class*="_toastContainer_navOpen_"] {
+		inset-inline-start: var(--body-container-margin);
+	}
+}
 </style>
