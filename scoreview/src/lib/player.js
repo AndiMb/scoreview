@@ -13,6 +13,7 @@ import { Sequencer, WorkletSynthesizer } from 'spessasynth_lib'
 import { withAppVersion } from './assetVersion.js'
 import { createAudioIdle } from './audioIdle.js'
 import { audioSession } from './audioSession.js'
+import { soundFontPresets } from './presetList.js'
 import { fineTuneCents } from './referencePitch.js'
 import { channelsSetUp, pickToneChannel } from './startTone.js'
 
@@ -75,14 +76,24 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		// - deren Samples sind selbst stereo, CC10 verschiebt nur die Balance. Ein
 		// StereoPannerNode auf dem eigenen Ausgang des Kanals legt beide Seiten
 		// wirklich auf ein Ohr, und er steht ausserhalb des Sequencers, den ein
-		// Suchlauf zuruecksetzt (siehe setController). Der Effektbus (Ausgang 0,
-		// Hall/Chorus aller Stimmen) bleibt in der Mitte.
+		// Suchlauf zuruecksetzt (siehe setController). Der Hall und Chorus aller
+		// Stimmen bleiben in der Mitte.
+		//
+		// Since spessasynth 4.4 output 0 carries the finished mix (dry channels
+		// plus effects) and the per-channel outputs are dry copies beside it, no
+		// longer parts of a sum. So a panned channel is re-placed instead of
+		// routed: its dry copy is subtracted from the mix (gain -1) and added
+		// back through the panner. For a stereo input a StereoPannerNode at 0
+		// passes both sides unchanged, so at the centre the two paths cancel
+		// exactly - which is why they are only wired while a channel is panned
+		// (repan()), and an unpanned score costs no extra node.
 		for (let channel = 0; channel < MIDI_CHANNELS; channel++) {
 			const panner = context.createStereoPanner()
+			const inverter = context.createGain()
+			inverter.gain.value = -1
 			panner.connect(master)
-			synth.disconnectChannel(master, channel)
-			synth.connectChannel(panner, channel)
-			panners.push(panner)
+			inverter.connect(master)
+			panners.push({ panner, inverter, wired: false })
 		}
 		await synth.soundBankManager.addSoundBank(soundFontArrayBuffer, 'main')
 		await synth.isReady
@@ -366,11 +377,35 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	 */
 	function applyChannelPans(pans) {
 		for (const [channel, pan] of pans) {
-			const panner = panners[channel]
-			if (panner) {
-				panner.pan.setValueAtTime(Math.min(1, Math.max(-1, pan)), context.currentTime)
+			const path = panners[channel]
+			if (path) {
+				path.panner.pan.setValueAtTime(Math.min(1, Math.max(-1, pan)), context.currentTime)
+				repan(channel, path, pan !== 0)
 			}
 		}
+	}
+
+	/**
+	 * Wires or unwires a channel's re-placement path (see createPlayer). Both
+	 * connections change in the same task, so the audio thread sees them
+	 * together and never the mix with only one half.
+	 *
+	 * @param {number} channel
+	 * @param {{panner: StereoPannerNode, inverter: GainNode, wired: boolean}} path
+	 * @param {boolean} wired
+	 */
+	function repan(channel, path, wired) {
+		if (path.wired === wired) {
+			return
+		}
+		if (wired) {
+			synth.connectChannel(path.panner, channel)
+			synth.connectChannel(path.inverter, channel)
+		} else {
+			synth.disconnectChannel(path.panner, channel)
+			synth.disconnectChannel(path.inverter, channel)
+		}
+		path.wired = wired
 	}
 
 	/**
@@ -478,7 +513,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 
 	/** Vom geladenen SoundFont tatsächlich angebotene Instrumente ("Auswahl aus dem SoundFont"). */
 	function getPresetList() {
-		return synth.presetList
+		return soundFontPresets(synth.presetList)
 	}
 
 	/**
@@ -504,8 +539,13 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		stopTone()
 		releaseChord()
 		sequencer.pause()
-		synth.disconnect()
-		panners.forEach((panner) => panner.disconnect())
+		// Since 4.4 disconnect() only takes output 0 off the node it is given.
+		synth.disconnect(master)
+		panners.forEach((path, channel) => {
+			repan(channel, path, false)
+			path.panner.disconnect()
+			path.inverter.disconnect()
+		})
 		master.disconnect()
 		context.close()
 	}

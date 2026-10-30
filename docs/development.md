@@ -241,9 +241,12 @@ Zwei Container: eine Nextcloud-Instanz und `scoreview-sidecar`, aufgesetzt wie i
   sollte er nicht takten, sonst kollidiert er unter SQLite mit parallelen
   Anfragen („database is locked").
 
-Für Tonprüfungen im Browser gilt ein Fallstrick: Der Abgriff muss den
-Ausgangsindex mitführen, sonst misst er nur den Effektbus und meldet fälschlich
-„kein Ton".
+Für Tonprüfungen im Browser gilt ein Fallstrick: Ausgang 0 des
+spessasynth-Worklets trägt den fertigen Mix samt Hall und Chorus, die Ausgänge
+2–17 sind trockene Kopien je Kanal daneben, kein Teil einer Summe. Ein Abgriff
+gehört an Ausgang 0 oder hinter den Master-Gain des Players (der Knoten, der
+in `context.destination` mündet); wer alle Ausgänge summiert, zählt jede
+Stimme doppelt.
 
 **Mikrofon ohne Mikrofon.** Aufnahme und Intonation lassen sich in einem
 Chromium ohne Fenster mit einer WAV-Datei als Signalquelle prüfen:

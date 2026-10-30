@@ -2386,10 +2386,11 @@ SoundFont, MIDI und Mischung ohnehin; der Server bräuchte sonst eine eigene
 Synthese. `usePracticeExport` baut aus dem, was gerade an den Player geht
 (Lautstärken nach Mute, Solo, Fokus und Coach, Panorama, Programme), einen Plan
 (`exportPlan.js`); ein eigener Worker (`renderWorker.js`) spielt das MIDI damit
-über `spessasynth_core` ab, mischt jeden Kanal einzeln nach derselben Kurve wie
-der `StereoPannerNode` des Viewers, legt Metronomklicks dazu, normalisiert auf
-−1 dBFS Spitze (höchstens +12 dB) und kodiert mit `@breezystack/lamejs`
-(LGPL-3.0) als MP3 mit 128 kbit/s, ID3v2.3-Kopf mit Titel, Stimme und Mischung.
+über `spessasynth_core` ab, setzt jeden verschobenen Kanal nach derselben Kurve
+wie der `StereoPannerNode` des Viewers neu ins Stereobild, legt Metronomklicks
+dazu, normalisiert auf −1 dBFS Spitze (höchstens +12 dB) und kodiert mit
+`@breezystack/lamejs` (LGPL-3.0) als MP3 mit 128 kbit/s, ID3v2.3-Kopf mit
+Titel, Stimme und Mischung.
 Ein eigener Worker statt des Players oder eines `OfflineAudioContext`: Er läuft
 unabhängig von der laufenden Wiedergabe, und Chromium reicht Nachrichten an
 ein Worklet im `OfflineAudioContext` nicht weiter. Der Track klingt so wie das,

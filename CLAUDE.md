@@ -155,8 +155,9 @@ Testinstanz stehen in `docs/development.md#testumgebung`.
 Ein Browser-Test läuft über `playwright-core` gegen das gecachte Chromium
 unter `%LOCALAPPDATA%\ms-playwright\`, gesteuert aus kleinen Wegwerf-Skripten
 im Scratch-Verzeichnis. Für Tonprüfungen gilt der Fallstrick aus
-`docs/development.md`: der Abgriff muss den Ausgangsindex mitführen, sonst
-misst er nur den Effektbus und meldet fälschlich „kein Ton".
+`docs/development.md`: Ausgang 0 des Worklets trägt den fertigen Mix, die
+Ausgänge je Kanal sind trockene Kopien daneben – wer alle Ausgänge summiert,
+zählt jede Stimme doppelt.
 
 ## Konventionen
 

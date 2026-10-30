@@ -9,9 +9,10 @@
 //
 // Gemischt wird HIER, nicht im Synthesizer: Das Panorama der eigenen Stimme
 // sitzt im Viewer hinter dem Synthesizer (StereoPannerNode je Kanal, warum
-// nicht CC10 steht in lib/player.js). Der Worker bekommt deshalb jeden Kanal
-// einzeln (processSplit) und legt ihn nach derselben Kurve wie der
-// StereoPannerNode in die Summe. Der Effektbus bleibt in der Mitte, wie dort.
+// nicht CC10 steht in lib/player.js). The worker therefore takes the finished
+// mix plus a dry copy of every channel (process() with channel outputs) and
+// moves each panned channel along the same curve as the StereoPannerNode.
+// Reverb and chorus stay in the centre, as they do there.
 
 import { Mp3Encoder } from '@breezystack/lamejs'
 import { BasicMIDI, BasicSoundBank, SoundBankLoader, SpessaSynthProcessor, SpessaSynthSequencer } from 'spessasynth_core'
@@ -46,9 +47,9 @@ self.onmessage = async ({ data }) => {
  * @return {Promise<Uint8Array>}
  */
 async function render({ midi, soundFont, plan, tags, kbps = 128 }) {
-	await BasicSoundBank.isSF3DecoderReady
+	await BasicSoundBank.ready
 	const synth = new SpessaSynthProcessor(SAMPLE_RATE, { eventsEnabled: false, effectsEnabled: true })
-	await synth.processorInitialized
+	await synth.ready
 	synth.soundBankManager.addSoundBank(SoundBankLoader.fromArrayBuffer(soundFont), 'main')
 	synth.setSystemParameter('autoAllocateVoices', true)
 	// Die globale Transposition: uebersteht Suchlaeufe, laesst Schlagzeug aus
@@ -84,33 +85,38 @@ async function render({ midi, soundFont, plan, tags, kbps = 128 }) {
 	const outL = new Float32Array(total)
 	const outR = new Float32Array(total)
 	const dry = Array.from({ length: CHANNELS }, () => [new Float32Array(BLOCK), new Float32Array(BLOCK)])
-	const wetL = new Float32Array(BLOCK)
-	const wetR = new Float32Array(BLOCK)
+	const mixL = new Float32Array(BLOCK)
+	const mixR = new Float32Array(BLOCK)
 	const gains = panGains(plan.channels)
+	// Only panned channels need re-placing - see the loop.
+	const panned = gains.flatMap((g, c) => (g.ll === 1 && g.rl === 0 && g.rr === 1 && g.lr === 0 ? [] : [c]))
 
 	let lastReport = 0
 	for (let index = 0; index < total; index += BLOCK) {
 		const n = Math.min(BLOCK, total - index)
-		// processSplit MISCHT in die Puffer - also je Block leeren.
+		// process() ADDS into every buffer - so clear them per block.
 		for (const [l, r] of dry) {
 			l.fill(0)
 			r.fill(0)
 		}
-		wetL.fill(0)
-		wetR.fill(0)
+		mixL.fill(0)
+		mixR.fill(0)
 		seq.processTick()
-		synth.processSplit(dry, wetL, wetR, 0, n)
-		for (let c = 0; c < CHANNELS; c++) {
+		synth.process(mixL, mixR, 0, n, dry)
+		for (let i = 0; i < n; i++) {
+			outL[index + i] += mixL[i]
+			outR[index + i] += mixR[i]
+		}
+		// The mix already holds every channel dry, with the effects. A panned
+		// channel is taken out of it once and put back along the panner's
+		// curve, the same re-placement lib/player.js does with nodes.
+		for (const c of panned) {
 			const [l, r] = dry[c]
 			const g = gains[c]
 			for (let i = 0; i < n; i++) {
-				outL[index + i] += l[i] * g.ll + r[i] * g.rl
-				outR[index + i] += r[i] * g.rr + l[i] * g.lr
+				outL[index + i] += l[i] * (g.ll - 1) + r[i] * g.rl
+				outR[index + i] += r[i] * (g.rr - 1) + l[i] * g.lr
 			}
-		}
-		for (let i = 0; i < n; i++) {
-			outL[index + i] += wetL[i]
-			outR[index + i] += wetR[i]
 		}
 		if (index - lastReport > SAMPLE_RATE * 2) {
 			lastReport = index

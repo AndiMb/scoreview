@@ -11,9 +11,13 @@ All notable changes to ScoreView. The format follows
 - Updated @nextcloud/dialogs to 8, @nextcloud/vue to 9.14 and
   @nextcloud/files to 4.1.1. Notices now appear at the bottom of the screen
   instead of the top.
-- The synthesizer stays on spessasynth 4.3 for now: 4.4 no longer plays
-  through the per-voice outputs that “My part in the stereo image” relies on,
-  and the player would fall silent.
+- Updated the synthesizer to spessasynth 4.4. Playback, “My voice on the
+  right, the others on the left” and the audio file sound as before. Since
+  4.4 the synthesizer hands out a finished mix, so a panned part is now taken
+  out of that mix and put back on its side. Measured against 4.3: the same
+  levels left and right with the image on and off, solo, muted and while
+  switching, and the same audio file with transposition, a′ = 442 Hz, slower
+  tempo and a changed instrument.
 
 ## [1.27.0] – 2026-10-29
 
