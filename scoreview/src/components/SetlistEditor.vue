@@ -152,8 +152,6 @@ import Plus from 'vue-material-design-icons/Plus.vue'
 import { translate } from '../l10n.js'
 import { addScore, moveRow, payloadFor, removeRow, rowsFromSetlist } from '../lib/setlistEdit.js'
 
-import '@nextcloud/dialogs/style.css'
-
 /**
  * „Setliste bearbeiten" bzw. „Neue Setliste" (E11). Die
  * Zeilenlogik steht in lib/setlistEdit.js; hier nur Oberfläche und Anfragen.

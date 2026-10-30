@@ -22,10 +22,13 @@
 	"browserslist": [
 		"extends @nextcloud/browserslist-config"
 	],
+	"overrides": {
+		"spessasynth_core": "$spessasynth_core"
+	},
 	"dependencies": {
 		"@breezystack/lamejs": "^1.2.7",
 		"@nextcloud/axios": "^2.5.0",
-		"@nextcloud/dialogs": "^7.5.0",
+		"@nextcloud/dialogs": "^8.0.0",
 		"@nextcloud/files": "^4.0.0",
 		"@nextcloud/initial-state": "^3.0.0",
 		"@nextcloud/l10n": "^3.1.0",
@@ -33,7 +36,8 @@
 		"@nextcloud/router": "^3.1.0",
 		"@nextcloud/vue": "^9.13.1",
 		"dompurify": "^3.4.17",
-		"spessasynth_lib": "^4.3.14",
+		"spessasynth_core": "~4.3.20",
+		"spessasynth_lib": "~4.3.14",
 		"stb-vorbis": "^0.0.6",
 		"vue": "^3.5.44",
 		"vue-material-design-icons": "^5.4.0"
