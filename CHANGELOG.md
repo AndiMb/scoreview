@@ -6,6 +6,8 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.27.1] – 2026-10-30
+
 ### Changed
 
 - Updated @nextcloud/dialogs to 8, @nextcloud/vue to 9.14 and
@@ -1684,6 +1686,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.27.1]: https://github.com/AndiMb/scoreview/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/AndiMb/scoreview/compare/v1.26.3...v1.27.0
 [1.26.3]: https://github.com/AndiMb/scoreview/compare/v1.26.2...v1.26.3
 [1.26.2]: https://github.com/AndiMb/scoreview/compare/v1.26.1...v1.26.2
