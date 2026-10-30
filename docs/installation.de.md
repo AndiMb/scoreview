@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:e67eb17fd6b2 -->
+<!-- translation-of: installation.md sha256:2254a40beaa6 -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -10,7 +10,7 @@ es **zwei zur Wahl**, und sie liefern dasselbe Ergebnis
 | | **Weg A: Lokal** (Voreinstellung) | **Weg B: Sidecar** |
 |---|---|---|
 | Braucht | Node.js ≥ 18 oder Deno ≥ 2 auf dem Nextcloud-Server | einen Docker-Host |
-| MuseScore | MuseScore 4.7.5 als WebAssembly (scoreview-engine), im App-Paket | im Container, wählbar: dieselbe scoreview-engine (Voreinstellung) oder echtes MuseScore 4 |
+| MuseScore | MuseScore 4.7.6 als WebAssembly (scoreview-engine), im App-Paket | im Container, wählbar: dieselbe scoreview-engine (Voreinstellung) oder echtes MuseScore 4 |
 | SoundFont | holt der Server selbst, Adresse voreingestellt | bringt der Container mit |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
 | Notenköpfe einfärben, Liedtext-Ansicht, Tonnamen | ja | ja mit der Engine; nein mit MuseScore selbst – Stock-MuseScore liefert die Daten nicht ([E15](architecture.md#e15-fähigkeiten-statt-weg)) |

@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:854af01b63aa -->
+<!-- translation-of: limits.md sha256:b610ba92c094 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -230,7 +230,7 @@ Sammel-Vorabkonvertierung (`eager_conversion`) deshalb spürbar werden.
 
 **Die MuseScore-Version des lokalen Wegs hängt an einem eigenen Build.**
 [AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) trägt
-4.7.5 (MuseScore als gepinnter, ungepatchter Submodul-Stand, Qt-frei); sie
+4.7.6 (MuseScore als gepinnter, ungepatchter Submodul-Stand, Qt-frei); sie
 zieht nicht von selbst nach, wenn MuseScore weitergeht – ein neuer Kern heißt,
 die Engine zu bauen und die Tarball-URL hochzuziehen. Der Selbsttest der
 Betriebsdiagnose prüft, ob die Zusagen aus M2/M4/M7 noch halten – dass eine

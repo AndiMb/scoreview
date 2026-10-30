@@ -18,6 +18,19 @@ All notable changes to ScoreView. The format follows
   levels left and right with the image on and off, solo, muted and while
   switching, and the same audio file with transposition, a′ = 442 Hz, slower
   tempo and a changed instrument.
+- Conversion uses MuseScore 4.7.6 on both paths: scoreview-engine
+  `v4.7.6-engine.2` on the local path and in the browser fallback, the
+  MuseScore 4.7.6 AppImage in the sidecar. That AppImage unpacks readable
+  for root only, so the sidecar image now opens it up for the user it runs
+  as. A sidecar built from an older Dockerfile with 4.7.6 fails with exit
+  code 126.
+
+### Fixed
+
+- A volta whose endings all lie beyond the repeats already played no longer
+  cuts the score off there. Up to MuseScore 4.7.5, playback and the cursor
+  stopped after the repeat. A score converted before keeps its old timing
+  until “Convert again” under Score → Info and diagnostics.
 
 ## [1.27.0] – 2026-10-29
 

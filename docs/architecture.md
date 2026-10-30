@@ -1295,7 +1295,7 @@ zu beantworten.
 
 | | Lokal (Voreinstellung) | Sidecar |
 |---|---|---|
-| MuseScore | MuseScore 4.7.5 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) | wählbar: dieselbe Engine (Voreinstellung) oder echtes MuseScore 4 aus gepinntem AppImage |
+| MuseScore | MuseScore 4.7.6 als WebAssembly, Qt-frei ([AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine)) | wählbar: dieselbe Engine (Voreinstellung) oder echtes MuseScore 4 aus gepinntem AppImage |
 | Läuft als | abgeschotteter Kindprozess der Node- oder Deno-Laufzeit des Servers ([S11](#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)) | eigener Container, HTTP-API; die Engine darin als abgeschotteter Kindprozess von Node 22 |
 | Voraussetzung beim Betreiber | Node.js ≥ 18 oder Deno ≥ 2, `proc_open` erlaubt | Docker o. ä. |
 | Im App-Paket | rund 14 MB Wasm + Ressourcen (`converter/`) | nichts |
@@ -1395,7 +1395,7 @@ ein Browser selbst anzeigt; die beiden Formate, die dabei ausfallen, stehen
 in [Grenzwerte](limits.de.md#bekannte-lücken).
 
 Dass die Ergebnisse im Übrigen zusammenpassen, liegt am gemeinsamen Kern: Es
-ist derselbe MuseScore 4.7.5, einmal als AppImage und einmal Qt-frei nach
+ist derselbe MuseScore 4.7.6, einmal als AppImage und einmal Qt-frei nach
 WebAssembly übersetzt (MuseScore als ungepatchtes Submodul). `savePositions`
 liefert die Koordinaten dort bereits in SVG-Einheiten, die Division durch 12
 entfällt (`converter/lib/artifacts.mjs`).
@@ -1695,7 +1695,7 @@ keine Navigation ([E16](#e16-drucken-aus-den-seiten-svgs)).
 
 Wo der Server **nicht konvertieren kann** – keine Node-Laufzeit, `proc_open`
 gesperrt, kein erreichbarer Sidecar –, konvertiert der Browser. Dieselbe Engine
-(scoreview-engine, MuseScore 4.7.5 als WebAssembly), dieselben Artefakte, nur
+(scoreview-engine, MuseScore 4.7.6 als WebAssembly), dieselben Artefakte, nur
 ein anderer Ort.
 
 Das ist **kein dritter Konvertierungsweg**: Er steht in keiner Einstellung zur

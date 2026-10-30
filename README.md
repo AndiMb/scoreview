@@ -163,7 +163,7 @@ result and differ only in what the server needs for them:
 | | **Local** (default) | **Sidecar** |
 |---|---|---|
 | Requires | Node.js ≥ 18 on the Nextcloud server | a Docker host |
-| MuseScore | MuseScore 4.7.5 as WebAssembly, in the app package | the same engine (default) or real MuseScore 4, in the container |
+| MuseScore | MuseScore 4.7.6 as WebAssembly, in the app package | the same engine (default) or real MuseScore 4, in the container |
 | Setup | nothing | start the container, enter address and secret |
 | Lyrics view, note names, coloured noteheads, parts | yes | yes with the engine, no with MuseScore itself |
 | Recommended if | you run no containers | you run some anyway |

@@ -9,7 +9,7 @@ ScoreView consists of the Nextcloud app and a conversion path. There are
 | | **Path A: Local** (default) | **Path B: Sidecar** |
 |---|---|---|
 | Requires | Node.js ≥ 18 or Deno ≥ 2 on the Nextcloud server | a Docker host |
-| MuseScore | MuseScore 4.7.5 as WebAssembly (scoreview-engine), in the app package | in the container, selectable: the same scoreview-engine (default) or real MuseScore 4 |
+| MuseScore | MuseScore 4.7.6 as WebAssembly (scoreview-engine), in the app package | in the container, selectable: the same scoreview-engine (default) or real MuseScore 4 |
 | SoundFont | fetched by the server itself from a preset address | shipped with the container |
 | To set up | nothing | start the container, enter address and secret |
 | Coloured noteheads, lyrics view, note names | yes | yes with the engine; no with MuseScore itself – stock MuseScore does not deliver the data ([E15](architecture.md#e15-fähigkeiten-statt-weg), German) |
