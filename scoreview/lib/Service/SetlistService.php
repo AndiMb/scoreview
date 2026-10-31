@@ -498,7 +498,7 @@ class SetlistService {
 				}
 				$conversion = $this->conversionService->find($node->getId(), $node->getEtag());
 				$needed = $conversion === null
-					|| ($conversion->getStatus() === ScoreConversion::STATUS_READY && !$this->conversionService->isCurrentFormat($conversion));
+					|| ($conversion->getStatus() === ScoreConversion::STATUS_READY && !$this->conversionService->isCurrent($conversion));
 				if ($needed) {
 					$this->jobList->add(ConvertScoreJob::class, ['userId' => $uid, 'fileId' => $node->getId()]);
 				}

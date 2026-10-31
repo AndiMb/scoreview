@@ -173,6 +173,13 @@ jobs:
             --exclude='scoreview/converter/node_modules/scoreview-engine/scoreview.js' \
             --exclude='scoreview/converter/node_modules/@librescore' \
             scoreview | tar --extract --file - --directory dist
+          # The app store takes the release notes it shows in the update
+          # dialog of every instance from <app>/CHANGELOG.md in the archive,
+          # never from the repository (nextcloud/appstore, api/v1/release/
+          # parser.py; "## [x.y.z]" is a heading it parses). The file lives in
+          # the repository root for GitHub, so it is copied in - before
+          # signing, which covers it.
+          cp CHANGELOG.md dist/scoreview/CHANGELOG.md
           du -sh dist/scoreview
           echo "Dateien: $(find dist/scoreview -type f | wc -l)"
 
@@ -182,6 +189,7 @@ jobs:
         run: |
           for PFLICHT in \
             appinfo/info.xml \
+            CHANGELOG.md \
             js/scoreview-viewer.js \
             js/scoreview-settings.js \
             lib/AppInfo/Application.php \

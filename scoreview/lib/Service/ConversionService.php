@@ -83,8 +83,13 @@ class ConversionService {
 		private IAppData $appData,
 		private ITimeFactory $time,
 		private VariantService $variants,
+		private ConversionBackend $backend,
+		private LocalConverter $localConverter,
 	) {
 	}
+
+	/** Read once per request: isCurrent() runs per score in a set list. */
+	private ?string $localEngine = null;
 
 	public function find(int $fileId, string $etag): ?ScoreConversion {
 		return $this->mapper->findByFileIdAndEtag($fileId, $etag);
@@ -131,7 +136,7 @@ class ConversionService {
 	 * @param string[] $pageSvgs Seiteninhalte, 1-indiziert in Reihenfolge.
 	 * @param string $backend Welcher Weg das erzeugt hat (ConversionBackend).
 	 */
-	public function markReady(ScoreConversion $conversion, array $pageSvgs, string $midi, string $timingJson, string $measuresJson, string $metaJson, string $backend): void {
+	public function markReady(ScoreConversion $conversion, array $pageSvgs, string $midi, string $timingJson, string $measuresJson, string $metaJson, string $backend, ?string $engineVersion): void {
 		// Variants of this version were checked against the base being
 		// replaced; a new base (another engine, a reconversion) may number
 		// its segments differently, and their mappings would point astray.
@@ -145,6 +150,7 @@ class ConversionService {
 		$this->writeFile($folder, self::MEASURES_FILE, $measuresJson);
 		$this->writeFile($folder, self::META_FILE, $metaJson);
 		$conversion->setBackend($backend);
+		$conversion->setEngineVersion($engineVersion === null ? null : substr($engineVersion, 0, 64));
 		$conversion->setFormatVersion(self::CURRENT_FORMAT_VERSION);
 		$this->applySearchFields($conversion, $metaJson);
 		$this->updateStatus($conversion, ScoreConversion::STATUS_READY);
@@ -193,6 +199,36 @@ class ConversionService {
 	/** Siehe CURRENT_FORMAT_VERSION. */
 	public function isCurrentFormat(ScoreConversion $conversion): bool {
 		return $conversion->getFormatVersion() === self::CURRENT_FORMAT_VERSION;
+	}
+
+	/**
+	 * Whether a ready entry is what the server would render now - otherwise
+	 * opening the score converts it again, like an older format does.
+	 *
+	 * Beyond the format, the engine: an update of the app usually brings a
+	 * newer scoreview-engine, and with it fixes to layout and timing (a volta
+	 * that cut the score short, say). Without this a finished conversion kept
+	 * the old result until someone pressed "Convert again" on every single
+	 * score. Lazily, on opening, and not in a repair step: an instance with
+	 * thousands of scores would otherwise convert all of them at once, most
+	 * of which nobody opens.
+	 *
+	 * Only where the comparison is honest: on the local path, for a row that
+	 * path rendered, and when the installed engine names its release. A row
+	 * of the sidecar stays - the app does not learn which engine or MuseScore
+	 * the sidecar runs without asking it, and after a switch of the path a
+	 * cached score stays that of the old one (E3). A LOCAL row without a
+	 * stamp predates it and counts as older.
+	 */
+	public function isCurrent(ScoreConversion $conversion): bool {
+		if (!$this->isCurrentFormat($conversion)) {
+			return false;
+		}
+		if ($conversion->getBackend() !== ConversionBackend::LOCAL || !$this->backend->isLocal()) {
+			return true;
+		}
+		$this->localEngine ??= $this->localConverter->engineVersion();
+		return $this->localEngine === 'unknown' || $conversion->getEngineVersion() === $this->localEngine;
 	}
 
 	/**

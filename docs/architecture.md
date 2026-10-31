@@ -223,11 +223,24 @@ oder mit fehlender Cache-Datei – gilt automatisch als „nicht fertig" und st�
 eine Neukonvertierung an. Ein Formatwechsel braucht deshalb **keinen**
 Migrationspfad und kein manuelles Löschen von Zeilen.
 
-Das deckt den Formatwechsel ab, nicht aber den häufigeren Fall, dass eine
-neuere Fassung der App dieselbe Partitur **besser** setzt: Ein fertiger
-Eintrag bleibt liegen, solange niemand die Datei anfasst. Dafür gibt es
-`POST …/reconvert` – der Knopf „Neu konvertieren" im Viewer, unter der Angabe
-der Herkunft. Er verwirft Statuszeile und Cache-Ordner der Datei und reiht die
+Den häufigeren Fall, dass eine neuere Fassung der App dieselbe Partitur
+**besser** setzt, deckt auf dem lokalen Weg die Spalte `engine_version` ab:
+Sie hält das Release der scoreview-engine fest, das den Eintrag gesetzt hat
+(`LocalConverter::engineVersion()`). Weicht es vom installierten ab, gilt der
+Eintrag wie ein älteres Format als „nicht fertig" und wird beim **nächsten
+Öffnen** neu erzeugt (`ConversionService::isCurrent()`, auch für das
+Vorwärmen von Setlisten). Bewusst beim Öffnen und nicht in einem
+Reparaturschritt: Eine Instanz mit Tausenden Partituren setzte sonst alle auf
+einmal neu, die meisten davon ungeöffnet. Ein lokaler Eintrag ohne Stempel
+stammt aus der Zeit vor der Spalte und gilt als älter. Ausgenommen sind
+Einträge des Sidecars – welche Engine oder welches MuseScore dort läuft,
+erfährt die App nur auf Nachfrage – und ein Eintrag des anderen Wegs nach
+einem Wechsel (E3); ebenso jeder Vergleich, solange die installierte Engine
+kein Release nennt (`unknown`), sonst konvertierte jedes Öffnen neu.
+
+Für alles Übrige – den Sidecar, einen Satzunterschied ohne neue Engine – gibt
+es `POST …/reconvert`, den Knopf „Neu konvertieren" im Viewer, unter der
+Angabe der Herkunft. Er verwirft Statuszeile und Cache-Ordner der Datei und reiht die
 Konvertierung neu ein; nur mit Schreibrecht, denn der Cache hängt an der Datei
 und gilt für alle, die sie öffnen. Für **alle** Partituren einer Instanz auf
 einmal bleibt das Hochzählen von `CURRENT_FORMAT_VERSION` der Hebel.
@@ -256,7 +269,7 @@ Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 
 | Tabelle | Inhalt |
 |---|---|
-| `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version`, `backend`, `title`, `composer`, `search_text` |
+| `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version`, `backend`, `engine_version`, `title`, `composer`, `search_text` |
 | `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag`, `kind`, `stamp`, `target_parts`, `by_leader`, `end_measure` |
 | `scoreview_leaders` | `file_id`, `user_id`, `appointed_by`, `created_at` – ernannte Leitungen; die Eigentümerin steht nie darin ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) |
 | `scoreview_follow` | `file_id` (Primärschlüssel: höchstens eine Sitzung je Datei), `leader_uid`, `started_at`, `heartbeat_at`, `version`, `state` ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) |

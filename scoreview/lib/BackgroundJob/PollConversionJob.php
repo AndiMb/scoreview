@@ -103,7 +103,7 @@ class PollConversionJob extends QueuedJob {
 			$metaJson = $this->sidecarClient->fetchFile($files['metaJson']);
 			// Diesen Job gibt es nur auf dem Sidecar-Weg (siehe ConvertScoreJob),
 			// die Herkunft steht hier also fest und wird nicht nachgeschlagen.
-			$this->conversionService->markReady($conversion, $pageSvgs, $midi, $timingJson, $measuresJson, $metaJson, ConversionBackend::SIDECAR);
+			$this->conversionService->markReady($conversion, $pageSvgs, $midi, $timingJson, $measuresJson, $metaJson, ConversionBackend::SIDECAR, null);
 		} catch (\Throwable $e) {
 			$this->logger->error('ScoreView: conversion failed for fileId={fileId}: {message}', [
 				'fileId' => $conversion->getFileId(),

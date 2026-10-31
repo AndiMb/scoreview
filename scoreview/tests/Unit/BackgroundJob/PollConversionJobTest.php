@@ -112,7 +112,7 @@ class PollConversionJobTest extends TestCase {
 		// Sidecar-Weg. Wird sie je nachgeschlagen statt gesetzt, faellt es hier auf.
 		$this->conversionService->expects($this->once())
 			->method('markReady')
-			->with($conversion, ['inhalt'], 'inhalt', 'inhalt', 'inhalt', 'inhalt', ConversionBackend::SIDECAR);
+			->with($conversion, ['inhalt'], 'inhalt', 'inhalt', 'inhalt', 'inhalt', ConversionBackend::SIDECAR, null);
 
 		$this->laufenLassen($this->argument());
 	}

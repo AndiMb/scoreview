@@ -624,8 +624,11 @@ next to it. The error codes:
 Two causes that feel similar and have to be handled separately.
 
 **On the server**, a finished conversion stays in place as long as nobody touches the
-file – even if a newer version of the app would set it better
-or the origin still reports “Unknown”. The **“Convert again”** button under
+file. On the local path there is one exception: when an update brought a newer
+scoreview-engine, a score is converted again the next time it is opened, once,
+with the usual wait. A conversion by the sidecar stays, and so does one where
+only the app improved without a new engine, or where the origin still reports
+“Unknown”. For those, the **“Convert again”** button under
 **Score → Info and diagnostics** discards it and has it generated again; it
 only appears with write permission on the file. For all scores of an instance
 at once, `CURRENT_FORMAT_VERSION` is the lever (see
@@ -634,7 +637,10 @@ at once, `CURRENT_FORMAT_VERSION` is the lever (see
 **In the browser**, an entry in the browser cache can linger that a normal
 reload does not clear – Chrome does not revalidate subresources in that case.
 A single hard reload (`Ctrl`+`Shift`+`R`) is enough; the artifact links
-carry the conversion's timestamp and are then replaced automatically.
+carry the conversion's timestamp and are then replaced automatically. Whether
+the browser still runs the scripts of an older version shows under
+**Score → Info and diagnostics**: “App version” is the version of the scripts
+loaded, not the one installed on the server.
 
 ## The viewer reports HTTP 500
 

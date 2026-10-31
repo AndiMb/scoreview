@@ -62,7 +62,7 @@ class SetlistServiceTest extends TestCase {
 		});
 		$this->conversions = $this->createMock(ConversionService::class);
 		$this->conversions->method('find')->willReturnCallback(fn () => $this->konvertierung);
-		$this->conversions->method('isCurrentFormat')->willReturnCallback(fn () => $this->aktuellesFormat);
+		$this->conversions->method('isCurrent')->willReturnCallback(fn () => $this->aktuellesFormat);
 	}
 
 	private function service(string $uid = 'anna'): SetlistService {

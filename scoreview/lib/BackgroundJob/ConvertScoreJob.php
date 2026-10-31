@@ -243,7 +243,7 @@ class ConvertScoreJob extends QueuedJob {
 			// ConversionController::status() -> retryConversion()) - der reicht
 			// diesen Job gezielt fuer GENAU diesen Fall neu ein und braucht ihn
 			// nicht uebersprungen.
-			$alreadyReadyAndCurrent = $conversion->getStatus() === ScoreConversion::STATUS_READY && $this->conversionService->isCurrentFormat($conversion);
+			$alreadyReadyAndCurrent = $conversion->getStatus() === ScoreConversion::STATUS_READY && $this->conversionService->isCurrent($conversion);
 			// Der eigene Neuversuch findet den Datensatz absichtlich auf
 			// `pending` vor (markWaiting() unten) - der Guard gilt fuer ihn nur
 			// umgekehrt: Steht der Datensatz NICHT mehr auf pending, hat ihn
@@ -380,6 +380,7 @@ class ConvertScoreJob extends QueuedJob {
 				$artifacts['measures'],
 				$artifacts['meta'],
 				ConversionBackend::LOCAL,
+				$this->localConverter->engineVersion(),
 			);
 		} catch (\Throwable $e) {
 			$this->logger->error('ScoreView: local conversion failed for fileId={fileId}: {message}', [

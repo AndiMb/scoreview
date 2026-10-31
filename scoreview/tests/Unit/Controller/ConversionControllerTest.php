@@ -143,6 +143,7 @@ class ConversionControllerTest extends TestCase {
 		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node(schreibbar: false));
 		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_READY));
 		$this->conversionService->method('isCurrentFormat')->willReturn(true);
+		$this->conversionService->method('isCurrent')->willReturn(true);
 		$this->conversionService->method('getPageCount')->willReturn(1);
 
 		$response = $this->controller()->status(42);

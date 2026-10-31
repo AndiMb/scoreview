@@ -6,7 +6,9 @@ namespace OCA\ScoreView\Tests\Unit\Service;
 
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreConversionMapper;
+use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\IAppData;
@@ -35,15 +37,19 @@ class ConversionServiceTest extends TestCase {
 	private ScoreConversionMapper&MockObject $mapper;
 	private IAppData&MockObject $appData;
 	private ITimeFactory&MockObject $time;
+	private ConversionBackend&MockObject $backend;
+	private LocalConverter&MockObject $localConverter;
 
 	protected function setUp(): void {
 		$this->mapper = $this->createMock(ScoreConversionMapper::class);
 		$this->appData = $this->createMock(IAppData::class);
 		$this->time = $this->createMock(ITimeFactory::class);
+		$this->backend = $this->createMock(ConversionBackend::class);
+		$this->localConverter = $this->createMock(LocalConverter::class);
 	}
 
 	private function service(): ConversionService {
-		return new ConversionService($this->mapper, $this->appData, $this->time, $this->createMock(VariantService::class));
+		return new ConversionService($this->mapper, $this->appData, $this->time, $this->createMock(VariantService::class), $this->backend, $this->localConverter);
 	}
 
 	// --- Allowlist der Artefakte ------------------------------------------
@@ -232,6 +238,69 @@ class ConversionServiceTest extends TestCase {
 		$conversion->setFileId(7);
 		$conversion->setEtag('e');
 
-		$this->service()->markReady($conversion, ['<svg/>'], 'MThd', '{}', '{}', json_encode(['title' => 'Ave', 'composer' => 'Bruckner']), 'local');
+		$this->service()->markReady($conversion, ['<svg/>'], 'MThd', '{}', '{}', json_encode(['title' => 'Ave', 'composer' => 'Bruckner']), 'local', '4.7.6-engine.3');
+	}
+
+	// --- Newer engine, converted again on opening (isCurrent) ---------------
+
+	private function fertig(?string $backend, ?string $engine, int $format = ConversionService::CURRENT_FORMAT_VERSION): ScoreConversion {
+		$conversion = new ScoreConversion();
+		$conversion->setStatus(ScoreConversion::STATUS_READY);
+		$conversion->setBackend($backend);
+		$conversion->setEngineVersion($engine);
+		$conversion->setFormatVersion($format);
+		return $conversion;
+	}
+
+	/**
+	 * @return array<string, array{?string, ?string, bool, string, bool}>
+	 */
+	public static function engineFaelle(): array {
+		return [
+			'same engine on the local path' => ['local', '4.7.6-engine.3', true, '4.7.6-engine.3', true],
+			// The case of the issue: an update brought a newer engine.
+			'older engine on the local path' => ['local', '4.7.6-engine.2', true, '4.7.6-engine.3', false],
+			// Rendered before the stamp existed - by an older engine.
+			'local row without a stamp' => ['local', null, true, '4.7.6-engine.3', false],
+			// No comparison without a named release - else every opening
+			// would convert again, for ever.
+			'installed engine unknown' => ['local', '4.7.6-engine.2', true, 'unknown', true],
+			// The app does not know what the sidecar runs.
+			'row of the sidecar, local now' => ['sidecar', null, true, '4.7.6-engine.3', true],
+			'local row, sidecar now' => ['local', '4.7.6-engine.2', false, '4.7.6-engine.3', true],
+			'row from before the backend column' => [null, null, true, '4.7.6-engine.3', true],
+		];
+	}
+
+	#[DataProvider('engineFaelle')]
+	public function testIsCurrentComparesTheEngineOnlyWhereItIsKnown(?string $backend, ?string $engine, bool $localNow, string $installed, bool $current): void {
+		$this->backend->method('isLocal')->willReturn($localNow);
+		$this->localConverter->method('engineVersion')->willReturn($installed);
+
+		$this->assertSame($current, $this->service()->isCurrent($this->fertig($backend, $engine)));
+	}
+
+	public function testIsCurrentStillRequiresTheCurrentFormat(): void {
+		$this->backend->method('isLocal')->willReturn(true);
+		$this->localConverter->method('engineVersion')->willReturn('4.7.6-engine.3');
+
+		$this->assertFalse($this->service()->isCurrent($this->fertig('local', '4.7.6-engine.3', ConversionService::CURRENT_FORMAT_VERSION - 1)));
+	}
+
+	public function testMarkReadyRecordsTheEngine(): void {
+		$folder = $this->createMock(ISimpleFolder::class);
+		$folder->method('newFile')->willReturn($this->createMock(ISimpleFile::class));
+		$root = $this->createMock(ISimpleFolder::class);
+		$root->method('getFolder')->willReturn($folder);
+		$this->appData->method('getFolder')->willReturn($root);
+		$this->mapper->method('findAllByFileId')->willReturn([]);
+		$conversion = new ScoreConversion();
+		$conversion->setFileId(7);
+		$conversion->setEtag('e');
+
+		$this->service()->markReady($conversion, ['<svg/>'], 'MThd', '{}', '{}', '{}', 'local', '4.7.6-engine.3');
+
+		$this->assertSame('4.7.6-engine.3', $conversion->getEngineVersion());
+		$this->assertTrue($conversion->getFormatVersion() === ConversionService::CURRENT_FORMAT_VERSION);
 	}
 }

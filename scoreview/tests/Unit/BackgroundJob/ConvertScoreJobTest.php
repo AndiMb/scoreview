@@ -122,6 +122,7 @@ class ConvertScoreJobTest extends TestCase {
 		// Container weiterhin an einem Dienst, den es dort nicht gibt.
 		$this->backend = ConversionBackend::LOCAL;
 		$this->tempManager->method('getTemporaryFile')->willReturn(tempnam(sys_get_temp_dir(), 'sv'));
+		$this->localConverter->method('engineVersion')->willReturn('4.7.6-engine.3');
 		$this->localConverter->expects($this->once())->method('convert')->willReturn([
 			'pages' => ['<svg/>'],
 			'midi' => 'MThd',
@@ -136,7 +137,7 @@ class ConvertScoreJobTest extends TestCase {
 		// an, und aus der Admin-Einstellung waere er spaeter nicht mehr
 		// rekonstruierbar (sie sagt nur, was JETZT gilt).
 		$this->conversionService->expects($this->once())->method('markReady')
-			->with($this->anything(), ['<svg/>'], 'MThd', '{"events":[],"elements":{}}', '{"events":[],"elements":{}}', '{"pages":1}', ConversionBackend::LOCAL);
+			->with($this->anything(), ['<svg/>'], 'MThd', '{"events":[],"elements":{}}', '{"events":[],"elements":{}}', '{"pages":1}', ConversionBackend::LOCAL, '4.7.6-engine.3');
 
 		$this->jobLaufenLassen();
 	}

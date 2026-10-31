@@ -7,7 +7,9 @@ namespace OCA\ScoreView\Tests\Unit\Migration;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreConversionMapper;
 use OCA\ScoreView\Migration\BackfillSearchText;
+use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\IAppData;
@@ -30,7 +32,7 @@ class BackfillSearchTextTest extends TestCase {
 		$this->mapper = $this->createMock(ScoreConversionMapper::class);
 		// A partial mock: the real applySearchFields(), only the file read is faked.
 		$this->conversions = $this->getMockBuilder(ConversionService::class)
-			->setConstructorArgs([$this->mapper, $this->createMock(IAppData::class), $this->createMock(ITimeFactory::class), $this->createMock(VariantService::class)])
+			->setConstructorArgs([$this->mapper, $this->createMock(IAppData::class), $this->createMock(ITimeFactory::class), $this->createMock(VariantService::class), $this->createMock(ConversionBackend::class), $this->createMock(LocalConverter::class)])
 			->onlyMethods(['getMetaJsonFile'])
 			->getMock();
 	}

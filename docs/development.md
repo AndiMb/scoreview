@@ -322,7 +322,10 @@ Direkt nach dem Checkout prüft die Action außerdem, dass der Tag zur Version
 in `appinfo/info.xml` passt und dass `CHANGELOG.md` einen Abschnitt
 `## [<Version>]` enthält. Beides kostet eine Sekunde und fängt zwei Fehler
 ab, die sonst erst auf einer fremden Instanz bzw. im App Store auffielen –
-der Store zieht seine Release-Notes aus genau diesem Abschnitt.
+der Store zieht seine Release-Notes aus genau diesem Abschnitt. Er liest ihn
+allerdings aus `scoreview/CHANGELOG.md` **im Archiv**, nie aus dem Repo – die
+Action kopiert die Datei deshalb vor dem Signieren hinein, und die Gegenprobe
+des Auslieferungsbaums verlangt sie.
 
 **Die Reihenfolge ist wesentlich:** erst den Auslieferungsbaum zusammenstellen,
 dann signieren, dann packen. Die Signatur listet jede Datei einzeln auf – würde

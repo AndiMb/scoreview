@@ -1632,6 +1632,10 @@ msgstr ""
 msgid "Frame rate"
 msgstr ""
 
+#: src/components/ScoreInfoControls.vue
+msgid "App version"
+msgstr ""
+
 #: src/components/ScoreLockButton.vue
 msgid "Performance mode is on – hold for one second to leave"
 msgstr ""

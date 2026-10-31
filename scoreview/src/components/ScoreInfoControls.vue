@@ -78,6 +78,16 @@
 				</div>
 			</dl>
 		</fieldset>
+		<!--
+			The version of the app as this browser runs it: the bundle's own,
+			built in from info.xml - so a browser that still holds the old
+			scripts after an update says so here, instead of the server
+			claiming the new one.
+		-->
+		<p class="scoreview-origin scoreview-app-version">
+			<span class="scoreview-origin-label">{{ t('App version') }}</span>
+			ScoreView {{ appVersion }}
+		</p>
 	</div>
 </template>
 
@@ -126,6 +136,10 @@ export default {
 	emits: ['reconvert'],
 
 	computed: {
+		appVersion() {
+			return typeof SCOREVIEW_APP_VERSION === 'string' ? SCOREVIEW_APP_VERSION : '?'
+		},
+
 		/** Womit diese Seiten gesetzt wurden, als ein Satz (lib/viewerTexts.js). */
 		rendererText() {
 			return rendererText(this.rendererBackend, this.t)

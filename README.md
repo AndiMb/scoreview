@@ -156,9 +156,9 @@ Interface in English and German; more languages are welcome (see
 
 An uploaded `.mscz` file is converted **once** on the server into score pages
 (SVG), MIDI and timing data, and the result is cached. Opening it again does not
-re-render; a new conversion is triggered by a change to the file – or by the
-"Convert again" button in the viewer, when a newer version of the app lays out
-the same score better. Next to it, the viewer shows which of the two paths below
+re-render; a new conversion is triggered by a change to the file, by an update
+that brings a newer engine (on the local path, the next time the score is
+opened) – or by the "Convert again" button in the viewer. Next to it, the viewer shows which of the two paths below
 produced the pages on display. Audio playback happens client-side in the
 browser, with a SoundFont that the app serves itself.
 

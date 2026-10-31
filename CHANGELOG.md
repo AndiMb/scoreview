@@ -20,6 +20,24 @@ All notable changes to ScoreView. The format follows
   of your last runs and the measures to practise, each a click away as a
   loop. Pitch counts 60 %, onset 25 %, length 15 %. Only you see your
   results. Administrators can switch it off; it needs intonation.
+- Score → Info and diagnostics shows the app version, as the browser runs it.
+  A browser still holding the scripts of an older version shows that here.
+
+### Changed
+
+- After an update that brings a newer scoreview-engine, a score converted on
+  the local path is converted again the next time it is opened, once, so
+  layout and timing fixes reach every score without “Convert again”. Scores
+  are not all converted at once, only when opened. Conversions by the sidecar
+  stay as they are; “Convert again” remains the way for them. The first
+  opening of each score after this update converts it again, since older
+  conversions did not record their engine.
+
+### Fixed
+
+- The update dialog of Nextcloud and the app store now show what changed in
+  a release. The release archive did not contain this changelog, which the
+  store reads from there (#31).
 
 ## [1.27.2] – 2026-10-31
 

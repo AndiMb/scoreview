@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:f8dbba1d8f89 -->
+<!-- translation-of: troubleshooting.md sha256:dad351ee2561 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -633,8 +633,12 @@ daneben. Die Fehlercodes:
 Zwei Ursachen, die sich ähnlich anfühlen und getrennt zu behandeln sind.
 
 **Serverseitig** bleibt eine fertige Konvertierung liegen, solange niemand die
-Datei anfasst – auch wenn eine neuere Fassung der App sie besser setzen würde
-oder die Herkunft noch „unbekannt" meldet. Der Knopf **„Neu konvertieren"** unter
+Datei anfasst. Auf dem lokalen Weg gibt es eine Ausnahme: Hat ein Update eine
+neuere scoreview-engine mitgebracht, wird eine Partitur beim nächsten Öffnen
+einmal neu konvertiert, mit der üblichen Wartezeit. Eine Konvertierung des
+Sidecars bleibt, ebenso eine, bei der sich nur die App ohne neue Engine
+verbessert hat oder deren Herkunft noch „unbekannt" meldet. Für diese Fälle gibt
+es den Knopf **„Neu konvertieren"** unter
 **Partitur → Info und Diagnose** verwirft sie und lässt sie neu erzeugen; er
 erscheint nur mit Schreibrecht auf die Datei. Für alle Partituren einer Instanz
 auf einmal ist `CURRENT_FORMAT_VERSION` der Hebel (siehe
@@ -643,7 +647,10 @@ auf einmal ist `CURRENT_FORMAT_VERSION` der Hebel (siehe
 **Im Browser** kann ein Eintrag im Browsercache nachwirken, den normales
 Neuladen nicht wegräumt – Chrome revalidiert Unterressourcen dabei nicht.
 Einmal hart neu laden (`Strg`+`Umschalt`+`R`) genügt; die Artefakt-Links
-tragen den Zeitstempel der Konvertierung und lösen sich danach von selbst ab.
+tragen den Zeitstempel der Konvertierung und lösen sich danach von selbst ab. Ob
+der Browser noch die Skripte einer älteren Fassung ausführt, zeigt
+**Partitur → Info und Diagnose**: „App-Version“ ist die Version der geladenen
+Skripte, nicht die auf dem Server installierte.
 
 ## Der Viewer meldet HTTP 500
 

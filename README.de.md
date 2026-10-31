@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:88aa80397979 -->
+<!-- translation-of: README.md sha256:5fdb60c9f081 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -162,8 +162,8 @@ Oberfläche auf Deutsch und Englisch; weitere Sprachen sind willkommen (siehe
 Eine hochgeladene `.mscz`-Datei wird **einmalig** serverseitig zu Notenseiten
 (SVG), MIDI und Timing-Daten konvertiert und das Ergebnis gecacht. Erneutes
 Öffnen rendert nicht neu; eine neue Konvertierung stößt eine Änderung an der
-Datei an – oder der Knopf „Neu konvertieren" im Viewer, wenn eine neuere Fassung
-der App dieselbe Partitur besser setzt. Daneben steht, über welchen der beiden
+Datei an, ein Update mit neuerer Engine (auf dem lokalen Weg beim nächsten
+Öffnen der Partitur) – oder der Knopf „Neu konvertieren" im Viewer. Daneben steht, über welchen der beiden
 Wege unten die angezeigten Seiten gesetzt wurden. Die Audiowiedergabe passiert
 clientseitig im Browser, mit einem SoundFont, das die App selbst ausliefert.
 

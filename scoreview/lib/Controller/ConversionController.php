@@ -156,8 +156,9 @@ class ConversionController extends Controller {
 			}
 			$this->retryConversion($fileId);
 		} elseif ($conversion->getStatus() === ScoreConversion::STATUS_READY) {
-			if (!$this->conversionService->isCurrentFormat($conversion)) {
-				// Aeltere Cache-Formatversion - wie "nicht fertig" behandeln
+			if (!$this->conversionService->isCurrent($conversion)) {
+				// Aeltere Cache-Formatversion (oder, auf dem lokalen Weg, eine
+				// aeltere Engine, siehe ConversionService::isCurrent()) - wie "nicht fertig" behandeln
 				// statt Cache-Dateien auszuliefern, die nicht mehr zum aktuellen
 				// Controller/Sidecar-Format passen, und eine Neukonvertierung
 				// anstossen statt manuellem Eingriff in der DB.

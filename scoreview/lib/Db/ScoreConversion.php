@@ -24,6 +24,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setErrorCode(?string $errorCode)
  * @method ?string getBackend()
  * @method void setBackend(?string $backend)
+ * @method ?string getEngineVersion()
+ * @method void setEngineVersion(?string $engineVersion)
  * @method int getFormatVersion()
  * @method void setFormatVersion(int $formatVersion)
  * @method ?string getTitle()
@@ -92,6 +94,13 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	 * docs/architecture.md E3).
 	 */
 	protected $backend;
+	/**
+	 * The engine release that rendered it on the local path
+	 * (LocalConverter::engineVersion()); NULL for the sidecar, which does not
+	 * report it, and for rows from before the column. See
+	 * ConversionService::isCurrent().
+	 */
+	protected $engineVersion;
 	protected $formatVersion;
 	/**
 	 * For the search provider (E17), from meta.json - see

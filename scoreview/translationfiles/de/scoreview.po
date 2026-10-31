@@ -1632,6 +1632,10 @@ msgstr "keine – der Notencursor läuft ohne Ton"
 msgid "Frame rate"
 msgstr "Bildrate"
 
+#: src/components/ScoreInfoControls.vue
+msgid "App version"
+msgstr "App-Version"
+
 #: src/components/ScoreLockButton.vue
 msgid "Performance mode is on – hold for one second to leave"
 msgstr "Aufführungsmodus ist an – zum Verlassen eine Sekunde gedrückt halten"
