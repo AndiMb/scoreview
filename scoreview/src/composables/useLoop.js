@@ -175,5 +175,5 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 		endMs.value = null
 	}
 
-	return { fromMeasure, toMeasure, active, markers, toggle, setRange, clear, setFromCurrentMeasure, restartTarget, wrapIfDue, reset }
+	return { fromMeasure, toMeasure, active, startMs, endMs, markers, toggle, setRange, clear, setFromCurrentMeasure, restartTarget, wrapIfDue, reset }
 }

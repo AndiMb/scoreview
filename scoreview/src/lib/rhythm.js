@@ -131,6 +131,56 @@ export function levelEnvelope(samples, sampleRate) {
 }
 
 /**
+ * The level envelope while it is sung: the same windows and values as
+ * levelEnvelope() over the blocks put together, each with the context time
+ * of its centre - live scoring (lib/singScore.js) traces onsets after
+ * silence with it as the analysis of a recording does.
+ *
+ * @param {number} [sampleRate]
+ * @return {{push: function(Float32Array, number): Array<{contextTimeSec:number, db:number}>, reset: function(): void}}
+ */
+export function createLevelStream(sampleRate = 16000) {
+	const hop = Math.round((sampleRate * LEVEL_HOP_MS) / 1000)
+	const window = Math.round((LEVEL_WINDOW * sampleRate) / 16000)
+	let buf = new Float32Array(window * 4)
+	let len = 0
+	let startSec = 0
+	return {
+		push(block, contextTimeSec) {
+			if (len === 0) {
+				startSec = contextTimeSec
+			}
+			if (len + block.length > buf.length) {
+				const grown = new Float32Array(Math.max(buf.length * 2, len + block.length))
+				grown.set(buf.subarray(0, len))
+				buf = grown
+			}
+			buf.set(block, len)
+			len += block.length
+			const out = []
+			let first = 0
+			while (len - first >= window) {
+				let sum = 0
+				for (let k = first, end = first + window; k < end; k++) {
+					sum += buf[k] * buf[k]
+				}
+				out.push({ contextTimeSec: startSec + (first + window / 2) / sampleRate, db: 10 * Math.log10(sum / window + 1e-12) })
+				first += hop
+			}
+			if (first > 0) {
+				buf.copyWithin(0, first, len)
+				len -= first
+				startSec += first / sampleRate
+			}
+			return out
+		},
+		reset() {
+			len = 0
+		},
+	}
+}
+
+/**
  * Back from the stable pitch to where the level rose: the start of the
  * syllable after silence.
  *

@@ -564,7 +564,7 @@
 					</NcButton>
 				</template>
 			</ScoreBar>
-			<div class="scoreview-body">
+			<div class="scoreview-body" :class="{ 'scoreview-body--sing': singActive && singView === 'band' }">
 				<!--
 					„Folgt mir": wer leitet, ob dieses Geraet folgt, ob die
 					Verbindung steht - ueber den Noten, damit es keine Hoehe kostet
@@ -801,13 +801,32 @@
 					</LiveValue>
 				</div>
 				<!--
+					The singing lane (E24): under the score as a band, or over it
+					as a stage. The score stays mounted underneath - switching back
+					costs no new page load.
+				-->
+				<SingLane
+					v-if="singActive"
+					:mode="singView"
+					:readTimeMs="readDisplayTimeMs"
+					:subscribeFrame="sessionOnFrame"
+					:tempoFactor="tempo"
+					:notes="singLaneNotes"
+					:results="singResults"
+					:readFrames="singFramesForLane"
+					:syllablesFor="singView === 'stage' && singLyricsBlocks.length > 0 ? singSyllablesFor : null"
+					:livePct="singLivePct"
+					:levelLabel="singLevelLabel"
+					:unitLabel="singUnitLabel"
+					:liveOnly="singRun?.state === 'liveOnly'" />
+				<!--
 					Mixer und Notizen liegen als Karten UEBER dem Notenbild statt
 					davor im Fluss: im Fluss kosteten sie Hoehe, sobald sie offen
 					waren, und waren nur ganz oben zu sehen. Als Overlay kosten sie
 					nichts, wenn sie zu sind, und bleiben erreichbar, wo immer man
 					gerade liest.
 				-->
-				<div v-if="showMixerPanel || showMyPartPanel || showAnnotations || showRehearsal || showPractice || showTuner || showPracticeLog || armedStamp || drawSpec || setlistEditorMode" class="scoreview-panels">
+				<div v-if="showMixerPanel || showMyPartPanel || showAnnotations || showRehearsal || showPractice || showTuner || showPracticeLog || showSing || armedStamp || drawSpec || setlistEditorMode" class="scoreview-panels">
 					<!--
 						Ein Stempel wartet auf den Tipp ins Notenbild. Das
 						Notizen-Panel ist dafuer zu - es laege sonst ueber den Noten,
@@ -971,6 +990,26 @@
 							:error="practiceLogError"
 							@setGoal="setPracticeGoal" />
 					</ScorePanel>
+					<!-- Scored singing (E24): closing the card leaves the lane running. -->
+					<ScorePanel v-if="showSing" :title="t('Scored singing')" @close="showSing = false">
+						<SingPanel
+							:active="singActive"
+							:level="singLevel"
+							:view="singView"
+							:unitLabel="singUnitLabel"
+							:needPart="intonationNeedPart"
+							:micError="micError"
+							:error="singError || intonationError"
+							:lastRun="singLastRun"
+							:history="singHistory"
+							@toggle="onSingToggle"
+							@update:level="singSetLevel"
+							@update:view="onSingView"
+							@jump="onPracticeJump"
+							@loop="onSingLoop"
+							@clear="singClear"
+							@dismiss="singDismiss" />
+					</ScorePanel>
 					<!-- The tuner (B3): closing the card stops the microphone. -->
 					<ScorePanel v-if="showTuner" :title="t('Tuner')" @close="closeTuner">
 						<TunerPanel
@@ -1052,6 +1091,7 @@ import InformationOutline from 'vue-material-design-icons/InformationOutline.vue
 import MessageTextOutline from 'vue-material-design-icons/MessageTextOutline.vue'
 import Metronome from 'vue-material-design-icons/Metronome.vue'
 import Microphone from 'vue-material-design-icons/Microphone.vue'
+import MicrophoneVariant from 'vue-material-design-icons/MicrophoneVariant.vue'
 import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
 import Palette from 'vue-material-design-icons/Palette.vue'
 import Pause from 'vue-material-design-icons/Pause.vue'
@@ -1093,6 +1133,8 @@ import ScoreStartTone from './ScoreStartTone.vue'
 import ScoreStatus from './ScoreStatus.vue'
 import SetlistBar from './SetlistBar.vue'
 import SetlistEditor from './SetlistEditor.vue'
+import SingLane from './SingLane.vue'
+import SingPanel from './SingPanel.vue'
 import SystemBand from './SystemBand.vue'
 import TempoControls from './TempoControls.vue'
 import ToolGroup from './ToolGroup.vue'
@@ -1129,6 +1171,7 @@ import { useScoreFacts } from '../composables/useScoreFacts.js'
 import { NO_RECTS, useScoreSession } from '../composables/useScoreSession.js'
 import { useScoreVariant } from '../composables/useScoreVariant.js'
 import { useSetlist } from '../composables/useSetlist.js'
+import { useSingScore } from '../composables/useSingScore.js'
 import { useSpeedTrainer } from '../composables/useSpeedTrainer.js'
 import { useStartTone } from '../composables/useStartTone.js'
 import { useTuner } from '../composables/useTuner.js'
@@ -1144,6 +1187,7 @@ import { countLabels } from '../lib/countLabels.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
 import { resolveKey } from '../lib/keyMap.js'
 import { loopDimRects, loopMeasureRects, loopSystemKeys } from '../lib/loopFocus.js'
+import { buildLyrics } from '../lib/lyricsLayout.js'
 import { staffPartNames } from '../lib/lyricsLayout.js'
 import { browserFileUrl } from '../lib/micAccess.js'
 import { nameOf } from '../lib/noteNames.js'
@@ -1158,6 +1202,7 @@ import {
 } from '../lib/scoreLayout.js'
 import { revealsCursor } from '../lib/scrollPlan.js'
 import { visibleSharedRecordings } from '../lib/sharedRecordings.js'
+import { laneSyllables } from '../lib/singLane.js'
 import { MIN_SPREAD_WIDTH_PX, spreadMode as spreadModeOf } from '../lib/spreadLayout.js'
 import { MODE_TONIC, MODE_VOICE } from '../lib/startTone.js'
 import { formatTime, progressPercent, seekValue } from '../lib/viewerFormat.js'
@@ -1197,6 +1242,7 @@ const TOOL_ICONS = Object.freeze({
 	recording: Microphone,
 	tuner: SineWave,
 	practiceLog: ChartBar,
+	sing: MicrophoneVariant,
 	autoScroll: ChevronDoubleDown,
 	myPart: FocusFieldHorizontal,
 	noteNames: Alphabetical,
@@ -1219,6 +1265,7 @@ const TOOL_STATE = Object.freeze({
 	recording: 'showPractice',
 	tuner: 'showTuner',
 	practiceLog: 'showPracticeLog',
+	sing: 'showSing',
 	annotations: 'showAnnotations',
 	rehearsal: 'showRehearsal',
 	partChoice: 'showMyPart',
@@ -1227,6 +1274,19 @@ const TOOL_STATE = Object.freeze({
 	myPart: 'focusMyPart',
 	noteText: 'showNoteText',
 })
+
+// The view of the singing lane (E24) is a matter of the device - a stage on a
+// phone, a band on a tablet - so it stays in this browser.
+const SING_VIEW_KEY = 'scoreview.singView'
+
+/** @return {'band'|'stage'} */
+function readSingView() {
+	try {
+		return window.localStorage?.getItem(SING_VIEW_KEY) === 'stage' ? 'stage' : 'band'
+	} catch {
+		return 'band'
+	}
+}
 
 const GROUP_ICONS = Object.freeze({
 	playback: HeadphonesSettings,
@@ -1249,6 +1309,8 @@ export default {
 		MyPartControls,
 		PracticeLogPanel,
 		RecordingPanel,
+		SingLane,
+		SingPanel,
 		ScorePage,
 		ScorePanel,
 		ScoreMixer,
@@ -1911,6 +1973,24 @@ export default {
 			intonation,
 			setMineMuted: (muted) => mix.silence(muted ? myChannels() : null),
 		})
+		// Scored singing (E24): the live intonation's frames, judged per note.
+		const singScore = useSingScore({
+			fileId: () => activeFileId.value,
+			enabled: () => features.intonation && features.singScore && !props.offline,
+			intonation,
+			notes: () => transposedNotes.value,
+			myChannels,
+			measureOf: (ms) => resolveMeasurePosition(measuresTimeline.value, ms, durationMs.value)?.measureNumber ?? null,
+			loopRange: () => (loop.active.value
+				? { from: Number(loop.fromMeasure.value), to: Number(loop.toMeasure.value), startMs: loop.startMs.value, endMs: loop.endMs.value }
+				: null),
+			durationMs: () => durationMs.value,
+			// Reactive: the end of a run is a watcher on it (clock.isPlaying() is not).
+			isPlaying: () => playback.isPlaying.value,
+			positionMs: () => clock.value?.getCurrentTimeMs() ?? null,
+			waitModeActive: () => waitMode.active.value,
+		})
+
 		// F-C2.2: no metronome, speed trainer, recording or following a leader
 		// alongside. Whatever is switched on last wins.
 		watch(waitMode.active, (on) => {
@@ -2236,6 +2316,27 @@ export default {
 			waitModeNeedPart: waitMode.needPart,
 			toggleWaitMode: waitMode.toggle,
 			resetWaitMode: waitMode.reset,
+			singScoreEnabled: features.singScore,
+			// My notes, for the bars of the singing lane.
+			singLaneNotes: computed(() => {
+				const channels = new Set(myChannels() ?? [])
+				return (transposedNotes.value ?? []).filter((n) => channels.has(n.channel))
+			}),
+
+			singActive: singScore.active,
+			singLevel: singScore.level,
+			singRun: singScore.run,
+			singResults: singScore.results,
+			singLastRun: singScore.lastRun,
+			singHistory: singScore.history,
+			singError: singScore.error,
+			singLivePct: singScore.livePct,
+			singToggle: singScore.toggle,
+			singSetLevel: singScore.setLevel,
+			singClear: singScore.clearResults,
+			singDismiss: singScore.dismissResult,
+			singFramesForLane: singScore.framesForLane,
+			resetSing: singScore.reset,
 			destroyIntonation: intonation.destroy,
 			followActive: follow.active,
 			followMine: follow.mine,
@@ -2353,6 +2454,9 @@ export default {
 			showTuner: false,
 			// The practice log card (E20).
 			showPracticeLog: false,
+			// Scored singing (E24): its card, and the view of its lane.
+			showSing: false,
+			singView: readSingView(),
 			// Focus on the loop (B4) - a session switch, it dies with the loop.
 			loopFocus: false,
 			// The save form of the running loop (B5) is open.
@@ -2474,6 +2578,7 @@ export default {
 				exportEnabled: this.exportEnabled,
 				offlineEnabled: this.offlineEnabled,
 				practiceLogEnabled: this.practiceLogEnabled,
+				singScoreEnabled: this.singScoreEnabled,
 				offline: this.offline,
 				standalone: this.standalonePage,
 			})
@@ -2494,6 +2599,7 @@ export default {
 				showPractice: this.showPractice,
 				showTuner: this.showTuner,
 				showPracticeLog: this.showPracticeLog,
+				showSing: this.showSing || this.singActive,
 				coachActive: this.practice.coach,
 				transposed: this.effectiveTranspose !== 0,
 				focusMyPart: this.focusMyPart,
@@ -2574,6 +2680,31 @@ export default {
 		lyricsPartNames() {
 			const meta = this.pictureMeta
 			return staffPartNames(this.pictureParts, [...(meta?.noteSpellings ?? []), ...(meta?.lyricSyllables ?? [])])
+		},
+
+		/** The lyrics of my part, for the singing stage. */
+		singLyricsBlocks() {
+			const syllables = this.pictureMeta?.lyricSyllables
+			if (!syllables || syllables.length === 0) {
+				return []
+			}
+			return buildLyrics({ syllables, staves: this.myStaves }).blocks
+		},
+
+		/** What the run covers: the whole piece, or the loop by name or measures. */
+		singUnitLabel() {
+			if (!this.loopActive) {
+				return this.t('Whole piece')
+			}
+			const from = Number(this.loopFromMeasure)
+			const to = Number(this.loopToMeasure)
+			const named = this.savedLoops.find((l) => l.from === from && l.to === to && l.name)
+			const range = from === to ? this.t('Measure {measure}', { measure: from }) : this.t('Measures {from}–{to}', { from, to })
+			return named ? `${named.name} (${range})` : range
+		},
+
+		singLevelLabel() {
+			return { easy: this.t('Beginner'), choir: this.t('Choir'), strict: this.t('Strict') }[this.singLevel] ?? ''
 		},
 
 		myStaves() {
@@ -2849,6 +2980,7 @@ export default {
 		// Abbau der Wiedergabe, solange deren Kontext noch lebt.
 		this.destroyRecorder()
 		this.resetWaitMode()
+		this.resetSing()
 		this.destroyIntonation()
 		this.practiceExport.cancel()
 		this.bandZoom.stop()
@@ -2967,6 +3099,7 @@ export default {
 				case 'recording': return this.t('Recording and intonation')
 				case 'tuner': return this.t('Tuner')
 				case 'practiceLog': return this.t('Practice log')
+				case 'sing': return this.t('Scored singing')
 				case 'autoScroll': return this.t('Scroll along with playback')
 				case 'myPart': return this.t('Show only my part')
 				case 'noteNames': return this.t('Note names and counting')
@@ -3147,6 +3280,7 @@ export default {
 			this.showRehearsal = false
 			this.showPractice = false
 			this.showPracticeLog = false
+			this.showSing = false
 			this.setlistEditorMode = null
 			this.toolsOpen = false
 			this.releaseStartTone()
@@ -3245,6 +3379,48 @@ export default {
 		onListenRecording(recording) {
 			this.followNavigation('seek')
 			this.listenRecording(recording)
+		},
+
+		async onSingToggle() {
+			await this.ensureIntonationMidi()
+			await this.singToggle()
+			if (this.intonationNeedPart) {
+				this.openVoiceSelection()
+			}
+		},
+
+		/** @param {string} view 'band' or 'stage' */
+		onSingView(view) {
+			this.singView = view === 'stage' ? 'stage' : 'band'
+			try {
+				window.localStorage?.setItem(SING_VIEW_KEY, this.singView)
+			} catch {
+				// Private mode: the choice lasts as long as the page.
+			}
+		},
+
+		/**
+		 * A loop over one measure to practise, from the result.
+		 *
+		 * @param {number} measure
+		 */
+		onSingLoop(measure) {
+			this.applySavedLoop({ from: measure, to: measure })
+		},
+
+		/**
+		 * The syllables of my part in a stretch of the score, for the stage.
+		 *
+		 * @param {number} fromMs
+		 * @param {number} toMs
+		 * @return {Array<{scoreMs:number, text:string}>}
+		 */
+		singSyllablesFor(fromMs, toMs) {
+			const events = this.timeline?.events
+			if (!events || this.singLyricsBlocks.length === 0) {
+				return []
+			}
+			return laneSyllables({ blocks: this.singLyricsBlocks, events, times: this.timeline.times, fromMs, toMs })
 		},
 
 		/**
@@ -3359,6 +3535,7 @@ export default {
 			// abgeschlossen und gespeichert, solange ihr Kontext lebt.
 			this.resetRecorder()
 			this.resetWaitMode()
+			this.resetSing()
 			this.resetIntonation()
 			// A practice-track export belongs to the piece it was started on.
 			this.practiceExport.cancel()
@@ -4036,6 +4213,17 @@ export default {
  * The band fills what the hints above it leave (F2): it scrolls by itself,
  * and with `height: 100%` below a hint its lowest staves fell off the screen.
  */
+.scoreview-body--sing {
+	display: flex;
+	flex-direction: column;
+}
+
+.scoreview-body--sing > .scoreview-scroll {
+	flex: 1 1 0;
+	height: auto;
+	min-height: 0;
+}
+
 .scoreview-scroll--band {
 	display: flex;
 	flex-direction: column;

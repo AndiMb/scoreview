@@ -173,6 +173,13 @@
 				<NcCheckboxRadioSwitch v-model="form.featureIntonation" type="switch" class="scoreview-field">
 					{{ t('Intonation feedback while singing, and the tuner') }}
 				</NcCheckboxRadioSwitch>
+				<NcCheckboxRadioSwitch
+					v-model="form.featureSingScore"
+					type="switch"
+					:disabled="!form.featureIntonation"
+					class="scoreview-field">
+					{{ t('Scored singing (points per run, own best scores; needs intonation)') }}
+				</NcCheckboxRadioSwitch>
 
 				<!--
 					Ueben unterwegs (E13/E14): Uebe-Tracks landen als Dateien in
@@ -342,6 +349,7 @@ export default {
 				featurePracticeExport: initial.featurePracticeExport ?? true,
 				featureOffline: initial.featureOffline ?? true,
 				featurePracticeLog: initial.featurePracticeLog ?? true,
+				featureSingScore: initial.featureSingScore ?? true,
 				practiceTrackMaxMb: initial.practiceTrackMaxMb?.value ?? 60,
 				pdfMaxMb: initial.pdfMaxMb?.value ?? 50,
 				followPollMs: initial.followPollMs ?? 800,

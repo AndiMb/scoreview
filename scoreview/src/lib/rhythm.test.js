@@ -5,6 +5,7 @@ import { recordingToScoreMs } from './recordingAlign.js'
 import {
 	classifyOnset,
 	classifyRelease,
+	createLevelStream,
 	evaluateRhythm,
 	frameState,
 	levelEnvelope,
@@ -286,5 +287,22 @@ describe('problemList with rhythm', () => {
 	it('medianOnsetMs skips notes without a measured onset', () => {
 		expect(medianOnsetMs([{ onset: { devMs: 30 } }, { onset: null }, { onset: { devMs: 50 } }, { onset: { devMs: null } }])).toBe(40)
 		expect(medianOnsetMs([{ onset: null }])).toBeNull()
+	})
+})
+
+describe('createLevelStream', () => {
+	it('gives the values of levelEnvelope over the blocks, with context times', () => {
+		const samples = voice([{ onMs: 200, offMs: 900, pitch: 64 }], 1200)
+		const whole = levelEnvelope(samples, RATE)
+		const stream = createLevelStream(RATE)
+		const live = []
+		for (let i = 0; i < samples.length; i += 128) {
+			live.push(...stream.push(samples.subarray(i, i + 128), 10 + i / RATE))
+		}
+		expect(live.length).toBe(whole.db.length)
+		live.forEach((p, i) => {
+			expect(p.db).toBeCloseTo(whole.db[i], 3)
+			expect(p.contextTimeSec).toBeCloseTo(10 + whole.firstSec + i * whole.hopSec, 6)
+		})
 	})
 })

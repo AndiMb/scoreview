@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeLogController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
+#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeLogController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php lib/Controller/SingRunController.php lib/Controller/VariantController.php
 msgid "File not found or no access."
 msgstr "Datei nicht gefunden oder kein Zugriff."
 
@@ -228,6 +228,10 @@ msgstr "Der Pfad muss leer sein oder absolut auf ein Programm namens node, nodej
 msgid "Addresses for the conversion service and the SoundFont source must start with http:// or https://."
 msgstr "Adressen für den Konvertierungsdienst und die SoundFont-Quelle müssen mit http:// oder https:// beginnen."
 
+#: lib/Controller/SingRunController.php
+msgid "Invalid singing result."
+msgstr "Ungültiges Singergebnis."
+
 #: lib/Controller/SoundFontController.php
 msgid "The server could not provide the SoundFont. The ScoreView status in the administration settings shows why."
 msgstr "Der Server konnte das SoundFont nicht bereitstellen. Warum, zeigt der Status von ScoreView in den Verwaltungseinstellungen."
@@ -363,6 +367,10 @@ msgstr "Erlaubt: {min}–{max}. Vorgabe: {default}."
 #: src/components/AdminSettings.vue
 msgid "Intonation feedback while singing, and the tuner"
 msgstr "Intonationsrückmeldung beim Singen und das Stimmgerät"
+
+#: src/components/AdminSettings.vue
+msgid "Scored singing (points per run, own best scores; needs intonation)"
+msgstr "Singen mit Wertung (Punkte je Durchgang, eigene Bestwerte; braucht die Intonation)"
 
 #: src/components/AdminSettings.vue
 msgid "Practising on the go"
@@ -1972,7 +1980,7 @@ msgstr "Neue Setliste"
 msgid "Edit setlist"
 msgstr "Setliste bearbeiten"
 
-#: src/components/ScoreViewer.vue
+#: src/components/ScoreViewer.vue src/components/SingPanel.vue
 msgid "Choose your part first."
 msgstr "Wähle zuerst deine Stimme."
 
@@ -2003,6 +2011,10 @@ msgstr "Aufnahme und Intonation"
 #: src/components/ScoreViewer.vue
 msgid "Practice log"
 msgstr "Übetagebuch"
+
+#: src/components/ScoreViewer.vue
+msgid "Scored singing"
+msgstr "Singen mit Wertung"
 
 #: src/components/ScoreViewer.vue
 msgid "Rehearsal"
@@ -2045,10 +2057,30 @@ msgid "Text"
 msgstr "Text"
 
 #: src/components/ScoreViewer.vue
+msgid "Whole piece"
+msgstr "Ganzes Stück"
+
+#: src/components/ScoreViewer.vue
+msgid "Measure {measure}"
+msgstr "Takt {measure}"
+
+#: src/components/ScoreViewer.vue src/components/SingPanel.vue
+msgid "Beginner"
+msgstr "Einsteiger"
+
+#: src/components/ScoreViewer.vue src/components/SingPanel.vue
+msgid "Choir"
+msgstr "Chor"
+
+#: src/components/ScoreViewer.vue src/components/SingPanel.vue
+msgid "Strict"
+msgstr "Streng"
+
+#: src/components/ScoreViewer.vue
 msgid "Playback and practice"
 msgstr "Wiedergabe und Üben"
 
-#: src/components/ScoreViewer.vue
+#: src/components/ScoreViewer.vue src/components/SingPanel.vue
 msgid "View"
 msgstr "Ansicht"
 
@@ -2231,6 +2263,110 @@ msgstr "Setliste speichern"
 #: src/components/SetlistEditor.vue
 msgid "Add"
 msgstr "Hinzufügen"
+
+#: src/components/SingLane.vue
+msgid "without score"
+msgstr "ohne Wertung"
+
+#: src/components/SingPanel.vue
+msgid "Stop scoring"
+msgstr "Wertung beenden"
+
+#: src/components/SingPanel.vue
+msgid "Start scoring"
+msgstr "Wertung starten"
+
+#: src/components/SingPanel.vue
+msgid "Press play and sing your part from the start of the piece or the loop."
+msgstr "Wiedergabe starten und die eigene Stimme vom Anfang des Stücks oder des Loops an singen."
+
+#: src/components/SingPanel.vue
+msgid "Your part is scored note by note: pitch, onset and length."
+msgstr "Die eigene Stimme wird Note für Note bewertet: Tonhöhe, Einsatz und Länge."
+
+#: src/components/SingPanel.vue
+msgid "Level"
+msgstr "Stufe"
+
+#: src/components/SingPanel.vue
+msgid "Lane under the score"
+msgstr "Spur unter der Partitur"
+
+#: src/components/SingPanel.vue
+msgid "Singing stage with lyrics"
+msgstr "Sing-Bühne mit Liedtext"
+
+#: src/components/SingPanel.vue
+msgid "Use headphones: otherwise the accompaniment reaches the microphone and is scored along."
+msgstr "Kopfhörer verwenden: Sonst gelangt die Begleitung ins Mikrofon und wird mitbewertet."
+
+#: src/components/SingPanel.vue
+msgid "Result"
+msgstr "Ergebnis"
+
+#: src/components/SingPanel.vue
+msgid "Hide result"
+msgstr "Ergebnis ausblenden"
+
+#: src/components/SingPanel.vue
+msgid "New best!"
+msgstr "Neuer Bestwert!"
+
+#: src/components/SingPanel.vue
+msgid "Best: {pct}"
+msgstr "Bestwert: {pct}"
+
+#: src/components/SingPanel.vue
+msgid "Pitch"
+msgstr "Ton"
+
+#: src/components/SingPanel.vue
+msgid "Onset"
+msgstr "Einsatz"
+
+#: src/components/SingPanel.vue
+msgid "Length"
+msgstr "Länge"
+
+#: src/components/SingPanel.vue
+msgid "Not scored: the run was not sung from the start, was jumped in, changed tempo or waited."
+msgstr "Ohne Wertung: Der Durchgang begann nicht am Anfang, es wurde gesprungen, das Tempo geändert oder gewartet."
+
+#: src/components/SingPanel.vue
+msgid "Saving …"
+msgstr "Wird gespeichert …"
+
+#: src/components/SingPanel.vue
+msgid "Not saved."
+msgstr "Nicht gespeichert."
+
+#: src/components/SingPanel.vue
+msgid "To practise"
+msgstr "Zum Üben"
+
+#: src/components/SingPanel.vue
+msgid "Measure {measure}: {issue}"
+msgstr "Takt {measure}: {issue}"
+
+#: src/components/SingPanel.vue
+msgid "Loop measure {measure}"
+msgstr "Takt {measure} als Loop"
+
+#: src/components/SingPanel.vue
+msgid "Your runs"
+msgstr "Deine Durchgänge"
+
+#: src/components/SingPanel.vue
+msgid "Your last {count} runs, from {first} to {last}"
+msgstr "Deine letzten {count} Durchgänge, von {first} bis {last}"
+
+#: src/components/SingPanel.vue
+msgid "Delete my results for this piece"
+msgstr "Meine Ergebnisse zu diesem Stück löschen"
+
+#: src/components/SingPanel.vue
+msgid "{level} · tempo {tempo} % · {notes} notes"
+msgstr "{level} · Tempo {tempo} % · {notes} Noten"
 
 #: src/components/SystemBand.vue
 msgid "Preparing the system band…"
@@ -2592,6 +2728,10 @@ msgstr "Diese Stimme bzw. dieses Seitenformat ließ sich nicht setzen. Die Parti
 msgid "The setlist could not be loaded."
 msgstr "Die Setliste konnte nicht geladen werden."
 
+#: src/composables/useSingScore.js
+msgid "The results could not be deleted."
+msgstr "Die Ergebnisse konnten nicht gelöscht werden."
+
 #: src/composables/useStartTone.js
 msgid "The starting note needs sound, and no SoundFont is loaded."
 msgstr "Der Anfangston braucht Ton, und es ist kein SoundFont geladen."
@@ -2599,6 +2739,34 @@ msgstr "Der Anfangston braucht Ton, und es ist kein SoundFont geladen."
 #: src/composables/useStartTone.js
 msgid "The score uses every MIDI channel, so there is none left for the starting note."
 msgstr "Die Partitur belegt alle MIDI-Kanäle, für den Anfangston ist keiner frei."
+
+#: src/lib/singLane.js
+msgid "Perfect"
+msgstr "Perfekt"
+
+#: src/lib/singLane.js
+msgid "low {cents} ct"
+msgstr "zu tief {cents} ct"
+
+#: src/lib/singLane.js
+msgid "high {cents} ct"
+msgstr "zu hoch {cents} ct"
+
+#: src/lib/singLane.js
+msgid "early"
+msgstr "früh"
+
+#: src/lib/singLane.js
+msgid "late"
+msgstr "spät"
+
+#: src/lib/singLane.js
+msgid "too short"
+msgstr "zu kurz"
+
+#: src/lib/singLane.js
+msgid "not heard"
+msgstr "nicht gehört"
 
 #: src/lib/viewerTexts.js
 msgid "scoreview-engine on this server (MuseScore as WebAssembly)"

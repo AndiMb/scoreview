@@ -8,6 +8,7 @@ use OCA\ScoreView\Db\AnnotationMapper;
 use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\LeaderMapper;
 use OCA\ScoreView\Db\PracticeLogMapper;
+use OCA\ScoreView\Db\SingRunMapper;
 use OCA\ScoreView\Listener\UserDeletedListener;
 use OCA\ScoreView\Service\RecordingStorage;
 use OCP\EventDispatcher\Event;
@@ -28,11 +29,14 @@ class UserDeletedListenerTest extends TestCase {
 	private FollowMapper&MockObject $follow;
 	private RecordingStorage&MockObject $recordings;
 
+	private SingRunMapper&MockObject $singRuns;
+
 	protected function setUp(): void {
 		$this->annotations = $this->createMock(AnnotationMapper::class);
 		$this->leaders = $this->createMock(LeaderMapper::class);
 		$this->follow = $this->createMock(FollowMapper::class);
 		$this->recordings = $this->createMock(RecordingStorage::class);
+		$this->singRuns = $this->createMock(SingRunMapper::class);
 	}
 
 	private function listener(): UserDeletedListener {
@@ -42,6 +46,7 @@ class UserDeletedListenerTest extends TestCase {
 			$this->follow,
 			$this->recordings,
 			$this->createMock(PracticeLogMapper::class),
+			$this->singRuns,
 			$this->createMock(LoggerInterface::class),
 		);
 	}
@@ -57,6 +62,7 @@ class UserDeletedListenerTest extends TestCase {
 		$this->leaders->expects($this->once())->method('deleteByUserId')->with('anna')->willReturn(1);
 		$this->follow->expects($this->once())->method('deleteByLeader')->with('anna')->willReturn(1);
 		$this->recordings->expects($this->once())->method('deleteAllForUser')->with('anna')->willReturn(3);
+		$this->singRuns->expects($this->once())->method('deleteByUserId')->with('anna')->willReturn(4);
 
 		$this->listener()->handle($this->kontoGeloescht('anna'));
 	}

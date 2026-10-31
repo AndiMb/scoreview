@@ -31,6 +31,8 @@
  * @property {boolean} [offlineEnabled] Offline-Seite von der Administration an (E14)
  * @property {boolean} [practiceLogEnabled] practice log switched on by the
  *   administration (E20)
+ * @property {boolean} [singScoreEnabled] scored singing switched on by the
+ *   administration (E24); it needs the intonation as well
  * @property {boolean} [offline] der Viewer laeuft auf der Offline-Seite: Was
  *   den Server braucht, entfaellt - ein Kontextwert, keine Weiche im Viewer
  * @property {boolean} [standalone] Direct Editing der mobilen Apps (E8) -
@@ -68,6 +70,7 @@ export const PINNABLE = Object.freeze({
 	recording: 'panel',
 	tuner: 'panel',
 	practiceLog: 'panel',
+	sing: 'panel',
 	autoScroll: 'switch',
 	myPart: 'switch',
 	noteNames: 'page',
@@ -119,6 +122,8 @@ export function barGroups(ctx) {
 				// The tuner (B3) hangs on the intonation switch: same analysis,
 				// same microphone question. It needs no server, so it stays offline.
 				tuner: ctx.intonationEnabled === true && settings,
+				// Scored singing (E24) stores its runs on the server.
+				sing: ctx.intonationEnabled === true && ctx.singScoreEnabled === true && settings && online,
 			}),
 			pick({
 				// Practising is counted on the server; a page without one has

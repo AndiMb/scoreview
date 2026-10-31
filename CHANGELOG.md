@@ -6,6 +6,21 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.28.0] – 2026-10-31
+
+### Added
+
+- Scored singing: sing your part along with the playback and get points for
+  each run. A lane under the score – or a stage over it with the lyrics –
+  shows your notes as bars and your voice as a line; at the end of each note
+  its bar turns green, yellow or red with a word such as “low −40 ct”,
+  “late” or “too short”. Three levels (Beginner, Choir, Strict). A run sung
+  through from the start of the piece or the loop to its end is stored – the
+  summary only, no audio – with your best score per level and tempo, a chart
+  of your last runs and the measures to practise, each a click away as a
+  loop. Pitch counts 60 %, onset 25 %, length 15 %. Only you see your
+  results. Administrators can switch it off; it needs intonation.
+
 ## [1.27.2] – 2026-10-31
 
 ### Fixed

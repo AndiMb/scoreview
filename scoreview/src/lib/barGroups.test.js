@@ -132,6 +132,15 @@ describe('barGroups', () => {
 		expect(items(barGroups(ctx({ intonationEnabled: true, offline: true })), 'playback')).toContain('tuner')
 	})
 
+	it('offers scored singing with intonation and its own switch, online (E24)', () => {
+		expect(items(barGroups(ctx({ intonationEnabled: true })), 'playback')).not.toContain('sing')
+		expect(items(barGroups(ctx({ singScoreEnabled: true })), 'playback')).not.toContain('sing')
+		const on = barGroups(ctx({ intonationEnabled: true, singScoreEnabled: true }))
+		expect(on[0].sections[1]).toEqual(['recording', 'tuner', 'sing'])
+		expect(items(barGroups(ctx({ intonationEnabled: true, singScoreEnabled: true, offline: true })), 'playback')).not.toContain('sing')
+		expect(PINNABLE.sing).toBe('panel')
+	})
+
 	it('offers the practice log only when switched on and online (E20)', () => {
 		expect(items(barGroups(ctx()), 'playback')).not.toContain('practiceLog')
 		const on = barGroups(ctx({ practiceLogEnabled: true }))
@@ -142,7 +151,7 @@ describe('barGroups', () => {
 	})
 
 	it('lets everything be pinned but zoom and the starting note', () => {
-		const all = barGroups(ctx({ intonationEnabled: true, practiceLogEnabled: true })).flatMap((g) => g.items)
+		const all = barGroups(ctx({ intonationEnabled: true, singScoreEnabled: true, practiceLogEnabled: true })).flatMap((g) => g.items)
 		expect(all.filter((id) => !(id in PINNABLE))).toEqual(['zoom', 'toneMode'])
 	})
 })

@@ -139,6 +139,7 @@ Route mit Token annimmt; Einzelheiten in
 | `GET\|POST /api/scores/{fileId}/recordings`, `GET\|DELETE …/recordings/{id}` | Eigene Aufnahmen – nur die eigenen, fremde antworten 404; die Liste trägt zusätzlich, was Leitungen für Stimmen freigegeben haben (`shared`), und nur das lässt sich auch abspielen ([E21](#e21-aufnahmen-der-leitung-für-stimmen)) | ja |
 | `PUT /api/scores/{fileId}/recordings/{id}` | Eine eigene Aufnahme für Stimmen freigeben (nur Leitungen) oder die Freigabe zurücknehmen (immer) ([E21](#e21-aufnahmen-der-leitung-für-stimmen)) | ja |
 | `GET\|POST /api/scores/{fileId}/practice-log` | Das eigene Übetagebuch der Partitur lesen, gezählte Sekunden melden ([E20](#e20-übetagebuch-ohne-bestenliste)) | ja |
+| `GET\|POST\|DELETE /api/scores/{fileId}/sing-runs` | Eigene Durchgänge der Sing-Wertung lesen (je Stufe und Taktbereich, mit Bestwert je Tempo), einen fertig gesungenen Durchgang melden, die eigenen Ergebnisse der Partitur löschen ([E24](#e24-sing-wertung-nur-für-sich)) | ja |
 | `PUT /api/scores/{fileId}/practice-goal` | Das Wochenziel der Partitur setzen oder mit 0 löschen (nur Leitungen, E20) | ja |
 | `GET\|PUT /api/setlists/{fileId}` | Setliste lesen (aufgelöst aus Sicht der Nutzerin) und schreiben ([E11](#e11-die-setliste-als-markdown-datei)) | Setlisten-Begleit-Token; schreibend nur mit Einträgen um die Partitur herum |
 | `POST /api/setlists` | Neue Setliste anlegen | nur im Ordner der Token-Datei, ohne Begleit-Token |
@@ -261,6 +262,7 @@ Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 | `scoreview_follow` | `file_id` (Primärschlüssel: höchstens eine Sitzung je Datei), `leader_uid`, `started_at`, `heartbeat_at`, `version`, `state` ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) |
 | `scoreview_recordings` | `file_id`, `user_id`, `created_at`, `duration_ms`, `size_bytes`, `score_start_ms`, `tempo_factor`, `with_accompaniment`, `reference_hz`, `shared_parts` (Stimmen, für die eine Leitung sie freigegeben hat, [E21](#e21-aufnahmen-der-leitung-für-stimmen)) – die WAV selbst liegt in IAppData |
 | `scoreview_practice_log` | `user_id`, `file_id`, `day` (lokaler Kalendertag `YYYY-MM-DD`, eindeutig zusammen), `seconds` ([E20](#e20-übetagebuch-ohne-bestenliste)) |
+| `scoreview_sing_runs` | `user_id`, `file_id`, `from_measure`, `to_measure` (beide `NULL`: ganzes Stück), `level`, `tempo_pct`, `total_pct`, `pitch_pct`, `onset_pct`, `release_pct`, `notes_scored`, `created_at` – nur die Zusammenfassung eines Durchgangs, keine Rahmen; höchstens 200 je Nutzerin, Partitur, Stufe und Taktbereich ([E24](#e24-sing-wertung-nur-für-sich)) |
 | `scoreview_practice_goals` | `file_id` (eindeutig), `minutes_per_week`, `user_id` (wer es gesetzt hat; `NULL`, wenn das Konto gelöscht ist), `updated_at` |
 | `scoreview_variants` | `file_id`, `etag`, `variant` (eindeutig zusammen – zugleich die Sperre eines Laufs), `status`, `error_code`, `error_message`, `format_version`, `engine`, `page_count`, `accessed_at` ([E19](#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)) |
 
@@ -583,6 +585,7 @@ einer eigenen Komponente. `ScoreViewer.vue` bekommt nur die Verdrahtung.
 | „Folgt mir“ ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) | `followState.js`, `leaderQueue.js`, `followPlayback.js` | `useFollowSession` | `FollowBadge.vue`, `LeaderPanel.vue` |
 | Setliste ([E11](#e11-die-setliste-als-markdown-datei)) | `setlistNav.js`, `setlistEdit.js`, `soundFontCache.js` | `useSetlist` | `SetlistBar.vue`, `SetlistEditor.vue` |
 | Mikrofon, Aufnahme, Intonation | `micAccess.js`, `resample.js`, `wavCodec.js`, `recordingAlign.js`, `pitchDetect.js`, `intonation.js`, `rhythm.js`, `waitMode.js` | `useMicrophone`, `useRecorder`, `useIntonation`, `useWaitMode` | `MicIndicator.vue`, `RecordingPanel.vue` |
+| Sing-Wertung ([E24](#e24-sing-wertung-nur-für-sich)) | `singScore.js`, `singLane.js`, `rhythm.js` (`createLevelStream`) | `useSingScore`, `useIntonation` (`onScoreFrames`) | `SingPanel.vue`, `SingLane.vue` |
 | Schalter der Verwaltung | `featureFlags.js` | – | – |
 
 **Die Zeitregel gilt auch hier.** Was plant oder springt, nimmt die
@@ -1227,7 +1230,7 @@ Skript aus, und welche Flags gelten, ergibt sich erst aus seiner Antwort.
 ## Entwurfsentscheidungen
 
 Diese Entscheidungen tragen den Aufbau. Sie sind im Code an vielen Stellen als
-`E1`…`E23` referenziert und sollten nicht ohne erneute Bewertung revidiert
+`E1`…`E24` referenziert und sollten nicht ohne erneute Bewertung revidiert
 werden.
 
 ### E1: MIDI statt MP3 als Audioartefakt
@@ -2920,6 +2923,74 @@ seinen Knopf im Transport.
 (`Service\ViewerPreferences`, nur bekannte Kennungen, höchstens vier): Am
 Rechner eingerichtet, gilt die Leiste auch am Tablet. Auf der Offline-Seite
 gibt es keine Nadeln – dort lässt sich nichts speichern.
+
+### E24: Sing-Wertung nur für sich
+
+Wer allein übt, will wissen, ob ein Durchgang besser war als der letzte – eine
+Zahl, die sich vergleichen lässt, und die Stellen, an denen sie verloren ging.
+Die Sing-Wertung bewertet dafür die eigene Stimme **Note für Note** mit
+denselben Verfahren wie die Intonation: Tonhöhe wie `evaluateNote`, Einsatz
+und Ende wie `evaluateRhythm` (`lib/singScore.js`). Es gibt kein zweites
+Verfahren und keine zweite Analyse am Mikrofon; sie liest die Rahmen der
+Live-Intonation (`useIntonation.onScoreFrames`), samt dem Pegelverlauf, den
+der Worker live mitschickt (`createLevelStream` in `rhythm.js`) – ohne ihn
+läge der Einsatz an der stabilen Tonhöhe statt am Silbenbeginn, wie oben bei
+**Rhythmus** begründet.
+
+**Gewichtet 60/25/15.** Ton zählt am meisten, weil er im Chor am meisten
+auffällt; Einsatz vor Länge, weil ein später Einsatz hörbar ist, ein früh
+abgesetzter Ton seltener. Jede Note zählt mit ihrer Dauer, mindestens 250 ms –
+sonst entschieden die langen Haltetöne allein. Was nicht zu hören war, zählt
+0 %: Schweigen ist kein „nicht auswertbar“, sonst gewänne, wer nur die
+sicheren Töne singt. Anders als die Intonation, die eine Note mit weniger
+als der Hälfte stimmhafter Rahmen „nicht auswertbar“ nennt, wertet die
+Sing-Wertung den Ton schon ab drei stimmhaften Rahmen nach dem Einschwingen:
+Eine früh abgesetzte Note ist „zu kurz“, nicht Schweigen (gemessen: auf 40 %
+gekürzt hießen sonst alle Noten „nicht gehört“). Im Divisi zählt die
+nächstliegende Note des Akkords.
+
+**Die Rückmeldung kommt am Notenende**, als Farbe des Balkens und ein
+Stichwort („Perfekt“, „zu tief −40 ct“, „spät“ …), etwa 250 ms nach dem Ende:
+Erst dann liegen die Rahmen nach dem Absetzen vor, die das Ende bewerten.
+Laufend gezeigt wird nur die gesungene Linie. Ein Urteil schon während der
+Note würde die Stimme beim Einschwingen nachregeln lassen.
+
+**Drei Stufen** (Einsteiger, Chor, Streng) weiten oder engen die Grenzen für
+Ton und Einsatz; die Werte sind gesetzt, nicht gemessen
+([Grenzwerte](limits.de.md#singen-mit-wertung)). Ergebnisse verschiedener Stufen
+werden nie miteinander verglichen.
+
+**Gespeichert wird nur ein durchgesungener Durchgang:** vom Anfang des Stücks
+oder des Loops bis zu seinem Ende, ohne Sprung, Tempowechsel oder Warte-Modus.
+Ein Loop-Umlauf ist ein eigener Durchgang. „Vom Anfang“ heißt: der erste
+Rahmen höchstens 250 ms nach der ersten Note – vor dem Start der Wiedergabe
+wird nichts analysiert, ein Ton gleich am Anfang hätte sonst nie gezählt.
+„Bis zum Ende“ entscheidet beim Anhalten die Position der Wiedergabe, nicht der
+letzte Rahmen: Die Rahmen hinken der Uhr um die Analyse nach, am Stückende
+läge der letzte noch in der letzten Note. Deren Länge bleibt dann
+unbewertet. Alles andere läuft „ohne Wertung“
+live mit – wer mittendrin einsteigt, sieht die Farben, aber keine Zahl, die
+sich mit einem vollen Durchgang vergleichen ließe. Gespeichert wird die
+Zusammenfassung, keine Rahmen und kein Ton (`scoreview_sing_runs`); der
+Bestwert gilt je Stufe, Taktbereich und Tempo, weil halbes Tempo leichter ist.
+Abgeprüft werden Werte und Stufe, Takte nur formal: Die Taktzahl des Stücks
+kennt der Server nicht, ohne die Konvertierung zu lesen.
+
+**Keine Bestenliste.** Wie beim Übetagebuch
+([E20](#e20-übetagebuch-ohne-bestenliste)) sieht jede nur die eigenen Zahlen,
+auch keine Leitung. Eine Rangliste im Chor misst Mikrofon, Raum und Kopfhörer
+mit und macht aus dem Üben einen Wettbewerb, den niemand verlangt hat.
+
+**Zwei Ansichten auf einer Canvas** (`SingLane.vue`): als Band unter der
+Partitur, die stehen bleibt, oder als Bühne über ihr mit dem Liedtext der
+eigenen Stimme. Kein DOM-Knoten je Note – unter Nextclouds Stylesheet kostet
+jeder Knoten (gemessen in 1.26), und die Spur ändert sich mit jedem Bild. Gemalt wird nur in
+der Bildschleife des Viewers, die mit der Musik schläft. Welche Ansicht und
+welche Stufe, merkt sich der Browser: Das Telefon will die Bühne, das Tablet
+das Band.
+
+Der Schalter `feature_sing_score` setzt die Intonation voraus; ist sie aus,
+antworten die Routen 404 wie die übrigen abgeschalteten Funktionen.
 
 ## Formatgrundlagen
 

@@ -615,6 +615,41 @@ re-measured on real devices and with real input latency.
   this week, last week and the days in a row. Deleting an account deletes its
   log; a goal stays when its leader's account goes.
 
+### Scored singing
+
+- **The levels are set, not measured.** Green for pitch up to ±50 cents
+  (Beginner), ±25 (Choir, the same as the intonation) or ±15 (Strict); green
+  for the onset up to 120 ms on Beginner, 60 ms otherwise; Strict narrows the
+  yellow band instead (100 ms against 120). No level goes below 60 ms – under it
+  the measured offset of the cursor would be judged, not the singer. Whether
+  the levels suit amateur voices has not been checked with real singers yet.
+- **Measured with a synthetic voice** (Chromium, a generated tone as the
+  microphone, following the playback): sung exactly, 100 % on Beginner and
+  Choir; 40 cents low, every note yellow and about 50 %; every fifth note
+  150 ms late, exactly those read “late”; notes let go after 40 % of their
+  length read “too short” with their pitch still counted. No frame went
+  missing in any run. Within a run the middle half of the onsets lies within
+  4–23 ms, but over a run of 98 s the onsets of the synthetic voice drifted
+  by up to about 50 ms, and between runs the median varied from −45 to
+  −65 ms: the generated tone keeps its own clock, while the player corrects
+  its time only from 50 ms on (see above). A singer follows the sound, so this
+  drift should not reach a real voice – not checked with one. A 150 ms late
+  onset is therefore not always recognised as late in this test (7 of 11).
+- **The word under a note comes about 250 ms after its end** – only then are
+  the frames there that judge the end. The sung line itself is live.
+- **Headphones.** Without them the accompaniment reaches the microphone and
+  is heard as singing – in unison passages it scores along. The app cannot
+  tell the two apart.
+- **One part per device.** The score belongs to the part chosen as mine; two
+  people at one microphone are scored as one voice.
+- **Divisi is scored against the nearest note** of the chord; the other notes
+  of the chord stay grey.
+- **Stored are only runs sung through** from the start of the piece or the
+  loop to its end, without a jump, a change of tempo or the wait mode – the
+  summary only, no audio. At most 200 per person, score, level and range of
+  measures; the oldest go first. Deleting an account deletes them. Nobody
+  else sees them, leaders and admins neither.
+
 ### Recordings shared with voices
 
 - **Only leaders share, and only their own recordings.** Taking a sharing

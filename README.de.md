@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:5cefed8c2ef7 -->
+<!-- translation-of: README.md sha256:88aa80397979 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -132,15 +132,21 @@ Das Mikrofon läuft nur auf ausdrücklichen Wunsch, ein roter Punkt zeigt wofür
 **Dranbleiben.** Das **Übetagebuch** zählt die Minuten, in denen eine
 Partitur spielt oder man aufnimmt – je Tag und je Stück, mit Tagen in Folge.
 Leitungen können für ein Stück ein Wochenziel setzen. Die eigene Zeit sieht
-nur man selbst: keine Leitung, keine Bestenliste.
+nur man selbst: keine Leitung, keine Bestenliste. **Singen mit Wertung**
+macht aus einem Durchgang Punkte: Eine Spur unter der Partitur – oder eine
+Bühne mit dem Liedtext – zeigt die eigenen Noten als Balken und die Stimme als
+Linie, und jede Note bekommt ihre Farbe und ein Stichwort zu Ton, Einsatz und
+Länge. Ein vom Anfang des Stücks oder des Loops durchgesungener Durchgang wird
+behalten, mit dem eigenen Bestwert je Stufe und Tempo und den Takten, die das
+Üben lohnen; auch das sieht nur man selbst.
 
 Das geht auch in den mobilen Nextcloud-Apps, mit wenigen Einschränkungen: Das
 Mikrofon gibt die Android-App nicht frei, dort führt „Im Browser öffnen“ weiter.
 Und eine Setliste öffnet sich mobil über eine ihrer Partituren statt über die
 Datei selbst. Die Offline-Seite gibt es nur im Browser, nicht in den Apps.
 Liedtext-Ansicht und Tonnamen brauchen den lokalen Konvertierungsweg (siehe
-unten). Die Verwaltung kann „Folgt mir“, Aufnahme, Intonation, Übe-Tracks, das
-Übetagebuch und die Offline-Seite einzeln abschalten; was die Funktionen kosten und wo sie
+unten). Die Verwaltung kann „Folgt mir“, Aufnahme, Intonation, Singen mit
+Wertung, Übe-Tracks, das Übetagebuch und die Offline-Seite einzeln abschalten; was die Funktionen kosten und wo sie
 enden, steht in docs/limits.de.md unter
 [Probe- und Konzertfunktionen](docs/limits.de.md#probe--und-konzertfunktionen)
 und [Üben und Lesen auf dem Handy](docs/limits.de.md#üben-und-lesen-auf-dem-handy).

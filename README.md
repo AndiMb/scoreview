@@ -128,7 +128,12 @@ red dot shows what for.
 **Keeping at it.** The **practice log** counts the minutes in which a score
 plays or you record – per day and per piece, with days in a row. Leaders can
 set a weekly goal for a piece. Only you see your time: no leader, no
-leaderboard.
+leaderboard. **Scored singing** turns a run into points: a lane under the
+score – or a stage with the lyrics – shows your notes as bars and your voice
+as a line, and every note gets its colour and a word for pitch, onset and
+length. A run sung through from the start of the piece or the loop is kept,
+with your best per level and tempo and the measures worth practising; again
+only you see it.
 
 This also works in the Nextcloud mobile apps, with a few limitations: the
 Android app does not grant access to the microphone; there, "Open in browser"
@@ -136,7 +141,7 @@ gets you further. And on mobile a setlist opens through one of its scores
 rather than through the file itself. The offline page exists only in the
 browser, not in the apps. The lyrics view and note names require the local
 conversion path (see below). Administrators can switch off "Follow me",
-recording, intonation, practice tracks, the practice log and the offline page individually; what
+recording, intonation, scored singing, practice tracks, the practice log and the offline page individually; what
 the features cost and where they end is described in docs/limits.md under
 [Rehearsal and concert features](docs/limits.md#rehearsal-and-concert-features)
 and [Practising and reading on a phone](docs/limits.md#practising-and-reading-on-a-phone).

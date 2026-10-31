@@ -77,6 +77,11 @@ return [
 		['name' => 'practice_log#show', 'url' => '/api/scores/{fileId}/practice-log', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'practice_log#create', 'url' => '/api/scores/{fileId}/practice-log', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'practice_log#updateGoal', 'url' => '/api/scores/{fileId}/practice-goal', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
+		// Scored runs of one's own part (E24, Controller\SingRunController):
+		// read, added to and deleted only by the singer.
+		['name' => 'sing_run#index', 'url' => '/api/scores/{fileId}/sing-runs', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'sing_run#create', 'url' => '/api/scores/{fileId}/sing-runs', 'verb' => 'POST', 'requirements' => ['fileId' => '\d+']],
+		['name' => 'sing_run#destroy', 'url' => '/api/scores/{fileId}/sing-runs', 'verb' => 'DELETE', 'requirements' => ['fileId' => '\d+']],
 		['name' => 'my_part#updatePractice', 'url' => '/api/scores/{fileId}/practice', 'verb' => 'PUT', 'requirements' => ['fileId' => '\d+']],
 
 		// Leitungen einer Partitur (B1, Controller\LeaderController). Die

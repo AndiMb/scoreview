@@ -6,16 +6,18 @@
 //
 // Zwei Auftraege:
 // - `live`: Bloecke aus dem Aufnahme-Worklet, zurueck kommen die Rahmen mit
-//   Kontextzeit (useIntonation.js, Live-Nadel).
+//   Kontextzeit (useIntonation.js, Live-Nadel), and the level envelope for
+//   live scoring (lib/singScore.js), which traces onsets after silence.
 // - `analyze`: eine ganze gespeicherte Aufnahme, in Stuecken mit
 //   Fortschritt (jedes Mal neu berechnet, nichts gespeichert). With the
 //   frames comes the level envelope for the start of a syllable
 //   (lib/rhythm.js) - computed here because it also runs over every sample.
 
 import { createPitchStream, FRAME_SIZE, HOP_SIZE, trackPitch } from '../lib/pitchDetect.js'
-import { levelEnvelope } from '../lib/rhythm.js'
+import { createLevelStream, levelEnvelope } from '../lib/rhythm.js'
 
 let stream = createPitchStream()
+let levelStream = createLevelStream()
 
 // Ein Stueck zu je 30 s: Zwischen zwei Stuecken kommt die Fortschrittsmeldung
 // heraus, und ein neuer `live`-Auftrag muss nicht auf die ganze Aufnahme
@@ -26,10 +28,12 @@ self.onmessage = (event) => {
 	const message = event.data
 	if (message.type === 'live-reset') {
 		stream = createPitchStream()
+		levelStream = createLevelStream()
 	} else if (message.type === 'live') {
 		const frames = stream.push(message.samples, message.contextTimeSec)
-		if (frames.length > 0) {
-			self.postMessage({ type: 'live', frames })
+		const level = levelStream.push(message.samples, message.contextTimeSec)
+		if (frames.length > 0 || level.length > 0) {
+			self.postMessage({ type: 'live', frames, level })
 		}
 	} else if (message.type === 'analyze') {
 		const { id, samples, sampleRate } = message

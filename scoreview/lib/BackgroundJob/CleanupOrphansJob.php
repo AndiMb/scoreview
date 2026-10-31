@@ -12,6 +12,7 @@ use OCA\ScoreView\Db\MyPartPreferenceMapper;
 use OCA\ScoreView\Db\PracticeGoalMapper;
 use OCA\ScoreView\Db\PracticeLogMapper;
 use OCA\ScoreView\Db\ScoreConversionMapper;
+use OCA\ScoreView\Db\SingRunMapper;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\PracticeLogService;
 use OCA\ScoreView\Service\RecordingStorage;
@@ -64,6 +65,7 @@ class CleanupOrphansJob extends TimedJob {
 		private PracticeLogMapper $practiceLog,
 		private PracticeGoalMapper $practiceGoals,
 		private PracticeLogService $practiceLogService,
+		private SingRunMapper $singRuns,
 		private LoggerInterface $logger,
 	) {
 		parent::__construct($time);
@@ -86,6 +88,7 @@ class CleanupOrphansJob extends TimedJob {
 			$this->myPartPreferences->findAllFileIds(),
 			$this->practiceLog->findAllFileIds(),
 			$this->practiceGoals->findAllFileIds(),
+			$this->singRuns->findAllFileIds(),
 		));
 
 		$caches = 0;
@@ -105,6 +108,7 @@ class CleanupOrphansJob extends TimedJob {
 				$others += $this->myPartPreferences->deleteByFileId($fileId);
 				$others += $this->practiceLog->deleteByFileId($fileId);
 				$others += $this->practiceGoals->deleteByFileId($fileId);
+				$others += $this->singRuns->deleteByFileId($fileId);
 			} catch (\Throwable $e) {
 				// Eine einzelne kaputte fileId darf den Durchlauf nicht beenden -
 				// der naechste Lauf versucht es erneut.

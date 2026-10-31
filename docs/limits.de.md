@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:b610ba92c094 -->
+<!-- translation-of: limits.md sha256:0a4c3c47eaca -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -627,6 +627,45 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   Ansicht zeigt diese Woche, die letzte Woche und die Tage in Folge. Wer sein
   Konto löscht, löscht sein Tagebuch; ein Ziel bleibt, wenn das Konto seiner
   Leitung geht.
+
+### Singen mit Wertung
+
+- **Die Stufen sind gesetzt, nicht gemessen.** Grün für den Ton bis ±50 Cent
+  (Einsteiger), ±25 (Chor, wie die Intonation) oder ±15 (Streng); grün für
+  den Einsatz bis 120 ms bei Einsteiger, sonst 60 ms; Streng verengt statt
+  dessen den gelben Bereich (100 ms statt 120). Keine Stufe geht unter 60 ms – darunter
+  würde der gemessene Versatz des Cursors bewertet, nicht die Stimme. Ob die
+  Stufen zu Laienstimmen passen, ist mit echten Sängerinnen noch nicht
+  geprüft.
+- **Gemessen mit einer synthetischen Stimme** (Chromium, ein erzeugter Ton
+  als Mikrofon, der Wiedergabe folgend): exakt gesungen 100 % auf Einsteiger
+  und Chor; 40 Cent zu tief jede Note gelb und rund 50 %; jede fünfte Note
+  150 ms zu spät, genau diese „spät“; nach 40 % ihrer Länge abgesetzte Noten
+  „zu kurz“, ihr Ton zählt weiter. In keinem Durchgang ging ein Rahmen
+  verloren. Innerhalb eines Durchgangs liegt die mittlere Hälfte der Einsätze
+  in 4–23 ms, über einen Durchgang von 98 s drifteten die Einsätze der
+  synthetischen Stimme aber um bis zu etwa 50 ms, und zwischen Durchgängen
+  schwankte der Median von −45 bis −65 ms: Der erzeugte Ton hält seine eigene
+  Uhr, die Wiedergabe korrigiert ihre Zeit erst ab 50 ms (siehe oben). Eine
+  Sängerin folgt dem Klang, die Drift sollte eine echte Stimme also nicht
+  treffen – mit einer echten nicht geprüft. Ein 150 ms später Einsatz wird in
+  diesem Test deshalb nicht immer als spät erkannt (7 von 11).
+- **Das Stichwort unter einer Note kommt etwa 250 ms nach ihrem Ende** – erst
+  dann liegen die Rahmen vor, die das Ende bewerten. Die gesungene Linie
+  selbst läuft live.
+- **Kopfhörer.** Ohne sie gelangt die Begleitung ins Mikrofon und wird als
+  Gesang gehört – in Unisono-Stellen wertet sie mit. Die App kann beides nicht
+  unterscheiden.
+- **Eine Stimme je Gerät.** Gewertet wird die als meine gewählte Stimme; zwei
+  Personen an einem Mikrofon zählen als eine Stimme.
+- **Im Divisi zählt die nächstliegende Note** des Akkords; die übrigen Noten
+  des Akkords bleiben grau.
+- **Gespeichert werden nur durchgesungene Durchgänge** vom Anfang des Stücks
+  oder des Loops bis zu seinem Ende, ohne Sprung, Tempowechsel oder
+  Warte-Modus – nur die Zusammenfassung, kein Ton. Höchstens 200 je Person,
+  Partitur, Stufe und Taktbereich; die ältesten gehen zuerst. Wer das Konto
+  löscht, löscht sie. Niemand sonst sieht sie, auch keine Leitung und keine
+  Verwaltung.
 
 ### Für Stimmen freigegebene Aufnahmen
 

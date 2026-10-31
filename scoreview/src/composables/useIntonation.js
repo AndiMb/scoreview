@@ -105,6 +105,9 @@ export function useIntonation({
 	// Wait mode (useWaitMode.js) listens to the same live frames instead of
 	// running a second analysis on the same microphone.
 	const frameListeners = new Set()
+	// Live scoring (useSingScore.js) needs every frame in score time, not
+	// only the newest one the needle shows.
+	const scoreFrameListeners = new Set()
 	// Zwei getrennte Zaehler: Eine laufende Auswertung und ein wartendes
 	// Einschalten der Live-Nadel veralten unabhaengig voneinander - das
 	// Abschalten der Nadel darf keine Auswertung verwerfen.
@@ -144,7 +147,7 @@ export function useIntonation({
 		worker.onmessage = (event) => {
 			const message = event.data
 			if (message.type === 'live') {
-				onLiveFrames(message.frames)
+				onLiveFrames(message.frames, message.level ?? [])
 			} else if (message.type === 'progress') {
 				// Nur die juengste Anfrage zeigt Fortschritt - eine verworfene
 				// rechnet im Worker noch zu Ende.
@@ -267,6 +270,48 @@ export function useIntonation({
 		return () => frameListeners.delete(cb)
 	}
 
+	/**
+	 * Receive every batch of live frames and level points in score time, while
+	 * the playback runs: `{frames: [{scoreMs, hz, clarity}], level: [{scoreMs,
+	 * db}], tempoFactor}`. Frames are already at a' = 440 (referencePitch.js).
+	 *
+	 * @param {function(object): void} cb
+	 * @return {function(): void} unsubscribe
+	 */
+	function onScoreFrames(cb) {
+		scoreFrameListeners.add(cb)
+		return () => scoreFrameListeners.delete(cb)
+	}
+
+	/**
+	 * One anchor per batch: the clock is read once, so the frames of a batch
+	 * keep their spacing - a uniform raster is what rhythm.js expects of the
+	 * level envelope.
+	 *
+	 * @param {Array<object>} frames at 440
+	 * @param {Array<{contextTimeSec:number, db:number}>} level
+	 */
+	function emitScoreFrames(frames, level) {
+		if (scoreFrameListeners.size === 0 || !isPlaying()) {
+			return
+		}
+		const tempo = tempoFactor()
+		const anchor = { contextTimeSec: liveContext.currentTime, scoreMs: clock()?.getCurrentTimeMs() ?? 0 }
+		const toScore = (contextTimeSec) => captureToScoreMs({
+			captureContextTimeSec: contextTimeSec,
+			anchor,
+			tempoFactor: tempo,
+			outputLatencyMs: latencyMs(),
+			inputLatencyMs: liveInputLatency,
+		})
+		const batch = {
+			frames: frames.map((f) => ({ scoreMs: toScore(f.contextTimeSec), hz: f.hz, clarity: f.clarity })),
+			level: level.map((p) => ({ scoreMs: toScore(p.contextTimeSec), db: p.db })),
+			tempoFactor: tempo,
+		}
+		scoreFrameListeners.forEach((cb) => cb(batch))
+	}
+
 	function toggleLive() {
 		if (live.value || startingLive) {
 			stopLive()
@@ -275,12 +320,16 @@ export function useIntonation({
 		}
 	}
 
-	function onLiveFrames(heard) {
-		if (!live.value || !liveContext || heard.length === 0) {
+	function onLiveFrames(heard, level = []) {
+		if (!live.value || !liveContext) {
 			return
 		}
 		// Here, before the listeners: wait mode compares the same frames.
 		const frames = framesAt440(heard, referenceHz())
+		emitScoreFrames(frames, level)
+		if (frames.length === 0) {
+			return
+		}
 		frameListeners.forEach((cb) => cb(frames))
 		const frame = frames[frames.length - 1]
 		const scoreMs = isPlaying()
@@ -488,6 +537,7 @@ export function useIntonation({
 		stopLive,
 		toggleLive,
 		onFrames,
+		onScoreFrames,
 		analyze,
 		clearAnalysis,
 		reset,
