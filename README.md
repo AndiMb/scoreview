@@ -182,7 +182,7 @@ work at all.
 
 ## Requirements
 
-- Nextcloud 31–35, PHP 8.1–8.5
+- Nextcloud 35, PHP 8.3–8.5
 - One of the two conversion paths above – or neither: where managed hosting
   allows neither containers nor a Node runtime, the fallback in the browser
   steps in
