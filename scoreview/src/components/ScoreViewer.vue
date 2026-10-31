@@ -2162,7 +2162,6 @@ export default {
 			startKey: computed(() => scoreFacts.facts.value?.keys?.[0] ?? null),
 			scoreFactsKeys: computed(() => scoreFacts.facts.value?.keys ?? []),
 			elidKeys: computed(() => keyByElid(timeline.value, scoreFacts.facts.value?.keys ?? [], measuresTimeline.value, durationMs.value)),
-			pageComponents: autoScroll.pages,
 			exportEnabled: features.practiceExport,
 			offlineEnabled: features.offline,
 			leaders: leaders.leaders,
@@ -3628,22 +3627,22 @@ export default {
 		 * transponiert den Ton selbst (player.js), der Name bleibt die
 		 * geschriebene Note.
 		 *
-		 * @param {number} page
 		 * @param {{pitch: number, tpc: number, elid: number, left: number, top: number}} note
+		 * @param {?function(string): void} showName from the tapped ScorePage
 		 */
-		async playTappedNote(page, note) {
+		async playTappedNote(note, showName) {
 			if (this.isPlaying || !this.can('tone') || !this.clock?.startTone) {
 				return
 			}
 			const system = this.noteNames !== 'off'
 				? this.noteNames
 				: (getLanguage().startsWith('de') ? 'de' : 'en')
-			this.pageComponents()[page]?.showTapName(note, nameOf({ tpc: note.tpc, system, concertKey: this.keyOfElid(note.elid) }))
+			showName?.(nameOf({ tpc: note.tpc, system, concertKey: this.keyOfElid(note.elid) }))
 			await this.clock.startTone(note.pitch)
 			setTimeout(() => this.clock?.stopTone?.(), 700)
 		},
 
-		onNoteClick({ page, x, y, note }) {
+		onNoteClick({ page, x, y, note, showName }) {
 			// Liegt ein Stempel bereit, setzt der Tipp ihn - und springt nicht
 			// zusaetzlich dorthin.
 			if (this.armedStamp) {
@@ -3669,7 +3668,7 @@ export default {
 				this.clock.seek(timeMs)
 			}
 			if (note) {
-				this.playTappedNote(page, note)
+				this.playTappedNote(note, showName)
 			}
 		},
 

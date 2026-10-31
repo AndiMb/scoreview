@@ -1408,13 +1408,18 @@ export default {
 			const fracY = (event.clientY - rect.top) / rect.height
 			const x = this.viewBox.minX + fracX * this.viewBox.width
 			const y = this.viewBox.minY + fracY * this.viewBox.height
+			const note = this.hitNote(x, y)
 			this.$emit('noteClick', {
 				page: this.pageIndex,
 				x,
 				y,
 				// Der getroffene Kopf mit Tonhoehe, wenn die Artefakte sie tragen
 				// - der Viewer spielt ihn an (D13).
-				note: this.hitNote(x, y),
+				note,
+				// The name goes into the instance that was tapped. The viewer
+				// cannot find it by page index: in the system band several
+				// frames show the same page, none of them a page-view ref.
+				showName: note ? (text) => this.showTapName(note, text) : null,
 			})
 		},
 
