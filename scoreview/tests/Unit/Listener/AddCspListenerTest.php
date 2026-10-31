@@ -11,6 +11,7 @@ use OCP\AppFramework\Http\EmptyContentSecurityPolicy;
 use OCP\IAppConfig;
 use OCP\IRequest;
 use OCP\Security\CSP\AddContentSecurityPolicyEvent;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -126,9 +127,8 @@ class AddCspListenerTest extends TestCase {
 	 * Der Kern der Eingrenzung: ausserhalb der Files-App darf GAR KEINE Policy
 	 * dazukommen. Wuerde hier eine gesetzt, traege sie instanzweit - das war
 	 * genau der Befund.
-	 *
-	 * @dataProvider fremdePfade
 	 */
+	#[DataProvider('fremdePfade')]
 	public function testLockertNichtsAusserhalbDerFilesApp(string $pfad): void {
 		$this->assertNull(
 			$this->runListener('https://cdn.example.org/gm.sf3', $pfad),
@@ -153,9 +153,7 @@ class AddCspListenerTest extends TestCase {
 		];
 	}
 
-	/**
-	 * @dataProvider filesPfade
-	 */
+	#[DataProvider('filesPfade')]
 	public function testLockertAufFilesSeiten(string $pfad): void {
 		$policy = $this->runListener('', $pfad);
 

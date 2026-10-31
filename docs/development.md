@@ -146,7 +146,7 @@ Einträge wie Notenköpfe im SVG).
 `.github/workflows/ci.yml` fährt alle Sprachen des Repos: Frontend (Build,
 vitest, ESLint, Stylelint, l10n-Vollständigkeit), Backend (Syntaxprüfung,
 Codingstandard, PHPUnit an Unter- und Obergrenze aus `info.xml`: PHP 8.1 gegen
-OCP 31, PHP 8.5 gegen OCP 35), lokaler Konverter (echte Konvertierung mit der
+OCP 31 und PHPUnit 10, PHP 8.5 gegen OCP 35 und PHPUnit 13), lokaler Konverter (echte Konvertierung mit der
 scoreview-engine, auf Node 18 und 22) und Sidecar (pytest auf Python 3.10 und
 3.12). Was lokal grün ist, ist es dort in aller Regel auch.
 

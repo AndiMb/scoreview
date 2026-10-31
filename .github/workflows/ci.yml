@@ -125,9 +125,18 @@ jobs:
       # gegen frisch aufgeloeste Abhaengigkeiten. composer.json bleibt bei
       # `^31.0`: Sie ist die Zusage, die der Lock traegt - die Obergrenze ist
       # eine Pruefung, keine Festlegung.
+      #
+      # `config.platform.php` (8.1) haelt den Lock auf der Untergrenze
+      # installierbar - ohne den Pin loest Composer (und damit Dependabot)
+      # nach der PHP-Version auf, mit der es gerade laeuft, und zieht Pakete
+      # in den Lock, die PHP 8.1 nicht mehr installieren kann (OCP 35 will
+      # 8.3, PHPUnit 13 will 8.4). Hier oben muss der Pin weg, sonst loeste
+      # auch diese Achse fuer 8.1 auf und kaeme weder an OCP 35 noch an
+      # PHPUnit 13 heran.
       - name: OCP-Stand dieser Achse
         if: matrix.ocp != '^31.0'
         run: |
+          composer config --unset platform.php
           composer require --dev --no-update --no-interaction "nextcloud/ocp:${{ matrix.ocp }}"
           composer update --no-interaction --no-progress
 
