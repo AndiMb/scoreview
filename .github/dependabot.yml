@@ -16,16 +16,6 @@ updates:
     groups:
       npm-abhaengigkeiten:
         patterns: ['*']
-    # spessasynth 4.4 turned the per-channel outputs into visualization-only
-    # taps and mixes everything into output 0. player.js pans "my part" with a
-    # StereoPannerNode on exactly those outputs, so 4.4 plays silent there.
-    # Held on 4.3 (package.json pins both, overrides keeps lib's core:
-    # "latest" from pulling 4.4) until the stereo image is rebuilt for 4.4.
-    ignore:
-      - dependency-name: spessasynth_lib
-        versions: ['>=4.4.0']
-      - dependency-name: spessasynth_core
-        versions: ['>=4.4.0']
 
   # Der lokale Konvertierungsweg (docs/architecture.md E3). Hier kann
   # Dependabot nur @librescore/fonts anfassen: scoreview-engine haengt an einer
@@ -40,7 +30,9 @@ updates:
   # PHP: ausschliesslich dev-Abhaengigkeiten (PHPUnit, Codingstandard,
   # OCP-Stubs). Die App selbst verlangt zur Laufzeit nichts ausser einer
   # PHP-Version - was auch der Grund ist, warum ein Bump hier nie eine Instanz
-  # erreichen kann: das Release laeuft mit --no-dev.
+  # erreichen kann: das Release laeuft mit --no-dev. Vorschlaege bleiben auf
+  # das beschraenkt, was PHP 8.1 installieren kann, weil composer.json
+  # `config.platform.php` festnagelt (siehe Backend-Job in ci.yml).
   - package-ecosystem: composer
     directory: /scoreview
     schedule:

@@ -11,6 +11,7 @@ use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\SidecarClient;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -150,9 +151,8 @@ class ClientFallbackTest extends TestCase {
 	/**
 	 * Der Kern der Entscheidung: Eine Partitur, die der Server nicht setzen
 	 * konnte, setzt der Browser auch nicht - er hat dieselbe Engine.
-	 *
-	 * @dataProvider inhaltsfehler
 	 */
+	#[DataProvider('inhaltsfehler')]
 	public function testIgnoriertFehlerDerPartitur(?string $code): void {
 		$fallback = $this->fallback(lokalVerfuegbar: true);
 		$this->assertFalse($fallback->noteConversionError($code));
