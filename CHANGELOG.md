@@ -6,6 +6,14 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.27.2] – 2026-10-31
+
+### Fixed
+
+- Tapping a note in the system band now shows its name, as on pages. The
+  tone sounded, but the name was sent to the page view, which the band does
+  not show.
+
 ## [1.27.1] – 2026-10-30
 
 ### Changed
@@ -1686,6 +1694,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.27.2]: https://github.com/AndiMb/scoreview/compare/v1.27.1...v1.27.2
 [1.27.1]: https://github.com/AndiMb/scoreview/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/AndiMb/scoreview/compare/v1.26.3...v1.27.0
 [1.26.3]: https://github.com/AndiMb/scoreview/compare/v1.26.2...v1.26.3
