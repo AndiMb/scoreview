@@ -6,14 +6,33 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.27.1] – 2026-10-30
+
 ### Changed
 
 - Updated @nextcloud/dialogs to 8, @nextcloud/vue to 9.14 and
   @nextcloud/files to 4.1.1. Notices now appear at the bottom of the screen
   instead of the top.
-- The synthesizer stays on spessasynth 4.3 for now: 4.4 no longer plays
-  through the per-voice outputs that “My part in the stereo image” relies on,
-  and the player would fall silent.
+- Updated the synthesizer to spessasynth 4.4. Playback, “My voice on the
+  right, the others on the left” and the audio file sound as before. Since
+  4.4 the synthesizer hands out a finished mix, so a panned part is now taken
+  out of that mix and put back on its side. Measured against 4.3: the same
+  levels left and right with the image on and off, solo, muted and while
+  switching, and the same audio file with transposition, a′ = 442 Hz, slower
+  tempo and a changed instrument.
+- Conversion uses MuseScore 4.7.6 on both paths: scoreview-engine
+  `v4.7.6-engine.2` on the local path and in the browser fallback, the
+  MuseScore 4.7.6 AppImage in the sidecar. That AppImage unpacks readable
+  for root only, so the sidecar image now opens it up for the user it runs
+  as. A sidecar built from an older Dockerfile with 4.7.6 fails with exit
+  code 126.
+
+### Fixed
+
+- A volta whose endings all lie beyond the repeats already played no longer
+  cuts the score off there. Up to MuseScore 4.7.5, playback and the cursor
+  stopped after the repeat. A score converted before keeps its old timing
+  until “Convert again” under Score → Info and diagnostics.
 
 ## [1.27.0] – 2026-10-29
 
@@ -1667,6 +1686,7 @@ Erste öffentliche Fassung.
 Siehe [docs/limits.de.md](docs/limits.de.md) – insbesondere D.C./D.S./Coda-Sprünge,
 Orchesterpartituren, Offlinebetrieb und die Verpackung als AppAPI/ExApp.
 
+[1.27.1]: https://github.com/AndiMb/scoreview/compare/v1.27.0...v1.27.1
 [1.27.0]: https://github.com/AndiMb/scoreview/compare/v1.26.3...v1.27.0
 [1.26.3]: https://github.com/AndiMb/scoreview/compare/v1.26.2...v1.26.3
 [1.26.2]: https://github.com/AndiMb/scoreview/compare/v1.26.1...v1.26.2

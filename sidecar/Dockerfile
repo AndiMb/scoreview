@@ -15,8 +15,8 @@
 # Die beiden Zeilen MUSESCORE_VERSION/MUSESCORE_BUILD liest CI per
 # `grep '^ARG MUSESCORE_VERSION='` (Abgleich mit der Engine-Version) und
 # hebt der Engine-Release-Bot per sed - Form "ARG NAME=wert" beibehalten.
-ARG MUSESCORE_VERSION=4.7.5
-ARG MUSESCORE_BUILD=4.7.5.260831071
+ARG MUSESCORE_VERSION=4.7.6
+ARG MUSESCORE_BUILD=4.7.6.261022093
 ARG MUSESCORE_APPIMAGE_URL=https://github.com/musescore/MuseScore/releases/download/v${MUSESCORE_VERSION}/MuseScore-Studio-${MUSESCORE_BUILD}-x86_64.AppImage
 # SHA256 genau dieses AppImages. Ohne ihn lieferte ein ausgetauschtes
 # Release-Asset (oder ein Umweg ueber einen manipulierten Spiegel) fremden
@@ -27,7 +27,7 @@ ARG MUSESCORE_APPIMAGE_URL=https://github.com/musescore/MuseScore/releases/downl
 #   gh api repos/musescore/MuseScore/releases/tags/v<VERSION> \
 #     --jq '.assets[] | select(.name|endswith("x86_64.AppImage")) | .digest'
 #   curl -fsSL -o ms.AppImage "<MUSESCORE_APPIMAGE_URL>" && sha256sum ms.AppImage
-ARG MUSESCORE_APPIMAGE_SHA256=a31b2da2dbcc2191bcc98beb7be5c15f2f517bedb3444def96fe3088b74d3a1e
+ARG MUSESCORE_APPIMAGE_SHA256=5fcbd1f292270eca5c3867d56b767c31a173a155216a415f5caee22553f8e7a6
 
 # The converter stage: Node and `npm ci` against the converter's lockfile, so
 # the engine in the image is byte for byte the one the app's release ships
@@ -71,6 +71,11 @@ ARG MUSESCORE_APPIMAGE_SHA256
 # Deliberately NOT running `apt-get autoremove` afterwards - that would
 # pull out exactly the shared libraries (Qt, glib, ...) we kept the
 # `apt-get remove` around for.
+#
+# The chmod after extracting: the 4.7.6 AppImage stores its directories as
+# 0700, so the extracted tree belongs to root alone, and the unprivileged
+# user the container runs as (see USER below) got exit 126 for
+# mscore4portable. Read and traverse for everyone, write stays with root.
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-suggests \
         xvfb wget libopengl0 musescore ca-certificates libpipewire-0.3-0 \
@@ -80,6 +85,7 @@ RUN apt-get update && \
     chmod +x /tmp/musescore.AppImage && \
     cd /opt && /tmp/musescore.AppImage --appimage-extract && \
     mv squashfs-root musescore && \
+    chmod -R a+rX musescore && \
     apt-get remove -y wget musescore && \
     rm -rf /tmp/musescore.AppImage /var/lib/apt/lists/*
 

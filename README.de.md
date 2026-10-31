@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:aff5177132b9 -->
+<!-- translation-of: README.md sha256:5cefed8c2ef7 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -167,7 +167,7 @@ Ergebnis liefern und sich nur darin unterscheiden, was der Server dafür braucht
 | | **Lokal** (Voreinstellung) | **Sidecar** |
 |---|---|---|
 | Braucht | Node.js ≥ 18 auf dem Nextcloud-Server | einen Docker-Host |
-| MuseScore | MuseScore 4.7.5 als WebAssembly, im App-Paket | dieselbe Engine (Voreinstellung) oder echtes MuseScore 4, im Container |
+| MuseScore | MuseScore 4.7.6 als WebAssembly, im App-Paket | dieselbe Engine (Voreinstellung) oder echtes MuseScore 4, im Container |
 | Einzurichten | nichts | Container starten, Adresse und Secret eintragen |
 | Liedtext-Ansicht, Tonnamen, eingefärbte Notenköpfe, Stimmenauszüge | ja | ja mit der Engine, nein mit MuseScore selbst |
 | Empfohlen, wenn | keine Container laufen | ohnehin welche laufen |

@@ -25,9 +25,9 @@ const WHEEL_CENTS = 200
  * @return {Promise<SpessaSynthProcessor>}
  */
 async function createSynth(soundFont, sampleRate, programs) {
-	await BasicSoundBank.isSF3DecoderReady
+	await BasicSoundBank.ready
 	const synth = new SpessaSynthProcessor(sampleRate, { eventsEnabled: false, effectsEnabled: false })
-	await synth.processorInitialized
+	await synth.ready
 	synth.soundBankManager.addSoundBank(SoundBankLoader.fromArrayBuffer(soundFont), 'main')
 	synth.setSystemParameter('autoAllocateVoices', true)
 	for (const [channel, program] of programs) {
@@ -56,8 +56,10 @@ function renderChannels(synth, scheduled, sampleRate, length) {
 	events.sort((a, b) => a.at - b.at || Number(a.on) - Number(b.on))
 	const out = Array.from({ length: CHANNELS }, () => new Float32Array(length))
 	const dry = Array.from({ length: CHANNELS }, () => [new Float32Array(BLOCK), new Float32Array(BLOCK)])
-	const wetL = new Float32Array(BLOCK)
-	const wetR = new Float32Array(BLOCK)
+	// The mix is not used, process() just needs somewhere to write it: the
+	// rig wants each channel dry, and those come as channel outputs.
+	const mixL = new Float32Array(BLOCK)
+	const mixR = new Float32Array(BLOCK)
 	// -1: set the wheel at each channel's first note - the synth keeps the
 	// value of the previous render otherwise (measured: a case after the
 	// drift case started 80 cents flat).
@@ -83,9 +85,9 @@ function renderChannels(synth, scheduled, sampleRate, length) {
 			l.fill(0)
 			r.fill(0)
 		}
-		wetL.fill(0)
-		wetR.fill(0)
-		synth.processSplit(dry, wetL, wetR, 0, count)
+		mixL.fill(0)
+		mixR.fill(0)
+		synth.process(mixL, mixR, 0, count, dry)
 		for (let c = 0; c < CHANNELS; c++) {
 			const [l, r] = dry[c]
 			const target = out[c]

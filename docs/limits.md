@@ -231,7 +231,7 @@ can therefore become noticeable.
 
 **The MuseScore version of the local path depends on a dedicated build.**
 [AndiMb/scoreview-engine](https://github.com/AndiMb/scoreview-engine) carries
-4.7.5 (MuseScore as a pinned, unpatched submodule revision, Qt-free); it does
+4.7.6 (MuseScore as a pinned, unpatched submodule revision, Qt-free); it does
 not follow along by itself when MuseScore moves on – a new core means building
 the engine and bumping the tarball URL. The self-test in the status
 diagnostics checks whether the guarantees from M2/M4/M7 still hold – it does
