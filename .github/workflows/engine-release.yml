@@ -29,6 +29,9 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # For the last step: dispatching ci.yml on the new branch is a call to the
+  # Actions API, and without this it answers 403 - the PR then has no gate.
+  actions: write
 
 jobs:
   pin:
