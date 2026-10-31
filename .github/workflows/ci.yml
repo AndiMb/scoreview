@@ -77,7 +77,7 @@ jobs:
         run: npm run build
 
   backend:
-    name: Backend (PHP ${{ matrix.php }}, OCP ${{ matrix.ocp }})
+    name: Backend (PHP ${{ matrix.php }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -86,20 +86,20 @@ jobs:
         # geprueft - wie bei Node und Python: max-version ist eine Zusage an
         # den App Store, und eine ungepruefte Zusage ist keine.
         #
-        # Dasselbe gilt fuer NEXTCLOUD selbst: info.xml verspricht 31-35,
-        # `nextcloud/ocp` steht in composer.json aber auf `^31.0` (also < 32).
-        # Ohne die obere Achse liefe die Suite ausschliesslich gegen die
-        # Schnittstellen von NC 31 - eine Signaturaenderung in 32-35 fiele
-        # nirgends auf, obwohl die App mehrere OCP-Schnittstellen implementiert
-        # (IEditor, IEventListener, Middleware, QBMapper).
+        # Nextcloud selbst hat nur eine Achse: info.xml verlangt 35, und
+        # `nextcloud/ocp` steht in composer.json auf `^35.0`. Kommt eine
+        # Nextcloud-Version dazu, braucht auch sie eine eigene Achse - die
+        # App implementiert mehrere OCP-Schnittstellen (IEditor,
+        # IEventListener, Middleware, QBMapper), deren Signaturen sich
+        # zwischen Versionen aendern koennen.
         #
-        # PHP 8.5 auf der oberen Achse ist keine freie Wahl: `nextcloud/ocp`
-        # v35 verlangt ~8.3 || ~8.4 || ~8.5.
+        # 8.3 ist keine freie Wahl: `nextcloud/ocp` v35 verlangt
+        # ~8.3 || ~8.4 || ~8.5.
         include:
-          - php: '8.1'
-            ocp: '^31.0'
+          - php: '8.3'
+            lock: true
           - php: '8.5'
-            ocp: '^35.0'
+            lock: false
     defaults:
       run:
         working-directory: scoreview
@@ -115,32 +115,28 @@ jobs:
       # Vor dem Install, damit ein Fehler in composer.json auch als solcher
       # gemeldet wird und nicht als merkwuerdiger Aufloesungsfehler. --strict
       # zieht auch einen composer.lock hoch, der nicht mehr zur composer.json
-      # passt. Nur auf der Achse, deren OCP-Stand der Lock auch abbildet - die
-      # andere zieht ihn gleich planmaessig hoch und muss ihn verlassen.
+      # passt. Nur auf der Achse, die den Lock auch installiert - die andere
+      # loest planmaessig neu auf und muss ihn verlassen.
       - name: composer.json und composer.lock pruefen
-        if: matrix.ocp == '^31.0'
+        if: matrix.lock
         run: composer validate --strict --no-check-publish
 
       # Die Untergrenze laeuft gegen den Lock (reproduzierbar), die Obergrenze
-      # gegen frisch aufgeloeste Abhaengigkeiten. composer.json bleibt bei
-      # `^31.0`: Sie ist die Zusage, die der Lock traegt - die Obergrenze ist
-      # eine Pruefung, keine Festlegung.
+      # gegen frisch aufgeloeste Abhaengigkeiten.
       #
-      # `config.platform.php` (8.1) haelt den Lock auf der Untergrenze
+      # `config.platform.php` (8.3) haelt den Lock auf der Untergrenze
       # installierbar - ohne den Pin loest Composer (und damit Dependabot)
       # nach der PHP-Version auf, mit der es gerade laeuft, und zieht Pakete
-      # in den Lock, die PHP 8.1 nicht mehr installieren kann (OCP 35 will
-      # 8.3, PHPUnit 13 will 8.4). Hier oben muss der Pin weg, sonst loeste
-      # auch diese Achse fuer 8.1 auf und kaeme weder an OCP 35 noch an
-      # PHPUnit 13 heran.
-      - name: OCP-Stand dieser Achse
-        if: matrix.ocp != '^31.0'
+      # in den Lock, die PHP 8.3 nicht mehr installieren kann (PHPUnit 13
+      # will 8.4). Hier oben muss der Pin weg, sonst loeste auch diese Achse
+      # fuer 8.3 auf und kaeme nicht an PHPUnit 13 heran.
+      - name: Frisch aufgeloeste Abhaengigkeiten
+        if: ${{ !matrix.lock }}
         run: |
           composer config --unset platform.php
-          composer require --dev --no-update --no-interaction "nextcloud/ocp:${{ matrix.ocp }}"
           composer update --no-interaction --no-progress
 
-      - if: matrix.ocp == '^31.0'
+      - if: matrix.lock
         run: composer install --no-interaction --no-progress
 
       - name: Syntaxpruefung
@@ -153,7 +149,7 @@ jobs:
       # statt ueber den Code. Die Obergrenze traegt dafuer Syntaxpruefung und
       # Unit-Tests - das, was an ihr wirklich neu ist.
       - name: Codingstandard (nextcloud/coding-standard)
-        if: matrix.php == '8.1'
+        if: matrix.lock
         run: composer run cs:check
 
       - name: Unit-Tests (PHPUnit)

@@ -108,8 +108,9 @@ class LocalConverterTest extends TestCase {
 	 * Der Fall, um den es geht: Vor PHP 8.3 liefert proc_close() nach einem
 	 * proc_get_status(), das das Ende schon gemeldet hat, -1 statt des
 	 * Exitcodes. Mit -1 galt jedes node als kaputt, und der lokale Weg war
-	 * unter 8.1/8.2 nie verfuegbar. Aussagekraeftig ist der Test deshalb in
-	 * der 8.1-Achse der CI; unter 8.3 waere er auch mit dem Fehler gruen.
+	 * unter 8.1/8.2 nie verfuegbar. Seit info.xml PHP 8.3 verlangt, deckt
+	 * keine CI-Achse diesen Fall mehr ab; der Test haelt trotzdem fest, dass
+	 * der Exitcode eines echten Prozesses ueberhaupt ankommt.
 	 *
 	 * @return array<string, array{int}>
 	 */

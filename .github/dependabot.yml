@@ -31,7 +31,7 @@ updates:
   # OCP-Stubs). Die App selbst verlangt zur Laufzeit nichts ausser einer
   # PHP-Version - was auch der Grund ist, warum ein Bump hier nie eine Instanz
   # erreichen kann: das Release laeuft mit --no-dev. Vorschlaege bleiben auf
-  # das beschraenkt, was PHP 8.1 installieren kann, weil composer.json
+  # das beschraenkt, was PHP 8.3 installieren kann, weil composer.json
   # `config.platform.php` festnagelt (siehe Backend-Job in ci.yml).
   - package-ecosystem: composer
     directory: /scoreview

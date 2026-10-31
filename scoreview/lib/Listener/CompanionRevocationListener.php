@@ -17,7 +17,7 @@ use OCP\User\Events\UserChangedEvent;
  * (Service\CompanionTokenService, S1 in docs/architecture.md).
  *
  * Zwei Anlaesse, weil es genau fuer diese beiden ein Ereignis gibt, das in
- * Nextcloud 31 bis 35 verlaesslich feuert:
+ * Nextcloud 35 verlaesslich feuert:
  *
  * - **Passwortwechsel** (PasswordUpdatedEvent): Wer sein Passwort aendert,
  *   weil er einen Verlust vermutet, erwartet, dass danach nichts Altes mehr
