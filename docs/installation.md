@@ -33,8 +33,8 @@ it is not active.
 
 ## Requirements
 
-- Nextcloud 35
-- PHP 8.3 to 8.5
+- Nextcloud 31 to 35
+- PHP 8.1 to 8.5
 - SQLite, MySQL/MariaDB or PostgreSQL
 - Background jobs in `cron` mode (step 5)
 - Depending on the path: **A** a Node.js runtime, version 18 or later, or

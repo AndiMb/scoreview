@@ -21,8 +21,9 @@ use OCP\IDBConnection;
  * gibt es ueberhaupt": IConfig kennt Schluessel nur je Nutzerin
  * (getUserKeys), getUsersForUserValue() sucht nach einem bekannten WERT, und
  * deleteAppFromAllUsers() loescht alle Einstellungen der App. IUserConfig mit
- * deleteKey() haelt die Schluesselfrage ebenfalls nicht. Ein Eintrag je
- * Nutzerin und je geoeffneter Partitur waechst sonst ohne Ende.
+ * deleteKey() kaeme erst mit Nextcloud 32 und haelt die Schluesselfrage
+ * ebenfalls nicht - die App unterstuetzt 31. Ein Eintrag je Nutzerin und je
+ * geoeffneter Partitur waechst sonst ohne Ende.
  *
  * Nur zwei Abfragen, beide auf (appid, configkey) eingeschraenkt; beruehrt
  * wird ausschliesslich, was diese App selbst unter diesem Praefix schreibt.

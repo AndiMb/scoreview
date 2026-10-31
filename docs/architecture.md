@@ -1598,7 +1598,7 @@ Rest von Nextcloud.
 
 Der Preis ist Bundle-Größe (Gegenmaßnahme: gezielte Einzelimporte statt
 Sammelimport) und eine stärkere Bindung an die Nextcloud-Version: `info.xml`
-deklariert 35, die Bibliotheksversion muss dazu passen. Für Regler
+deklariert 31–35, die Bibliotheksversion muss dazu passen. Für Regler
 (Lautstärke, Tempo, Zoom) gibt es keine Entsprechung; dort steht
 `<input type="range">` mit Nextcloud-CSS-Variablen.
 

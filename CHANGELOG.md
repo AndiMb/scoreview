@@ -6,12 +6,6 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
-### Changed
-
-- ScoreView now requires Nextcloud 35 and PHP 8.3 or later. Nextcloud 31–34
-  and PHP 8.1 and 8.2 are no longer supported; instances on those versions
-  keep the release they have and are not offered this one.
-
 ## [1.27.1] – 2026-10-30
 
 ### Changed

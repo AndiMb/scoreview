@@ -31,12 +31,22 @@ updates:
   # OCP-Stubs). Die App selbst verlangt zur Laufzeit nichts ausser einer
   # PHP-Version - was auch der Grund ist, warum ein Bump hier nie eine Instanz
   # erreichen kann: das Release laeuft mit --no-dev. Vorschlaege bleiben auf
-  # das beschraenkt, was PHP 8.3 installieren kann, weil composer.json
+  # das beschraenkt, was PHP 8.1 installieren kann, weil composer.json
   # `config.platform.php` festnagelt (siehe Backend-Job in ci.yml).
+  #
+  # nextcloud/ocp is held on its major on purpose: the lock stands for the
+  # LOWER end of the range info.xml promises (Nextcloud 31), the upper end is
+  # resolved fresh by the second backend axis in ci.yml. Despite the platform
+  # pin, Dependabot did propose the jump to 35 (PR #27), and following it
+  # would have narrowed the promise to Nextcloud 35 only. Patch releases of
+  # the same major still come through.
   - package-ecosystem: composer
     directory: /scoreview
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: nextcloud/ocp
+        update-types: ['version-update:semver-major']
 
   # Der Sidecar. requirements-dev.txt deckt nur die Unit-Tests ab; die
   # Laufzeit-Pakete des Images kommen als Debian-Pakete aus dem Dockerfile

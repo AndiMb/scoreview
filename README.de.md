@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:741111cc9e92 -->
+<!-- translation-of: README.md sha256:5cefed8c2ef7 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -185,7 +185,7 @@ Rückfall ist nirgends wählbar und greift nur, wo sonst gar nichts liefe.
 
 ## Voraussetzungen
 
-- Nextcloud 35, PHP 8.3–8.5
+- Nextcloud 31–35, PHP 8.1–8.5
 - Einer der beiden Konvertierungswege oben – oder keiner: Wo verwaltetes
   Hosting weder Container noch eine Node-Laufzeit erlaubt, springt der Rückfall
   im Browser ein

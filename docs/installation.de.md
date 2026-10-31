@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:88f42548da9c -->
+<!-- translation-of: installation.md sha256:2254a40beaa6 -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -34,8 +34,8 @@ wird nichts zwischengespeichert. Wo der Server konvertieren kann, ist er nicht a
 
 ## Voraussetzungen
 
-- Nextcloud 35
-- PHP 8.3 bis 8.5
+- Nextcloud 31 bis 35
+- PHP 8.1 bis 8.5
 - SQLite, MySQL/MariaDB oder PostgreSQL
 - Background-Jobs im Modus `cron` (Schritt 5)
 - Je nach Weg: **A** eine Node.js-Laufzeit ab Version 18 oder Deno ab
