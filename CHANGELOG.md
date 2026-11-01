@@ -6,6 +6,8 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.29.0] – 2026-11-01
+
 ### Changed
 
 - Note names are drawn as SVG text in page units instead of HTML labels:
@@ -51,7 +53,6 @@ All notable changes to ScoreView. The format follows
   page's staves can be matched to parts; the band never passed that on.
 - Scored singing shows a refused microphone as a sentence with a link to open
   the score in the browser (as recording does), instead of raw data.
-
 - A note sung flat a semitone above the next one no longer makes the next
   note's onset “early”. The troughs of its vibrato came closer to the next
   pitch than to its own, and three of them in a row passed for an onset some
