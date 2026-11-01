@@ -6,8 +6,15 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.29.1] – 2026-11-01
+
 ### Fixed
 
+- Chrome on Android shows the own-part band and the bar cursor again: the
+  score frame painted an opaque backdrop over them in system night mode.
+- "Only my part" for note names and beat numbers works in scores with a
+  hidden part (for example a hidden drum kit); before, they appeared on
+  every staff and the own-part band was missing.
 - With the screen locked or the tab in the background, a practice loop
   jumps back at its end and the metronome keeps clicking - both hung on
   animation frames, which the browser stops for a hidden page while the
