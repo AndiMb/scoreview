@@ -124,6 +124,7 @@ takes everyone along to the next piece of the setlist.
 	<screenshot>https://raw.githubusercontent.com/AndiMb/scoreview/master/docs/img/viewer.png</screenshot>
 	<screenshot>https://raw.githubusercontent.com/AndiMb/scoreview/master/docs/img/mixer.png</screenshot>
 	<screenshot>https://raw.githubusercontent.com/AndiMb/scoreview/master/docs/img/annotations.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/AndiMb/scoreview/master/docs/img/sing.png</screenshot>
 	<dependencies>
 		<php min-version="8.1" max-version="8.5"/>
 		<database>sqlite</database>
