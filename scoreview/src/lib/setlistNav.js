@@ -25,7 +25,7 @@ export function isPlayable(entry) {
  * @param {1|-1} step
  * @return {?number}
  */
-export function stepIndex(entries, index, step) {
+function stepIndex(entries, index, step) {
 	const list = Array.isArray(entries) ? entries : []
 	for (let i = index + step; i >= 0 && i < list.length; i += step) {
 		if (isPlayable(list[i])) {

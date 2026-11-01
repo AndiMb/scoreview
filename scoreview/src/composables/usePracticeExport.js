@@ -5,6 +5,7 @@ import { translate } from '../l10n.js'
 import { withAppVersion } from '../lib/assetVersion.js'
 import { buildExportPlan, plansForAllParts } from '../lib/exportPlan.js'
 import { practiceTrackName } from '../lib/practiceTrackName.js'
+import { serverError } from '../lib/serverError.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -171,7 +172,7 @@ export function usePracticeExport(deps) {
 			}
 		} catch (err) {
 			if (!self.cancelled) {
-				error.value = err?.response?.data?.error ?? err?.message ?? String(err)
+				error.value = serverError(err, err?.message ?? String(err))
 			}
 		} finally {
 			self.worker?.terminate()

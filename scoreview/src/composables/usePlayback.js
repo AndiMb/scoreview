@@ -1,5 +1,5 @@
 import axios from '@nextcloud/axios'
-import { computed, ref, shallowRef } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
 import { translate } from '../l10n.js'
 import { createDropoutCounter, createFrameRateMeter } from '../lib/audioHealth.js'
 import { audioSession } from '../lib/audioSession.js'
@@ -13,12 +13,35 @@ import {
 	resolveLatencyMs,
 	toDisplayTimeMs,
 } from '../lib/playbackTime.js'
-import { createPlayer } from '../lib/player.js'
 import { normalizeReferencePitch } from '../lib/referencePitch.js'
+import { abortableDelay, retryAfterMs } from '../lib/retryAfter.js'
 import { createSilentClock } from '../lib/silentClock.js'
 import { createSoundFontCache } from '../lib/soundFontCache.js'
+import { readStored, writeStored } from '../lib/storage.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
+
+/** @type {?Promise<typeof import('../lib/player.js')>} */
+let playerModule = null
+
+/**
+ * The real player (lib/player.js) with spessasynth, as a chunk of its own:
+ * it is the largest part of the viewer and nothing before the first sound
+ * needs it. One promise per page; a failed load (network) may succeed on
+ * the next try.
+ *
+ * Also called by the offline page, so the chunk is fetched - and stored by
+ * its service worker - while there is a network (E14).
+ *
+ * @return {Promise<typeof import('../lib/player.js')>}
+ */
+export function preloadPlayer() {
+	playerModule ??= import(/* webpackChunkName: "player" */ '../lib/player.js').catch((err) => {
+		playerModule = null
+		throw err
+	})
+	return playerModule
+}
 
 // Der Wert von Hand fuer den Bild/Ton-Abgleich - GERAETEWEISE gespeichert,
 // bewusst anders als Farbe und Form der Hervorhebung (useViewerPreferences.js,
@@ -32,6 +55,10 @@ const AUDIO_OFFSET_STORAGE_KEY = 'scoreview:audio-offset-ms'
 // letztes Timing-Event plus Puffer für den Ausklang der letzten Note. Mit
 // echtem Player kommt die Dauer stattdessen von player.durationMs.
 const DURATION_PADDING_MS = 2000
+
+// How often to wait for a SoundFont another request is downloading: at up to
+// 30 s each, this outlasts the server's 300 s download limit.
+const SOUNDFONT_BUSY_RETRIES = 12
 
 // Grenzen des Tempofaktors auf playbackRate (nur in diesem Bereich
 // gemessen, dass die Zeitachse tempounabhängig bleibt) - die BPM-Eingabe
@@ -73,6 +100,12 @@ const NO_HOLD = Object.assign(() => {}, { ready: Promise.resolve() })
  *   Tempoangabe (M8: `metadata.tempo` kann 0 sein)
  */
 export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
+	// Started with the viewer, so the synth code loads while the status is
+	// polled and the first page is fetched - by the time the SoundFont is
+	// in, it usually is too. A score without a SoundFont never uses it; the
+	// chunk is then fetched for nothing, but costs no parsing on the
+	// critical path either.
+	preloadPlayer().catch(() => {})
 	// Die ROHE Zeit der Audiouhr. Bezugsgroesse fuer alles, was gegen
 	// dieselbe Uhr terminiert oder springt (Metronom, Loop, seek).
 	const currentTimeMs = ref(0)
@@ -212,7 +245,15 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	 * @return {Promise<ArrayBuffer>}
 	 */
 	async function fetchSoundFont(url, signal, report) {
-		const res = await fetch(url, { signal })
+		let res = await fetch(url, { signal })
+		// 503 with Retry-After: another request is filling the server's
+		// SoundFont cache right now (SoundFontService holds a lock so that
+		// only one PHP worker downloads it). Waiting for that copy beats a
+		// second download of the same 24-40 MB - and beats no sound at all.
+		for (let attempt = 0; res.status === 503 && res.headers.get('Retry-After') !== null && attempt < SOUNDFONT_BUSY_RETRIES; attempt++) {
+			await abortableDelay(retryAfterMs(res.headers.get('Retry-After'), 10000), signal)
+			res = await fetch(url, { signal })
+		}
 		if (!res.ok) {
 			// The app's own route answers with a translated {"error": "…"} -
 			// more useful than "HTTP 503". The technical cause is in the
@@ -262,7 +303,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 			// Stueckwechsel mitten im Laden bricht ihn nicht ab, das naechste
 			// Stueck wartet auf denselben (lib/soundFontCache.js). Abbrechen
 			// kann nur „ohne Ton weiter" (skipSoundFontLoad).
-			const [midiRes, soundFontBuffer] = await Promise.all([
+			const [midiRes, soundFontBuffer, { createPlayer }] = await Promise.all([
 				axios.get(midiUrl, { responseType: 'arraybuffer' }),
 				soundFontCache.get(soundFontUrl, (report) => {
 					const controller = new AbortController()
@@ -275,6 +316,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 						soundFontLoadPercent.value = percent
 					}
 				}),
+				preloadPlayer(),
 			])
 			if (!current()) {
 				return
@@ -603,13 +645,9 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 	function setManualOffsetMs(valueMs) {
 		const begrenzt = Math.min(MAX_MANUAL_OFFSET_MS, Math.max(MIN_MANUAL_OFFSET_MS, Math.round(valueMs) || 0))
 		manualOffsetMs.value = begrenzt
-		try {
-			window.localStorage?.setItem(AUDIO_OFFSET_STORAGE_KEY, String(begrenzt))
-		} catch {
-			// Privates Fenster oder gesperrter Speicher - der Wert wirkt in
-			// dieser Sitzung trotzdem, er ueberlebt sie nur nicht. Das ist
-			// kein Grund fuer eine Meldung ueber der Partitur.
-		}
+		// Unstorable (private window) is no reason for a message over the
+		// score - the value holds for this session (lib/storage.js).
+		writeStored(AUDIO_OFFSET_STORAGE_KEY, String(begrenzt))
 	}
 
 	function onManualOffsetInput(event) {
@@ -678,6 +716,14 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 		// default back (lib/audioSession.js). The next score sets it again
 		// with its first sound.
 		audioSession.reset()
+	}
+
+	// A safety net, not the order: the viewer tears playback down
+	// explicitly after recording and listening (beforeUnmount/reset), and a
+	// forgotten line there must not leave an AudioContext running. Calling
+	// destroy() twice does no harm.
+	if (getCurrentScope()) {
+		onScopeDispose(destroy)
 	}
 
 	function reset() {
@@ -778,13 +824,9 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
  * @return {number} ms, 0 wenn nichts Brauchbares gespeichert ist
  */
 function leseGespeichertenVersatz() {
-	try {
-		const roh = Number(window.localStorage?.getItem(AUDIO_OFFSET_STORAGE_KEY))
-		if (!Number.isFinite(roh)) {
-			return 0
-		}
-		return Math.min(MAX_MANUAL_OFFSET_MS, Math.max(MIN_MANUAL_OFFSET_MS, Math.round(roh)))
-	} catch {
+	const roh = Number(readStored(AUDIO_OFFSET_STORAGE_KEY))
+	if (!Number.isFinite(roh)) {
 		return 0
 	}
+	return Math.min(MAX_MANUAL_OFFSET_MS, Math.max(MIN_MANUAL_OFFSET_MS, Math.round(roh)))
 }

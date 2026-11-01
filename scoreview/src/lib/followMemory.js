@@ -1,3 +1,9 @@
+// PARKED - part of the microphone score follower (automatic page turning),
+// which is paused; no viewer code imports it. Kept and tested because
+// tools/follow/replay.mjs measures it against recorded rehearsals, and the
+// work resumes from here. The switch `feature_score_follower` exists but
+// turns nothing on (docs/installation.md).
+//
 // The last followed place of a score, kept on this device only (F28) -
 // pure parts; the composable reads and writes localStorage.
 //

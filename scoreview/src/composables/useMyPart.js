@@ -4,7 +4,7 @@ import { ref } from 'vue'
 import { clampLevel, DEFAULT_OTHERS_LEVEL } from '../lib/coachMix.js'
 
 /** Die Vorgaben der Uebe-Einstellungen, wie Service\ViewerPreferences. */
-export const PRACTICE_DEFAULTS = Object.freeze({
+const PRACTICE_DEFAULTS = Object.freeze({
 	transpose: 0,
 	coach: false,
 	othersLevel: DEFAULT_OTHERS_LEVEL,
@@ -111,7 +111,7 @@ export function useMyPart({ fileId }) {
  * @param {?object} data
  * @return {{transpose: number, coach: boolean, othersLevel: number, source: string, concert: boolean, transposeNotation: boolean}}
  */
-export function normalizePractice(data) {
+function normalizePractice(data) {
 	const t = Math.trunc(Number(data?.transpose) || 0)
 	return {
 		transpose: Math.max(-12, Math.min(12, t)),

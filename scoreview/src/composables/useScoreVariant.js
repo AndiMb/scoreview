@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { translate } from '../l10n.js'
+import { readStored, writeStored } from '../lib/storage.js'
 import { availableSource, FORMATS, keyForChoice, sourceOptions } from '../lib/variantChoice.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
@@ -13,26 +14,6 @@ export const LAST_VARIANT_PREFIX = 'scoreview-variant.'
 /** Below this width, a phone page is offered once (CSS pixels). */
 const NARROW_PX = 600
 const DEBOUNCE_MS = 400
-
-function readStorage(key) {
-	try {
-		return window.localStorage.getItem(key)
-	} catch {
-		return null
-	}
-}
-
-function writeStorage(key, value) {
-	try {
-		if (value === null) {
-			window.localStorage.removeItem(key)
-		} else {
-			window.localStorage.setItem(key, value)
-		}
-	} catch {
-		// Private mode or full storage: the choice works, it is just not kept.
-	}
-}
 
 /**
  * The display variant of the open score (docs/architecture.md E19): which
@@ -63,12 +44,12 @@ function writeStorage(key, value) {
  * @return {object}
  */
 export function useScoreVariant(deps) {
-	const storedFormat = readStorage(FORMAT_KEY)
+	const storedFormat = readStored(FORMAT_KEY)
 	const format = ref(FORMATS.includes(storedFormat) ? storedFormat : 'orig')
 	// 'idle' | 'loading' | 'error'
 	const status = ref('idle')
 	const errorCode = ref('')
-	const phoneHintDismissed = ref(readStorage(PHONE_HINT_KEY) !== null)
+	const phoneHintDismissed = ref(readStored(PHONE_HINT_KEY) !== null)
 	let request = 0
 
 	const options = computed(() => sourceOptions(deps.meta(), deps.myPartId()))
@@ -131,7 +112,7 @@ export function useScoreVariant(deps) {
 			if (mine === request) {
 				status.value = 'idle'
 				errorCode.value = ''
-				writeStorage(LAST_VARIANT_PREFIX + deps.fileId(), key)
+				writeStored(LAST_VARIANT_PREFIX + deps.fileId(), key)
 			}
 			return
 		}
@@ -155,7 +136,7 @@ export function useScoreVariant(deps) {
 
 	function setFormat(value) {
 		format.value = FORMATS.includes(value) ? value : 'orig'
-		writeStorage(FORMAT_KEY, format.value === 'orig' ? null : format.value)
+		writeStored(FORMAT_KEY, format.value === 'orig' ? null : format.value)
 	}
 
 	function setConcert(value) {
@@ -175,7 +156,7 @@ export function useScoreVariant(deps) {
 
 	function answerPhoneOffer(accept) {
 		phoneHintDismissed.value = true
-		writeStorage(PHONE_HINT_KEY, '1')
+		writeStored(PHONE_HINT_KEY, '1')
 		if (accept) {
 			setFormat('phone')
 		}

@@ -3,6 +3,7 @@ import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue'
 import { translate } from '../l10n.js'
 import { createPracticeMeter, localDay, MAX_REPORT_SECONDS, REPORT_INTERVAL_MS, summarize } from '../lib/practiceLog.js'
+import { serverError } from '../lib/serverError.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -165,7 +166,7 @@ export function usePracticeLog({ fileId, enabled, active, now = () => new Date()
 				load()
 			}
 		} catch (err) {
-			error.value = err?.response?.data?.error || t('The practice goal could not be saved.')
+			error.value = serverError(err, t('The practice goal could not be saved.'))
 		} finally {
 			savingGoal.value = false
 		}

@@ -60,6 +60,7 @@ import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import { translate } from '../l10n.js'
 import { keyTonicName, transposeKey } from '../lib/noteNames.js'
+import { noteNameSystem } from '../lib/noteNameSystem.js'
 
 export default {
 	name: 'TransposeControls',
@@ -115,7 +116,8 @@ export default {
 			if (!this.startKey || this.semitones === 0) {
 				return ''
 			}
-			const system = getLanguage().startsWith('de') ? 'de' : 'en'
+			// The key label speaks the interface language, whatever the note names show.
+			const system = noteNameSystem(null, getLanguage())
 			const from = keyTonicName({ ...this.startKey, system })
 			const to = keyTonicName({ ...this.startKey, concertKey: transposeKey(this.startKey.concertKey, this.semitones), system })
 			return this.t('Sounds in {to} instead of {from}', { from, to })

@@ -18,7 +18,7 @@
 
 <script>
 import { translate } from '../l10n.js'
-import { labelText, laneWindow, pitchRange, sungPitch, xOf, yOf } from '../lib/singLane.js'
+import { firstNoteFrom, labelText, laneWindow, pitchRange, sungPitch, xOf, yOf } from '../lib/singLane.js'
 
 /** Space for the lyrics under the lane in the stage view, CSS px. */
 const LYRICS_HEIGHT = 44
@@ -60,6 +60,15 @@ export default {
 
 		sortedNotes() {
 			return [...this.notes].sort((a, b) => a.onMs - b.onMs)
+		},
+
+		/** The longest note - how far back a bar can still reach into view. */
+		longestNoteMs() {
+			let longest = 0
+			for (const n of this.notes) {
+				longest = Math.max(longest, n.offMs - n.onMs)
+			}
+			return longest
 		},
 	},
 
@@ -164,7 +173,12 @@ export default {
 			const barH = Math.max(4, Math.min(16, row * 0.7))
 			ctx.font = `${Math.max(10, Math.min(13, row * 0.9))}px sans-serif`
 			ctx.textBaseline = 'top'
-			for (const n of this.sortedNotes) {
+			// Each frame starts where the window starts, not at the first note
+			// of the piece - a binary search instead of a walk over all of them.
+			const notes = this.sortedNotes
+			const first = firstNoteFrom(notes, win.fromMs, this.longestNoteMs)
+			for (let i = first; i < notes.length; i++) {
+				const n = notes[i]
 				if (n.offMs < win.fromMs) {
 					continue
 				}
@@ -193,8 +207,9 @@ export default {
 			let ref = null
 			let lastMs = null
 			let open = false
-			let noteIndex = 0
-			const notes = this.sortedNotes
+			// Notes before `first` end before the window, so the walk below
+			// would step over them anyway.
+			let noteIndex = first
 			for (const f of this.readFrames()) {
 				if (f.scoreMs < win.fromMs || f.scoreMs > nowMs + 50) {
 					continue

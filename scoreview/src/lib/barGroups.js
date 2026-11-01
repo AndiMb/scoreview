@@ -90,6 +90,84 @@ export const PINNABLE = Object.freeze({
 export const MAX_PINS = 4
 
 /**
+ * Every tool of the bar, in its group and section, with the rule for when it
+ * is visible. One table for both questions the bar asks: what to show
+ * (barGroups) and which group a running tool lights up (groupActive) - two
+ * lists would drift apart. Each rule gets the BarContext plus `settings`
+ * (can('settings')) and `online` (not the offline page).
+ *
+ * @type {Record<GroupId, Array<Record<string, (c: object) => boolean>>>}
+ */
+const SECTIONS = Object.freeze({
+	playback: [
+		{
+			loop: (c) => c.can('loop'),
+			metronome: (c) => c.settings,
+			tempo: (c) => c.settings,
+			mixer: (c) => c.hasRealPlayer && c.can('mixer'),
+			transpose: (c) => c.hasRealPlayer && c.settings,
+			// Coach braucht eine eigene Stimme, die er hervorheben kann.
+			coach: (c) => c.hasRealPlayer && c.canCoach === true && c.can('mixer'),
+		},
+		// The microphone tools, together: same question for the microphone.
+		{
+			recording: (c) => (c.recordingEnabled || c.intonationEnabled) && c.settings && c.online,
+			// The tuner (B3) hangs on the intonation switch: same analysis,
+			// same microphone question. It needs no server, so it stays offline.
+			tuner: (c) => c.intonationEnabled === true && c.settings,
+			// Scored singing (E24) stores its runs on the server.
+			sing: (c) => c.intonationEnabled === true && c.singScoreEnabled === true && c.settings && c.online,
+		},
+		{
+			// Practising is counted on the server; a page without one has
+			// nothing to show (E20).
+			practiceLog: (c) => c.practiceLogEnabled === true && c.settings && c.online,
+		},
+	],
+	view: [
+		{
+			// Zoom zuerst und ohne Unterseite: Im Auffuehrungsmodus ist es
+			// das einzige Werkzeug, am Notenstaender das haeufigste.
+			zoom: (c) => c.can('zoom'),
+			// Without a submenu: it is flipped while reading, not set up
+			// once (issue #12).
+			autoScroll: (c) => c.settings,
+			myPart: (c) => c.canFocusMyPart && c.settings,
+			noteNames: (c) => c.settings,
+			annotations: (c) => c.can('annotate'),
+			noteText: (c) => c.settings,
+		},
+		{
+			layout: (c) => c.settings,
+			appearance: (c) => c.settings,
+		},
+	],
+	score: [
+		{
+			// Without sound too: the highlight, note names, beat counts and
+			// the print page use the choice as well (issue #18).
+			partChoice: (c) => c.hasParts === true && c.settings,
+			// Right below "my part": "my note" is the first note of it.
+			toneMode: (c) => c.hasRealPlayer && c.can('tone'),
+			rehearsal: (c) => c.settings && c.online,
+			// „Neue Setliste" im Ordner der offenen Partitur (E11).
+			newSetlist: (c) => c.settings && c.setlistCanCreate && c.online,
+		},
+		{
+			// The print page (E16) needs a session and a browser: the
+			// mobile apps print through "open in browser", offline there
+			// is no page.
+			print: (c) => c.online && c.standalone !== true && c.settings,
+			export: (c) => c.exportEnabled === true && c.hasRealPlayer && c.settings && c.online,
+			// Vormerken geht nur von einer Seite aus, die online ist, und
+			// nur im Browser - die Offline-Seite gibt es in den Apps nicht (E14).
+			offline: (c) => c.offlineEnabled === true && c.online && c.standalone !== true && c.settings,
+			info: (c) => c.settings,
+		},
+	],
+})
+
+/**
  * Die sichtbaren Gruppen in Leistenreihenfolge, jede mit ihren sichtbaren
  * Werkzeugen. Leere Gruppen entfallen - ein Gruppenknopf, hinter dem nichts
  * steht, waere ein Knopf, der nichts tut.
@@ -102,80 +180,12 @@ export const MAX_PINS = 4
  * @return {BarGroup[]}
  */
 export function barGroups(ctx) {
-	const { can } = ctx
-	const settings = can('settings')
-	const online = ctx.offline !== true
-	const groups = {
-		playback: [
-			pick({
-				loop: can('loop'),
-				metronome: settings,
-				tempo: settings,
-				mixer: ctx.hasRealPlayer && can('mixer'),
-				transpose: ctx.hasRealPlayer && settings,
-				// Coach braucht eine eigene Stimme, die er hervorheben kann.
-				coach: ctx.hasRealPlayer && ctx.canCoach === true && can('mixer'),
-			}),
-			// The microphone tools, together: same question for the microphone.
-			pick({
-				recording: (ctx.recordingEnabled || ctx.intonationEnabled) && settings && online,
-				// The tuner (B3) hangs on the intonation switch: same analysis,
-				// same microphone question. It needs no server, so it stays offline.
-				tuner: ctx.intonationEnabled === true && settings,
-				// Scored singing (E24) stores its runs on the server.
-				sing: ctx.intonationEnabled === true && ctx.singScoreEnabled === true && settings && online,
-			}),
-			pick({
-				// Practising is counted on the server; a page without one has
-				// nothing to show (E20).
-				practiceLog: ctx.practiceLogEnabled === true && settings && online,
-			}),
-		],
-		view: [
-			pick({
-				// Zoom zuerst und ohne Unterseite: Im Auffuehrungsmodus ist es
-				// das einzige Werkzeug, am Notenstaender das haeufigste.
-				zoom: can('zoom'),
-				// Without a submenu: it is flipped while reading, not set up
-				// once (issue #12).
-				autoScroll: settings,
-				myPart: ctx.canFocusMyPart && settings,
-				noteNames: settings,
-				annotations: can('annotate'),
-				noteText: settings,
-			}),
-			pick({
-				layout: settings,
-				appearance: settings,
-			}),
-		],
-		score: [
-			pick({
-				// Without sound too: the highlight, note names, beat counts and
-				// the print page use the choice as well (issue #18).
-				partChoice: ctx.hasParts === true && settings,
-				// Right below "my part": "my note" is the first note of it.
-				toneMode: ctx.hasRealPlayer && can('tone'),
-				rehearsal: settings && online,
-				// „Neue Setliste" im Ordner der offenen Partitur (E11).
-				newSetlist: settings && ctx.setlistCanCreate && online,
-			}),
-			pick({
-				// The print page (E16) needs a session and a browser: the
-				// mobile apps print through "open in browser", offline there
-				// is no page.
-				print: online && ctx.standalone !== true && settings,
-				export: ctx.exportEnabled === true && ctx.hasRealPlayer && settings && online,
-				// Vormerken geht nur von einer Seite aus, die online ist, und
-				// nur im Browser - die Offline-Seite gibt es in den Apps nicht (E14).
-				offline: ctx.offlineEnabled === true && online && ctx.standalone !== true && settings,
-				info: settings,
-			}),
-		],
-	}
+	const c = { ...ctx, settings: ctx.can('settings'), online: ctx.offline !== true }
 	return GROUP_IDS
 		.map((id) => {
-			const sections = groups[id].filter((section) => section.length > 0)
+			const sections = SECTIONS[id]
+				.map((section) => Object.keys(section).filter((tool) => section[tool](c)))
+				.filter((section) => section.length > 0)
 			return { id, sections, items: sections.flat() }
 		})
 		.filter((group) => group.items.length > 0)
@@ -266,47 +276,88 @@ function normalizePins(pins) {
 }
 
 /**
- * @param {Record<string, boolean>} flags
- * @return {string[]} die Schluessel, deren Wert wahr ist, in Schreibreihenfolge
+ * What is on in the viewer, for the tools of the bar (toolOn) and the dots
+ * of the groups (groupActive).
+ *
+ * @typedef {object} BarState
+ * @property {string[]} panels the tool ids of the open cards over the score
+ *   (mixer, recording, tuner, practiceLog, sing, annotations, rehearsal,
+ *   partChoice)
+ * @property {boolean} [metronomeEnabled] the metronome clicks along
+ * @property {boolean} [autoScroll] the score scrolls along with playback
+ * @property {boolean} [loopActive] a loop is set
+ * @property {boolean} [trainerActive] the speed trainer - it runs on the loop
+ * @property {boolean} [singActive] a run of scored singing (E24) is going on
+ * @property {boolean} [coachActive] the coach plays my part on its own instrument
+ * @property {number} [transpose] semitones that sound now
+ * @property {boolean} [focusMyPart] only my staff is highlighted
+ * @property {boolean} [showNoteNames] note names or beat counts are drawn
+ * @property {boolean} [showNoteText] notes are shown in the score
+ * @property {?string} [setlistEditorMode] 'new' | 'edit' | null
  */
-function pick(flags) {
-	return Object.keys(flags).filter((key) => flags[key])
+
+/**
+ * Whether a tool is on: an open card, a switch, and for a page tool whether
+ * it is doing something (a running loop, a transposition). The pinned
+ * button and the row in the group show it, and the group's dot is made of
+ * it (groupActive) - one answer for all three.
+ *
+ * Scored singing counts while a run goes on, card open or not (A3): the
+ * lane under the score keeps listening when the card is closed, and the
+ * microphone with it - the dot shows where to stop it.
+ *
+ * @param {string} id a tool of PINNABLE
+ * @param {BarState} s
+ * @return {boolean}
+ */
+export function toolOn(id, s) {
+	switch (id) {
+		case 'metronome': return s.metronomeEnabled === true
+		case 'autoScroll': return s.autoScroll === true
+		case 'myPart': return s.focusMyPart === true
+		case 'noteText': return s.showNoteText === true
+		case 'loop': return s.loopActive === true || s.trainerActive === true
+		case 'transpose': return (s.transpose ?? 0) !== 0
+		case 'coach': return s.coachActive === true
+		case 'noteNames': return s.showNoteNames === true
+		case 'sing': return panelOpen(s, 'sing') || s.singActive === true
+		case 'newSetlist': return s.setlistEditorMode === 'new'
+		default: return PINNABLE[id] === 'panel' && panelOpen(s, id)
+	}
 }
 
 /**
- * Die Schalter des Viewers, gleichnamig: metronomeEnabled, loopActive,
- * trainerActive, showMixer, showPractice, coachActive, transposed,
- * focusMyPart, showNoteNames, showNoteText, showAnnotations, showRehearsal
- * (Booleans) und setlistEditorMode ('new' | 'edit' | null).
- *
- * @typedef {Record<string, boolean|string|null>} BarState
+ * @param {BarState} s
+ * @param {string} id
+ * @return {boolean}
  */
+function panelOpen(s, id) {
+	return (s.panels ?? []).includes(id)
+}
+
+// Tools that are on as a standing preference rather than as something that
+// runs: scrolling along is on for most people all the time, and a dot that
+// is always lit says nothing.
+const NO_DOT = new Set(['autoScroll'])
 
 /**
  * Ob in einer Gruppe etwas eingeschaltet ist - der Punkt am Gruppenknopf.
  * Ohne ihn verschwaende ein laufendes Metronom hinter einem geschlossenen
  * Aufklapper, und mitten in der Probe suchte jemand einen Schalter, den er
  * nicht sieht. Zoom und Darstellung zaehlen nicht: Sie sind Zustand, nichts,
- * das "noch laeuft".
+ * das "noch laeuft". A transposition does count: whoever forgets that
+ * everything sounds a tone lower starts wrong in the rehearsal.
+ *
+ * Made of toolOn over the tools of the group, so a pressed tool and the dot
+ * of its group cannot disagree.
  *
  * @param {string} id
  * @param {BarState} s
  * @return {boolean}
  */
 export function groupActive(id, s) {
-	switch (id) {
-		case 'playback':
-			// Eine Transposition gehoert dazu: Wer vergisst, dass alles einen
-			// Ton tiefer klingt, singt in der Probe falsch an.
-			return Boolean(s.metronomeEnabled || s.loopActive || s.trainerActive || s.showMixer || s.showPractice
-				|| s.showTuner || s.showPracticeLog || s.coachActive || s.transposed)
-		case 'view':
-			return Boolean(s.focusMyPart || s.showNoteNames || s.showNoteText || s.showAnnotations)
-		case 'score':
-			return Boolean(s.showRehearsal || s.setlistEditorMode === 'new')
-		default:
-			return false
-	}
+	return (SECTIONS[id] ?? []).some((section) => Object.keys(section)
+		.some((tool) => !NO_DOT.has(tool) && toolOn(tool, s)))
 }
 
 /**
@@ -317,4 +368,47 @@ export function groupActive(id, s) {
  */
 export function anyGroupActive(s) {
 	return GROUP_IDS.some((id) => groupActive(id, s))
+}
+
+// Short form of the note-name system for the row in the group.
+const NOTE_NAME_SHORT = Object.freeze({ de: 'C D H', en: 'C D B', 'solfa-fixed': 'do', 'solfa-movable': 'do' })
+
+/**
+ * What a row shows of its tool at its end (ToolRow.vue): "♩ 80", "12–16".
+ *
+ * @param {string} id
+ * @param {object} v
+ * @param {boolean} [v.loopActive]
+ * @param {number|string} [v.loopFrom]
+ * @param {number|string} [v.loopTo]
+ * @param {number} [v.tempoBpm]
+ * @param {boolean} [v.tempoGuessed] "*" marks an estimated tempo (M8)
+ * @param {number} [v.transpose]
+ * @param {boolean} [v.coachActive]
+ * @param {string} [v.noteNames] the note-name preference
+ * @param {boolean} [v.countsOn] beat counts are drawn
+ * @param {string} [v.layout] the chosen layout
+ * @param {string} [v.myPartLabel]
+ * @param {boolean} [v.exportRunning]
+ * @param {(text: string) => string} t the caller's translation
+ * @return {string}
+ */
+export function toolValue(id, v, t) {
+	switch (id) {
+		case 'loop': return v.loopActive ? `${v.loopFrom}–${v.loopTo}` : ''
+		case 'tempo': return `♩ ${v.tempoBpm}${v.tempoGuessed ? '*' : ''}`
+		case 'transpose': {
+			const n = v.transpose ?? 0
+			return n === 0 ? '' : (n > 0 ? `+${n}` : `−${-n}`)
+		}
+		case 'coach': return v.coachActive ? t('On') : ''
+		case 'noteNames': return [
+			v.noteNames && v.noteNames !== 'off' ? (NOTE_NAME_SHORT[v.noteNames] ?? '') : '',
+			v.countsOn ? '1 + 2' : '',
+		].filter(Boolean).join(' · ')
+		case 'layout': return { pages: '', band: t('Band'), lyrics: t('Text') }[v.layout] ?? ''
+		case 'partChoice': return v.myPartLabel ?? ''
+		case 'export': return v.exportRunning ? '…' : ''
+		default: return ''
+	}
 }

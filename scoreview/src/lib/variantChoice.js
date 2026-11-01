@@ -124,3 +124,44 @@ export function elidMapping(variantMeta) {
 		toPicture: (elid) => (elid === null || elid === undefined ? null : toPicture.get(Number(elid)) ?? null),
 	}
 }
+
+/**
+ * The meta that describes the picture on screen (or paper): the base meta
+ * with a variant's picture-bearing fields over it. A variant's meta.json
+ * describes its own pages only - spellings, page format, page list and
+ * syllables carry its segment and staff numbers - while everything about
+ * the piece (parts for the mixer, keys, duration) stays the base's.
+ *
+ * One function for viewer and print page, so both read the same picture.
+ *
+ * @param {?object} base the base meta.json
+ * @param {?object} variant meta.json of the variant shown, null for the base
+ * @return {?object}
+ */
+export function mergePictureMeta(base, variant) {
+	if (!base || !variant) {
+		return base ?? null
+	}
+	const merged = { ...base, noteSpellings: variant.noteSpellings, pageFormat: variant.pageFormat ?? base.pageFormat, pages: variant.pages }
+	// Absent means "too much text" in both (capabilities.js) - keep that
+	// apart from "none", and never fall back to the base's syllables: their
+	// segment numbers belong to other pages.
+	if (Array.isArray(variant.lyricSyllables)) {
+		merged.lyricSyllables = variant.lyricSyllables
+	} else {
+		delete merged.lyricSyllables
+	}
+	return merged
+}
+
+/**
+ * The parts the picture draws, in staff order - for "which staff is my
+ * part" (lib/staffBands.js). A part variant draws fewer than the score has.
+ *
+ * @param {?object} base the base meta.json
+ * @param {?object} variant meta.json of the variant shown, null for the base
+ * @return {Array<object>}
+ */
+export function pictureParts(base, variant) {
+	return variant?.parts ?? base?.parts ?? []
+}

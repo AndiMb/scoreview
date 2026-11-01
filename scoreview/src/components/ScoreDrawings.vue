@@ -37,17 +37,20 @@
 			class="score-drawing-line score-drawing-line--pending"
 			:d="s"
 			:stroke-width="penWidth" />
+		<!-- The stroke under the pen: its `d` is written by the pen itself
+			(paintLive), not bound - see onMove. -->
 		<path
-			v-if="livePath"
+			v-if="drawing"
+			ref="livePath"
 			class="score-drawing-line score-drawing-line--pending"
-			:d="livePath"
 			:stroke-width="penWidth" />
 	</svg>
 </template>
 
 <script>
+import { markRaw } from 'vue'
 import { translate } from '../l10n.js'
-import { layoutDrawings, pathOf, PEN_SPACES } from '../lib/drawingLayout.js'
+import { layoutDrawings, pathOf, pathStep, PEN_SPACES } from '../lib/drawingLayout.js'
 import { DEFAULT_SPACE } from '../lib/stampLayout.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
@@ -98,16 +101,17 @@ export default {
 
 	data() {
 		return {
-			// The stroke under the pen right now, page units.
-			live: null,
+			// Whether a stroke is under the pen right now. Only this bit is
+			// reactive; the stroke itself lives outside data() (created()).
+			drawing: false,
 		}
 	},
 
 	computed: {
 		placed() {
+			const byId = new Map(this.drawings.map((d) => [d.id, d]))
 			return layoutDrawings(this.drawings, this.systems, this.mappable).map((d) => {
-				const source = this.drawings.find((x) => x.id === d.id)
-				const voices = source?.voices ?? []
+				const voices = byId.get(d.id)?.voices ?? []
 				return { ...d, title: voices.length > 0 ? t('Drawing for {voices}', { voices: voices.join(', ') }) : t('Drawing') }
 			})
 		},
@@ -122,31 +126,36 @@ export default {
 		pendingPaths() {
 			return this.pendingStrokes.map((points) => pathOf(points))
 		},
-
-		livePath() {
-			return this.live ? pathOf(this.live.points) : ''
-		},
 	},
 
 	watch: {
 		drawMode(on) {
 			if (!on) {
-				this.live = null
+				this.dropLive()
 			}
 		},
 	},
 
+	created() {
+		/*
+		 * The stroke being drawn: {pointerId, points, rect, d}. Not in data():
+		 * a pointer sends up to 240 moves a second, and as reactive state each
+		 * one copied the whole point array and re-serialised the whole path -
+		 * quadratic in the length of the stroke. Here a move pushes a point,
+		 * appends one path step and sets one attribute. `rect` is the layer's
+		 * box from the pointerdown: reading it on every move forced a layout
+		 * right after the previous frame's write.
+		 */
+		this.live = null
+	},
+
 	methods: {
 		/**
-		 * @param {PointerEvent} event
-		 * @return {?{x:number, y:number}}
+		 * @param {{clientX:number, clientY:number}} event
+		 * @param {DOMRect} rect the layer's box
+		 * @return {{x:number, y:number}}
 		 */
-		toPage(event) {
-			const layer = this.$refs.layer
-			if (!layer || !this.viewBox) {
-				return null
-			}
-			const rect = layer.getBoundingClientRect()
+		toPage(event, rect) {
 			return {
 				x: this.viewBox.minX + ((event.clientX - rect.left) / rect.width) * this.viewBox.width,
 				y: this.viewBox.minY + ((event.clientY - rect.top) / rect.height) * this.viewBox.height,
@@ -159,27 +168,46 @@ export default {
 			}
 			// One finger draws; a second one is a pinch, not a stroke.
 			if (this.live) {
-				this.live = null
+				this.dropLive()
 				return
 			}
-			const p = this.toPage(event)
-			if (!p) {
+			const layer = this.$refs.layer
+			if (!layer || !this.viewBox) {
+				return
+			}
+			const rect = layer.getBoundingClientRect()
+			if (!(rect.width > 0 && rect.height > 0)) {
 				return
 			}
 			event.preventDefault()
 			event.stopPropagation()
-			this.$refs.layer.setPointerCapture?.(event.pointerId)
-			this.live = { pointerId: event.pointerId, points: [p] }
+			layer.setPointerCapture?.(event.pointerId)
+			const p = this.toPage(event, rect)
+			this.live = { pointerId: event.pointerId, points: markRaw([p]), rect, d: pathStep(p, true) }
+			this.drawing = true
+			this.$nextTick(() => this.paintLive())
 		},
 
 		onMove(event) {
-			if (!this.live || event.pointerId !== this.live.pointerId) {
+			const live = this.live
+			if (!live || event.pointerId !== live.pointerId) {
 				return
 			}
-			const p = this.toPage(event)
-			if (p) {
-				// A new array each time: the live path is a computed of it.
-				this.live = { ...this.live, points: [...this.live.points, p] }
+			// The moves the browser merged into this event: a fast stroke
+			// keeps its curve instead of turning into a polygon at frame rate.
+			const coalesced = event.getCoalescedEvents?.()
+			for (const e of coalesced?.length > 0 ? coalesced : [event]) {
+				const p = this.toPage(e, live.rect)
+				live.points.push(p)
+				live.d += pathStep(p, false)
+			}
+			this.paintLive()
+		},
+
+		/** Writes the stroke so far into its path - one attribute, no patch. */
+		paintLive() {
+			if (this.live) {
+				this.$refs.livePath?.setAttribute('d', this.live.d)
 			}
 		},
 
@@ -189,12 +217,17 @@ export default {
 			}
 			event.stopPropagation()
 			const points = this.live.points
-			this.live = null
+			this.dropLive()
 			this.$emit('stroke', points)
 		},
 
 		onCancel() {
+			this.dropLive()
+		},
+
+		dropLive() {
 			this.live = null
+			this.drawing = false
 		},
 	},
 }

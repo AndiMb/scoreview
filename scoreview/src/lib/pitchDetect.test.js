@@ -116,3 +116,14 @@ describe('createPitchStream', () => {
 		expect(live[3].hz).toBeCloseTo(amStueck[3].hz, 6)
 	})
 })
+
+describe('detectPitch - working arrays reused', () => {
+	it('gives the same answer however often and in whatever order it runs', () => {
+		const a = signal(stimme(220))
+		const b = signal(stimme(330))
+		const first = detectPitch(a, RATE)
+		detectPitch(b, RATE)
+		detectPitch(signal(stimme(110), FRAME_SIZE * 2), RATE)
+		expect(detectPitch(a, RATE)).toEqual(first)
+	})
+})

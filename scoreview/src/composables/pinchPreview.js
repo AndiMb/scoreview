@@ -14,7 +14,7 @@
 // keeps zooming per frame as before.
 
 /**
- * @return {{supported: (el: ?Element) => boolean, start: (el: Element, touches: TouchList) => void, show: (scale: number) => void, end: () => void}}
+ * @return {{supported: (el: ?Element) => boolean, start: (el: Element, touches: TouchList) => void, startAt: (el: Element, clientX: number, clientY: number) => void, show: (scale: number) => void, end: () => void}}
  */
 export function createPinchPreview() {
 	let el = null
@@ -34,11 +34,22 @@ export function createPinchPreview() {
 		 * @param {TouchList} touches
 		 */
 		start(target, touches) {
+			this.startAt(target, (touches[0].clientX + touches[1].clientX) / 2, (touches[0].clientY + touches[1].clientY) / 2)
+		},
+
+		/**
+		 * The same for a zoom without fingers (slider, Ctrl+wheel,
+		 * zoomGesture.js): it scales around a point given in client
+		 * coordinates.
+		 *
+		 * @param {Element} target
+		 * @param {number} clientX
+		 * @param {number} clientY
+		 */
+		startAt(target, clientX, clientY) {
 			el = target
 			const box = target.getBoundingClientRect()
-			const x = (touches[0].clientX + touches[1].clientX) / 2 - box.left
-			const y = (touches[0].clientY + touches[1].clientY) / 2 - box.top
-			origin = `${x}px ${y}px`
+			origin = `${clientX - box.left}px ${clientY - box.top}px`
 		},
 
 		/** @param {number} scale relative to the zoom at the gesture's start */

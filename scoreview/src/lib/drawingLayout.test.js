@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decodeDrawing, encodeDrawing, layoutDrawings, MAX_POINTS, originOf, simplifyStroke, staffAt } from './drawingLayout.js'
+import { decodeDrawing, encodeDrawing, layoutDrawings, MAX_POINTS, originOf, pathOf, pathStep, simplifyStroke, staffAt } from './drawingLayout.js'
 
 // One system with two staves (S, B), staff space 25; measure 1 from x 1000
 // to 3000, measure 2 from 3000 to 5000.
@@ -85,5 +85,14 @@ describe('decodeDrawing', () => {
 		expect(decodeDrawing('nonsense')).toBeNull()
 		expect(decodeDrawing('{"v":2,"s":[]}')).toBeNull()
 		expect(decodeDrawing('{"v":1,"part":null,"s":[[1,2,3],[0,0,1,1]]}').strokes).toEqual([[0, 0, 1, 1]])
+	})
+})
+
+describe('pathStep', () => {
+	it('builds point by point the path pathOf writes at once', () => {
+		const points = [{ x: 1.04, y: 2 }, { x: 3.26, y: -4.5 }, { x: 10, y: 0.05 }]
+		const stepwise = points.reduce((d, p, i) => d + pathStep(p, i === 0), '')
+		expect(stepwise).toBe(pathOf(points))
+		expect(stepwise).toBe('M1.0 2.0L3.3 -4.5L10.0 0.1')
 	})
 })

@@ -1,3 +1,9 @@
+// PARKED - part of the microphone score follower (automatic page turning),
+// which is paused; no viewer code imports it. Kept and tested because
+// tools/follow/replay.mjs measures it against recorded rehearsals, and the
+// work resumes from here. The switch `feature_score_follower` exists but
+// turns nothing on (docs/installation.md).
+//
 // Chroma features for score following by microphone - pure, no DOM, no
 // AudioContext, so the measuring rig (tools/follow-replay.mjs) computes
 // exactly what the viewer computes.

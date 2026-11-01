@@ -7,8 +7,11 @@ import {
 	foldOctave,
 	formatCents,
 	noteMarks,
+	noteMarksIn,
+	ownNotes,
 	problemList,
 	targetAt,
+	targetIn,
 } from './intonation.js'
 import { trackPitch } from './pitchDetect.js'
 import { recordingToScoreMs } from './recordingAlign.js'
@@ -199,5 +202,56 @@ describe('noteMarks', () => {
 		expect(noteMarks([{ note: { onMs: 500, pitch: 60, channel: 1 }, class: 'red' }], NOTES, [1], events, 1)).toEqual([])
 		expect(noteMarks([{ note: ALT[0], class: 'red' }], NOTES, [1], [], 1)).toEqual([])
 		expect(noteMarks([{ note: ALT[0], class: 'red' }], NOTES, [1], events, null)).toEqual([])
+	})
+})
+
+describe('targetIn - my notes sorted once', () => {
+	// The filter targetIn() replaced, kept to compare against.
+	function scan(notes, myChannels, scoreMs, hz = null) {
+		const channels = new Set(myChannels)
+		const klingend = notes.filter((n) => channels.has(n.channel) && n.onMs <= scoreMs && scoreMs < n.offMs)
+		if (klingend.length === 0) {
+			return null
+		}
+		if (klingend.length === 1 || !Number.isFinite(hz)) {
+			return klingend.reduce((a, b) => (b.pitch > a.pitch ? b : a))
+		}
+		return klingend.reduce((a, b) => (Math.abs(foldOctave(centsOff(hz, b.pitch))) < Math.abs(foldOctave(centsOff(hz, a.pitch))) ? b : a))
+	}
+
+	it('finds the same note as a scan over all notes', () => {
+		let seed = 11
+		const rnd = () => {
+			seed = (seed * 16807) % 2147483647
+			return seed / 2147483647
+		}
+		for (let round = 0; round < 20; round++) {
+			const notes = Array.from({ length: 150 }, () => {
+				const onMs = Math.floor(rnd() * 20) * 250
+				return { onMs, offMs: onMs + 125 * (1 + Math.floor(rnd() * 8)), pitch: 55 + Math.floor(rnd() * 12), channel: Math.floor(rnd() * 3) }
+			})
+			const index = ownNotes(notes, [0, 2])
+			for (let ms = -100; ms < 6500; ms += 37) {
+				const hz = rnd() < 0.5 ? null : 200 + rnd() * 300
+				expect(targetIn(index, ms, hz)).toBe(scan(notes, [0, 2], ms, hz))
+			}
+		}
+	})
+
+	it('is empty without a part', () => {
+		expect(ownNotes(NOTES, null)).toBeNull()
+		expect(targetIn(null, 2500)).toBeNull()
+	})
+
+	it('marks the same heads from the index as from the notes', () => {
+		const notes = [
+			{ onMs: 0, offMs: 500, pitch: 64, channel: 1 },
+			{ onMs: 0, offMs: 500, pitch: 60, channel: 1 },
+			{ onMs: 500, offMs: 1000, pitch: 62, channel: 1 },
+		]
+		const events = [{ timeMs: 0, elid: 4 }, { timeMs: 500, elid: 5 }]
+		const evaluations = [{ note: notes[1], class: 'green' }, { note: notes[2], class: 'red' }]
+		expect(noteMarksIn(evaluations, ownNotes(notes, [1]), events, 0)).toEqual(noteMarks(evaluations, notes, [1], events, 0))
+		expect(noteMarksIn(evaluations, ownNotes(notes, [1]), events, 0)[0]).toMatchObject({ elid: 4, rank: 1, size: 2 })
 	})
 })

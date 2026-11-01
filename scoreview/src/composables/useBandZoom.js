@@ -1,7 +1,9 @@
-import { computed, ref } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { computePinchZoom } from '../lib/scoreLayout.js'
+import { readStored, writeStored } from '../lib/storage.js'
 import { BAND_ZOOM_MAX, BAND_ZOOM_MIN } from '../lib/systemBand.js'
 import { createPinchPreview } from './pinchPreview.js'
+import { createZoomGesture } from './zoomGesture.js'
 
 /** The size that suits a screen belongs to the device, not to the person. */
 const STORAGE_KEY = 'scoreview-band-zoom'
@@ -11,25 +13,14 @@ function clamp(value) {
 	return Math.min(BAND_ZOOM_MAX, Math.max(BAND_ZOOM_MIN, value))
 }
 
-function readStored() {
-	try {
-		const value = Number(window.localStorage.getItem(STORAGE_KEY))
-		return Number.isFinite(value) && value > 0 ? clamp(value) : 1
-	} catch {
-		return 1
-	}
+function readZoom() {
+	const value = Number(readStored(STORAGE_KEY))
+	return Number.isFinite(value) && value > 0 ? clamp(value) : 1
 }
 
 function store(value) {
-	try {
-		if (value === 1) {
-			window.localStorage.removeItem(STORAGE_KEY)
-		} else {
-			window.localStorage.setItem(STORAGE_KEY, String(value))
-		}
-	} catch {
-		// Private mode or full storage: the zoom works, it is just not kept.
-	}
+	// The default is not stored, so a later change of it reaches this device.
+	writeStored(STORAGE_KEY, value === 1 ? null : String(value))
 }
 
 /**
@@ -38,10 +29,13 @@ function store(value) {
  * (useZoom), which is a page width tied to the window and means nothing in
  * the band - one shared value would jump on every switch between the two.
  *
+ * @param {object} [deps]
+ * @param {() => ?Element} [deps.el] the band's scroller, scaled as a preview
+ *   while the slider or the wheel moves (zoomGesture.js)
  * @return {object}
  */
-export function useBandZoom() {
-	const zoom = ref(readStored())
+export function useBandZoom({ el = () => null } = {}) {
+	const zoom = ref(readZoom())
 	const percent = computed(() => Math.round(zoom.value * 100))
 	let pinching = false
 	let pinchStartDistance = 0
@@ -68,6 +62,19 @@ export function useBandZoom() {
 
 	function reset() {
 		set(1)
+	}
+
+	// Slider and Ctrl+wheel as on the pages (useZoom.js, zoomGesture.js).
+	const gesture = createZoomGesture({ target: el, current: () => zoom.value, clamp, commit: set })
+
+	/** @param {number} value from the slider - previewed, set at its end */
+	function input(value) {
+		gesture.to(value)
+	}
+
+	/** @param {WheelEvent} event with Ctrl, already prevented by the caller */
+	function wheel(event) {
+		gesture.by(event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP, { x: event.clientX, y: event.clientY })
 	}
 
 	function touchDistance(touches) {
@@ -135,10 +142,18 @@ export function useBandZoom() {
 	}
 
 	function stop() {
+		gesture.cancel()
 		cancelFrame()
 		preview.end()
 		previewing = false
 		pinching = false
+	}
+
+	// A safety net, not the order: the viewer stops this explicitly where
+	// the order matters (beforeUnmount/reset), and a forgotten line there
+	// must not leave it running. Calling it twice does no harm.
+	if (getCurrentScope()) {
+		onScopeDispose(stop)
 	}
 
 	return {
@@ -151,6 +166,9 @@ export function useBandZoom() {
 		zoomIn,
 		zoomOut,
 		reset,
+		input,
+		inputDone: gesture.finish,
+		wheel,
 		onTouchStart,
 		onTouchMove,
 		onTouchEnd,

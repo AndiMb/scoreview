@@ -8,22 +8,16 @@
 // Ausweis unten zeigte der Viewer hier gar nichts an.
 
 import axios from '@nextcloud/axios'
-import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 import { createApp } from 'vue'
 import StandaloneFrame from './components/StandaloneFrame.vue'
+import { readInitialState } from './initialState.js'
 import { ausweisFuer, begleiterErneuerbar, setlisteDerAnfrage } from './lib/directToken.js'
 import { createBridge } from './lib/mobileBridge.js'
 
 import './publicPath.js'
 
-const zustand = (() => {
-	try {
-		return loadState('scoreview', 'standalone')
-	} catch {
-		return {}
-	}
-})()
+const zustand = readInitialState('standalone') ?? {}
 
 /**
  * Begleit-Token fuer weitere Dateien einer Setliste (S1): fileId ->

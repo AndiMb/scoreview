@@ -1,3 +1,9 @@
+// PARKED - part of the microphone score follower (automatic page turning),
+// which is paused; no viewer code imports it. Kept and tested because
+// tools/follow/replay.mjs measures it against recorded rehearsals, and the
+// work resumes from here. The switch `feature_score_follower` exists but
+// turns nothing on (docs/installation.md).
+//
 // Acceptance figures of the microphone follower, computed from a replay -
 // pure, so they run the same in `npm test` (synthetic cases) and in
 // tools/follow-replay.mjs (recorded rehearsals).

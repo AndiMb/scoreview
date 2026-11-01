@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMs, formatTime, progressPercent, seekValue } from './viewerFormat.js'
+import { formatDuration, formatMs, formatTime, progressPercent, seekValue } from './viewerFormat.js'
 
 describe('formatTime', () => {
 	it('schreibt Minuten und zweistellige Sekunden', () => {
@@ -53,5 +53,17 @@ describe('seekValue', () => {
 		expect(seekValue(-5)).toBe(0)
 		expect(seekValue(NaN)).toBe(0)
 		expect(seekValue(undefined)).toBe(0)
+	})
+})
+
+describe('formatDuration', () => {
+	it('rounds a length where formatTime floors a position', () => {
+		expect(formatDuration(4800)).toBe('0:05')
+		expect(formatTime(4800)).toBe('0:04')
+		expect(formatDuration(125400)).toBe('2:05')
+	})
+	it('reads a missing length as zero', () => {
+		expect(formatDuration(null)).toBe('0:00')
+		expect(formatDuration(undefined)).toBe('0:00')
 	})
 })

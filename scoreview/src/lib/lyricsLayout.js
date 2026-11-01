@@ -234,7 +234,7 @@ export function systemKeyFor(element, measureRectsByPage) {
  * @param {number} elid
  * @param {number} verse
  */
-export const choirSyllableId = (staff, elid, verse) => `${staff}:${elid}:${verse}`
+const choirSyllableId = (staff, elid, verse) => `${staff}:${elid}:${verse}`
 
 /**
  * The lyrics of every part (E15, the "all parts" view): per system a row per

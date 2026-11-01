@@ -15,7 +15,7 @@
 // zwei Standardaktionen.
 
 export const MSCZ_MIME = 'application/x-musescore'
-export const MSCZ_EXTENSION = '.mscz'
+const MSCZ_EXTENSION = '.mscz'
 
 /**
  * @param {object} node Ein Knoten aus @nextcloud/files (oder etwas mit

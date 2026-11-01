@@ -40,11 +40,33 @@ class CaptureProcessor extends AudioWorkletProcessor {
 		// Wiederverwendet statt je Quantum neu (siehe lib/resample.js):
 		// Zuteilungen im Audio-Thread koennen als Aussetzer hoerbar werden.
 		this.mono = new Float32Array(QUANTUM)
+		// A second way out for the blocks, straight to the pitch worker
+		// (useIntonation.js): without it each block crossed the main thread
+		// on its way there, 50 messages a second competing with the viewer's
+		// frame loop. `toMain` is off while nobody on the main thread listens
+		// (useMicrophone.js) - then the live needle costs the main thread
+		// nothing at all.
+		this.sidePort = null
+		this.toMain = true
 		this.port.onmessage = (event) => {
-			if (event.data === 'stop') {
+			const message = event.data
+			if (message === 'stop') {
 				this.running = false
+				this.closeSidePort()
+			} else if (message?.type === 'attach') {
+				this.closeSidePort()
+				this.sidePort = message.port
+			} else if (message?.type === 'detach') {
+				this.closeSidePort()
+			} else if (message?.type === 'main') {
+				this.toMain = message.on === true
 			}
 		}
+	}
+
+	closeSidePort() {
+		this.sidePort?.close()
+		this.sidePort = null
 	}
 
 	process(inputs) {
@@ -75,8 +97,16 @@ class CaptureProcessor extends AudioWorkletProcessor {
 			this.produced++
 			if (this.filled === BLOCK) {
 				const frame = this.startFrame + this.downsampler.inputPositionOf(this.blockStart)
-				this.port.postMessage({ samples: this.block, contextTimeSec: frame / sampleRate }, [this.block.buffer])
-				this.block = new Float32Array(BLOCK)
+				const contextTimeSec = frame / sampleRate
+				if (this.sidePort) {
+					// A copy: the main thread may get the same block (recording).
+					const copy = this.block.slice()
+					this.sidePort.postMessage({ samples: copy, contextTimeSec }, [copy.buffer])
+				}
+				if (this.toMain) {
+					this.port.postMessage({ samples: this.block, contextTimeSec }, [this.block.buffer])
+					this.block = new Float32Array(BLOCK)
+				}
 				this.filled = 0
 			}
 		}

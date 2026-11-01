@@ -8,21 +8,13 @@
 // sondern in lib/mixerLayout.js (rein, ohne Synth-Abhängigkeit) - diese
 // Datei wendet nur an, was von dort berechnet wird.
 
-import { generateFilePath } from '@nextcloud/router'
 import { Sequencer, WorkletSynthesizer } from 'spessasynth_lib'
-import { withAppVersion } from './assetVersion.js'
 import { createAudioIdle } from './audioIdle.js'
 import { audioSession } from './audioSession.js'
 import { soundFontPresets } from './presetList.js'
 import { fineTuneCents } from './referencePitch.js'
 import { channelsSetUp, pickToneChannel } from './startTone.js'
-
-// spessasynth_lib's AudioWorklet-Prozessor läuft in einem eigenen
-// AudioWorkletGlobalScope und wird per addModule(url) als eigenständige
-// Datei geladen, nicht importiert/gebündelt - webpack.config.js kopiert sie
-// unverändert neben die anderen Bundles (siehe dort). Mit App-Version, weil
-// sie sonst nach einem Update aus dem Browser-Cache kaeme (assetVersion.js).
-export const WORKLET_URL = withAppVersion(generateFilePath('scoreview', 'js', 'spessasynth_processor.min.js'), SCOREVIEW_APP_VERSION)
+import { WORKLET_URL } from './workletUrl.js'
 
 // MIDI CC7 = Kanal-Lautstärke (General-MIDI-Standard). Mute/Solo werden
 // bewusst darüber abgebildet statt über eine synth-interne Mute-API - CC7

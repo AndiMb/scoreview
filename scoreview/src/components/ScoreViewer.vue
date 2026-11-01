@@ -9,228 +9,44 @@
 	<div
 		ref="root"
 		class="scoreview-viewer"
-		:class="{ 'scoreview-viewer--page-fullscreen': pageFullscreen }"
-		:style="highlightStyle">
-		<!--
-			The pages of the bar's tools, written once (reusableTemplate.js):
-			they open inside their group and, pinned (E23), in a popover of
-			their own. Rendered only where a page is shown.
-		-->
-		<component :is="DefineToolPage" v-slot="{ id }">
-			<div v-if="id === 'loop'" class="scoreview-controls">
-				<div class="scoreview-popover-row">
-					<NcTextField
-						v-model.number="loopFromMeasure"
-						type="number"
-						min="1"
-						:label="t('From measure')" />
-					<NcTextField
-						v-model.number="loopToMeasure"
-						type="number"
-						min="1"
-						:label="t('To measure')" />
-				</div>
-				<NcButton wide :aria-label="t('Loop from current measure')" @click="setLoopFromMeasure(currentAnchor?.measureNumber)">
-					<template #icon>
-						<CrosshairsGps :size="20" />
-					</template>
-					{{ t('Loop from current measure') }}
-				</NcButton>
-				<NcButton
-					wide
-					:pressed="loopActive"
-					:aria-label="loopActive ? t('Loop on') : t('Loop off')"
-					@click="onToggleLoop">
-					<template #icon>
-						<Repeat :size="20" />
-					</template>
-					{{ loopActive ? t('Loop on') : t('Loop off') }}
-				</NcButton>
-				<!-- Focus (B4): only while a loop runs, gone with it. -->
-				<NcCheckboxRadioSwitch
-					v-if="loopActive"
-					v-model="loopFocus"
-					type="switch">
-					{{ t('Show only the loop') }}
-				</NcCheckboxRadioSwitch>
-				<ScoreSpeedTrainer
-					v-if="loopActive && hasRealPlayer"
-					v-model:startBpm="trainerStartBpm"
-					v-model:targetBpm="trainerTargetBpm"
-					v-model:stepBpm="trainerStepBpm"
-					:minBpm="minTempoBpm"
-					:maxBpm="maxTempoBpm"
-					:active="trainerActive"
-					:passes="trainerPasses"
-					:currentBpm="effectiveTempoBpm"
-					@toggle="toggleSpeedTrainer" />
-				<!--
-					Saved loops (B5): kept like notes, so a
-					leader can save "Alto: 12-20" for the altos
-					and everyone else sees it dimmed.
-				-->
-				<fieldset v-if="savedLoops.length > 0" class="scoreview-popover-group">
-					<legend>{{ t('Saved loops') }}</legend>
-					<button
-						v-for="savedLoop in savedLoops"
-						:key="savedLoop.id"
-						type="button"
-						class="scoreview-saved-loop"
-						:class="{ 'scoreview-saved-loop--dimmed': savedLoop.dimmed }"
-						:disabled="savedLoop.orphaned || !can('loop')"
-						@click="applySavedLoop(savedLoop)">
-						<span class="scoreview-saved-loop-name">{{ savedLoop.name || t('Measures {from}–{to}', { from: savedLoop.from, to: savedLoop.to }) }}</span>
-						<span class="scoreview-saved-loop-meta">{{ savedLoopMeta(savedLoop) }}</span>
-					</button>
-				</fieldset>
-				<NcButton
-					v-if="loopActive && can('annotate') && !loopSaving"
-					wide
-					:aria-label="t('Save this loop…')"
-					@click="loopSaving = true">
-					<template #icon>
-						<ContentSave :size="20" />
-					</template>
-					{{ t('Save this loop…') }}
-				</NcButton>
-				<LoopSaveForm
-					v-if="loopSaving && loopActive"
-					:from="Number(loopFromMeasure)"
-					:to="Number(loopToMeasure)"
-					:isLeader="isLeader"
-					:parts="scoreParts"
-					:error="annotationError"
-					@save="saveLoop"
-					@cancel="loopSaving = false" />
-			</div>
-			<TempoControls
-				v-else-if="id === 'tempo'"
-				v-model:metronomeBeats="metronomeBeats"
-				:hasRealPlayer="hasRealPlayer"
-				:effectiveTempoBpm="effectiveTempoBpm"
-				:tempoGuessed="tempoGuessed"
-				:minTempoBpm="minTempoBpm"
-				:maxTempoBpm="maxTempoBpm"
-				:audioOffsetMs="audioOffsetMs"
-				:readAutomaticLatencyMs="readAutomaticLatencyMs"
-				@tempoInput="onTempoBpmInput"
-				@audioOffsetInput="onAudioOffsetInput" />
-			<TransposeControls
-				v-else-if="id === 'transpose'"
-				:semitones="effectiveTranspose"
-				:startKey="startKey"
-				:fromLeader="sessionTranspose !== null"
-				:notationAvailable="variantsSupported"
-				:transposeNotation="variant.transposeNotation"
-				@update:semitones="onTransposeInput"
-				@update:transposeNotation="variant.setTransposeNotation" />
-			<CoachControls
-				v-else-if="id === 'coach'"
-				:coach="practice.coach"
-				:othersLevel="practice.othersLevel"
-				:hasMyPart="myPartId !== null"
-				@update:coach="setPractice({ coach: $event })"
-				@update:othersLevel="setPractice({ othersLevel: $event })" />
-			<NoteNameControls
-				v-else-if="id === 'noteNames'"
-				v-model:system="noteNames"
-				v-model:onlyMine="noteNamesMine"
-				v-model:counts="beatCounts"
-				:hasMyPart="myPartId !== null"
-				:transpose="effectiveTranspose"
-				:unavailable="noteNamesUnavailable"
-				:countsUnavailable="countsUnavailable" />
-			<LayoutControls
-				v-else-if="id === 'layout'"
-				v-model:layout="layout"
-				v-model:doublePage="doublePage"
-				:spreadUnavailable="spreadUnavailable"
-				:lyricsUnavailable="lyricsUnavailable"
-				:variantSources="variantSourceChoices"
-				:variantSource="variant.source"
-				:variantFormat="variant.format"
-				:variantConcert="variant.concert"
-				:showConcert="variant.hasTransposingParts"
-				:variantUnavailable="variant.unavailableReason"
-				@update:variantSource="variant.setSource"
-				@update:variantFormat="variant.setFormat"
-				@update:variantConcert="variant.setConcert" />
-			<AppearanceControls
-				v-else-if="id === 'appearance'"
-				v-model:highlightMode="highlightMode"
-				v-model:highlightColor="highlightColor"
-				v-model:noteTheme="noteTheme" />
-			<PracticeExportControls
-				v-else-if="id === 'export'"
-				:running="practiceExport.running.value"
-				:progress="practiceExport.progress.value"
-				:error="practiceExport.error.value"
-				:conflict="practiceExport.conflict.value"
-				:saved="practiceExport.saved.value"
-				:loopRange="exportLoopRange"
-				:canWriteFolder="canWriteFolder"
-				:standalone="standalonePage"
-				:metronomeMode="metronomeBeats"
-				@export="practiceExport.exportOne"
-				@exportAll="practiceExport.exportAllParts"
-				@cancel="practiceExport.cancel"
-				@resolveConflict="practiceExport.resolveConflict" />
-			<PinControls
-				v-else-if="id === 'offline'"
-				:fileId="activeFileId"
-				:setlistId="setlistActive ? (setlist?.id ?? null) : null"
-				:title="pinTitle"
-				:setlistTitle="setlistTitle"
-				:estimate="offlineStore.estimate"
-				:busy="offlineStore.busy.value"
-				:progress="offlineStore.progress.value"
-				:done="offlineStore.done.value"
-				:error="offlineStore.error.value"
-				@pin="offlineStore.pin($event)" />
-			<ScoreInfoControls
-				v-else-if="id === 'info'"
-				:rendererBackend="rendererBackend"
-				:mscoreVersion="mscoreVersion"
-				:canReconvert="canReconvert"
-				:readDiagnostics="readAudioDiagnostics"
-				@reconvert="reconvertScore" />
-		</component>
+		:class="{ 'scoreview-viewer--page-fullscreen': zoom.pageFullscreen }"
+		:style="prefs.highlightStyle">
 		<!--
 			Die Setliste steht ueber allem, auch ueber „Wird konvertiert…" und
 			einem Fehler: Im Konzert muss es auch an einem Stueck vorbei
 			weitergehen, das gerade nicht geht.
 		-->
 		<SetlistBar
-			:active="setlistActive"
+			:active="setlistNav.active"
 			:title="setlistTitle"
-			:entries="setlistEntries"
-			:index="setlistIndex"
-			:position="setlistPosition"
+			:entries="setlistNav.entries"
+			:index="setlistNav.index"
+			:position="setlistNav.position"
 			:canEdit="setlistCanEdit"
-			:canNavigate="can('nextPiece')"
-			:canManage="can('settings')"
-			:offers="setlistOffers"
-			:offerDismissed="setlistOfferDismissed"
-			@previous="onSetlistPrevious"
-			@next="onSetlistNext"
-			@goTo="onSetlistGoTo"
-			@edit="openSetlistEditor('edit')"
-			@close="closeSetlist"
-			@accept="acceptSetlistOffer"
-			@dismiss="setlistOfferDismissed = true" />
-		<NcNoteCard v-if="setlistError" type="error" class="scoreview-hint">
-			{{ setlistError }}
+			:canNavigate="performance.can('nextPiece')"
+			:canManage="performance.can('settings')"
+			:offers="setlistNav.offers"
+			:offerDismissed="setlistNav.offerDismissed"
+			@previous="setlistNav.previous"
+			@next="setlistNav.next"
+			@goTo="setlistNav.goTo"
+			@edit="setlistNav.toggleEditor('edit')"
+			@close="setlistNav.close"
+			@accept="setlistNav.acceptOffer"
+			@dismiss="setlistNav.offerDismissed = true" />
+		<NcNoteCard v-if="setlistNav.error" type="error" class="scoreview-hint">
+			{{ setlistNav.error }}
 		</NcNoteCard>
 		<div
-			v-if="state === 'converting' || state === 'loading' || state === 'error'"
+			v-if="conversion.state === 'converting' || conversion.state === 'loading' || conversion.state === 'error'"
 			class="scoreview-status-host">
 			<ScoreStatus
-				:state="state"
-				:clientProgress="clientProgress"
-				:longWait="longWait"
-				:errorText="errorText"
-				:errorCode="errorCode"
-				:errorMessage="errorMessage" />
+				:state="conversion.state"
+				:clientProgress="conversion.clientProgress"
+				:longWait="conversion.langeWartezeit"
+				:errorText="conversion.errorText"
+				:errorCode="conversion.errorCode"
+				:errorMessage="conversion.errorMessage" />
 			<!--
 				Without a bar the way out floats above the status: it costs no
 				height, and the status keeps its top padding free for it.
@@ -249,342 +65,31 @@
 		</div>
 		<template v-else>
 			<!--
-				Die Leiste: Wie sie steht (eingefahren, kompakt, Werkzeuge auf
-				Abruf), regeln ScoreBar.vue und useBarLayout.js; was darin
-				steht, ist hier verdrahtet.
+				Die Leiste (ViewerBar.vue): Transport, angeheftete Werkzeuge und
+				die drei Gruppen, an den Composables des Viewers (viewerContext.js).
 			-->
-			<ScoreBar
-				v-model:toolsOpen="toolsOpen"
-				:collapsed="barCollapsed"
-				:compact="compactBar"
-				:anyToolActive="anyToolActive"
-				:readProgress="readPlaybackPercent"
-				@show="showBar"
-				@activity="scheduleBarCollapse"
-				@overflow="reportBarOverflow"
-				@height="reportBarHeight">
-				<template #transport>
-					<NcButton
-						class="scoreview-play"
-						variant="primary"
-						:disabled="!can('play')"
-						:aria-label="isPlaying ? t('Pause') : t('Play')"
-						:title="isPlaying ? t('Pause') : t('Play')"
-						@click="onPlayClick">
-						<template #icon>
-							<Pause v-if="isPlaying" :size="20" />
-							<Play v-else :size="20" />
-						</template>
-					</NcButton>
-					<!-- Die Zeit liest nur LiveValue: sonst rendert der ganze
-						Viewer in jedem Frame neu (siehe LiveValue.vue). -->
-					<!--
-						Auf SEEK_STEP_MS gerundet: Jeder neue Wert des Reglers loest in
-						Files eine Stil-Neuberechnung ueber den ganzen Baum aus
-						(Nextclouds :has()-Regeln an body/Viewer, gemessen: 7139
-						Elemente, ~78 ms je Mal am Desktop). In jedem Bild
-						geschrieben, frass das am Telefon die halbe Hauptthread-Zeit;
-						Vue schreibt den Wert nur, wenn er sich aendert.
-					-->
-					<LiveValue v-slot="{ value }" :get="() => seekValue(displayTimeMs)">
-						<input
-							type="range"
-							class="scoreview-seek"
-							min="0"
-							:max="durationMs"
-							:value="value"
-							:disabled="!can('seek')"
-							:aria-label="t('Playback position')"
-							@input="onSeekBarInput">
-						<span v-node-text="`${formatTime(value)} / ${formatTime(durationMs)}`" class="scoreview-time" />
-					</LiveValue>
-					<!--
-					Taktanzeige und Sprungfeld sind DASSELBE Feld: getrennt zeigten
-					sie dieselbe Zahl an zwei Stellen und kosteten zusammen fast eine
-					halbe Leiste. Solange das Feld den Fokus hat, laeuft die Anzeige
-					nicht mit - sonst wuerde die Wiedergabe die gerade getippte Zahl
-					ueberschreiben.
-				-->
-					<span class="scoreview-measure">
-						<!-- Die feste Breite sitzt am Wrapper, nicht an NcTextField
-							selbst - Begründung im CSS unten. -->
-						<!--
-							Mit Studierbuchstaben nimmt das Feld auch „C" und
-							„C+3" an und zeigt „47 (C+3)" - deshalb dann Text statt
-							Zahl, und breiter. Ohne Buchstaben bleibt es das
-							Zahlenfeld von heute.
-						-->
-						<span class="scoreview-measure-field" :class="{ 'scoreview-measure-field--marks': rehearsalMarks.length > 0 }">
-							<NcTextField
-								v-model="measureInput"
-								:type="rehearsalMarks.length > 0 ? 'text' : 'number'"
-								min="1"
-								:label="t('Measure')"
-								:title="rehearsalMarks.length > 0
-									? t('Measure – enter a number or a rehearsal mark (C, C+3) and press Enter to jump there')
-									: t('Measure – enter a number and press Enter to jump there')"
-								:disabled="!can('seek')"
-								labelOutside
-								@focus="onMeasureFieldFocus"
-								@blur="onMeasureFieldBlur"
-								@keyup.enter="jumpToMeasureInput" />
-						</span>
-						<span class="scoreview-measure-total">/ {{ totalMeasures || '–' }}</span>
-					</span>
-					<!--
-						Der Aufklapper „Navigation": die Studierbuchstaben als Chips.
-						Als Aufklapper statt als Leiste, weil die Leiste auf
-						Telefonbreite keinen Platz fuer eine zweite Reihe hat; und nur,
-						wenn die Partitur welche traegt.
-					-->
-					<NcPopover
-						v-if="rehearsalMarks.length > 0 && can('seek')"
-						v-model:shown="marksOpen"
-						popoverBaseClass="scoreview-bounded-popper"
-						:container="popoverContainer"
-						:autoBoundaryMaxSize="true">
-						<template #trigger>
-							<NcButton
-								class="scoreview-marks-button"
-								:aria-label="t('Rehearsal marks')"
-								:title="t('Rehearsal marks')">
-								<template #icon>
-									<BookmarkOutline :size="20" />
-								</template>
-							</NcButton>
-						</template>
-						<template #default>
-							<div class="scoreview-popover scoreview-marks" role="group" :aria-label="t('Rehearsal marks')">
-								<NcButton
-									v-for="mark in rehearsalMarks"
-									:key="mark.text"
-									class="scoreview-mark-chip"
-									:aria-label="t('Go to rehearsal mark {mark} (measure {n})', { mark: mark.text, n: mark.measure })"
-									:title="t('Measure {n}', { n: mark.measure })"
-									@click="jumpToMark(mark)">
-									{{ mark.text }}
-								</NcButton>
-							</div>
-						</template>
-					</NcPopover>
-					<!--
-						Anfangston und Schloss stehen im Transport, nicht in den
-						Werkzeugen: Beide werden auf Telefonbreite gebraucht,
-						und das Schloss ist im Aufführungsmodus der einzige Weg
-						hinaus - es darf nicht hinter „Mehr" verschwinden.
-					-->
-					<ScoreStartTone
-						v-if="can('tone')"
-						:mode="startToneMode"
-						:sounding="startToneSounding"
-						:toneName="startToneName"
-						:unavailableReason="startToneUnavailable"
-						@press="pressStartTone"
-						@release="releaseStartTone" />
-					<ScoreLockButton
-						:active="performanceMode"
-						:progress="performanceExitProgress"
-						@down="lockDown"
-						@cancel="cancelLockHold"
-						@lockKeydown="lockKeydown"
-						@lockKeyup="lockKeyup" />
-					<!--
-						Der rote Punkt: im Transport, nicht in den
-						Werkzeugen - er muss auch im Aufführungsmodus und bei
-						eingefahrenen Werkzeugen sichtbar und antippbar bleiben.
-					-->
-					<MicIndicator v-if="micActive" :consumers="micConsumers" @off="turnMicOff" />
-				</template>
-				<template #tools>
-					<!--
-						Pinned tools first (E23): what someone uses all the time,
-						one tap away instead of two or three. The same rule as
-						the groups decides what is visible (lib/barGroups.js
-						barPins) - a pinned mixer without sound disappears.
-					-->
-					<template v-for="pin in barPins" :key="'pin-' + pin.id">
-						<ToolGroup
-							v-if="pin.kind === 'page'"
-							class="scoreview-pinned"
-							:label="toolLabel(pin.id)"
-							:pressed="toolOn(pin.id)"
-							:fixedPage="{ id: pin.id, title: toolLabel(pin.id) }">
-							<template #icon>
-								<component :is="toolIcon(pin.id)" :size="20" />
-							</template>
-							<template #page="{ id }">
-								<component :is="ReuseToolPage" :id="id" />
-							</template>
-						</ToolGroup>
-						<NcButton
-							v-else
-							class="scoreview-pinned"
-							:pressed="pin.kind === 'action' ? undefined : toolOn(pin.id)"
-							:aria-label="toolLabel(pin.id)"
-							:title="toolLabel(pin.id)"
-							@click="onToolTap(pin.id)">
-							<template #icon>
-								<component :is="toolIcon(pin.id)" :size="20" />
-							</template>
-						</NcButton>
-					</template>
-					<!--
-						Die Werkzeuge in drei Gruppen (lib/barGroups.js - dort
-						steht auch, was wann sichtbar ist). Im Aufführungsmodus
-						bleibt nur „Ansicht" mit dem Zoom; was gesperrt ist,
-						verschwindet, statt ausgegraut dazustehen - ein grauer
-						Knopf laedt zum Antippen ein. Within a group the
-						sections are divided by a line: the frequent tools
-						first, what is set once below.
-					-->
-					<ToolGroup
-						v-for="group in barGroups"
-						:key="group.id"
-						:label="groupLabel(group.id)"
-						:active="groupActive(group.id)">
-						<template #icon>
-							<component :is="groupIcon(group.id)" :size="20" />
-						</template>
-						<template #default="{ openPage, close }">
-							<template v-for="(section, index) in group.sections" :key="index">
-								<hr v-if="index > 0" class="scoreview-group-divider">
-								<template v-for="id in section" :key="id">
-									<ZoomControls
-										v-if="id === 'zoom'"
-										v-bind="zoomView"
-										@input="onZoomControlInput"
-										@preset="onZoomControlPreset" />
-									<fieldset v-else-if="id === 'toneMode'" class="scoreview-popover-group">
-										<!--
-											Welcher Ton der Anfangston ist: der eigene
-											oder der Grundton. Beide Moeglichkeiten
-											beschriftet nebeneinander - an dieser Wahl
-											entscheidet sich, was man gleich hoert.
-											Right below "my part": "my note" is its
-											first note.
-										-->
-										<legend>{{ t('Starting note') }}</legend>
-										<div class="scoreview-tone-modes">
-											<NcCheckboxRadioSwitch
-												:modelValue="startToneMode"
-												type="radio"
-												:value="MODE_TONIC"
-												name="scoreview-tone-mode"
-												buttonVariant
-												buttonVariantGrouped="horizontal"
-												:title="t('Key note of the current key')"
-												@update:modelValue="setStartToneMode">
-												{{ t('Key note') }}
-											</NcCheckboxRadioSwitch>
-											<NcCheckboxRadioSwitch
-												:modelValue="startToneMode"
-												type="radio"
-												:value="MODE_VOICE"
-												name="scoreview-tone-mode"
-												buttonVariant
-												buttonVariantGrouped="horizontal"
-												:title="t('The first note of my voice')"
-												@update:modelValue="setStartToneMode">
-												{{ t('My note') }}
-											</NcCheckboxRadioSwitch>
-										</div>
-									</fieldset>
-									<ToolSwitch
-										v-else-if="toolKind(id) === 'switch'"
-										:label="toolLabel(id)"
-										:modelValue="toolOn(id)"
-										v-bind="pinProps(id)"
-										@update:modelValue="setSwitch(id, $event)"
-										@pin="flipPin(id)" />
-									<ToolRow
-										v-else
-										:page="toolKind(id) === 'page'"
-										:pressed="toolKind(id) !== 'page' && toolOn(id)"
-										:label="toolLabel(id)"
-										:value="toolValue(id)"
-										v-bind="pinProps(id)"
-										@click="onToolTap(id, { openPage, close })"
-										@pin="flipPin(id)">
-										<template #icon>
-											<component :is="toolIcon(id)" :size="20" />
-										</template>
-									</ToolRow>
-								</template>
-							</template>
-						</template>
-						<template #page="{ id }">
-							<component :is="ReuseToolPage" :id="id" />
-						</template>
-					</ToolGroup>
-					<!--
-						Vollbild steht ausserhalb der Gruppen: Es wird am
-						Notenstaender gebraucht, nicht eingerichtet. In der
-						kompakten Leiste steht es vorn im Werkzeug-Streifen
-						(CSS unten) - auf 360 px traegt der Transport keinen
-						weiteren Knopf (docs/architecture.md, Telefonbreite).
-
-						Always there: where the browser has no Fullscreen API -
-						measured in the WebView of the Nextcloud Android app,
-						document.fullscreenEnabled = false - it switches to
-						fullscreen inside the page (useZoom.js, issue #20). The
-						title says so, so that the system bars that stay are not
-						taken for a fault.
-					-->
-					<NcButton
-						class="scoreview-fullscreen"
-						:pressed="isFullscreen"
-						:aria-label="fullscreenLabel"
-						:title="fullscreenLabel"
-						@click="toggleFullscreen">
-						<template #icon>
-							<FullscreenExit v-if="isFullscreen" :size="20" />
-							<Fullscreen v-else :size="20" />
-						</template>
-					</NcButton>
-					<!--
-						Only where the host has no cross of its own - the page of
-						the mobile apps (StandaloneFrame.vue). There it replaces a
-						header row of its own: in landscape that row and the bar
-						took a third of the phone's height. Next to fullscreen and,
-						like it, behind "More" on the compact bar: the transport
-						carries nothing more at 360 px, and Android's back gesture
-						leaves in one tap anyway. Not locked in performance mode -
-						it locks working on the score, not leaving the page.
-					-->
-					<NcButton
-						v-if="closable"
-						class="scoreview-close"
-						variant="tertiary"
-						:aria-label="t('Close')"
-						:title="t('Close')"
-						@click="$emit('close')">
-						<template #icon>
-							<Close :size="20" />
-						</template>
-					</NcButton>
-				</template>
-			</ScoreBar>
-			<div class="scoreview-body" :class="{ 'scoreview-body--sing': singActive && singView === 'band' }">
+			<ViewerBar :closable="closable" @close="$emit('close')" @reconvert="reconvertScore" />
+			<div class="scoreview-body" :class="{ 'scoreview-body--sing': singScore.active && sing.view === 'band' }">
 				<!--
 					„Folgt mir": wer leitet, ob dieses Geraet folgt, ob die
 					Verbindung steht - ueber den Noten, damit es keine Hoehe kostet
 					und im Aufführungsmodus sichtbar bleibt.
 				-->
 				<FollowBadge
-					v-if="followActive"
+					v-if="follow.active"
 					class="scoreview-follow"
-					:leaderName="followLeaderName"
-					:mine="followMine"
-					:detached="!followFollowing"
-					:offline="!followConnected"
-					@resume="resumeFollow" />
+					:leaderName="follow.leaderName"
+					:mine="follow.mine"
+					:detached="!follow.following"
+					:offline="!follow.connected"
+					@resume="follow.resume" />
 				<!--
 					Die Leitung ist zum naechsten Stueck weiter, dieses Geraet folgt
 					gerade nicht (D5): nur ein Hinweis, mitgehen per Tipp.
 				-->
 				<NcNoteCard v-if="leaderMovedTo" type="info" class="scoreview-follow-moved">
 					{{ t('The leader has moved on to another piece.') }}
-					<NcButton variant="primary" @click="resumeFollow">
+					<NcButton variant="primary" @click="follow.resume">
 						{{ t('Go there') }}
 					</NcButton>
 				</NcNoteCard>
@@ -621,23 +126,23 @@
 				<div
 					ref="scroll"
 					class="scoreview-scroll"
-					:class="{ 'scoreview-scroll--band': activeLayout === 'band' }"
-					@pointerdown.passive="onScrollGestureStart"
-					@pointerup.passive="onScrollGestureEnd"
-					@pointercancel.passive="onScrollGestureEnd"
-					@touchstart.passive="onScrollGestureStart"
-					@touchend.passive="onScrollGestureEnd"
-					@touchcancel.passive="onScrollGestureEnd"
+					:class="{ 'scoreview-scroll--band': display.activeLayout === 'band' }"
+					@pointerdown.passive="autoScroller.onUserGestureStart"
+					@pointerup.passive="autoScroller.onUserGestureEnd"
+					@pointercancel.passive="autoScroller.onUserGestureEnd"
+					@touchstart.passive="autoScroller.onUserGestureStart"
+					@touchend.passive="autoScroller.onUserGestureEnd"
+					@touchcancel.passive="autoScroller.onUserGestureEnd"
 					@scrollend.passive="onViewerScrollEnd"
 					@wheel="onViewerWheel">
-					<NcNoteCard v-if="soundFontLoading" type="info" class="scoreview-hint">
-						{{ t('Loading sound ({percent}%)…', { percent: soundFontLoadPercent }) }}
-						<NcButton @click="skipSoundFontLoad">
+					<NcNoteCard v-if="playback.soundFontLoading" type="info" class="scoreview-hint">
+						{{ t('Loading sound ({percent}%)…', { percent: playback.soundFontLoadPercent }) }}
+						<NcButton @click="playback.skipSoundFontLoad">
 							{{ t('Continue without sound') }}
 						</NcButton>
 					</NcNoteCard>
-					<NcNoteCard v-else-if="!hasRealPlayer" type="warning" class="scoreview-hint">
-						{{ t('No sound: {reason}', { reason: playbackError || t('Playback is not available.') }) }}
+					<NcNoteCard v-else-if="!playback.hasRealPlayer" type="warning" class="scoreview-hint">
+						{{ t('No sound: {reason}', { reason: playback.playbackError || t('Playback is not available.') }) }}
 						{{ t('The score cursor keeps running independently of this.') }}
 					</NcNoteCard>
 					<!--
@@ -695,22 +200,22 @@
 						</div>
 					</NcNoteCard>
 					<!-- Die gewaehlte Darstellung geht nicht (N3): sagen, warum. -->
-					<NcNoteCard v-if="layout !== activeLayout" type="info" class="scoreview-hint">
-						{{ t('Lyrics view is not available: {reason} Showing the pages instead.', { reason: lyricsUnavailable }) }}
+					<NcNoteCard v-if="prefs.layout !== display.activeLayout" type="info" class="scoreview-hint">
+						{{ t('Lyrics view is not available: {reason} Showing the pages instead.', { reason: display.lyricsUnavailable }) }}
 					</NcNoteCard>
 					<LyricsView
-						v-if="activeLayout === 'lyrics' && timeline"
+						v-if="display.activeLayout === 'lyrics' && session.timeline"
 						ref="lyrics"
 						:follow="followCursor"
-						:syllables="pictureMeta?.lyricSyllables ?? []"
+						:syllables="session.pictureMeta?.lyricSyllables ?? []"
 						:staves="myStaves"
 						:partNames="lyricsPartNames"
-						:timeline="timeline"
-						:measureRectsByPage="systemRectsByPage"
+						:timeline="session.timeline"
+						:measureRectsByPage="session.systemRectsByPage"
 						:focusKeys="loopFocusKeys"
 						:readTimeMs="readDisplayTimeMs"
-						:subscribeFrame="sessionOnFrame"
-						:canSeek="can('seek')"
+						:subscribeFrame="session.onFrame"
+						:canSeek="performance.can('seek')"
 						@seek="onLyricsSeek"
 						@loop="onLyricsLoop"
 						@cursorVisible="layoutCursorShown = $event" />
@@ -723,22 +228,23 @@
 						the page list.
 					-->
 					<LiveValue
-						v-else-if="activeLayout === 'band'"
+						v-else-if="display.activeLayout === 'band'"
 						v-slot="{ value: live }"
 						:get="readLive">
 						<SystemBand
 							ref="band"
-							:pageUrls="pageUrls"
-							:systemRectsByPage="systemRectsByPage"
-							:pageProps="bandPageProps"
+							:pageUrls="session.pageUrls"
+							:systemRectsByPage="session.systemRectsByPage"
+							:pageProps="sharedPageProps"
 							:loopRects="loopMeasureRects"
 							:loopDimRectsByPage="loopDimRectsByPage"
 							:cursorRect="live.cursorRect"
 							:cursorElid="live.cursorElid"
 							:needle="live.needle"
+							:liveNoteMarks="live.liveNoteMarks"
 							:follow="followCursor"
-							:forced="cursorForced"
-							:zoom="bandZoomValue"
+							:forced="session.cursorForced"
+							:zoom="bandZoom.zoom"
 							@touchstart.passive="bandZoom.onTouchStart"
 							@touchmove.passive="bandZoom.onTouchMove"
 							@touchend.passive="bandZoom.onTouchEnd"
@@ -755,48 +261,31 @@
 						<div
 							class="scoreview-pages"
 							:class="spreadClasses"
-							@touchstart.passive="onTouchStart"
-							@touchmove.passive="onTouchMove"
-							@touchend.passive="onTouchEnd">
+							@touchstart.passive="zoom.onTouchStart"
+							@touchmove.passive="zoom.onTouchMove"
+							@touchend.passive="zoom.onTouchEnd">
 							<ScorePage
-								v-for="(url, i) in pageUrls"
+								v-for="(url, i) in session.pageUrls"
 								:key="url"
-								:ref="pageRef(i)"
+								:ref="autoScroller.pageRef(i)"
 								:svgUrl="url"
 								:pageIndex="i"
+								v-bind="sharedPageProps"
 								:cursorRect="onCursorPage(i, live.cursorRect, live.cursorRect)"
 								:cursorElid="onCursorPage(i, live.cursorElid, live.cursorRect)"
-								:zoom="zoom"
-								:markers="annotationMarkers"
-								:stamps="annotationStamps"
-								:drawings="annotationDrawings"
-								:drawMode="drawSpec !== null"
-								:pendingStrokes="drawStrokes"
-								:loopMarkers="loopMarkers"
-								:systemRects="systemRectsByPage[i] ?? NO_RECTS"
+								:zoom="zoom.zoom"
+								:drawMode="annotations.drawSpec !== null"
+								:pendingStrokes="annotations.drawStrokes"
+								:systemRects="session.systemRectsByPage[i] ?? NO_RECTS"
 								:loopDimRects="loopDimRectsByPage[i] ?? NO_RECTS"
-								:myPartIndex="myPartIndex"
-								:focusMyPart="focusMyPart"
-								:partCount="partCount"
-								:showNoteText="showNoteText"
-								:highlightMode="highlightMode"
-								:noteTheme="resolvedNoteTheme"
-								:svgVars="highlightStyle"
-								:noteMarks="intonationMarks"
-								:liveNoteMarks="live.liveNoteMarks"
+								:liveNoteMarks="onCursorPage(i, live.liveNoteMarks, live.cursorRect) ?? NO_MARKS"
 								:needle="onCursorPage(i, live.needle, live.cursorRect)"
-								:spellings="spellings"
-								:noteNameSystem="noteNameSystem"
-								:noteNameStaves="noteNameStaves"
-								:keyOfElid="keyOfElid"
-								:countOfElid="countOfElid"
-								:countStaves="countStaves"
 								@indexed="onPageIndexed"
 								@noteClick="onNoteClick"
 								@markerClick="onMarkerClick"
 								@staffMapping="onStaffMapping"
-								@stroke="addStroke"
-								@loaded="onPageLoaded" />
+								@stroke="annotations.addStroke"
+								@loaded="zoom.onPageLoaded" />
 						</div>
 					</LiveValue>
 				</div>
@@ -806,19 +295,19 @@
 					costs no new page load.
 				-->
 				<SingLane
-					v-if="singActive"
-					:mode="singView"
+					v-if="singScore.active"
+					:mode="sing.view"
 					:readTimeMs="readDisplayTimeMs"
-					:subscribeFrame="sessionOnFrame"
-					:tempoFactor="tempo"
+					:subscribeFrame="session.onFrame"
+					:tempoFactor="playback.tempo"
 					:notes="singLaneNotes"
-					:results="singResults"
-					:readFrames="singFramesForLane"
-					:syllablesFor="singView === 'stage' && singLyricsBlocks.length > 0 ? singSyllablesFor : null"
-					:livePct="singLivePct"
-					:levelLabel="singLevelLabel"
-					:unitLabel="singUnitLabel"
-					:liveOnly="singRun?.state === 'liveOnly'" />
+					:results="singScore.results"
+					:readFrames="singScore.framesForLane"
+					:syllablesFor="sing.view === 'stage' && sing.lyricsBlocks.length > 0 ? sing.syllablesFor : null"
+					:livePct="singScore.livePct"
+					:levelLabel="sing.levelLabel"
+					:unitLabel="sing.unitLabel"
+					:liveOnly="singScore.run?.state === 'liveOnly'" />
 				<!--
 					Mixer und Notizen liegen als Karten UEBER dem Notenbild statt
 					davor im Fluss: im Fluss kosteten sie Hoehe, sobald sie offen
@@ -826,7 +315,7 @@
 					nichts, wenn sie zu sind, und bleiben erreichbar, wo immer man
 					gerade liest.
 				-->
-				<div v-if="showMixerPanel || showMyPartPanel || showAnnotations || showRehearsal || showPractice || showTuner || showPracticeLog || showSing || armedStamp || drawSpec || setlistEditorMode" class="scoreview-panels">
+				<div v-if="panels.anyShown || annotations.armedStamp || annotations.drawSpec || setlistNav.editorMode" class="scoreview-panels">
 					<!--
 						Ein Stempel wartet auf den Tipp ins Notenbild. Das
 						Notizen-Panel ist dafuer zu - es laege sonst ueber den Noten,
@@ -838,30 +327,30 @@
 						does not lie over the music being drawn on, and this bar
 						says how drawing ends.
 					-->
-					<ScorePanel v-if="drawSpec" class="scoreview-armed">
+					<ScorePanel v-if="annotations.drawSpec" class="scoreview-armed">
 						<span>{{ t('Draw on the music with finger, pen or mouse.') }}</span>
-						<NcButton :disabled="drawStrokes.length === 0" @click="undoStroke">
+						<NcButton :disabled="annotations.drawStrokes.length === 0" @click="annotations.undoStroke">
 							<template #icon>
 								<Undo :size="20" />
 							</template>
 							{{ t('Undo') }}
 						</NcButton>
-						<NcButton variant="primary" :disabled="drawStrokes.length === 0" @click="saveDrawing">
+						<NcButton variant="primary" :disabled="annotations.drawStrokes.length === 0" @click="annotations.saveDrawing">
 							<template #icon>
 								<Check :size="20" />
 							</template>
 							{{ t('Done') }}
 						</NcButton>
-						<NcButton :aria-label="t('Cancel')" @click="cancelDrawing">
+						<NcButton :aria-label="t('Cancel')" @click="annotations.cancelDrawing">
 							<template #icon>
 								<Close :size="20" />
 							</template>
 							{{ t('Cancel') }}
 						</NcButton>
 					</ScorePanel>
-					<ScorePanel v-if="armedStamp" class="scoreview-armed">
+					<ScorePanel v-if="annotations.armedStamp" class="scoreview-armed">
 						<span>{{ t('Tap the score where the {stamp} belongs.', { stamp: armedStampName }) }}</span>
-						<NcButton :aria-label="t('Cancel')" @click="disarmStamp">
+						<NcButton :aria-label="t('Cancel')" @click="annotations.disarmStamp">
 							<template #icon>
 								<Close :size="20" />
 							</template>
@@ -869,62 +358,62 @@
 						</NcButton>
 					</ScorePanel>
 					<ScorePanel
-						v-if="setlistEditorMode"
-						:title="setlistEditorMode === 'new' ? t('New setlist') : t('Edit setlist')"
-						@close="setlistEditorMode = null">
+						v-if="setlistNav.editorMode"
+						:title="setlistNav.editorMode === 'new' ? t('New setlist') : t('Edit setlist')"
+						@close="setlistNav.closeEditor()">
 						<SetlistEditor
-							:key="setlistEditorMode + ':' + (setlist?.etag ?? '')"
-							:mode="setlistEditorMode"
-							:setlist="setlist"
+							:key="setlistNav.editorMode + ':' + (setlistNav.setlist?.etag ?? '')"
+							:mode="setlistNav.editorMode"
+							:setlist="setlistNav.setlist"
 							:scoreFileId="standalonePage ? fileid : activeFileId"
-							:folderFileId="setlistFolderFileId"
+							:folderFileId="setlistNav.folderFileId"
 							:withoutFilePicker="standalonePage"
-							:noAdding="standalonePage && setlistEditorMode !== 'new'"
-							@saved="onSetlistSaved"
-							@cancel="setlistEditorMode = null" />
+							:noAdding="standalonePage && setlistNav.editorMode !== 'new'"
+							@saved="setlistNav.applySaved"
+							@cancel="setlistNav.closeEditor()" />
 					</ScorePanel>
-					<ScorePanel v-if="showMyPartPanel" :title="t('My part')" @close="showMyPart = false">
+					<ScorePanel v-if="panels.shown('partChoice')" :title="t('My part')" @close="panels.close('partChoice')">
 						<!--
 							Der Anfangston kam ohne gewaehlte Stimme hierher:
 							Er raet nicht, sondern sagt, was fehlt.
 						-->
-						<NcNoteCard v-if="startToneNeedsPart" type="info">
+						<NcNoteCard v-if="startTone.needPart" type="info">
 							{{ t('Choose your part first.') }}
 						</NcNoteCard>
 						<MyPartControls
-							:parts="scoreParts"
-							:partId="myPartId"
+							:parts="session.scoreParts"
+							:partId="myPart.myPartId"
 							@update:partId="onMyPartChanged" />
 					</ScorePanel>
-					<ScorePanel v-if="showMixerPanel" :title="t('Mixer')" @close="showMixer = false">
+					<ScorePanel v-if="panels.shown('mixer')" :title="t('Mixer')" @close="panels.close('mixer')">
 						<!-- What the pressed voice symbol stands for, in words. -->
 						<p class="scoreview-mixer-mypart">
-							{{ myPartId !== null ? t('My part: {name}', { name: myPartLabel }) : t('No part chosen') }}
+							{{ myPart.myPartId !== null ? t('My part: {name}', { name: myPartLabel }) : t('No part chosen') }}
 						</p>
-						<NcCheckboxRadioSwitch v-model="stereoMyPart" type="switch">
+						<NcCheckboxRadioSwitch v-model="prefs.stereoMyPart" type="switch">
 							{{ t('My voice on the right, the others on the left') }}
 						</NcCheckboxRadioSwitch>
 						<ScoreMixer
-							:channels="mixerChannels"
-							:presetList="presetList"
-							:mix="mixState"
-							@level="({ channels, level }) => mixSetLevel(channels, level)"
-							@mute="mixToggleMute"
-							@solo="mixToggleSolo"
+							:channels="playback.mixerChannels"
+							:presetList="playback.presetList"
+							:mix="mix.state"
+							@level="({ channels, level }) => mix.setLevel(channels, level)"
+							@mute="mix.toggleMute"
+							@solo="mix.toggleSolo"
 							@focus="onMixerFocus"
-							@program="mixChangeProgram" />
+							@program="mix.changeProgram" />
 					</ScorePanel>
-					<ScorePanel v-if="showAnnotations" :title="t('Notes')" @close="showAnnotations = false">
+					<ScorePanel v-if="panels.shown('annotations')" :title="t('Notes')" @close="panels.close('annotations')">
 						<ScoreAnnotations
-							:annotations="listedAnnotations"
+							:annotations="annotations.listed"
 							:currentAnchor="readCurrentAnchor"
-							:error="annotationError"
-							:isLeader="isLeader"
-							:parts="scoreParts"
-							:armedStamp="armedStamp ? armedStamp.stamp : null"
-							@create="onAnnotationCreate"
-							@update="onAnnotationUpdate"
-							@delete="onAnnotationDelete"
+							:error="annotations.error"
+							:isLeader="leaderRoles.isLeader"
+							:parts="session.scoreParts"
+							:armedStamp="annotations.armedStamp ? annotations.armedStamp.stamp : null"
+							@create="annotations.create"
+							@update="annotations.update"
+							@delete="annotations.remove"
 							@jumpTo="onAnnotationJumpToOwn"
 							@armStamp="onArmStamp"
 							@startDrawing="onStartDrawing" />
@@ -933,124 +422,124 @@
 						Eigene Aufnahmen und Intonation. Bleibt waehrend
 						des Aufnehmens offen stehen - dort sitzt der Stopp-Knopf.
 					-->
-					<ScorePanel v-if="showPractice" :title="t('Recording and intonation')" @close="showPractice = false">
+					<ScorePanel v-if="panels.shown('recording')" :title="t('Recording and intonation')" @close="panels.close('recording')">
 						<RecordingPanel
-							v-model:withAccompaniment="recordWithAccompaniment"
-							v-model:countIn="recordCountIn"
-							v-model:recordingVolume="recordingVolume"
-							v-model:accompanimentVolume="accompanimentVolume"
-							:recordingEnabled="recordingEnabled"
-							:intonationEnabled="intonationEnabled"
-							:referenceHz="referencePitch"
-							:hasRealPlayer="hasRealPlayer"
-							:recordings="recordings"
+							v-model:withAccompaniment="recorder.withAccompaniment"
+							v-model:countIn="recorder.countIn"
+							v-model:recordingVolume="recorder.recordingVolume"
+							v-model:accompanimentVolume="recorder.accompanimentVolume"
+							:recordingEnabled="features.recording"
+							:intonationEnabled="features.intonation"
+							:referenceHz="prefs.referencePitch"
+							:hasRealPlayer="playback.hasRealPlayer"
+							:recordings="recorder.recordings"
 							:sharedRecordings="visibleSharedRecordings"
-							:isLeader="isLeader"
-							:parts="scoreParts"
-							:phase="recordPhase"
-							:elapsedMs="recordElapsedMs"
-							:confirmReplace="recordConfirmReplace"
-							:maxPerScore="maxRecordingsPerScore"
-							:pending="recordPending"
-							:listening="recordListening"
-							:error="recordError"
-							:micError="micError"
+							:isLeader="leaderRoles.isLeader"
+							:parts="session.scoreParts"
+							:phase="recorder.phase"
+							:elapsedMs="recorder.elapsedMs"
+							:confirmReplace="recorder.confirmReplace"
+							:maxPerScore="features.maxRecordingsPerScore"
+							:pending="recorder.pending"
+							:listening="recorder.listening"
+							:error="recorder.error"
+							:micError="microphone.error"
 							:browserUrl="browserUrl"
-							:live="intonationLive"
-							:needPart="intonationNeedPart || waitModeNeedPart"
-							:analysis="intonationAnalysis"
-							:analyzing="intonationAnalyzing"
-							:progress="intonationProgress"
-							:intonationError="intonationError"
-							:waitMode="waitModeActive"
-							:waiting="waitModeWaiting"
-							:waitBlocked="recordPhase !== 'idle' || followFollowing"
-							@start="startRecording()"
-							@stop="stopRecording"
-							@replace="answerRecordReplace"
-							@retry="retryRecordSave"
-							@discard="discardPendingRecording"
+							:live="intonation.live"
+							:needPart="intonation.needPart || waitMode.needPart"
+							:analysis="intonation.analysis"
+							:analyzing="intonation.analyzing"
+							:progress="intonation.progress"
+							:intonationError="intonation.error"
+							:waitMode="waitMode.active"
+							:waiting="waitMode.waiting"
+							:waitBlocked="recorder.phase !== 'idle' || follow.following"
+							@start="recorder.start()"
+							@stop="recorder.stop"
+							@replace="recorder.answerReplace"
+							@retry="recorder.retrySave"
+							@discard="recorder.discardPending"
 							@listen="onListenRecording"
-							@stopListening="stopListeningRecording"
-							@delete="removeRecording"
-							@share="({ recording, targetParts }) => shareRecording(recording, targetParts)"
+							@stopListening="recorder.stopListening"
+							@delete="recorder.remove"
+							@share="({ recording, targetParts }) => recorder.share(recording, targetParts)"
 							@analyze="onAnalyzeRecording"
 							@toggleLive="onToggleLiveIntonation"
 							@toggleWaitMode="onToggleWaitMode"
-							@clearAnalysis="clearIntonationAnalysis"
+							@clearAnalysis="intonation.clearAnalysis"
 							@jump="onPracticeJump" />
 					</ScorePanel>
 					<!-- The practice log (E20): only the singer's own time. -->
-					<ScorePanel v-if="showPracticeLog" :title="t('Practice log')" @close="showPracticeLog = false">
+					<ScorePanel v-if="panels.shown('practiceLog')" :title="t('Practice log')" @close="panels.close('practiceLog')">
 						<PracticeLogPanel
-							:summary="practiceLogSummary"
-							:goal="practiceLogGoal"
-							:isLeader="isLeader"
-							:savingGoal="practiceLogSaving"
-							:error="practiceLogError"
-							@setGoal="setPracticeGoal" />
+							:summary="practiceLog.summary"
+							:goal="practiceLog.goal"
+							:isLeader="leaderRoles.isLeader"
+							:savingGoal="practiceLog.savingGoal"
+							:error="practiceLog.error"
+							@setGoal="practiceLog.setGoal" />
 					</ScorePanel>
 					<!-- Scored singing (E24): closing the card leaves the lane running. -->
-					<ScorePanel v-if="showSing" :title="t('Scored singing')" @close="showSing = false">
+					<ScorePanel v-if="panels.shown('sing')" :title="t('Scored singing')" @close="panels.close('sing')">
 						<SingPanel
-							:active="singActive"
-							:level="singLevel"
-							:view="singView"
-							:unitLabel="singUnitLabel"
-							:needPart="intonationNeedPart"
-							:micError="micError"
-							:error="singError || intonationError"
-							:lastRun="singLastRun"
-							:history="singHistory"
+							:active="singScore.active"
+							:level="singScore.level"
+							:view="sing.view"
+							:unitLabel="sing.unitLabel"
+							:needPart="intonation.needPart"
+							:micError="microphone.error"
+							:error="singScore.error || intonation.error"
+							:lastRun="singScore.lastRun"
+							:history="singScore.history"
 							@toggle="onSingToggle"
-							@update:level="singSetLevel"
-							@update:view="onSingView"
+							@update:level="singScore.setLevel"
+							@update:view="sing.setView"
 							@jump="onPracticeJump"
 							@loop="onSingLoop"
-							@clear="singClear"
-							@dismiss="singDismiss" />
+							@clear="singScore.clearResults"
+							@dismiss="singScore.dismissResult" />
 					</ScorePanel>
 					<!-- The tuner (B3): closing the card stops the microphone. -->
-					<ScorePanel v-if="showTuner" :title="t('Tuner')" @close="closeTuner">
+					<ScorePanel v-if="panels.shown('tuner')" :title="t('Tuner')" @close="closeTuner">
 						<TunerPanel
-							:reading="tunerReading"
-							:active="tunerActive"
-							:error="tunerError"
-							:micError="micError"
+							:reading="tuner.reading"
+							:active="tuner.active"
+							:error="tuner.error"
+							:micError="microphone.error"
 							:nameSystem="tunerNameSystem"
 							:concertKey="tunerKey"
-							:referenceHz="referencePitch"
-							@update:referenceHz="referencePitch = $event"
-							@toggle="toggleTuner" />
+							:referenceHz="prefs.referencePitch"
+							@update:referenceHz="prefs.referencePitch = $event"
+							@toggle="tuner.toggle" />
 					</ScorePanel>
 					<!--
 						Der Aufklapper „Probe": die Leitungen - hier sammelt
 						sich, was eine Probe organisiert, statt jedes Stueck davon
 						als eigenen Knopf in die Leiste zu setzen.
 					-->
-					<ScorePanel v-if="showRehearsal" :title="t('Rehearsal')" @close="showRehearsal = false">
+					<ScorePanel v-if="panels.shown('rehearsal')" :title="t('Rehearsal')" @close="panels.close('rehearsal')">
 						<LeaderPanel
-							:leaders="leaders"
-							:isLeader="isLeader"
-							:candidates="leaderCandidates"
-							:error="leaderError"
-							:followEnabled="followEnabled"
-							:followActive="followActive"
-							:followMine="followMine"
-							:followLeaderName="followLeaderName"
-							:followBusy="followBusy"
-							:followError="followError"
-							:marks="rehearsalMarks"
-							:loopActive="loopActive"
-							@appoint="onLeaderAppoint"
-							@revoke="onLeaderRevoke"
-							@search="onLeaderSearch"
-							@followStart="startFollow"
-							@followEnd="endFollow"
+							:leaders="leaderRoles.leaders"
+							:isLeader="leaderRoles.isLeader"
+							:candidates="leaderRoles.candidates"
+							:error="leaderRoles.error"
+							:followEnabled="features.followSession"
+							:followActive="follow.active"
+							:followMine="follow.mine"
+							:followLeaderName="follow.leaderName"
+							:followBusy="follow.busy"
+							:followError="follow.error"
+							:marks="scoreFacts.marks"
+							:loopActive="loop.active"
+							@appoint="leaderRoles.appoint"
+							@revoke="leaderRoles.revoke"
+							@search="leaderRoles.search"
+							@followStart="follow.start"
+							@followEnd="follow.end"
 							@followPosition="sendFollowPosition()"
 							@followMark="sendFollowMark"
-							@followLoop="sendFollowLoop"
-							@followTone="sendFollowTone" />
+							@followLoop="follow.sendLoop"
+							@followTone="follow.sendTone" />
 					</ScorePanel>
 				</div>
 			</div>
@@ -1059,90 +548,32 @@
 </template>
 
 <script>
-import { loadState } from '@nextcloud/initial-state'
 import { getLanguage } from '@nextcloud/l10n'
 import { generateUrl, getRootUrl } from '@nextcloud/router'
-import { computed, getCurrentInstance, inject, nextTick, reactive, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, getCurrentInstance, inject, nextTick, provide, reactive, ref, watch } from 'vue'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import NcPopover from '@nextcloud/vue/components/NcPopover'
-import NcTextField from '@nextcloud/vue/components/NcTextField'
-import AccountTieVoiceOutline from 'vue-material-design-icons/AccountTieVoiceOutline.vue'
-import AccountVoice from 'vue-material-design-icons/AccountVoice.vue'
-import Alphabetical from 'vue-material-design-icons/Alphabetical.vue'
-import BookmarkOutline from 'vue-material-design-icons/BookmarkOutline.vue'
-import BookMusicOutline from 'vue-material-design-icons/BookMusicOutline.vue'
-import BookOpenPageVariantOutline from 'vue-material-design-icons/BookOpenPageVariantOutline.vue'
-import ChartBar from 'vue-material-design-icons/ChartBar.vue'
 import Check from 'vue-material-design-icons/Check.vue'
-import ChevronDoubleDown from 'vue-material-design-icons/ChevronDoubleDown.vue'
 import Close from 'vue-material-design-icons/Close.vue'
-import CloudDownloadOutline from 'vue-material-design-icons/CloudDownloadOutline.vue'
-import ContentSave from 'vue-material-design-icons/ContentSave.vue'
 import CrosshairsGps from 'vue-material-design-icons/CrosshairsGps.vue'
-import EyeOutline from 'vue-material-design-icons/EyeOutline.vue'
-import FileMusicOutline from 'vue-material-design-icons/FileMusicOutline.vue'
-import FocusFieldHorizontal from 'vue-material-design-icons/FocusFieldHorizontal.vue'
-import Fullscreen from 'vue-material-design-icons/Fullscreen.vue'
-import FullscreenExit from 'vue-material-design-icons/FullscreenExit.vue'
-import HeadphonesSettings from 'vue-material-design-icons/HeadphonesSettings.vue'
-import InformationOutline from 'vue-material-design-icons/InformationOutline.vue'
-import MessageTextOutline from 'vue-material-design-icons/MessageTextOutline.vue'
-import Metronome from 'vue-material-design-icons/Metronome.vue'
-import Microphone from 'vue-material-design-icons/Microphone.vue'
-import MicrophoneVariant from 'vue-material-design-icons/MicrophoneVariant.vue'
-import NotebookOutline from 'vue-material-design-icons/NotebookOutline.vue'
-import Palette from 'vue-material-design-icons/Palette.vue'
-import Pause from 'vue-material-design-icons/Pause.vue'
-import Piano from 'vue-material-design-icons/Piano.vue'
-import Play from 'vue-material-design-icons/Play.vue'
-import PlaylistPlus from 'vue-material-design-icons/PlaylistPlus.vue'
-import Printer from 'vue-material-design-icons/Printer.vue'
-import Repeat from 'vue-material-design-icons/Repeat.vue'
-import SineWave from 'vue-material-design-icons/SineWave.vue'
-import Speedometer from 'vue-material-design-icons/Speedometer.vue'
-import SwapVertical from 'vue-material-design-icons/SwapVertical.vue'
-import TuneVertical from 'vue-material-design-icons/TuneVertical.vue'
 import Undo from 'vue-material-design-icons/Undo.vue'
-import AppearanceControls from './AppearanceControls.vue'
-import CoachControls from './CoachControls.vue'
 import FollowBadge from './FollowBadge.vue'
-import LayoutControls from './LayoutControls.vue'
-import LeaderPanel from './LeaderPanel.vue'
 import LiveValue from './LiveValue.vue'
-import LoopSaveForm from './LoopSaveForm.vue'
 import LyricsView from './LyricsView.vue'
-import MicIndicator from './MicIndicator.vue'
 import MyPartControls from './MyPartControls.vue'
-import NoteNameControls from './NoteNameControls.vue'
-import PinControls from './PinControls.vue'
-import PracticeExportControls from './PracticeExportControls.vue'
-import PracticeLogPanel from './PracticeLogPanel.vue'
-import RecordingPanel from './RecordingPanel.vue'
 import ScoreAnnotations from './ScoreAnnotations.vue'
-import ScoreBar from './ScoreBar.vue'
-import ScoreInfoControls from './ScoreInfoControls.vue'
-import ScoreLockButton from './ScoreLockButton.vue'
 import ScoreMixer from './ScoreMixer.vue'
 import ScorePage from './ScorePage.vue'
 import ScorePanel from './ScorePanel.vue'
-import ScoreSpeedTrainer from './ScoreSpeedTrainer.vue'
 import { stampName } from './ScoreStamps.vue'
-import ScoreStartTone from './ScoreStartTone.vue'
 import ScoreStatus from './ScoreStatus.vue'
 import SetlistBar from './SetlistBar.vue'
 import SetlistEditor from './SetlistEditor.vue'
-import SingLane from './SingLane.vue'
-import SingPanel from './SingPanel.vue'
 import SystemBand from './SystemBand.vue'
-import TempoControls from './TempoControls.vue'
-import ToolGroup from './ToolGroup.vue'
-import ToolRow from './ToolRow.vue'
-import ToolSwitch from './ToolSwitch.vue'
-import TransposeControls from './TransposeControls.vue'
 import TunerPanel from './TunerPanel.vue'
-import ZoomControls from './ZoomControls.vue'
+import ViewerBar from './ViewerBar.vue'
+import { forward } from '../composables/forward.js'
 import { useAnnotations } from '../composables/useAnnotations.js'
 import { useAutoScroll } from '../composables/useAutoScroll.js'
 import { useBandZoom } from '../composables/useBandZoom.js'
@@ -1167,145 +598,77 @@ import { usePlayback } from '../composables/usePlayback.js'
 import { usePracticeExport } from '../composables/usePracticeExport.js'
 import { usePracticeLog } from '../composables/usePracticeLog.js'
 import { useRecorder } from '../composables/useRecorder.js'
+import { useScoreDisplay } from '../composables/useScoreDisplay.js'
 import { useScoreFacts } from '../composables/useScoreFacts.js'
 import { NO_RECTS, useScoreSession } from '../composables/useScoreSession.js'
 import { useScoreVariant } from '../composables/useScoreVariant.js'
 import { useSetlist } from '../composables/useSetlist.js'
 import { useSingScore } from '../composables/useSingScore.js'
+import { useSingView } from '../composables/useSingView.js'
 import { useSpeedTrainer } from '../composables/useSpeedTrainer.js'
 import { useStartTone } from '../composables/useStartTone.js'
 import { useTuner } from '../composables/useTuner.js'
+import { PANELS, useViewerPanels } from '../composables/useViewerPanels.js'
 import { useViewerPreferences } from '../composables/useViewerPreferences.js'
 import { useWaitMode } from '../composables/useWaitMode.js'
 import { useWakeLock } from '../composables/useWakeLock.js'
 import { useZoom } from '../composables/useZoom.js'
 import nodeText from '../directives/nodeText.js'
+import { readInitialState } from '../initialState.js'
 import { translate } from '../l10n.js'
-import { anyGroupActive, groupActive as isGroupActive, isPinned, pinLimitReached, PINNABLE, togglePin, barGroups as visibleBarGroups, barPins as visibleBarPins } from '../lib/barGroups.js'
-import { capabilitiesOf, unavailableReason } from '../lib/capabilities.js'
-import { countLabels } from '../lib/countLabels.js'
+import { capabilitiesOf } from '../lib/capabilities.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
 import { resolveKey } from '../lib/keyMap.js'
 import { loopDimRects, loopMeasureRects, loopSystemKeys } from '../lib/loopFocus.js'
-import { buildLyrics } from '../lib/lyricsLayout.js'
 import { staffPartNames } from '../lib/lyricsLayout.js'
 import { browserFileUrl } from '../lib/micAccess.js'
 import { nameOf } from '../lib/noteNames.js'
+import { noteNameSystem } from '../lib/noteNameSystem.js'
 import { spellingMap } from '../lib/noteSpellingIndex.js'
 import { channelsOfPart } from '../lib/panLayout.js'
 import { keyAt, keyByElid } from '../lib/scoreFacts.js'
 import {
 	findElementAtPoint,
-	findMeasureStartTime,
 	findNearestOccurrenceTimeMs,
 	resolveMeasurePosition,
 } from '../lib/scoreLayout.js'
 import { revealsCursor } from '../lib/scrollPlan.js'
 import { visibleSharedRecordings } from '../lib/sharedRecordings.js'
-import { laneSyllables } from '../lib/singLane.js'
-import { MIN_SPREAD_WIDTH_PX, spreadMode as spreadModeOf } from '../lib/spreadLayout.js'
-import { MODE_TONIC, MODE_VOICE } from '../lib/startTone.js'
-import { formatTime, progressPercent, seekValue } from '../lib/viewerFormat.js'
-import { createReusableTemplate } from './reusableTemplate.js'
+import { createStaffMappingReports } from '../lib/staffMappingReports.js'
+import { VIEWER_CONTEXT } from './viewerContext.js'
 
 // MuseScores eigene Vorgabe für Partituren ohne Tempoangabe (docs/architecture.md
 // M8: metadata.tempo kann 0 sein, z.B. bei repeat-test.mscz) - dient nur als
 // Bezugswert für die BPM-Anzeige/-Eingabe, gekennzeichnet über tempoGuessed.
 const DEFAULT_TEMPO_BPM = 120
 
-/**
- * Ein Anfangszustand der Seite, oder null. `loadState()` wirft bei einem
- * fehlenden Schluessel - und fehlen darf er: Das Viewer-Bundle laeuft auch
- * dort, wo niemand ihn hinterlegt hat (siehe useViewerPreferences.js).
- *
- * @param {string} key
- * @return {?object}
+// The live intonation marks of every page off the cursor: one empty list, so
+// that those pages see no changed prop while someone sings (B3).
+const NO_MARKS = Object.freeze([])
+
+/*
+ * Panels that only open online and on request load as chunks of their own
+ * (webpack's async chunks, public path from publicPath.js): most visits never
+ * open them, and in the mobile apps' page (standalone.js, one file otherwise)
+ * they were a large part of what every visit downloaded. Kept static: what
+ * the offline page (E14) can show - lyrics, notes, the tuner. Its service
+ * worker caches only what the page has loaded before, so a chunk first asked
+ * for offline would not be there.
  */
-function readInitialState(key) {
-	try {
-		return loadState('scoreview', key)
-	} catch {
-		return null
-	}
-}
-
-// The icons of the bar's tools and groups (lib/barGroups.js has the ids).
-// One map for the row in the group and the pinned button (E23), so the two
-// never show different icons for the same tool.
-const TOOL_ICONS = Object.freeze({
-	loop: Repeat,
-	metronome: Metronome,
-	tempo: Speedometer,
-	mixer: TuneVertical,
-	transpose: SwapVertical,
-	coach: Piano,
-	recording: Microphone,
-	tuner: SineWave,
-	practiceLog: ChartBar,
-	sing: MicrophoneVariant,
-	autoScroll: ChevronDoubleDown,
-	myPart: FocusFieldHorizontal,
-	noteNames: Alphabetical,
-	annotations: NotebookOutline,
-	noteText: MessageTextOutline,
-	layout: BookOpenPageVariantOutline,
-	appearance: Palette,
-	partChoice: AccountVoice,
-	rehearsal: AccountTieVoiceOutline,
-	newSetlist: PlaylistPlus,
-	print: Printer,
-	export: FileMusicOutline,
-	offline: CloudDownloadOutline,
-	info: InformationOutline,
-})
-
-// The viewer state behind the panels and switches of the bar, by tool id.
-const TOOL_STATE = Object.freeze({
-	mixer: 'showMixer',
-	recording: 'showPractice',
-	tuner: 'showTuner',
-	practiceLog: 'showPracticeLog',
-	sing: 'showSing',
-	annotations: 'showAnnotations',
-	rehearsal: 'showRehearsal',
-	partChoice: 'showMyPart',
-	metronome: 'metronomeEnabled',
-	autoScroll: 'autoScroll',
-	myPart: 'focusMyPart',
-	noteText: 'showNoteText',
-})
-
-// The view of the singing lane (E24) is a matter of the device - a stage on a
-// phone, a band on a tablet - so it stays in this browser.
-const SING_VIEW_KEY = 'scoreview.singView'
-
-/** @return {'band'|'stage'} */
-function readSingView() {
-	try {
-		return window.localStorage?.getItem(SING_VIEW_KEY) === 'stage' ? 'stage' : 'band'
-	} catch {
-		return 'band'
-	}
-}
-
-const GROUP_ICONS = Object.freeze({
-	playback: HeadphonesSettings,
-	view: EyeOutline,
-	score: BookMusicOutline,
-})
-
+const LeaderPanel = defineAsyncComponent(() => import(/* webpackChunkName: "panel-leader" */ './LeaderPanel.vue'))
+const PracticeLogPanel = defineAsyncComponent(() => import(/* webpackChunkName: "panel-practice-log" */ './PracticeLogPanel.vue'))
+const RecordingPanel = defineAsyncComponent(() => import(/* webpackChunkName: "panel-recording" */ './RecordingPanel.vue'))
+const SingLane = defineAsyncComponent(() => import(/* webpackChunkName: "panel-sing" */ './SingLane.vue'))
+const SingPanel = defineAsyncComponent(() => import(/* webpackChunkName: "panel-sing" */ './SingPanel.vue'))
 export default {
 	name: 'ScoreViewer',
 
 	directives: { nodeText },
 
 	components: {
-		AppearanceControls,
-		BookmarkOutline,
 		FollowBadge,
 		LeaderPanel,
 		LiveValue,
-		MicIndicator,
 		MyPartControls,
 		PracticeLogPanel,
 		RecordingPanel,
@@ -1315,44 +678,20 @@ export default {
 		ScorePanel,
 		ScoreMixer,
 		ScoreAnnotations,
-		ScoreBar,
-		ScoreLockButton,
-		ScoreSpeedTrainer,
-		ScoreStartTone,
 		ScoreStatus,
 		NcButton,
-		NcTextField,
 		NcNoteCard,
-		NcPopover,
 		NcCheckboxRadioSwitch,
-		Play,
-		Pause,
-		ContentSave,
-		PinControls,
 		Check,
 		Close,
 		Undo,
-		Repeat,
-		Fullscreen,
-		FullscreenExit,
 		CrosshairsGps,
 		SetlistBar,
 		SetlistEditor,
-		LayoutControls,
-		LoopSaveForm,
 		LyricsView,
-		NoteNameControls,
 		SystemBand,
-		CoachControls,
-		PracticeExportControls,
-		TempoControls,
-		TransposeControls,
-		ToolGroup,
-		ToolRow,
 		TunerPanel,
-		ZoomControls,
-		ScoreInfoControls,
-		ToolSwitch,
+		ViewerBar,
 	},
 
 	// The scrolling container for the pages' load/unload observers
@@ -1417,15 +756,26 @@ export default {
 	/**
 	 * Die Bereiche des Viewers als Composables, hier verdrahtet.
 	 *
-	 * Vue 3 legt setup()-Rueckgaben auf der Instanz aus und entpackt Refs
-	 * dabei - der Options-API-Teil weiter unten liest also `this.timeline`
-	 * und schreibt `this.showMixer = x`, waehrend die Composables dieselben
-	 * Refs direkt benutzen. Der Zustand der offenen Partitur, den fast alle
-	 * teilen, liegt in useScoreSession.js.
+	 * Vue 3 lays the setup() return out on the instance and unwraps its
+	 * refs. The composables come back as namespaces (see `shared` at the
+	 * end): the options API below reads `this.session.timeline` and writes
+	 * `this.focusMyPart = x`, while the composables use the same refs
+	 * directly. Der Zustand der offenen Partitur, den fast alle teilen,
+	 * liegt in useScoreSession.js.
 	 *
 	 * @param props
 	 */
 	setup(props) {
+		// The order of the composables below is load-bearing: each takes
+		// getters onto the ones built before it. Where two need each other,
+		// one side gets a forward() (composables/forward.js) and the
+		// partner binds it once it exists:
+		//   spreadNow       - zoom and paging -> what the picture shows (useScoreDisplay)
+		//   onLoopWrap      - loop -> speed trainer
+		//   isFollowing     - performance mode -> "Folgt mir"
+		//   noteNavigation  - measure navigation -> "Folgt mir"
+		// Until bound, each answers with its fallback; all are bound before
+		// the first render.
 		// Die gerade offene Partitur. Anfangs die aus `fileid`; eine Setliste
 		// wechselt sie IM Viewer, statt ihn neu einhaengen zu lassen - nur so
 		// bleiben Aufführungsmodus, Dunkelmodus, Zoom und der geladene
@@ -1435,10 +785,6 @@ export default {
 		const session = useScoreSession()
 		const { timeline, measuresTimeline, systemRectsByPage, currentEtag, durationMs, clock, scoreMeta } = session
 
-		// Einzeln und unter ihren eigenen Namen zurueckgegeben, nicht als
-		// verschachteltes Objekt: Vue entpackt Refs nur auf der OBERSTEN Ebene
-		// der setup()-Rueckgabe. `annotationsApi.visible` waere im Template ein
-		// Ref-Objekt statt eines Wertes.
 		// `onReady` wartet einen Tick: load() misst am Ende die Seitenbreite
 		// fuer das Zoom-Preset, die Seiten muessen dafuer schon gerendert sein.
 		const conversion = useConversionStatus({
@@ -1457,21 +803,18 @@ export default {
 		const scroll = ref(null)
 		const rootElement = () => root.value
 		const scrollElement = () => scroll.value
-		// Two pages side by side (A2): the rule needs the active layout, an
-		// options computed that does not exist yet here - it is bound in
-		// created(). The width comes from the zoom's own ResizeObserver.
+		// Two pages side by side (A2): the rule needs the active layout, which
+		// needs the capabilities of the picture - known further down. The
+		// width comes from the zoom's own ResizeObserver.
 		const pagesWidthPx = ref(0)
-		let spreadNow = () => false
-		const bindSpread = (rule) => {
-			spreadNow = rule
-		}
+		const spreadNow = forward(() => false)
 		// The system band's own zoom (D in the band design): a factor on its
 		// default size, not a page width.
-		const bandZoom = useBandZoom()
+		const bandZoom = useBandZoom({ el: () => scroll.value?.querySelector('.scoreview-band') ?? null })
 		const zoomApi = useZoom({
 			rootEl: rootElement,
 			scrollEl: scrollElement,
-			spread: () => spreadNow(),
+			spread: spreadNow.call,
 			onWidth: (px) => {
 				pagesWidthPx.value = px
 			},
@@ -1485,13 +828,18 @@ export default {
 		// The playback sounds at the reference the tuner and intonation hear
 		// against (lib/referencePitch.js).
 		watch(preferences.referencePitch, (a4) => playback.setReferencePitch(a4), { immediate: true })
-		// The meter per measure comes from the score facts, which need the
-		// MIDI and are built further down - the lookup is handed in later.
-		let meterAt = () => null
+		// Tonarten, Taktarten und Studierbuchstaben - fuer Metronom, Anfangston
+		// UND Taktnavigation aus demselben gelesenen MIDI. Before the
+		// metronome, which counts in the meter of each measure.
+		const scoreFacts = useScoreFacts({
+			midiData: () => playback.midiData.value,
+			meta: () => scoreMeta.value,
+			measuresTimeline: () => measuresTimeline.value,
+		})
 		const metronome = useMetronome({
 			measuresTimeline: () => measuresTimeline.value,
 			durationMs: () => durationMs.value,
-			meterAt: (index) => meterAt(index),
+			meterAt: (index) => scoreFacts.meters.value[index] ?? null,
 			baseTempoBpm: () => playback.baseTempoBpm.value,
 			effectiveTempoBpm: () => playback.effectiveTempoBpm.value,
 			tempoFactor: () => playback.tempo.value,
@@ -1557,7 +905,7 @@ export default {
 
 		// Der Speed-Trainer zaehlt an den Loop-Durchlaeufen, braucht aber selbst
 		// den Loop-Zustand - der Rueckruf wird deshalb nachgereicht.
-		let onLoopWrap = () => {}
+		const onLoopWrap = forward(() => {})
 		const loop = useLoop({
 			measuresTimeline: () => measuresTimeline.value,
 			durationMs: () => durationMs.value,
@@ -1565,7 +913,7 @@ export default {
 			seek: (timeMs) => clock.value?.seek(timeMs),
 			startCountIn: (targetMs) => metronome.startCountIn(targetMs, DEFAULT_TEMPO_BPM),
 			clearCountIn: metronome.clearCountIn,
-			onWrap: () => onLoopWrap(),
+			onWrap: onLoopWrap.call,
 		})
 
 		const speedTrainer = useSpeedTrainer({
@@ -1576,7 +924,7 @@ export default {
 			setTempoBpm: playback.setTempoBpm,
 			manualTempoChanges: () => playback.manualTempoChanges.value,
 		})
-		onLoopWrap = speedTrainer.onLoopWrap
+		onLoopWrap.to(speedTrainer.onLoopWrap)
 
 		// Aufführungsmodus: die Tasten laufen ueber denselben Handler wie am
 		// Viewer (onKeydown), nur zusaetzlich am document - siehe dort.
@@ -1588,27 +936,52 @@ export default {
 		// greifen auf fast jeden Bereich des Viewers zu - sie gehoeren in die
 		// Orchestrierung, nicht in ein eigenes Composable.
 		const vm = getCurrentInstance()
-		let isFollowing = () => false
+		const isFollowing = forward(() => false)
 		const performance = usePerformanceMode({
 			rootEl: rootElement,
 			onKeydown: (event) => vm?.proxy?.onKeydown(event),
 			onEnter: () => vm?.proxy?.onPerformanceEnter(),
-			following: () => isFollowing(),
+			following: isFollowing.call,
 			offline: () => props.offline,
 		})
 
-		// Der Mixer als Karte ueber dem Notenbild. `showMixer` ist der
-		// Schalter; zu sehen ist die Karte nur mit echter Wiedergabe UND
-		// aufgelösten Kanälen - ohne beides bliebe eine leere Karte über dem
-		// Notenbild stehen.
-		const showMixer = ref(false)
-		const showMixerPanel = computed(() => playback.hasRealPlayer.value && showMixer.value && playback.mixerChannels.value.length > 0)
+		// The cards over the score (useViewerPanels.js), one state for all.
+		const panels = reactive(useViewerPanels({
+			adopt: { annotations: annotations.visible, rehearsal: leaders.visible },
+			shownIf: {
+				// The mixer shows with real playback AND resolved channels -
+				// without both an empty card would stand over the score.
+				mixer: () => playback.hasRealPlayer.value && playback.mixerChannels.value.length > 0,
+				// „Meine Stimme" as a card of its own (issue #18): reachable
+				// without sound, unlike the mixer. Both set the one choice
+				// (useMyPart.js) - two places to make it, one state, so they
+				// cannot disagree.
+				partChoice: () => session.scoreParts.value.length > 0,
+			},
+		}))
 
-		// „Meine Stimme" as a card of its own (issue #18): reachable without
-		// sound, unlike the mixer. Both set the one choice (useMyPart.js) - two
-		// places to make it, one state, so they cannot disagree.
-		const showMyPart = ref(false)
-		const showMyPartPanel = computed(() => showMyPart.value && session.scoreParts.value.length > 0)
+		// The switches of the bar by tool id (lib/barGroups.js PINNABLE,
+		// kind 'switch'). Welche Stimme "meine" ist, setzt die Stimmwahl
+		// (useMyPart); `focusMyPart` only says whether the score dims the
+		// other staves - the same choice steers sound AND highlight.
+		const focusMyPart = ref(false)
+		const showNoteText = ref(false)
+		const switches = {
+			metronome: metronome.enabled,
+			autoScroll: preferences.autoScroll,
+			myPart: focusMyPart,
+			noteText: showNoteText,
+		}
+
+		/**
+		 * @param {string} id a tool of kind 'switch'
+		 * @param {boolean} on
+		 */
+		function setSwitch(id, on) {
+			if (switches[id]) {
+				switches[id].value = on
+			}
+		}
 
 		/**
 		 * Die Stimmauswahl oeffnen - wenn der Anfangston oder die Intonation
@@ -1618,7 +991,7 @@ export default {
 			if (!performance.can('settings')) {
 				return
 			}
-			showMyPart.value = true
+			panels.set('partChoice', true)
 		}
 
 		const paging = usePaging({
@@ -1626,17 +999,8 @@ export default {
 			pages: autoScroll.pages,
 			measureRects: (pageIndex) => systemRectsByPage.value[pageIndex] ?? [],
 			onManualScroll: autoScroll.noteManualScroll,
-			spread: () => spreadNow(),
+			spread: spreadNow.call,
 		})
-
-		// Tonarten und Studierbuchstaben - fuer Anfangston UND Taktnavigation
-		// aus demselben gelesenen MIDI.
-		const scoreFacts = useScoreFacts({
-			midiData: () => playback.midiData.value,
-			meta: () => scoreMeta.value,
-			measuresTimeline: () => measuresTimeline.value,
-		})
-		meterAt = (index) => scoreFacts.meters.value[index] ?? null
 
 		const startTone = useStartTone({
 			clock: () => clock.value,
@@ -1657,7 +1021,7 @@ export default {
 		// Folgen einer Leitung - „Folgt mir" entsteht aber erst weiter unten,
 		// weil es selbst die Sprungfunktionen von hier braucht; der Rueckruf
 		// wird deshalb nachgereicht, wie `isFollowing` oben.
-		let noteNavigation = () => {}
+		const noteNavigation = forward(() => {})
 		const navigation = useMeasureNavigation({
 			measuresTimeline: () => measuresTimeline.value,
 			durationMs: () => durationMs.value,
@@ -1668,7 +1032,7 @@ export default {
 			marks: () => scoreFacts.marks.value,
 			totalMeasures: () => session.totalMeasures.value,
 			can: performance.can,
-			onNavigate: (kind) => noteNavigation(kind),
+			onNavigate: noteNavigation.call,
 			forceAutoScrollFor: session.forceAutoScrollFor,
 		})
 
@@ -1689,6 +1053,7 @@ export default {
 			standalone: () => readInitialState('standalone')?.directEditing === true,
 			ready: () => !!clock.value && !!measuresTimeline.value,
 			permitted: (action) => performance.can(action),
+		}, {
 			seekToMeasure: navigation.followSeek,
 			setLoop: (from, to) => loop.setRange(from, to),
 			clearLoop: () => loop.clear(),
@@ -1723,7 +1088,7 @@ export default {
 				}
 			},
 		})
-		isFollowing = () => follow.following.value
+		isFollowing.to(() => follow.following.value)
 		// With autoscroll switched off (issue #12) an own jump still has to
 		// show where it landed - the same window a jump of the leader gets
 		// (useMeasureNavigation.followSeek). Switched on, nothing changes.
@@ -1732,12 +1097,12 @@ export default {
 				session.forceAutoScrollFor(1500)
 			}
 		}
-		noteNavigation = (kind) => {
+		noteNavigation.to((kind) => {
 			if (revealsCursor(kind)) {
 				revealJump()
 			}
 			follow.noteNavigation(kind)
-		}
+		})
 		// The leader reports start and stop at once; its watch beat only
 		// runs while playing (useFollowSession.updatePlaybackWatch).
 		watch(() => playback.isPlaying.value, () => follow.playbackChanged())
@@ -1759,6 +1124,7 @@ export default {
 			},
 			standalone: () => standalonePage,
 			originFileId: () => props.fileid,
+			can: performance.can,
 		})
 		// Eine andere Partitur von aussen (Prop): Gehoert sie nicht zur
 		// offenen Setliste, ist die Liste vorbei.
@@ -1783,7 +1149,7 @@ export default {
 			}
 			const i = setlist.entries.value.findIndex((e) => String(e.fileId) === String(target.fileId))
 			if (setlist.active.value && i >= 0) {
-				setlist.goTo(i)
+				setlist.showEntry(i)
 			} else {
 				activeFileId.value = target.fileId
 			}
@@ -1861,12 +1227,13 @@ export default {
 			active: () => playback.isPlaying.value || recorder.phase.value === 'recording',
 		})
 
-		// Ob sich die Notenzeilen ueberhaupt Stimmen zuordnen lassen -
-		// gemeldet von der ersten geladenen Seite (ScorePage.vue).
+		// Whether staves map to parts at all - "yes" once any loaded page
+		// says so (lib/staffMappingReports.js, onStaffMapping).
 		const staffMappingOk = ref(false)
-		// A new picture brings new pages; whether their staves map to parts
-		// is reported again by the first of them (onStaffMapping).
+		const staffMappingReports = createStaffMappingReports()
+		// A new picture brings new pages, and they report again.
 		watch(session.pageUrls, () => {
+			staffMappingReports.clear()
 			staffMappingOk.value = false
 		})
 		// Die Stimme, die als „meine" gilt, als Index in meta.parts - also in
@@ -1911,6 +1278,61 @@ export default {
 		// staves of the pages on screen (E19).
 		const capabilities = computed(() => capabilitiesOf({ meta: session.pictureMeta.value, svgHasSegIds: svgHasSegIds.value }))
 		const spellings = computed(() => (capabilities.value.spellings ? spellingMap(session.pictureMeta.value?.noteSpellings) : null))
+
+		// What the picture shows now: layout, spread, note names, counts.
+		const scoreDisplay = useScoreDisplay({
+			capabilities: () => capabilities.value,
+			pictureMeta: () => session.pictureMeta.value,
+			preferences,
+			meters: () => scoreFacts.meters.value,
+			myPartIndex: () => myPartIndex.value,
+			staffMappingOk: () => staffMappingOk.value,
+			pagesWidthPx: () => pagesWidthPx.value,
+		})
+		spreadNow.to(() => scoreDisplay.spreadMode.value !== 'off')
+
+		/**
+		 * The zoom of the layout on screen, behind one shape: the band has a
+		 * zoom of its own, a factor on its default size with that one preset
+		 * (useBandZoom); pages and lyrics share the page zoom (useZoom).
+		 * Keys, wheel and the controls ask this and never the layout.
+		 */
+		const activeZoom = computed(() => {
+			if (scoreDisplay.activeLayout.value === 'band') {
+				return {
+					zoom: bandZoom.zoom.value,
+					percent: bandZoom.percent.value,
+					min: bandZoom.min,
+					max: bandZoom.max,
+					presets: ['default'],
+					zoomIn: bandZoom.zoomIn,
+					zoomOut: bandZoom.zoomOut,
+					// Back to the default size, as "width" is for pages.
+					fit: bandZoom.reset,
+					preset: () => bandZoom.reset(),
+					input: bandZoom.input,
+					inputDone: bandZoom.inputDone,
+					wheel: bandZoom.wheel,
+				}
+			}
+			return {
+				zoom: zoomApi.zoom.value,
+				percent: zoomApi.percent.value,
+				min: zoomApi.min,
+				max: zoomApi.max,
+				presets: ['width', 'page', 'actual'],
+				zoomIn: () => zoomApi.by(zoomApi.step),
+				zoomOut: () => zoomApi.by(1 / zoomApi.step),
+				// Back to the page width - and following the window again,
+				// as on opening.
+				fit: () => zoomApi.applyPreset('width'),
+				preset: zoomApi.applyPreset,
+				input: zoomApi.input,
+				inputDone: zoomApi.inputDone,
+				wheel: zoomApi.wheel,
+			}
+		})
+		const display = reactive({ ...scoreDisplay, activeZoom })
 
 		// Uebe-Track als MP3 (H1/H10) - mit der Mischung, die gerade klingt.
 		const myPartName = () => session.scoreParts.value.find((p) => String(p.id) === String(myPart.myPartId.value))?.name ?? null
@@ -1973,6 +1395,9 @@ export default {
 			intonation,
 			setMineMuted: (muted) => mix.silence(muted ? myChannels() : null),
 		})
+		// My staff, where staves map to parts - for the lyrics and the stage.
+		const myStaves = computed(() => (myPartIndex.value !== null && staffMappingOk.value ? [myPartIndex.value] : null))
+
 		// Scored singing (E24): the live intonation's frames, judged per note.
 		const singScore = useSingScore({
 			fileId: () => activeFileId.value,
@@ -1990,6 +1415,15 @@ export default {
 			positionMs: () => clock.value?.getCurrentTimeMs() ?? null,
 			waitModeActive: () => waitMode.active.value,
 		})
+		// What the singing lane shows besides the judged notes.
+		const sing = reactive(useSingView({
+			pictureMeta: () => session.pictureMeta.value,
+			myStaves: () => myStaves.value,
+			timeline: () => timeline.value,
+			loop: () => ({ active: loop.active.value, from: loop.fromMeasure.value, to: loop.toMeasure.value }),
+			savedLoops: () => annotations.savedLoops.value,
+			level: () => singScore.level.value,
+		}))
 
 		// F-C2.2: no metronome, speed trainer, recording or following a leader
 		// alongside. Whatever is switched on last wins.
@@ -2054,385 +1488,204 @@ export default {
 			].join('|'),
 		})
 
-		// The tool pages, once for group and pinned popover (reusableTemplate.js).
-		const toolPage = createReusableTemplate()
+		// --- Shared with the bar ------------------------------------------
+		// The single-argument wrapper the l10n extraction looks for.
+		const t = (text, vars) => translate('scoreview', text, vars)
+		// What more than one part of the viewer needs: the keys, the lyrics
+		// view and the bar (ViewerBar.vue) start the same loop and print the
+		// same way.
+
+		/** The name of "my part" in the bar and the mixer. */
+		const myPartLabel = computed(() => {
+			if (myPart.myPartId.value === null) {
+				return t('None')
+			}
+			const part = session.scoreParts.value.find((p) => String(p.id) === String(myPart.myPartId.value))
+			return part?.name || String(myPart.myPartId.value)
+		})
+
+		/**
+		 * Ob „nur meine Zeile" ueberhaupt etwas bewirken kann. Ohne diese
+		 * Pruefung stuende dort ein Schalter, der bei einem Klavierauszug oder
+		 * einer Partitur mit ausgeblendeten leeren Zeilen wirkungslos bliebe.
+		 */
+		const canFocusMyPart = computed(() => myPartIndex.value !== null && staffMappingOk.value)
+
+		const setlistTitle = computed(() => setlist.setlist.value?.title ?? '')
+		const startKey = computed(() => scoreFacts.facts.value?.keys?.[0] ?? null)
+
+		// Focus on the loop (B4) - a session switch, it dies with the loop, so
+		// the next loop starts with the whole score in view.
+		const loopFocus = ref(false)
+		watch(loop.active, (active) => {
+			if (!active) {
+				loopFocus.value = false
+			}
+		})
+
+		/** Eigener Loop loest das Folgen. */
+		function toggleLoopByUser() {
+			if (performance.can('loop')) {
+				noteNavigation.call('loop')
+				loop.toggle()
+			}
+		}
+
+		/**
+		 * A saved loop (B5) becomes the running loop and the playback
+		 * position moves to its start - no count-in, like a range sent by
+		 * the leader.
+		 *
+		 * @param {{from: number, to: number}} saved
+		 */
+		function applySavedLoop(saved) {
+			if (!performance.can('loop')) {
+				return
+			}
+			noteNavigation.call('loop')
+			if (loop.setRange(saved.from, saved.to)) {
+				navigation.jumpToMeasure(saved.from)
+			}
+		}
+
+		/**
+		 * The print page (E16) in a new tab - the viewer in Files holds only
+		 * the pages in reach, so printing happens on a page that holds all.
+		 * Only where the bar offers it (lib/barGroups.js): with a session,
+		 * in the browser, outside performance mode.
+		 */
+		function openPrintPage() {
+			if (!performance.can('settings') || standalonePage || props.offline) {
+				return
+			}
+			// What is on screen: a part or phone pages print as such (E19).
+			const key = session.variantKey.value
+			const url = generateUrl('/apps/scoreview/print/{fileId}', { fileId: activeFileId.value })
+			window.open(key ? `${url}?variant=${encodeURIComponent(key)}` : url, '_blank', 'noopener')
+		}
+
+		function closeTuner() {
+			panels.close('tuner')
+			tuner.stop()
+		}
+
+		const popoverContainer = useFullscreenContainer().container
+
+		// The composables as namespaces, the same proxies for the bar
+		// (components/viewerContext.js) and for this component. reactive()
+		// unwraps their refs, so the template reads `playback.isPlaying` and
+		// the options API writes `this.loop.fromMeasure = n` as it would a
+		// flat ref. They hold only refs, computeds and functions; large data
+		// (timeline, MIDI, the clock) sits in shallowRefs, which reactive()
+		// hands out unwrapped and raw, not deep-proxied.
+		const shared = {
+			playback: reactive(playback),
+			loop: reactive(loop),
+			trainer: reactive(speedTrainer),
+			metronome: reactive(metronome),
+			navigation: reactive(navigation),
+			startTone: reactive(startTone),
+			performance: reactive(performance),
+			microphone: reactive(microphone),
+			prefs: reactive(preferences),
+			zoom: reactive(zoomApi),
+			myPart: reactive(myPart),
+			annotations: reactive(annotations),
+			// Not `leaders`: that is the composable's own list of them.
+			leaderRoles: reactive(leaders),
+			follow: reactive(follow),
+			session: reactive(session),
+			scoreFacts: reactive(scoreFacts),
+			conversion: reactive(conversion),
+			bar: reactive(bar),
+			practiceExport: reactive(practiceExport),
+			panels,
+			setlistNav: reactive(setlist),
+			variant,
+			display,
+			// Plain: the administration's switches do not change while open.
+			features,
+		}
+		provide(VIEWER_CONTEXT, {
+			...shared,
+			offlineStore: reactive(offlineStore),
+			view: reactive({
+				activeFileId,
+				standalonePage,
+				offline: computed(() => props.offline),
+				popoverContainer,
+				myPartInScore,
+				myPartLabel,
+				canFocusMyPart,
+				startKey,
+				sessionTranspose,
+				effectiveTranspose,
+				focusMyPart,
+				showNoteText,
+				singActive: singScore.active,
+				loopFocus,
+				setlistTitle,
+				followNavigation: noteNavigation.call,
+				toggleLoop: toggleLoopByUser,
+				applySavedLoop,
+				openPrintPage,
+				closeTuner,
+				setSwitch,
+			}),
+		})
 
 		return {
-			DefineToolPage: toolPage.Define,
-			ReuseToolPage: toolPage.Reuse,
+			...shared,
+			waitMode: reactive(waitMode),
+			practiceLog: reactive(practiceLog),
+			tuner: reactive(tuner),
+			mix: reactive(mix),
+			recorder: reactive(recorder),
+			intonation: reactive(intonation),
+			singScore: reactive(singScore),
+			bandZoom: reactive(bandZoom),
+			// Named apart from the switch `prefs.autoScroll`, which says
+			// whether it follows at all; this is the following itself.
+			autoScroller: reactive(autoScroll),
+			paging: reactive(paging),
+			sing,
+			mediaSession,
+			// The viewer's own state, derived values and actions.
 			root,
 			scroll,
-			showMixer,
-			showMixerPanel,
-			showMyPart,
-			showMyPartPanel,
+			focusMyPart,
+			showNoteText,
 			openVoiceSelection,
 			staffMappingOk,
+			staffMappingReports,
 			myPartIndex,
-			myPartInScore,
-			variant,
-			variantsSupported: conversion.variantsSupported,
 			activeFileId,
-			compactBar: bar.compact,
-			toolsOpen: bar.toolsOpen,
-			barCollapsed: bar.collapsed,
-			showBar: bar.show,
-			scheduleBarCollapse: bar.scheduleCollapse,
-			observeBarWidth: bar.observe,
-			stopBarLayout: bar.stop,
-			reportBarOverflow: bar.reportOverflow,
-			reportBarHeight: bar.reportHeight,
-			barTight: bar.tight,
-			MODE_TONIC,
-			MODE_VOICE,
 			standalonePage,
-			setlist: setlist.setlist,
-			setlistActive: setlist.active,
-			setlistEntries: setlist.entries,
-			setlistIndex: setlist.index,
-			setlistPosition: setlist.position,
-			setlistCurrent: setlist.current,
-			setlistError: setlist.error,
-			setlistOffers: setlist.offers,
-			setlistOfferDismissed: setlist.offerDismissed,
-			setlistFolderFileId: setlist.folderFileId,
-			setlistCanCreate: setlist.canCreate,
-			openSetlist: setlist.open,
-			setlistNext: setlist.next,
-			setlistPrevious: setlist.previous,
-			setlistGoTo: setlist.goTo,
-			closeSetlist: setlist.close,
-			applySavedSetlist: setlist.applySaved,
-			loadSetlistOffers: setlist.loadOffers,
-			acceptSetlistOffer: setlist.acceptOffer,
-			zoom: zoomApi.zoom,
-			bandZoom,
-			bandZoomValue: bandZoom.zoom,
-			bandZoomPercent: bandZoom.percent,
-			zoomPreset: zoomApi.preset,
-			pagesWidthPx,
-			bindSpread,
-			doublePage: preferences.doublePage,
-			zoomFollowsWidth: zoomApi.followsWidth,
-			isFullscreen: zoomApi.isFullscreen,
-			pageFullscreen: zoomApi.pageFullscreen,
-			// Rehearsal marks into the viewer while fullscreen (useFullscreenContainer.js).
-			popoverContainer: useFullscreenContainer().container,
-			fullscreenPossible: zoomApi.fullscreenPossible,
-			disposeFullscreen: zoomApi.disposeFullscreen,
-			zoomPercent: zoomApi.percent,
-			minZoom: zoomApi.min,
-			maxZoom: zoomApi.max,
-			zoomStep: zoomApi.step,
-			setZoom: zoomApi.set,
-			zoomBy: zoomApi.by,
-			onZoomInput: zoomApi.onInput,
-			onWheel: zoomApi.onWheel,
-			onPageLoaded: zoomApi.onPageLoaded,
-			applyZoomPreset: zoomApi.applyPreset,
-			toggleFullscreen: zoomApi.toggleFullscreen,
-			onFullscreenChange: zoomApi.onFullscreenChange,
-			onTouchStart: zoomApi.onTouchStart,
-			onTouchMove: zoomApi.onTouchMove,
-			onTouchEnd: zoomApi.onTouchEnd,
-			resetZoom: zoomApi.reset,
-			pageRef: autoScroll.pageRef,
-			updateAutoScroll: autoScroll.update,
-			onScrollGestureStart: autoScroll.onUserGestureStart,
-			onScrollGestureEnd: autoScroll.onUserGestureEnd,
-			noteManualScroll: autoScroll.noteManualScroll,
-			onScrollEnd: autoScroll.onScrollEnd,
-			resetAutoScroll: autoScroll.reset,
-			metronomeEnabled: metronome.enabled,
-			metronomeBeats: metronome.beats,
-			startCountIn: metronome.startCountIn,
-			clearCountIn: metronome.clearCountIn,
-			resetMetronome: metronome.reset,
-			loopFromMeasure: loop.fromMeasure,
-			loopToMeasure: loop.toMeasure,
-			loopActive: loop.active,
-			loopMarkers: loop.markers,
-			toggleLoop: loop.toggle,
-			setLoopFromMeasure: loop.setFromCurrentMeasure,
-			setLoopRange: loop.setRange,
-			savedLoops: annotations.savedLoops,
-			resetLoop: loop.reset,
-			trainerStartBpm: speedTrainer.startBpm,
-			trainerTargetBpm: speedTrainer.targetBpm,
-			trainerStepBpm: speedTrainer.stepBpm,
-			trainerActive: speedTrainer.active,
-			trainerPasses: speedTrainer.passes,
-			toggleSpeedTrainer: speedTrainer.toggle,
-			resetSpeedTrainer: speedTrainer.reset,
-			performanceMode: performance.active,
-			performanceExitProgress: performance.exitProgress,
-			can: performance.can,
-			lockDown: performance.lockDown,
-			cancelLockHold: performance.cancelHold,
-			lockKeydown: performance.lockKeydown,
-			lockKeyup: performance.lockKeyup,
-			pageBy: paging.page,
-			startToneMode: startTone.mode,
-			startToneSounding: startTone.sounding,
-			startToneName: startTone.lastToneName,
-			startToneNeedsPart: startTone.needPart,
-			startToneUnavailable: startTone.unavailableReason,
-			pressStartTone: startTone.press,
-			releaseStartTone: startTone.release,
-			startToneFor: startTone.startToneFor,
-			setStartToneMode: startTone.setMode,
-			resetStartTone: startTone.reset,
-			currentTimeMs: playback.currentTimeMs,
-			displayTimeMs: playback.displayTimeMs,
-			audioLatencyMs: playback.latencyMs,
-			audioOffsetMs: playback.manualOffsetMs,
-			automaticLatencyMs: playback.automaticLatencyMs,
-			audioDiagnostics: playback.audioDiagnostics,
-			setAudioOffsetMs: playback.setManualOffsetMs,
-			onAudioOffsetInput: playback.onManualOffsetInput,
-			isPlaying: playback.isPlaying,
-			hasRealPlayer: playback.hasRealPlayer,
-			playbackError: playback.playbackError,
-			tempo: playback.tempo,
-			baseTempoBpm: playback.baseTempoBpm,
-			tempoGuessed: playback.tempoGuessed,
-			effectiveTempoBpm: playback.effectiveTempoBpm,
-			minTempoBpm: playback.minTempoBpm,
-			maxTempoBpm: playback.maxTempoBpm,
-			mixerChannels: playback.mixerChannels,
-			presetList: playback.presetList,
-			soundFontLoading: playback.soundFontLoading,
-			soundFontLoadPercent: playback.soundFontLoadPercent,
-			skipSoundFontLoad: playback.skipSoundFontLoad,
-			togglePlay: playback.toggle,
-			onSeekInput: playback.onSeekInput,
-			onTempoBpmInput: playback.onTempoBpmInput,
-			mixState: mix.state,
-			mixSetLevel: mix.setLevel,
-			mixToggleMute: mix.toggleMute,
-			mixToggleSolo: mix.toggleSolo,
-			mixToggleFocus: mix.toggleFocus,
-			mixChangeProgram: mix.changeProgram,
-			resetPlayback: playback.reset,
-			myPartId: myPart.myPartId,
-			loadMyPart: myPart.load,
-			practice: myPart.practice,
-			setPractice: myPart.setPractice,
+			myPartLabel,
+			setlistTitle,
+			loopFocus,
+			toggleLoopByUser,
+			applySavedLoop,
+			openPrintPage,
+			closeTuner,
 			leaderMovedTo,
-			sendFollowTranspose: follow.sendTranspose,
-			mediaSession,
-			offlineStore,
 			svgHasSegIds,
-			capabilities,
 			spellings,
-			noteNames: preferences.noteNames,
-			noteNamesMine: preferences.noteNamesMine,
-			beatCounts: preferences.beatCounts,
-			scoreMeters: scoreFacts.meters,
-			layout: preferences.layout,
-			bandOffered: preferences.bandOffered,
-			autoScroll: preferences.autoScroll,
-			referencePitch: preferences.referencePitch,
-			// The stored list; `barPins` (computed) is what the bar shows.
-			storedBarPins: preferences.barPins,
-			cursorForced: session.cursorForced,
-			pagesCursorOutOfView: autoScroll.cursorOutOfView,
-			sessionTranspose,
-			effectiveTranspose,
-			startKey: computed(() => scoreFacts.facts.value?.keys?.[0] ?? null),
 			scoreFactsKeys: computed(() => scoreFacts.facts.value?.keys ?? []),
 			elidKeys: computed(() => keyByElid(timeline.value, scoreFacts.facts.value?.keys ?? [], measuresTimeline.value, durationMs.value)),
-			exportEnabled: features.practiceExport,
-			offlineEnabled: features.offline,
-			leaders: leaders.leaders,
-			isLeader: leaders.isLeader,
-			leaderError: leaders.error,
-			leaderCandidates: leaders.candidates,
-			showRehearsal: leaders.visible,
-			loadLeaders: leaders.load,
-			resetLeaders: leaders.reset,
-			followEnabled: features.followSession,
-			recordingEnabled: features.recording,
-			intonationEnabled: features.intonation,
-			maxRecordingsPerScore: features.maxRecordingsPerScore,
-			micActive: microphone.active,
-			micConsumers: microphone.consumers,
-			micError: microphone.error,
-			turnMicOff: microphone.turnOff,
-			practiceLogEnabled: features.practiceLog,
-			practiceLogSummary: practiceLog.summary,
-			practiceLogGoal: practiceLog.goal,
-			practiceLogError: practiceLog.error,
-			practiceLogSaving: practiceLog.savingGoal,
-			setPracticeGoal: practiceLog.setGoal,
-			recordings: recorder.recordings,
 			// Released by leaders (E21), filtered by part like part notes.
 			visibleSharedRecordings: computed(() => visibleSharedRecordings(recorder.sharedRecordings.value, myPart.myPartId.value, session.scoreParts.value, leaders.isLeader.value)),
-			shareRecording: recorder.share,
-			recordPhase: recorder.phase,
-			recordElapsedMs: recorder.elapsedMs,
-			sessionOnFrame: session.onFrame,
-			recordWithAccompaniment: recorder.withAccompaniment,
-			recordCountIn: recorder.countIn,
-			recordConfirmReplace: recorder.confirmReplace,
-			recordPending: recorder.pending,
-			recordListening: recorder.listening,
-			recordError: recorder.error,
-			recordingVolume: recorder.recordingVolume,
-			accompanimentVolume: recorder.accompanimentVolume,
-			loadRecordings: recorder.load,
-			startRecording: recorder.start,
-			stopRecording: recorder.stop,
-			answerRecordReplace: recorder.answerReplace,
-			retryRecordSave: recorder.retrySave,
-			discardPendingRecording: recorder.discardPending,
-			listenRecording: recorder.listen,
-			stopListeningRecording: recorder.stopListening,
-			removeRecording: recorder.remove,
-			resetRecorder: recorder.reset,
-			destroyRecorder: recorder.destroy,
-			intonationLive: intonation.live,
-			intonationNeedle: intonation.needle,
-			tunerActive: tuner.active,
-			tunerReading: tuner.reading,
-			tunerError: tuner.error,
-			toggleTuner: tuner.toggle,
-			stopTuner: tuner.stop,
-			intonationMarks: intonation.marks,
-			systemRectsByPage,
 			NO_RECTS,
-			intonationLiveMarks: intonation.liveMarks,
-			intonationAnalysis: intonation.analysis,
-			intonationAnalyzing: intonation.analyzing,
-			intonationProgress: intonation.progress,
-			intonationError: intonation.error,
-			intonationNeedPart: intonation.needPart,
-			toggleLiveIntonation: intonation.toggleLive,
-			analyzeRecording: intonation.analyze,
-			clearIntonationAnalysis: intonation.clearAnalysis,
-			resetIntonation: intonation.reset,
-			waitModeActive: waitMode.active,
-			waitModeWaiting: waitMode.waiting,
-			waitModeNeedPart: waitMode.needPart,
-			toggleWaitMode: waitMode.toggle,
-			resetWaitMode: waitMode.reset,
-			singScoreEnabled: features.singScore,
+			NO_MARKS,
+			myStaves,
 			// My notes, for the bars of the singing lane.
 			singLaneNotes: computed(() => {
 				const channels = new Set(myChannels() ?? [])
 				return (transposedNotes.value ?? []).filter((n) => channels.has(n.channel))
 			}),
 
-			singActive: singScore.active,
-			singLevel: singScore.level,
-			singRun: singScore.run,
-			singResults: singScore.results,
-			singLastRun: singScore.lastRun,
-			singHistory: singScore.history,
-			singError: singScore.error,
-			singLivePct: singScore.livePct,
-			singToggle: singScore.toggle,
-			singSetLevel: singScore.setLevel,
-			singClear: singScore.clearResults,
-			singDismiss: singScore.dismissResult,
-			singFramesForLane: singScore.framesForLane,
-			resetSing: singScore.reset,
-			destroyIntonation: intonation.destroy,
-			followActive: follow.active,
-			followMine: follow.mine,
-			followFollowing: follow.following,
-			followLeaderName: follow.leaderName,
-			followConnected: follow.connected,
-			followBusy: follow.busy,
-			followError: follow.error,
-			followNavigation: (kind) => noteNavigation(kind),
+			followNavigation: noteNavigation.call,
 			revealJump,
-			resumeFollow: follow.resume,
-			startFollow: follow.start,
-			endFollow: follow.end,
-			sendFollowPositionTo: follow.sendPosition,
-			sendFollowLoop: follow.sendLoop,
-			sendFollowTone: follow.sendTone,
-			restartFollow: follow.restart,
-			onLeaderAppoint: leaders.appoint,
-			onLeaderRevoke: leaders.revoke,
-			onLeaderSearch: leaders.search,
-			saveMyPart: myPart.set,
-			highlightColor: preferences.highlightColor,
-			highlightMode: preferences.highlightMode,
-			highlightStyle: preferences.highlightStyle,
-			stereoMyPart: preferences.stereoMyPart,
-			noteTheme: preferences.noteTheme,
-			resolvedNoteTheme: preferences.resolvedNoteTheme,
-			state: conversion.state,
-			clientProgress: conversion.clientProgress,
-			longWait: conversion.langeWartezeit,
-			errorMessage: conversion.errorMessage,
-			errorCode: conversion.errorCode,
-			errorText: conversion.errorText,
-			pollStatus: conversion.poll,
-			requestReconvert: conversion.reconvert,
-			resetConversion: conversion.reset,
-			timeline,
-			measuresTimeline,
-			currentEtag,
-			durationMs,
-			clock,
-			scoreMeta,
-			pictureMeta: session.pictureMeta,
-			pictureParts: session.pictureParts,
-			variantKey: session.variantKey,
-			pageUrls: session.pageUrls,
-			scoreParts: session.scoreParts,
-			totalMeasures: session.totalMeasures,
-			rendererBackend: session.rendererBackend,
-			mscoreVersion: session.mscoreVersion,
-			canReconvert: session.canReconvert,
-			canWriteFolder: session.canWriteFolder,
-			practiceExport,
-			midiUrl: session.midiUrl,
-			cursorRect: session.cursorRect,
-			currentElid: session.currentElid,
-			resetSession: session.reset,
-			measureInput: navigation.input,
-			marksOpen: navigation.marksOpen,
-			currentAnchor: navigation.currentAnchor,
-			jumpToMeasure: navigation.jumpToMeasure,
-			jumpToMeasureInput: navigation.jumpToInput,
-			jumpRelativeMeasure: navigation.jumpRelative,
-			jumpToMark: navigation.jumpToMark,
-			onMeasureFieldFocus: navigation.onFieldFocus,
-			onMeasureFieldBlur: navigation.onFieldBlur,
-			resetMeasureNavigation: navigation.reset,
-			cleanupSession: session.cleanup,
-			forceAutoScrollFor: session.forceAutoScrollFor,
-			annotations: annotations.annotations,
-			listedAnnotations: annotations.listed,
-			annotationError: annotations.error,
-			showAnnotations: annotations.visible,
-			annotationMarkers: annotations.markers,
-			annotationStamps: annotations.stamps,
-			annotationDrawings: annotations.drawings,
-			drawSpec: annotations.drawSpec,
-			drawStrokes: annotations.drawStrokes,
-			startDrawing: annotations.startDrawing,
-			addStroke: annotations.addStroke,
-			undoStroke: annotations.undoStroke,
-			cancelDrawing: annotations.cancelDrawing,
-			saveDrawing: annotations.saveDrawing,
-			armedStamp: annotations.armedStamp,
-			armStamp: annotations.armStamp,
-			disarmStamp: annotations.disarmStamp,
-			placeArmedStamp: annotations.placeArmedStamp,
-			rehearsalMarks: scoreFacts.marks,
-			ensureScoreMidi: scoreFacts.ensureMidi,
-			resetScoreFacts: scoreFacts.reset,
-			onAnnotationCreate: annotations.create,
-			onAnnotationUpdate: annotations.update,
-			onAnnotationDelete: annotations.remove,
-			onAnnotationJumpTo: annotations.jumpTo,
-			onAnnotationJumpToById: annotations.jumpToById,
-			resetAnnotations: annotations.reset,
 		}
 	},
 
@@ -2447,27 +1700,6 @@ export default {
 			// Fensterbreite beim Oeffnen - fuer das einmalige Angebot des
 			// Systembands auf Handybreite (D9).
 			viewerWidth: 0,
-			// Der Setlisten-Editor: 'edit' | 'new' | null (zu).
-			setlistEditorMode: null,
-			// Der Aufklapper „Aufnahme und Intonation".
-			showPractice: false,
-			showTuner: false,
-			// The practice log card (E20).
-			showPracticeLog: false,
-			// Scored singing (E24): its card, and the view of its lane.
-			showSing: false,
-			singView: readSingView(),
-			// Focus on the loop (B4) - a session switch, it dies with the loop.
-			loopFocus: false,
-			// The save form of the running loop (B5) is open.
-			loopSaving: false,
-			// Welche Stimme "meine" ist (`myPartId`, aus useMyPart in setup())
-			// wird ueber "Meine Stimme" im Mixer gesetzt (ScoreMixer.vue).
-			// Dieselbe Wahl steuert Lautstaerke UND Markierung im Notenbild;
-			// zwei getrennte Bedienelemente fuer dieselbe Aussage waeren eine
-			// Fehlerquelle.
-			focusMyPart: false,
-			showNoteText: false,
 		}
 	},
 
@@ -2475,240 +1707,43 @@ export default {
 		// Band and lyrics scroll along when the user wants it, and for an own
 		// jump or one of the leader even when not (useScoreSession.cursorForced).
 		followCursor() {
-			return this.autoScroll || this.cursorForced
-		},
-
-		/**
-		 * What the zoom controls show: the band has a zoom of its own, a
-		 * factor on its default size, with that one preset (useBandZoom).
-		 */
-		zoomView() {
-			return this.activeLayout === 'band'
-				? { zoom: this.bandZoomValue, percent: this.bandZoomPercent, min: this.bandZoom.min, max: this.bandZoom.max, presets: ['default'] }
-				: { zoom: this.zoom, percent: this.zoomPercent, min: this.minZoom, max: this.maxZoom, presets: ['width', 'page', 'actual'] }
+			return this.prefs.autoScroll || this.session.cursorForced
 		},
 
 		showBackToCursor() {
-			if (this.autoScroll || !this.cursorRect) {
+			if (this.prefs.autoScroll || !this.session.cursorRect) {
 				return false
 			}
-			return this.activeLayout === 'band' || this.activeLayout === 'lyrics'
+			return this.display.activeLayout === 'band' || this.display.activeLayout === 'lyrics'
 				? !this.layoutCursorShown
-				: this.pagesCursorOutOfView
-		},
-
-		setlistTitle() {
-			return this.setlist?.title ?? ''
+				: this.autoScroller.cursorOutOfView
 		},
 
 		setlistCanEdit() {
-			return this.setlist?.canEdit === true && !this.standalonePage && !this.offline
-		},
-
-		/** Wie das Vorgemerkte auf der Offline-Seite heisst (Material, E4). */
-		pinTitle() {
-			return this.scoreMeta?.title || this.setlistCurrent?.label || this.t('Score')
+			return this.setlistNav.setlist?.canEdit === true && !this.standalonePage && !this.offline
 		},
 
 		armedStampName() {
-			return this.armedStamp ? stampName(this.armedStamp.stamp) : ''
-		},
-
-		/**
-		 * The parts and scores to choose from (E19), labelled: names are
-		 * score content and stay as they are (E4); a generated part says so.
-		 */
-		variantSourceChoices() {
-			return this.variant.options.map((option) => ({
-				value: option.value,
-				label: option.kind === 'full'
-					? this.t('Full score')
-					: option.kind === 'stored'
-						? option.name
-						: this.t('{part} (generated)', { part: option.name }),
-			}))
+			return this.annotations.armedStamp ? stampName(this.annotations.armedStamp.stamp) : ''
 		},
 
 		partCount() {
-			return this.pictureParts.length
-		},
-
-		/**
-		 * Ob „nur meine Zeile" ueberhaupt etwas bewirken kann. Ohne diese
-		 * Pruefung stuende dort ein Schalter, der bei einem Klavierauszug oder
-		 * einer Partitur mit ausgeblendeten leeren Zeilen wirkungslos bliebe.
-		 */
-		fullscreenLabel() {
-			if (this.isFullscreen) {
-				return this.t('Exit fullscreen')
-			}
-			return this.fullscreenPossible ? this.t('Fullscreen') : this.t('Fullscreen (inside the app)')
-		},
-
-		/** The name of "my part" in the bar and the mixer. */
-		myPartLabel() {
-			if (this.myPartId === null) {
-				return this.t('None')
-			}
-			const part = this.scoreParts.find((p) => String(p.id) === String(this.myPartId))
-			return part?.name || String(this.myPartId)
-		},
-
-		canFocusMyPart() {
-			return this.myPartIndex !== null && this.staffMappingOk
+			return this.session.pictureParts.length
 		},
 
 		// --- Leiste ---------------------------------------------------------
 
-		/**
-		 * Die Gruppen der Leiste mit ihren sichtbaren Werkzeugen
-		 * (lib/barGroups.js - die einzige Stelle, die das entscheidet).
-		 */
-		barGroups() {
-			return visibleBarGroups({
-				can: this.can,
-				hasRealPlayer: this.hasRealPlayer,
-				canFocusMyPart: this.canFocusMyPart,
-				hasParts: this.scoreParts.length > 0,
-				canCoach: this.myPartInScore,
-				recordingEnabled: this.recordingEnabled,
-				intonationEnabled: this.intonationEnabled,
-				setlistCanCreate: this.setlistCanCreate,
-				isLeader: this.isLeader,
-				exportEnabled: this.exportEnabled,
-				offlineEnabled: this.offlineEnabled,
-				practiceLogEnabled: this.practiceLogEnabled,
-				singScoreEnabled: this.singScoreEnabled,
-				offline: this.offline,
-				standalone: this.standalonePage,
-			})
-		},
-
-		/** The pinned tools on the bar now (E23, lib/barGroups.js). */
-		barPins() {
-			return visibleBarPins(this.barGroups, this.storedBarPins, this.isLeader)
-		},
-
-		/** Was in den Gruppen eingeschaltet ist - fuer die Punkte. */
-		barState() {
-			return {
-				metronomeEnabled: this.metronomeEnabled,
-				loopActive: this.loopActive,
-				trainerActive: this.trainerActive,
-				showMixer: this.showMixer,
-				showPractice: this.showPractice,
-				showTuner: this.showTuner,
-				showPracticeLog: this.showPracticeLog,
-				showSing: this.showSing || this.singActive,
-				coachActive: this.practice.coach,
-				transposed: this.effectiveTranspose !== 0,
-				focusMyPart: this.focusMyPart,
-				showNoteNames: this.noteNameSystem !== null || this.countOfElid !== null,
-				showNoteText: this.showNoteText,
-				showAnnotations: this.showAnnotations,
-				showRehearsal: this.showRehearsal,
-				setlistEditorMode: this.setlistEditorMode,
-			}
-		},
-
-		/** Der Punkt am „Mehr"-Knopf der kompakten Leiste. */
-		anyToolActive() {
-			return anyGroupActive(this.barState)
-		},
-
-		/**
-		 * Der laufende Loop als Bereich fuer den Export „nur der Loop" -
-		 * Takte fuer die Anzeige, Partiturzeit fuer den Worker.
-		 *
-		 * @return {?{fromMeasure: number, toMeasure: number, fromMs: number, toMs: number}}
-		 */
-		exportLoopRange() {
-			if (!this.loopActive || !this.measuresTimeline) {
-				return null
-			}
-			const fromMs = findMeasureStartTime(this.measuresTimeline, this.loopFromMeasure)
-			const toMs = findMeasureStartTime(this.measuresTimeline, this.loopToMeasure + 1) ?? this.durationMs
-			return fromMs === null ? null : { fromMeasure: this.loopFromMeasure, toMeasure: this.loopToMeasure, fromMs, toMs }
-		},
-
-		/** Warum es keine Liedtext-Ansicht gibt - oder leer. */
-		lyricsUnavailable() {
-			const reason = unavailableReason(this.capabilities, 'lyrics', this.pictureMeta)
-			return reason === null ? '' : this.unavailableText(reason)
-		},
-
-		/** Two pages side by side now: 'off' | 'left' | 'right' (lib/spreadLayout.js). */
-		spreadMode() {
-			return spreadModeOf(this.doublePage, this.activeLayout, this.pagesWidthPx)
-		},
-
 		spreadClasses() {
 			return {
-				'scoreview-pages--spread': this.spreadMode !== 'off',
-				'scoreview-pages--first-right': this.spreadMode === 'right',
+				'scoreview-pages--spread': this.display.spreadMode !== 'off',
+				'scoreview-pages--first-right': this.display.spreadMode === 'right',
 			}
 		},
 
-		/**
-		 * Why the chosen spread does not show right now, or empty - so that
-		 * nobody looks for a switch that on a phone never acts (N3).
-		 */
-		spreadUnavailable() {
-			if (this.doublePage === 'off' || this.spreadMode !== 'off') {
-				return ''
-			}
-			if (this.activeLayout !== 'pages') {
-				return this.t('Only in the page view.')
-			}
-			return this.t('Needs a page area at least {px} px wide - this one is narrower.', { px: MIN_SPREAD_WIDTH_PX })
-		},
-
-		/** Die Darstellung, die gezeigt wird: die gewaehlte, wenn sie geht. */
-		activeLayout() {
-			if (this.layout === 'lyrics' && this.lyricsUnavailable !== '') {
-				return 'pages'
-			}
-			return this.layout
-		},
-
-		layoutShort() {
-			return { pages: '', band: this.t('Band'), lyrics: this.t('Text') }[this.layout] ?? ''
-		},
-
-		/** Die Notenzeilen der eigenen Stimme, wo sie sich zuordnen lassen. */
 		/** Part names for the rows of the all-parts lyrics (lyricsLayout.staffPartNames). */
 		lyricsPartNames() {
-			const meta = this.pictureMeta
-			return staffPartNames(this.pictureParts, [...(meta?.noteSpellings ?? []), ...(meta?.lyricSyllables ?? [])])
-		},
-
-		/** The lyrics of my part, for the singing stage. */
-		singLyricsBlocks() {
-			const syllables = this.pictureMeta?.lyricSyllables
-			if (!syllables || syllables.length === 0) {
-				return []
-			}
-			return buildLyrics({ syllables, staves: this.myStaves }).blocks
-		},
-
-		/** What the run covers: the whole piece, or the loop by name or measures. */
-		singUnitLabel() {
-			if (!this.loopActive) {
-				return this.t('Whole piece')
-			}
-			const from = Number(this.loopFromMeasure)
-			const to = Number(this.loopToMeasure)
-			const named = this.savedLoops.find((l) => l.from === from && l.to === to && l.name)
-			const range = from === to ? this.t('Measure {measure}', { measure: from }) : this.t('Measures {from}–{to}', { from, to })
-			return named ? `${named.name} (${range})` : range
-		},
-
-		singLevelLabel() {
-			return { easy: this.t('Beginner'), choir: this.t('Choir'), strict: this.t('Strict') }[this.singLevel] ?? ''
-		},
-
-		myStaves() {
-			return this.myPartIndex !== null && this.staffMappingOk ? [this.myPartIndex] : null
+			const meta = this.session.pictureMeta
+			return staffPartNames(this.session.pictureParts, [...(meta?.noteSpellings ?? []), ...(meta?.lyricSyllables ?? [])])
 		},
 
 		/**
@@ -2718,55 +1753,37 @@ export default {
 		 * nur einen Teil eines Systems (issue #15).
 		 */
 		offerBand() {
-			return !this.bandOffered && this.layout === 'pages' && ((this.viewerWidth > 0 && this.viewerWidth < 600) || this.barTight)
+			return !this.prefs.bandOffered && this.prefs.layout === 'pages' && ((this.viewerWidth > 0 && this.viewerWidth < 600) || this.bar.tight)
 		},
 
 		/**
-		 * Was jede ScorePage im Systemband bekommt - dieselben Props wie auf
-		 * Seiten, ausser denen, die sich mit jeder Note aendern: Cursor, Note
-		 * und Nadel reicht SystemBand nur an das System mit dem Cursor.
+		 * The props every ScorePage gets, in the band and in the page list -
+		 * one list, so the two cannot drift apart. Not in it: what changes
+		 * with every note (cursor, note, needle, live marks - the band passes
+		 * them only to the system with the cursor) and drawing, which only
+		 * the page list offers.
 		 */
-		bandPageProps() {
+		sharedPageProps() {
 			return {
-				markers: this.annotationMarkers,
-				stamps: this.annotationStamps,
-				drawings: this.annotationDrawings,
-				loopMarkers: this.loopMarkers,
+				markers: this.annotations.markers,
+				stamps: this.annotations.stamps,
+				drawings: this.annotations.drawings,
+				loopMarkers: this.loop.markers,
 				myPartIndex: this.myPartIndex,
 				focusMyPart: this.focusMyPart,
 				partCount: this.partCount,
 				showNoteText: this.showNoteText,
-				highlightMode: this.highlightMode,
-				noteTheme: this.resolvedNoteTheme,
-				svgVars: this.highlightStyle,
-				noteMarks: this.intonationMarks,
-				liveNoteMarks: this.intonationLiveMarks,
+				highlightMode: this.prefs.highlightMode,
+				noteTheme: this.prefs.resolvedNoteTheme,
+				svgVars: this.prefs.highlightStyle,
+				noteMarks: this.intonation.marks,
 				spellings: this.spellings,
-				noteNameSystem: this.noteNameSystem,
-				noteNameStaves: this.noteNameStaves,
+				noteNameSystem: this.display.noteNameSystem,
+				noteNameStaves: this.display.noteNameStaves,
 				keyOfElid: this.keyOfElid,
-				countOfElid: this.countOfElid,
-				countStaves: this.countStaves,
+				countOfElid: this.display.countOfElid,
+				countStaves: this.display.countStaves,
 			}
-		},
-
-		/** Warum es keine Tonnamen gibt - oder leer. */
-		noteNamesUnavailable() {
-			const reason = unavailableReason(this.capabilities, 'noteNames', this.pictureMeta)
-			return reason === null ? '' : this.unavailableText(reason)
-		},
-
-		/** Das System, das die Seiten zeichnen, oder null (aus/nicht moeglich). */
-		noteNameSystem() {
-			return this.noteNames !== 'off' && this.noteNamesUnavailable === '' ? this.noteNames : null
-		},
-
-		/** Nur die Zeile der eigenen Stimme - wo sich Zeilen Stimmen zuordnen lassen. */
-		noteNameStaves() {
-			if (!this.noteNamesMine || this.myPartIndex === null || !this.staffMappingOk) {
-				return null
-			}
-			return [this.myPartIndex]
 		},
 
 		/**
@@ -2774,90 +1791,28 @@ export default {
 		 * - with those switched off - as the interface language would.
 		 */
 		tunerNameSystem() {
-			if (this.noteNames !== 'off') {
-				return this.noteNames
-			}
-			return getLanguage().toLowerCase().startsWith('de') ? 'de' : 'en'
+			return noteNameSystem(this.prefs.noteNames, getLanguage())
 		},
 
 		/** The key at the current position - it decides between F♯ and G♭. */
 		tunerKey() {
-			return keyAt(this.scoreFactsKeys, this.currentAnchor?.measureNumber ?? 1)?.concertKey ?? 0
-		},
-
-		/** Kurzform des Systems fuer die Gruppenzeile. */
-		noteNameShort() {
-			return { de: 'C D H', en: 'C D B', 'solfa-fixed': 'do', 'solfa-movable': 'do' }[this.noteNames] ?? ''
-		},
-
-		/** Names and counts side by side in the group row, whichever is on. */
-		noteNameRowValue() {
-			return [
-				this.noteNames !== 'off' ? this.noteNameShort : '',
-				this.countOfElid !== null ? '1 + 2' : '',
-			].filter(Boolean).join(' · ')
-		},
-
-		/** Why there are no beat numbers - or empty. */
-		countsUnavailable() {
-			const reason = unavailableReason(this.capabilities, 'counts', this.pictureMeta)
-			return reason === null ? '' : this.unavailableText(reason)
-		},
-
-		/**
-		 * The count of every chord (lib/countLabels.js), built once per
-		 * score and setting, or null while the numbers are off.
-		 */
-		countOfElid() {
-			if (this.beatCounts === 'off' || this.countsUnavailable !== '') {
-				return null
-			}
-			return countLabels({ meters: this.scoreMeters, spellings: this.pictureMeta?.noteSpellings })
-		},
-
-		/** Only my staff - where staves map to parts, as for the note names. */
-		countStaves() {
-			if (this.beatCounts !== 'mine' || this.myPartIndex === null || !this.staffMappingOk) {
-				return null
-			}
-			return [this.myPartIndex]
-		},
-
-		/** Die Transposition als Wert in der Gruppenzeile, wenn sie gilt. */
-		transposeLabel() {
-			const n = this.effectiveTranspose
-			return n === 0 ? '' : (n > 0 ? `+${n}` : `−${-n}`)
-		},
-
-		/** Der Loop-Bereich als Wert in der Gruppenzeile, wenn er laeuft. */
-		loopLabel() {
-			return this.loopActive ? `${this.loopFromMeasure}–${this.loopToMeasure}` : ''
+			return keyAt(this.scoreFactsKeys, this.navigation.currentAnchor?.measureNumber ?? 1)?.concertKey ?? 0
 		},
 
 		/** The looped measures' rectangles while the focus is on (lib/loopFocus.js). */
 		loopMeasureRects() {
-			if (!this.loopFocus || !this.loopActive || !this.measuresTimeline) {
+			if (!this.loopFocus || !this.loop.active || !this.session.measuresTimeline) {
 				return null
 			}
-			return loopMeasureRects(this.measuresTimeline.elements, this.loopFromMeasure, this.loopToMeasure)
+			return loopMeasureRects(this.session.measuresTimeline.elements, this.loop.fromMeasure, this.loop.toMeasure)
 		},
 
 		loopDimRectsByPage() {
-			return this.loopMeasureRects ? loopDimRects(this.measuresTimeline.elements, this.loopFromMeasure, this.loopToMeasure) : []
+			return this.loopMeasureRects ? loopDimRects(this.session.measuresTimeline.elements, this.loop.fromMeasure, this.loop.toMeasure) : []
 		},
 
 		loopFocusKeys() {
 			return this.loopMeasureRects ? loopSystemKeys(this.loopMeasureRects) : null
-		},
-
-		/** Das Tempo in der Gruppenzeile; „*" heisst geschaetzt (M8). */
-		tempoLabel() {
-			return `♩ ${this.effectiveTempoBpm}${this.tempoGuessed ? '*' : ''}`
-		},
-
-		/** Fuer die eingefahrene Leiste, die nur noch die Position zeigt. */
-		playbackPercent() {
-			return progressPercent(this.displayTimeMs, this.durationMs)
 		},
 
 		/** „Im Browser oeffnen" (E8): Nextclouds Kurzlink auf diese Datei. */
@@ -2869,19 +1824,10 @@ export default {
 	watch: {
 		// The presets fit one page or the pair: when the spread comes or goes,
 		// a chosen fit is fitted again (a zoom of one's own stays as it is).
-		spreadMode() {
-			const preset = this.zoomPreset
+		'display.spreadMode': function() {
+			const preset = this.zoom.preset
 			if (preset === 'width' || preset === 'page') {
-				this.$nextTick(() => this.applyZoomPreset(preset))
-			}
-		},
-
-		// The focus is a property of the running loop: off with it, so the
-		// next loop starts with the whole score in view.
-		loopActive(active) {
-			if (!active) {
-				this.loopFocus = false
-				this.loopSaving = false
+				this.$nextTick(() => this.zoom.applyPreset(preset))
 			}
 		},
 
@@ -2895,7 +1841,7 @@ export default {
 		 *
 		 * @param {string} neu Der neue Zustand aus useConversionStatus
 		 */
-		state(neu) {
+		'conversion.state': function(neu) {
 			if (this.readyGemeldet || (neu !== 'ready' && neu !== 'error')) {
 				return
 			}
@@ -2910,17 +1856,17 @@ export default {
 				// Melden.
 				this.readyGemeldet = false
 				this.reset()
-				this.pollStatus()
-				this.loadMyPart()
-				this.resetLeaders()
-				this.loadLeaders()
-				this.restartFollow()
-				this.loadSetlistOffers()
-				this.loadRecordings()
+				this.conversion.poll()
+				this.myPart.load()
+				this.leaderRoles.reset()
+				this.leaderRoles.load()
+				this.follow.restart()
+				this.setlistNav.loadOffers()
+				this.recorder.load()
 			},
 		},
 
-		setlistCurrent() {
+		'setlistNav.current': function() {
 			this.announcePiece()
 		},
 
@@ -2929,67 +1875,63 @@ export default {
 		// (bei angehaltener Wiedergabe: für immer). Bewusst mit force: ein
 		// Zoomwechsel ist eine ausdrückliche Handlung, keine Störung des
 		// Lesens wie ein manueller Scroll.
-		zoom() {
-			this.$nextTick(() => this.updateAutoScroll(this.cursorRect, true))
+		'zoom.zoom': function() {
+			this.$nextTick(() => this.autoScroller.update(this.session.cursorRect, true))
 		},
 
 		// Switched back on: straight to the playing position, not only at the
 		// next note - when paused there is none.
-		autoScroll(on) {
+		'prefs.autoScroll': function(on) {
 			if (on) {
 				this.$nextTick(() => this.revealCursor())
 			}
 		},
 
-		activeLayout() {
+		'display.activeLayout': function() {
 			this.layoutCursorShown = true
 		},
-	},
-
-	created() {
-		this.bindSpread(() => this.spreadMode !== 'off')
 	},
 
 	mounted() {
 		// Der Scroll-Listener sitzt im Template (@scroll.passive an
 		// .scoreview-scroll): das scrollende Element ist ein Kind, das erst im
 		// Zustand "ready" existiert, this.$el scrollt selbst nicht.
-		document.addEventListener('fullscreenchange', this.onFullscreenChange)
+		document.addEventListener('fullscreenchange', this.zoom.onFullscreenChange)
 		// Tastaturkürzel NICHT passiv: Leertaste/Pfeiltasten sollen die Seite
 		// nicht zusätzlich scrollen (siehe onKeydown - preventDefault nur für
 		// die tatsächlich behandelten Tasten, alles andere bleibt unangetastet,
 		// insbesondere Nextclouds eigene Kürzel).
 		this.$el.addEventListener('keydown', this.onKeydown)
-		this.observeBarWidth()
+		this.bar.observe()
 		this.viewerWidth = window.innerWidth
 		this.mediaSession.setHandlers({
-			play: () => !this.isPlaying && this.can('play') && this.togglePlay(),
-			pause: () => this.isPlaying && this.can('play') && this.togglePlay(),
-			previous: () => this.can('seek') && this.jumpRelativeMeasure(-1),
-			next: () => this.can('seek') && this.jumpRelativeMeasure(1),
+			play: () => !this.playback.isPlaying && this.performance.can('play') && this.playback.toggle(),
+			pause: () => this.playback.isPlaying && this.performance.can('play') && this.playback.toggle(),
+			previous: () => this.performance.can('seek') && this.navigation.jumpRelative(-1),
+			next: () => this.performance.can('seek') && this.navigation.jumpRelative(1),
 		})
 		if (this.setlistId !== null) {
 			// Weg 1: Der Einstieg hat das erste spielbare Stueck schon
 			// als `fileid` gesetzt - die Liste setzt dort an.
-			this.openSetlist(this.setlistId, { at: this.fileid, data: this.setlistData })
+			this.setlistNav.open(this.setlistId, { at: this.fileid, data: this.setlistData })
 		}
 	},
 
 	beforeUnmount() {
-		// Dieselbe Reihenfolge wie in reset(): Aufnahme und Intonation vor dem
-		// Abbau der Wiedergabe, solange deren Kontext noch lebt.
-		this.destroyRecorder()
-		this.resetWaitMode()
-		this.resetSing()
-		this.destroyIntonation()
+		// Dieselbe Reihenfolge wie in reset() - why it matters is written
+		// there. Below the session, only listeners and handles are left.
+		this.recorder.destroy()
+		this.waitMode.reset()
+		this.singScore.reset()
+		this.intonation.destroy()
 		this.practiceExport.cancel()
 		this.bandZoom.stop()
-		this.cleanupSession()
-		this.turnMicOff()
-		document.removeEventListener('fullscreenchange', this.onFullscreenChange)
-		this.disposeFullscreen()
+		this.session.cleanup()
+		this.microphone.turnOff()
+		document.removeEventListener('fullscreenchange', this.zoom.onFullscreenChange)
+		this.zoom.disposeFullscreen()
 		this.$el.removeEventListener('keydown', this.onKeydown)
-		this.stopBarLayout()
+		this.bar.stop()
 		this.mediaSession.dispose()
 	},
 
@@ -3002,16 +1944,17 @@ export default {
 		 */
 		readLive() {
 			return {
-				cursorRect: this.cursorRect,
-				cursorElid: this.currentElid,
-				needle: this.intonationNeedle,
-				liveNoteMarks: this.intonationLiveMarks,
+				cursorRect: this.session.cursorRect,
+				cursorElid: this.session.currentElid,
+				needle: this.intonation.needle,
+				liveNoteMarks: this.intonation.liveMarks,
 			}
 		},
 
 		/**
 		 * A value that only the page under the cursor needs (cursor, sounding
-		 * elid, live needle) - every other page gets null. Vue re-renders a
+		 * elid, live needle and live intonation marks) - every other page
+		 * gets null. Vue re-renders a
 		 * child whenever one of its props changes, so handing the cursor to
 		 * all pages re-rendered every mounted page on every note step; this
 		 * way only the page the cursor enters or leaves updates.
@@ -3022,215 +1965,11 @@ export default {
 		 *   one LiveValue read (see readLive())
 		 * @return {?(object|number)}
 		 */
-		onCursorPage(pageIndex, value, cursorRect = this.cursorRect) {
+		onCursorPage(pageIndex, value, cursorRect = this.session.cursorRect) {
 			return cursorRect?.page === pageIndex ? value : null
 		},
 
-		/**
-		 * Eigene Transposition. Gilt gerade die der Leitung, loest das das
-		 * Folgen (V7) - sonst ueberschriebe der naechste Stand der Leitung die
-		 * eigene Wahl ungefragt.
-		 *
-		 * @param {number} semitones
-		 */
-		onTransposeInput(semitones) {
-			if (this.sessionTranspose !== null) {
-				this.sessionTranspose = null
-				this.followNavigation('transpose')
-			}
-			this.setPractice({ transpose: semitones })
-			// Die Leitung transponiert fuer alle (H6, F6.3).
-			if (this.followMine) {
-				this.sendFollowTranspose(semitones)
-			}
-		},
-
-		// --- Leiste ---------------------------------------------------------
-
-		/**
-		 * @param {{items: string[]}} group
-		 * @param {string} id
-		 * @return {boolean} ob das Werkzeug in dieser Gruppe sichtbar ist
-		 */
 		// --- Werkzeuge der Leiste (E23) ----------------------------------
-
-		/**
-		 * @param {string} id a group of lib/barGroups.js
-		 * @return {string}
-		 */
-		groupLabel(id) {
-			return {
-				playback: this.t('Playback and practice'),
-				view: this.t('View'),
-				score: this.t('Score'),
-			}[id]
-		},
-
-		groupIcon(id) {
-			return GROUP_ICONS[id]
-		},
-
-		/**
-		 * @param {string} id a tool of lib/barGroups.js
-		 * @return {string} 'panel' | 'switch' | 'page' | 'action'
-		 */
-		toolKind(id) {
-			return PINNABLE[id]
-		},
-
-		toolIcon(id) {
-			return TOOL_ICONS[id]
-		},
-
-		/**
-		 * The name of a tool - the same in its group and on its pinned button.
-		 *
-		 * @param {string} id
-		 * @return {string}
-		 */
-		toolLabel(id) {
-			switch (id) {
-				case 'loop': return this.t('Loop')
-				case 'metronome': return this.t('Metronome')
-				case 'tempo': return this.t('Tempo')
-				case 'mixer': return this.t('Mixer')
-				case 'transpose': return this.t('Transpose')
-				case 'coach': return this.t('Coach')
-				case 'recording': return this.t('Recording and intonation')
-				case 'tuner': return this.t('Tuner')
-				case 'practiceLog': return this.t('Practice log')
-				case 'sing': return this.t('Scored singing')
-				case 'autoScroll': return this.t('Scroll along with playback')
-				case 'myPart': return this.t('Show only my part')
-				case 'noteNames': return this.t('Note names and counting')
-				case 'annotations': return this.t('Notes')
-				case 'noteText': return this.t('Show notes in the score')
-				case 'layout': return this.t('Pages and edition')
-				case 'appearance': return this.t('Colours')
-				case 'partChoice': return this.t('My part')
-				case 'rehearsal': return this.t('Leaders and “Follow me”')
-				case 'newSetlist': return this.t('New setlist')
-				case 'print': return this.t('Print')
-				case 'export': return this.t('Save as audio file')
-				case 'offline': return this.t('Save for offline use')
-				case 'info': return this.t('Info and diagnostics')
-				default: return id
-			}
-		},
-
-		/**
-		 * The current value at the end of a row (ToolRow.vue): "♩ 80", "12–16".
-		 *
-		 * @param {string} id
-		 * @return {string}
-		 */
-		toolValue(id) {
-			switch (id) {
-				case 'loop': return this.loopLabel
-				case 'tempo': return this.tempoLabel
-				case 'transpose': return this.transposeLabel
-				case 'coach': return this.practice.coach ? this.t('On') : ''
-				case 'noteNames': return this.noteNameRowValue
-				case 'layout': return this.layoutShort
-				case 'partChoice': return this.myPartLabel
-				case 'export': return this.practiceExport.running.value ? '…' : ''
-				default: return ''
-			}
-		},
-
-		/**
-		 * Whether a tool is on: an open panel, a switch, and for the pinned
-		 * button of a page tool whether it is doing something (a running
-		 * loop, a transposition) - the same things the group's dot counts.
-		 *
-		 * @param {string} id
-		 * @return {boolean}
-		 */
-		toolOn(id) {
-			if (id in TOOL_STATE) {
-				return Boolean(this[TOOL_STATE[id]])
-			}
-			switch (id) {
-				case 'newSetlist': return this.setlistEditorMode === 'new'
-				case 'loop': return this.loopActive
-				case 'transpose': return this.effectiveTranspose !== 0
-				case 'coach': return this.practice.coach
-				case 'noteNames': return this.barState.showNoteNames
-				default: return false
-			}
-		},
-
-		/**
-		 * @param {string} id a tool of kind 'switch'
-		 * @param {boolean} on
-		 */
-		setSwitch(id, on) {
-			if (PINNABLE[id] === 'switch') {
-				this[TOOL_STATE[id]] = on
-			}
-		},
-
-		/**
-		 * A tap on a tool, in its group or pinned. In a group, a page opens
-		 * there and a panel or action closes the group - the card it opens
-		 * is what someone wants to see next. Pinned buttons have no group.
-		 *
-		 * @param {string} id
-		 * @param {{openPage: (id: string, title: string) => void, close: () => void}} [group]
-		 */
-		onToolTap(id, group) {
-			const kind = PINNABLE[id]
-			if (kind === 'page') {
-				group?.openPage(id, this.toolLabel(id))
-				return
-			}
-			if (kind === 'switch') {
-				this.setSwitch(id, !this.toolOn(id))
-				return
-			}
-			if (id === 'tuner' && this.showTuner) {
-				// Closing the tuner also lets go of the microphone.
-				this.closeTuner()
-			} else if (id === 'newSetlist') {
-				this.openSetlistEditor('new')
-			} else if (id === 'print') {
-				this.openPrintPage()
-			} else if (id in TOOL_STATE) {
-				this[TOOL_STATE[id]] = !this[TOOL_STATE[id]]
-			}
-			group?.close()
-		},
-
-		/**
-		 * The pin of a row (ToolPin.vue). Not on the offline page: nothing
-		 * can be stored there, and a pin that forgets itself on the next
-		 * visit is worse than none.
-		 *
-		 * @param {string} id
-		 * @return {{pinnable: boolean, pinned?: boolean, pinDisabled?: boolean}}
-		 */
-		pinProps(id) {
-			if (this.offline || !(id in PINNABLE)) {
-				return { pinnable: false }
-			}
-			return {
-				pinnable: true,
-				pinned: isPinned(this.storedBarPins, id, this.isLeader),
-				pinDisabled: pinLimitReached(this.storedBarPins, this.isLeader),
-			}
-		},
-
-		flipPin(id) {
-			this.storedBarPins = togglePin(this.storedBarPins, id, this.isLeader)
-		},
-
-		/**
-		 * @param {string} id
-		 * @return {boolean} der Punkt am Gruppenknopf
-		 */
-		groupActive(id) {
-			return isGroupActive(id, this.barState)
-		},
 
 		// Einzelargument-Wrapper um @nextcloud/l10n translate() (siehe
 		// tools/l10n.mjs zur Extraktion) - hier statt auf Modulebene definiert,
@@ -3241,27 +1980,27 @@ export default {
 		},
 
 		/**
-		 * Die Wahl aus dem Mixer uebernehmen. Wird sie zurueckgenommen, geht
-		 * auch „nur meine Zeile" aus - sonst bliebe ein Notenbild zurueck, in
-		 * dem alle Zeilen gedaempft sind und keine hervorgehoben.
-		 *
-		 * @param {?string} partId Stimme aus meta.parts, null = keine
-		 */
-		/**
 		 * The voice symbol in the mixer - a part to remember, or a row
 		 * without a part that only the mix knows (useMix.toggleFocus).
 		 *
 		 * @param {{key: string, partId: ?string, channels: number[]}} group
 		 */
 		onMixerFocus(group) {
-			const partId = this.mixToggleFocus(group)
+			const partId = this.mix.toggleFocus(group)
 			if (partId !== undefined) {
 				this.onMyPartChanged(partId)
 			}
 		},
 
+		/**
+		 * Die Wahl aus dem Mixer uebernehmen. Wird sie zurueckgenommen, geht
+		 * auch „nur meine Zeile" aus - sonst bliebe ein Notenbild zurueck, in
+		 * dem alle Zeilen gedaempft sind und keine hervorgehoben.
+		 *
+		 * @param {?string} partId Stimme aus meta.parts, null = keine
+		 */
 		onMyPartChanged(partId) {
-			this.saveMyPart(partId)
+			this.myPart.set(partId)
 			if (partId === null) {
 				this.focusMyPart = false
 			}
@@ -3272,59 +2011,16 @@ export default {
 		 * gesperrt ist - ein offener Mixer bliebe sonst bedienbar stehen.
 		 */
 		onPerformanceEnter() {
-			this.showMixer = false
-			this.showMyPart = false
-			this.showAnnotations = false
-			this.disarmStamp()
-			this.cancelDrawing()
-			this.showRehearsal = false
-			this.showPractice = false
-			this.showPracticeLog = false
-			this.showSing = false
-			this.setlistEditorMode = null
-			this.toolsOpen = false
-			this.releaseStartTone()
+			// The tuner stays: it changes nothing in the score or the sound.
+			this.panels.closeAll(PANELS.filter((id) => id !== 'tuner'))
+			this.annotations.disarmStamp()
+			this.annotations.cancelDrawing()
+			this.setlistNav.closeEditor()
+			this.bar.toolsOpen = false
+			this.startTone.release()
 		},
 
 		// --- Setliste -----------------------------------------------------
-
-		/** Blaettern in der Setliste - auch im Aufführungsmodus (Policy `nextPiece`). */
-		onSetlistNext() {
-			if (this.can('nextPiece')) {
-				this.setlistNext()
-			}
-		},
-
-		onSetlistPrevious() {
-			if (this.can('nextPiece')) {
-				this.setlistPrevious()
-			}
-		},
-
-		onSetlistGoTo(i) {
-			if (this.can('nextPiece')) {
-				this.setlistGoTo(i)
-			}
-		},
-
-		/** @param {'edit'|'new'} mode */
-		openSetlistEditor(mode) {
-			if (!this.can('settings')) {
-				return
-			}
-			this.setlistEditorMode = this.setlistEditorMode === mode ? null : mode
-		},
-
-		/**
-		 * Gespeichert oder angelegt: Die Liste gilt ab jetzt, auch eine neue -
-		 * wer eine Setliste anlegt, will sie gleich benutzen.
-		 *
-		 * @param {object} data Antwort von PUT/POST /api/setlists
-		 */
-		onSetlistSaved(data) {
-			this.setlistEditorMode = null
-			this.applySavedSetlist(data)
-		},
 
 		/**
 		 * Meldet dem Einstieg, welches Stueck gerade offen ist - ScoreModal
@@ -3332,7 +2028,7 @@ export default {
 		 * Dateinamen, den der Einstieg selbst kennt.
 		 */
 		announcePiece() {
-			const entry = this.setlistCurrent
+			const entry = this.setlistNav.current
 			this.$emit('pieceChange', entry ? { label: entry.label, setlistTitle: this.setlistTitle } : null)
 		},
 
@@ -3343,29 +2039,29 @@ export default {
 		 * das MIDI bis hierher niemand geladen.
 		 */
 		async ensureIntonationMidi() {
-			await this.ensureScoreMidi(this.midiUrl, true)
+			await this.scoreFacts.ensureMidi(this.session.midiUrl, true)
 		},
 
 		async onToggleLiveIntonation() {
 			await this.ensureIntonationMidi()
-			await this.toggleLiveIntonation()
-			if (this.intonationNeedPart) {
+			await this.intonation.toggleLive()
+			if (this.intonation.needPart) {
 				this.openVoiceSelection()
 			}
 		},
 
 		async onToggleWaitMode() {
 			await this.ensureIntonationMidi()
-			await this.toggleWaitMode()
-			if (this.waitModeNeedPart) {
+			await this.waitMode.toggle()
+			if (this.waitMode.needPart) {
 				this.openVoiceSelection()
 			}
 		},
 
 		async onAnalyzeRecording(recording) {
 			await this.ensureIntonationMidi()
-			await this.analyzeRecording(recording === 'pending' ? { id: 'pending', ...this.recordPending.meta } : recording)
-			if (this.intonationNeedPart) {
+			await this.intonation.analyze(recording === 'pending' ? { id: 'pending', ...this.recorder.pending.meta } : recording)
+			if (this.intonation.needPart) {
 				this.openVoiceSelection()
 			}
 		},
@@ -3378,24 +2074,14 @@ export default {
 		 */
 		onListenRecording(recording) {
 			this.followNavigation('seek')
-			this.listenRecording(recording)
+			this.recorder.listen(recording)
 		},
 
 		async onSingToggle() {
 			await this.ensureIntonationMidi()
-			await this.singToggle()
-			if (this.intonationNeedPart) {
+			await this.singScore.toggle()
+			if (this.intonation.needPart) {
 				this.openVoiceSelection()
-			}
-		},
-
-		/** @param {string} view 'band' or 'stage' */
-		onSingView(view) {
-			this.singView = view === 'stage' ? 'stage' : 'band'
-			try {
-				window.localStorage?.setItem(SING_VIEW_KEY, this.singView)
-			} catch {
-				// Private mode: the choice lasts as long as the page.
 			}
 		},
 
@@ -3409,42 +2095,14 @@ export default {
 		},
 
 		/**
-		 * The syllables of my part in a stretch of the score, for the stage.
-		 *
-		 * @param {number} fromMs
-		 * @param {number} toMs
-		 * @return {Array<{scoreMs:number, text:string}>}
-		 */
-		singSyllablesFor(fromMs, toMs) {
-			const events = this.timeline?.events
-			if (!events || this.singLyricsBlocks.length === 0) {
-				return []
-			}
-			return laneSyllables({ blocks: this.singLyricsBlocks, events, times: this.timeline.times, fromMs, toMs })
-		},
-
-		/**
 		 * Aus der Problemliste an die Stelle springen.
 		 *
 		 * @param {number} onMs Partiturzeit der Note
 		 */
 		onPracticeJump(onMs) {
-			if (this.can('seek') && this.clock) {
+			if (this.performance.can('seek') && this.session.clock) {
 				this.followNavigation('seek')
-				this.clock.seek(onMs)
-			}
-		},
-
-		onPlayClick() {
-			if (this.can('play')) {
-				this.togglePlay()
-			}
-		},
-
-		onSeekBarInput(event) {
-			if (this.can('seek')) {
-				this.followNavigation('seek')
-				this.onSeekInput(event)
+				this.session.clock.seek(onMs)
 			}
 		},
 
@@ -3456,11 +2114,11 @@ export default {
 		 * @param {{stamp:string, visibility:string, targetParts:?Array}} spec
 		 */
 		onArmStamp(spec) {
-			if (!this.can('annotate')) {
+			if (!this.performance.can('annotate')) {
 				return
 			}
-			this.armStamp(spec)
-			this.showAnnotations = false
+			this.annotations.armStamp(spec)
+			this.panels.close('annotations')
 		},
 
 		/**
@@ -3472,14 +2130,14 @@ export default {
 		 * @param {{visibility:string, targetParts:?Array}} spec
 		 */
 		onStartDrawing(spec) {
-			if (!this.can('annotate')) {
+			if (!this.performance.can('annotate')) {
 				return
 			}
-			if (this.activeLayout !== 'pages') {
-				this.layout = 'pages'
+			if (this.display.activeLayout !== 'pages') {
+				this.prefs.layout = 'pages'
 			}
-			this.startDrawing(spec)
-			this.showAnnotations = false
+			this.annotations.startDrawing(spec)
+			this.panels.close('annotations')
 		},
 
 		/**
@@ -3489,9 +2147,9 @@ export default {
 		 * @param {number} id
 		 */
 		onMarkerClick(id) {
-			if (this.can('seek')) {
+			if (this.performance.can('seek')) {
 				this.followNavigation('annotationJump')
-				this.onAnnotationJumpToById(id)
+				this.annotations.jumpToById(id)
 			}
 		},
 
@@ -3500,10 +2158,11 @@ export default {
 		 * lassen (siehe lib/staffBands.js).
 		 *
 		 * @param {boolean} moeglich
+		 * @param {number} page index of the reporting page
 		 */
-		onStaffMapping(moeglich) {
-			this.staffMappingOk = moeglich
-			if (!moeglich) {
+		onStaffMapping(moeglich, page) {
+			this.staffMappingOk = this.staffMappingReports.report(page, moeglich)
+			if (!this.staffMappingOk) {
 				this.focusMyPart = false
 			}
 		},
@@ -3515,7 +2174,7 @@ export default {
 		 * @return {?object}
 		 */
 		readCurrentAnchor() {
-			return this.currentAnchor
+			return this.navigation.currentAnchor
 		},
 
 		/**
@@ -3527,42 +2186,55 @@ export default {
 		 */
 		async reconvertScore() {
 			this.reset()
-			await this.requestReconvert()
+			await this.conversion.reconvert()
 		},
 
+		/**
+		 * Back to "nothing loaded" for the next piece or a reconversion.
+		 *
+		 * The order of the first block is fixed, and beforeUnmount repeats it:
+		 * 1. The recording first - a running one is finished and saved while
+		 *    its AudioContext, which belongs to the playback, still lives.
+		 * 2. Wait mode, scored singing, intonation - they listen to the
+		 *    microphone and read the clock; they stop before the clock goes,
+		 *    and singing before the intonation whose frames it judges.
+		 * 3. The practice-track export - it belongs to the piece it began on.
+		 * 4. The session - it tears down the playback and forgets the loaded
+		 *    conversion, so a load still under way counts as stale from here.
+		 * What follows is plain state without resources; its order is free.
+		 */
 		reset() {
-			// Vor dem Abbau der Wiedergabe: Eine laufende Aufnahme wird noch
-			// abgeschlossen und gespeichert, solange ihr Kontext lebt.
-			this.resetRecorder()
-			this.resetWaitMode()
-			this.resetSing()
-			this.resetIntonation()
+			this.recorder.reset()
+			this.waitMode.reset()
+			this.singScore.reset()
+			this.intonation.reset()
 			// A practice-track export belongs to the piece it was started on.
 			this.practiceExport.cancel()
 			// Baut die Wiedergabe ab und vergisst die geladene Konvertierung
 			// (useScoreSession.js) - ein noch laufendes Laden gilt ab hier
 			// als veraltet.
-			this.resetSession()
+			this.session.reset()
 			this.variant.reset()
-			this.resetStartTone()
-			this.resetSpeedTrainer()
-			this.resetConversion()
-			this.resetPlayback()
-			this.showMixer = false
-			this.showMyPart = false
-			this.resetAutoScroll()
+			this.startTone.reset()
+			this.trainer.reset()
+			this.conversion.reset()
+			this.playback.reset()
+			this.panels.close('mixer')
+			this.panels.close('partChoice')
+			this.autoScroller.reset()
 			this.focusMyPart = false
+			this.staffMappingReports.clear()
 			this.staffMappingOk = false
-			this.resetMeasureNavigation()
-			this.resetScoreFacts()
-			this.resetLoop()
-			this.resetZoom()
-			this.resetAnnotations()
-			this.resetMetronome()
+			this.navigation.reset()
+			this.scoreFacts.reset()
+			this.loop.reset()
+			this.zoom.reset()
+			this.annotations.reset()
+			this.metronome.reset()
 		},
 
 		sendFollowPosition() {
-			return this.sendFollowPositionTo(null)
+			return this.follow.sendPosition(null)
 		},
 
 		/**
@@ -3573,70 +2245,8 @@ export default {
 		 */
 		sendFollowMark(mark) {
 			this.revealJump()
-			this.jumpToMeasure(mark.measure)
-			return this.sendFollowPositionTo({ measure: mark.measure, mark: mark.text })
-		},
-
-		/** Eigener Loop loest das Folgen. */
-		onToggleLoop() {
-			if (this.can('loop')) {
-				this.followNavigation('loop')
-				this.toggleLoop()
-			}
-		},
-
-		/**
-		 * A saved loop (B5) becomes the running loop and the playback
-		 * position moves to its start - no count-in, like a range sent by
-		 * the leader.
-		 *
-		 * @param {{from: number, to: number}} saved
-		 */
-		applySavedLoop(saved) {
-			if (!this.can('loop')) {
-				return
-			}
-			this.followNavigation('loop')
-			if (this.setLoopRange(saved.from, saved.to)) {
-				this.jumpToMeasure(saved.from)
-			}
-		},
-
-		/**
-		 * @param {{name: string, visibility: string, targetParts: ?Array}} choice
-		 */
-		async saveLoop(choice) {
-			await this.onAnnotationCreate({
-				measureNumber: Number(this.loopFromMeasure),
-				endMeasure: Number(this.loopToMeasure),
-				fraction: 0,
-				elid: null,
-				anchorEtag: null,
-				content: choice.name,
-				visibility: choice.visibility,
-				kind: 'loop',
-				targetParts: choice.targetParts,
-			})
-			if (!this.annotationError) {
-				this.loopSaving = false
-			}
-		},
-
-		/**
-		 * The second line of a saved loop in the list: its range, and whom
-		 * it is for.
-		 *
-		 * @param {object} saved
-		 * @return {string}
-		 */
-		savedLoopMeta(saved) {
-			const parts = [saved.name ? `${saved.from}–${saved.to}` : '']
-			if (saved.visibility === 'parts') {
-				parts.push(this.t('For {voices}', { voices: saved.voices.join(', ') }))
-			} else if (saved.visibility === 'shared' && !saved.mine) {
-				parts.push(this.t('by {name}', { name: saved.authorName }))
-			}
-			return parts.filter(Boolean).join(' · ')
+			this.navigation.jumpToMeasure(mark.measure)
+			return this.follow.sendPosition({ measure: mark.measure, mark: mark.text })
 		},
 
 		/**
@@ -3646,7 +2256,7 @@ export default {
 		 */
 		onAnnotationJumpToOwn(annotation) {
 			this.followNavigation('annotationJump')
-			this.onAnnotationJumpTo(annotation)
+			this.annotations.jumpTo(annotation)
 		},
 
 		// Tastaturkürzel für die Probe - greifen, wenn der Viewer den Fokus
@@ -3663,59 +2273,36 @@ export default {
 			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable) {
 				return
 			}
-			const binding = resolveKey(event, { performance: this.performanceMode })
+			const binding = resolveKey(event, { performance: this.performance.active })
 			if (!binding) {
 				return
 			}
 			if (binding.preventDefault) {
 				event.preventDefault()
 			}
-			if (binding.action !== null && !this.can(binding.action)) {
+			if (binding.action !== null && !this.performance.can(binding.action)) {
 				return
 			}
 			const commands = {
-				togglePlay: () => this.togglePlay(),
-				nextMeasure: () => this.jumpRelativeMeasure(1),
-				previousMeasure: () => this.jumpRelativeMeasure(-1),
-				toggleLoop: () => this.onToggleLoop(),
-				zoomIn: () => (this.activeLayout === 'band' ? this.bandZoom.zoomIn() : this.zoomBy(this.zoomStep)),
-				zoomOut: () => (this.activeLayout === 'band' ? this.bandZoom.zoomOut() : this.zoomBy(1 / this.zoomStep)),
-				// Zurück zur Seitenbreite - und wieder der Fenstergröße
-				// folgend, wie beim Öffnen. Im Band: zur Standardgröße.
-				zoomWidth: () => (this.activeLayout === 'band' ? this.bandZoom.reset() : this.applyZoomPreset('width')),
+				togglePlay: () => this.playback.toggle(),
+				nextMeasure: () => this.navigation.jumpRelative(1),
+				previousMeasure: () => this.navigation.jumpRelative(-1),
+				toggleLoop: () => this.toggleLoopByUser(),
+				zoomIn: () => this.display.activeZoom.zoomIn(),
+				zoomOut: () => this.display.activeZoom.zoomOut(),
+				zoomWidth: () => this.display.activeZoom.fit(),
 				// Im Systemband blaettert das Pedal ein System weiter (H8).
-				pageDown: () => (this.activeLayout === 'band' ? this.$refs.band?.next() : this.pageBy(1)),
-				pageUp: () => (this.activeLayout === 'band' ? this.$refs.band?.previous() : this.pageBy(-1)),
+				pageDown: () => this.activeView().next(),
+				pageUp: () => this.activeView().previous(),
 				// Diese Tasten scrollen nativ weiter. Gemeldet wird nur, DASS
 				// gescrollt wird - der Browser meldet für Tastatur-Scrollen
 				// keine Geste, und ohne diesen Hinweis führte die App der
 				// Wiedergabe sofort wieder nach (siehe useAutoScroll.js).
-				scroll: () => this.noteManualScroll(),
+				scroll: () => this.autoScroller.noteManualScroll(),
 				print: () => this.openPrintPage(),
 				blocked: () => {},
 			}
 			commands[binding.command]?.()
-		},
-
-		/**
-		 * The print page (E16) in a new tab - the viewer in Files holds only
-		 * the pages in reach, so printing happens on a page that holds all.
-		 * Only where the bar offers it (lib/barGroups.js): with a session,
-		 * in the browser, outside performance mode.
-		 */
-		openPrintPage() {
-			if (!this.can('settings') || this.standalonePage || this.offline) {
-				return
-			}
-			// What is on screen: a part or phone pages print as such (E19).
-			const key = this.variantKey
-			const url = generateUrl('/apps/scoreview/print/{fileId}', { fileId: this.activeFileId })
-			window.open(key ? `${url}?variant=${encodeURIComponent(key)}` : url, '_blank', 'noopener')
-		},
-
-		closeTuner() {
-			this.showTuner = false
-			this.stopTuner()
 		},
 
 		// Umkehrung von M4: Klick auf eine Note springt dorthin -
@@ -3735,16 +2322,16 @@ export default {
 
 		/** Die gehoerte Zeit als Funktion - fuer Ansichten, die je Rahmen lesen. */
 		readDisplayTimeMs() {
-			return this.displayTimeMs
+			return this.playback.displayTimeMs
 		},
 
 		/** @param {number} ms aus der Liedtext-Ansicht */
 		onLyricsSeek(ms) {
-			if (!this.clock || !this.can('seek')) {
+			if (!this.session.clock || !this.performance.can('seek')) {
 				return
 			}
 			this.followNavigation('seek')
-			this.clock.seek(ms)
+			this.session.clock.seek(ms)
 		},
 
 		/**
@@ -3753,26 +2340,26 @@ export default {
 		 * @param {{fromMs: number, toMs: number}} range
 		 */
 		onLyricsLoop({ fromMs, toMs }) {
-			if (!this.can('loop')) {
+			if (!this.performance.can('loop')) {
 				return
 			}
-			const from = resolveMeasurePosition(this.measuresTimeline, fromMs, this.durationMs)?.measureNumber
-			const to = resolveMeasurePosition(this.measuresTimeline, toMs, this.durationMs)?.measureNumber
+			const from = resolveMeasurePosition(this.session.measuresTimeline, fromMs, this.session.durationMs)?.measureNumber
+			const to = resolveMeasurePosition(this.session.measuresTimeline, toMs, this.session.durationMs)?.measureNumber
 			if (!from || !to) {
 				return
 			}
-			this.loopFromMeasure = Math.min(from, to)
-			this.loopToMeasure = Math.max(from, to)
-			if (!this.loopActive) {
-				this.onToggleLoop()
+			this.loop.fromMeasure = Math.min(from, to)
+			this.loop.toMeasure = Math.max(from, to)
+			if (!this.loop.active) {
+				this.toggleLoopByUser()
 			}
 		},
 
 		/** @param {boolean} accepted */
 		answerBandOffer(accepted) {
-			this.bandOffered = true
+			this.prefs.bandOffered = true
 			if (accepted) {
-				this.layout = 'band'
+				this.prefs.layout = 'band'
 			}
 		},
 
@@ -3780,21 +2367,6 @@ export default {
 		onPageIndexed({ segIds }) {
 			if (segIds) {
 				this.svgHasSegIds = true
-			}
-		},
-
-		/**
-		 * @param {'no-lyrics'|'too-large'|'no-data'} reason
-		 * @return {string}
-		 */
-		unavailableText(reason) {
-			switch (reason) {
-				case 'no-lyrics':
-					return this.t('This score has no lyrics.')
-				case 'too-large':
-					return this.t('This score has too much text for the lyrics view.')
-				default:
-					return this.t('These pages were set without the data this view needs. A reconversion on this server cannot add it.')
 			}
 		},
 
@@ -3808,77 +2380,43 @@ export default {
 		 * @param {?function(string): void} showName from the tapped ScorePage
 		 */
 		async playTappedNote(note, showName) {
-			if (this.isPlaying || !this.can('tone') || !this.clock?.startTone) {
+			if (this.playback.isPlaying || !this.performance.can('tone') || !this.session.clock?.startTone) {
 				return
 			}
-			const system = this.noteNames !== 'off'
-				? this.noteNames
-				: (getLanguage().startsWith('de') ? 'de' : 'en')
+			const system = noteNameSystem(this.prefs.noteNames, getLanguage())
 			showName?.(nameOf({ tpc: note.tpc, system, concertKey: this.keyOfElid(note.elid) }))
-			await this.clock.startTone(note.pitch)
-			setTimeout(() => this.clock?.stopTone?.(), 700)
+			await this.session.clock.startTone(note.pitch)
+			setTimeout(() => this.session.clock?.stopTone?.(), 700)
 		},
 
 		onNoteClick({ page, x, y, note, showName }) {
 			// Liegt ein Stempel bereit, setzt der Tipp ihn - und springt nicht
 			// zusaetzlich dorthin.
-			if (this.armedStamp) {
-				if (this.can('annotate')) {
-					this.placeArmedStamp({ page, x, y })
+			if (this.annotations.armedStamp) {
+				if (this.performance.can('annotate')) {
+					this.annotations.placeArmedStamp({ page, x, y })
 				}
 				return
 			}
 			// Im Aufführungsmodus der haeufigste Fehlgriff ueberhaupt: ein Tipp
 			// auf die Noten, um zu blaettern.
-			if (!this.timeline || !this.clock || !this.can('noteClick')) {
+			if (!this.session.timeline || !this.session.clock || !this.performance.can('noteClick')) {
 				return
 			}
-			const elid = findElementAtPoint(this.timeline.elements, page, x, y)
+			const elid = findElementAtPoint(this.session.timeline.elements, page, x, y)
 			if (elid === null) {
 				return
 			}
 			// Bezugspunkt ist die gehörte Stelle: Getippt wird auf das, was
 			// gerade klingt, nicht auf das, was schon im Ausgabepuffer steht.
-			const timeMs = findNearestOccurrenceTimeMs(this.timeline.events, elid, this.displayTimeMs)
+			const timeMs = findNearestOccurrenceTimeMs(this.session.timeline.events, elid, this.playback.displayTimeMs)
 			if (timeMs !== null) {
 				this.followNavigation('noteClick')
-				this.clock.seek(timeMs)
+				this.session.clock.seek(timeMs)
 			}
 			if (note) {
 				this.playTappedNote(note, showName)
 			}
-		},
-
-		// Fuers Template - eine reine Funktion aus lib/viewerFormat.js.
-		formatTime,
-		seekValue,
-
-		/**
-		 * Die Position fuer die eingefahrene Leiste - als Methode, damit
-		 * ScoreBar eine gleichbleibende Funktion bekommt statt eines Werts,
-		 * der sich in jedem Frame aendert (gelesen nur in LiveValue).
-		 *
-		 * @return {number}
-		 */
-		readPlaybackPercent() {
-			return this.playbackPercent
-		},
-
-		/**
-		 * Die Betriebsdiagnose und die erkannte Latenz fuer die Aufklapper -
-		 * als Methoden, damit die Kindkomponenten eine gleichbleibende
-		 * Funktion bekommen statt eines Werts, der sich in jedem Frame
-		 * aendert (siehe TempoControls.vue, AppearanceControls.vue).
-		 *
-		 * @return {object}
-		 */
-		readAudioDiagnostics() {
-			return this.audioDiagnostics
-		},
-
-		/** @return {number} */
-		readAutomaticLatencyMs() {
-			return this.automaticLatencyMs
 		},
 
 		// --- Leiste -----------------------------------------------------------
@@ -3892,40 +2430,12 @@ export default {
 		 */
 		onViewerWheel(event) {
 			if (!event.ctrlKey) {
-				this.noteManualScroll()
-			}
-			if (event.ctrlKey && this.activeLayout === 'band') {
-				event.preventDefault()
-				if (event.deltaY < 0) {
-					this.bandZoom.zoomIn()
-				} else {
-					this.bandZoom.zoomOut()
-				}
+				this.autoScroller.noteManualScroll()
 				return
 			}
-			this.onWheel(event)
-		},
-
-		/**
-		 * The zoom slider: the band's own zoom there, the page zoom elsewhere.
-		 *
-		 * @param {Event} event the slider's input event
-		 */
-		onZoomControlInput(event) {
-			if (this.activeLayout === 'band') {
-				this.bandZoom.set(Number(event.target.value))
-			} else {
-				this.onZoomInput(event)
-			}
-		},
-
-		/** @param {string} preset 'default' in the band, a page fit elsewhere */
-		onZoomControlPreset(preset) {
-			if (preset === 'default') {
-				this.bandZoom.reset()
-			} else {
-				this.applyZoomPreset(preset)
-			}
+			// The score zooms, not the Nextcloud page around it.
+			event.preventDefault()
+			this.display.activeZoom.wheel(event)
 		},
 
 		/**
@@ -3934,21 +2444,35 @@ export default {
 		 * useAutoScroll, the band in its own scroller.
 		 */
 		onViewerScrollEnd() {
-			this.onScrollEnd()
-			if (!this.autoScroll && this.activeLayout === 'lyrics') {
+			this.autoScroller.onScrollEnd()
+			if (!this.prefs.autoScroll && this.display.activeLayout === 'lyrics') {
 				this.$refs.lyrics?.reportVisibility()
+			}
+		},
+
+		/**
+		 * The layout on screen behind one shape: back to the playing
+		 * position, one step on and back. The band steps by system (H8),
+		 * pages and lyrics scroll by a screen.
+		 *
+		 * @return {{reveal: () => void, next: () => void, previous: () => void}}
+		 */
+		activeView() {
+			const pages = { next: () => this.paging.page(1), previous: () => this.paging.page(-1) }
+			switch (this.display.activeLayout) {
+				case 'band': return {
+					reveal: () => this.$refs.band?.reveal(),
+					next: () => this.$refs.band?.next(),
+					previous: () => this.$refs.band?.previous(),
+				}
+				case 'lyrics': return { ...pages, reveal: () => this.$refs.lyrics?.reveal() }
+				default: return { ...pages, reveal: () => this.autoScroller.update(this.session.cursorRect, true) }
 			}
 		},
 
 		/** To the playing position, whatever the layout - the button and the switch. */
 		revealCursor() {
-			if (this.activeLayout === 'band') {
-				this.$refs.band?.reveal()
-			} else if (this.activeLayout === 'lyrics') {
-				this.$refs.lyrics?.reveal()
-			} else {
-				this.updateAutoScroll(this.cursorRect, true)
-			}
+			this.activeView().reveal()
 		},
 	},
 }
@@ -4033,149 +2557,6 @@ export default {
 
 .scoreview-hint {
 	margin-bottom: 8px;
-}
-
-.scoreview-play {
-	flex: 0 0 auto;
-}
-
-.scoreview-seek {
-	flex: 1 1 120px;
-	min-width: 80px;
-}
-
-.scoreview-time {
-	flex: 0 0 auto;
-	font-variant-numeric: tabular-nums;
-	color: var(--color-text-maxcontrast);
-}
-
-/* Auf Telefonbreite zählt jeder Millimeter: die Laufzeitanzeige ist die
-   entbehrlichste Angabe der Leiste (der Suchlauf daneben zeigt die Position
-   ohnehin), die Taktangabe dagegen die wichtigste. An `--compact` statt an
-   einer Media Query, damit es dieselbe Schwelle ist wie für den Umbau der
-   Leiste - zwei Schwellen wären zwei Zustände zu viel. */
-.scoreview-bar--compact .scoreview-time {
-	display: none;
-}
-
-/*
- * Die schmalsten Telefone (360 px): Play, Taktfeld, Anfangston, Schloss
- * und „Mehr" muessen auf EINE Zeile - gemessen ragte „Mehr" sonst 38 px aus
- * dem Bild und war nicht mehr zu erreichen, und mit ihm Dunkelmodus, Notizen
- * und Probe. Weichen muss der Suchlauf: Er ist die einzige Angabe, die das
- * Taktfeld daneben schon traegt, und auf 80 px ohnehin kaum zu treffen. An
- * der Breite des Streifens statt an der des Fensters, weil der Viewer auch in
- * einem schmalen Rahmen stecken kann. Bei Studierbuchstaben (breiteres Feld
- * plus Knopf) geht dazu die Gesamtzahl der Takte.
- */
-@container (max-width: 400px) {
-	.scoreview-seek {
-		display: none;
-	}
-
-	.scoreview-measure {
-		gap: 2px;
-	}
-
-	.scoreview-measure-field--marks {
-		width: 96px;
-	}
-
-	.scoreview-measure-field--marks + .scoreview-measure-total {
-		display: none;
-	}
-}
-
-.scoreview-measure {
-	flex: 0 0 auto;
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	color: var(--color-text-maxcontrast);
-	font-variant-numeric: tabular-nums;
-}
-
-/*
- * Feste Breite MUSS an einen Wrapper, nicht an NcTextField selbst
- * (Nutzer-Rückmeldung "das Taktfeld ist über die ganze Breite"):
- * NcInputField bringt `.input-field[data-v-…] { width: 100% }` mit -
- * dieselbe Spezifität wie eine scoped Klassenregel hier, und die
- * Bibliotheks-CSS wird später eingebunden, gewinnt bei Gleichstand also.
- * Eine Regel wie `.scoreview-measure-input { width: 70px }` wirkt deshalb
- * nicht (gemessen: 1376px). Innerhalb eines schmalen Wrappers ist
- * `width: 100%` genau das Gewünschte.
- */
-.scoreview-measure-field {
-	display: block;
-	width: 72px;
-}
-
-/* „47 (C+3)" braucht Platz fuer die Klammer. */
-.scoreview-measure-field--marks {
-	width: 104px;
-}
-
-.scoreview-marks {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	max-width: 280px;
-	/* As tall as the room on screen (boundedPopover.css). */
-	box-sizing: border-box;
-	max-block-size: inherit;
-	overflow-y: auto;
-}
-
-.scoreview-armed {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-}
-
-/* Der obere Abstand von NcInputField (margin-block-start: 6px) verschiebt das
-   Feld in einer waagerechten Leiste gegen alles andere. */
-.scoreview-measure-field :deep(.input-field) {
-	margin-block-start: 0;
-}
-
-.scoreview-measure-total {
-	white-space: nowrap;
-}
-
-/* Grundton | Meine Stimme als zusammenhaengende Knopfgruppe. */
-.scoreview-tone-modes {
-	display: flex;
-}
-
-/*
- * A little room between the pinned buttons and the groups: both are icon
- * buttons, and without it the pinned mixer reads as one more group.
- */
-.scoreview-pinned + :not(.scoreview-pinned) {
-	margin-inline-start: 8px;
-}
-
-/*
- * The line between the sections of a group: frequent tools above, what is
- * set once below. A rule, not a heading - the names of the rows already say
- * what they are, and a heading would cost a row on a phone held sideways.
- */
-.scoreview-group-divider {
-	margin: 4px 8px;
-	border: none;
-	border-block-start: 1px solid var(--color-border);
-}
-
-/*
- * Vollbild in der kompakten Leiste vorn im Werkzeug-Streifen: der erste
- * Griff nach „Mehr", nicht der letzte hinter drei Gruppen. Auf breiter
- * Leiste steht es als letzter Knopf, dort, wo es immer stand.
- */
-.scoreview-bar--compact .scoreview-fullscreen,
-.scoreview-bar--compact .scoreview-close {
-	order: -1;
 }
 
 .scoreview-status-host {
@@ -4341,43 +2722,6 @@ export default {
 	/* Nur die Karten selbst fangen Klicks - der Zwischenraum gehört weiter
 	   dem Notenbild darunter (Klick auf eine Note springt dorthin). */
 	pointer-events: none;
-}
-/* A saved loop in the loop page: name above, range and audience below. */
-.scoreview-saved-loop {
-	display: flex;
-	flex-direction: column;
-	align-items: flex-start;
-	inline-size: 100%;
-	margin: 0 0 4px 0;
-	padding: 6px 8px;
-	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius-large, 8px);
-	background: var(--color-main-background);
-	color: var(--color-main-text);
-	text-align: start;
-	cursor: pointer;
-}
-
-.scoreview-saved-loop:hover:not(:disabled) {
-	background: var(--color-background-hover);
-}
-
-.scoreview-saved-loop:disabled {
-	cursor: default;
-	opacity: 0.5;
-}
-
-.scoreview-saved-loop--dimmed {
-	opacity: 0.55;
-}
-
-.scoreview-saved-loop-name {
-	font-weight: bold;
-}
-
-.scoreview-saved-loop-meta {
-	color: var(--color-text-maxcontrast);
-	font-size: 0.9em;
 }
 </style>
 

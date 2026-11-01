@@ -1,12 +1,13 @@
 import axios from '@nextcloud/axios'
 import { listen } from '@nextcloud/notify_push'
 import { generateUrl } from '@nextcloud/router'
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { translate } from '../l10n.js'
 import { freshPlayback, leaderTimeMs, shouldSendPlayback } from '../lib/followPlayback.js'
 import { followPollDelay, IDLE_POLL_MS } from '../lib/followPoll.js'
 import { initialFollowState, reduce } from '../lib/followState.js'
 import { emptyQueue, enqueue, isBusy, recordSend, sendDelay, settle, takeNext } from '../lib/leaderQueue.js'
+import { serverError } from '../lib/serverError.js'
 
 // Which device polls how often: lib/followPoll.js.
 export { IDLE_POLL_MS }
@@ -70,6 +71,44 @@ function pushConnected() {
 }
 
 /**
+ * The viewer's capabilities a follow session uses, by name - two
+ * directions: what a following device carries out when the leader acts,
+ * and what the leader's own device reads to report.
+ *
+ * @typedef {object} FollowHost
+ * @property {(measure: number) => ?number} seekToMeasure follower: jump there, returns the target time
+ * @property {(from: number, to: number) => void} setLoop follower: take the leader's loop
+ * @property {() => void} clearLoop follower: the leader cleared the loop
+ * @property {() => void} playTone follower: starting note of my part (useStartTone.startToneFor)
+ * @property {(semitones: ?number) => void} [setTranspose] follower: take the
+ *   leader's transposition (H6); null = back to one's own
+ * @property {(target: {fileId: number, setlistId: ?number}) => void} [openPiece]
+ *   follower: go to the piece the leader moved to (H7)
+ * @property {(target: ?{fileId: number, setlistId: ?number}) => void} [leaderMoved]
+ *   detached follower: where the leader is now, null = here again
+ * @property {(getter: ?(() => number)) => void} [followPlayback] follower: hang
+ *   the display silently on the leader's time, null = let go
+ * @property {(timeMs: number) => void} [holdAt] follower: stand where the leader stopped
+ * @property {() => ?{measure: number, mark: ?string}} currentPosition leader: the own position
+ * @property {() => ?{from: number, to: number}} currentLoop leader: the own loop
+ * @property {() => ?{playing: boolean, timeMs: number, rate: number}} [leaderPlayback]
+ *   leader: the state of the own playback
+ */
+
+/**
+ * Optional capabilities: a host without them simply lacks that part of the
+ * session (no transposition, no move between pieces, no silent following).
+ */
+const HOST_DEFAULTS = Object.freeze({
+	setTranspose: () => {},
+	openPiece: () => {},
+	leaderMoved: () => {},
+	leaderPlayback: () => null,
+	followPlayback: () => {},
+	holdAt: () => {},
+})
+
+/**
  * „Folgt mir" im Viewer (C): Transport, Anzeige und das Weiterreichen der
  * Aktionen an Seek, Loop und Anfangston. WAS bei einem neuen Stand zu tun ist,
  * entscheidet lib/followState.js; hier wird es nur ausgefuehrt.
@@ -91,33 +130,17 @@ function pushConnected() {
  * nicht erst; ein 404 vom Server (Schalter inzwischen aus, Zugriff
  * entzogen) beendet das Fragen ebenso.
  *
- * @param {object} deps
- * @param {() => (number|string)} deps.fileId
- * @param {() => boolean} deps.enabled Schalter der Administration
- * @param {() => boolean} deps.standalone eigenstaendige Seite der Mobil-Apps
- * @param {() => boolean} deps.ready ob Notenbild und Zeitquelle stehen
- * @param {(action: string) => boolean} deps.permitted interactionPolicy
- * @param {(measure: number) => ?number} deps.seekToMeasure springt, gibt die Zielzeit zurueck
- * @param {(from: number, to: number) => void} deps.setLoop
- * @param {() => void} deps.clearLoop
- * @param {() => void} deps.playTone Anfangston meiner Stimme (useStartTone.startToneFor)
- * @param {() => ?{measure: number, mark: ?string}} deps.currentPosition fuer die Leitung
- * @param {() => ?{from: number, to: number}} deps.currentLoop fuer die Leitung
- * @param {(semitones: ?number) => void} [deps.setTranspose] Transposition der
- *   Leitung uebernehmen (H6); null = wieder die eigene
- * @param {(target: {fileId: number, setlistId: ?number}) => void} [deps.openPiece]
- *   zum Stueck wechseln, zu dem die Leitung umgezogen ist (H7)
- * @param {(target: ?{fileId: number, setlistId: ?number}) => void} [deps.leaderMoved]
- *   fuer Geloeste: wo die Leitung jetzt ist, null = wieder hier
- * @param {() => ?{playing: boolean, timeMs: number, rate: number}} [deps.leaderPlayback]
- *   der Stand der eigenen Wiedergabe - fuer die Leitung
- * @param {(getter: ?(() => number)) => void} [deps.followPlayback] die Anzeige
- *   stumm an die Zeit der Leitung haengen, null = loesen
- * @param {(timeMs: number) => void} [deps.holdAt] dort stehen bleiben, wo die
- *   Leitung angehalten hat
+ * @param {object} context which session, and whether to look for one at all
+ * @param {() => (number|string)} context.fileId
+ * @param {() => boolean} context.enabled Schalter der Administration
+ * @param {() => boolean} context.standalone eigenstaendige Seite der Mobil-Apps
+ * @param {() => boolean} context.ready ob Notenbild und Zeitquelle stehen
+ * @param {(action: string) => boolean} context.permitted interactionPolicy
+ * @param {FollowHost} host what the viewer lends the session (see FollowHost)
  * @return {object}
  */
-export function useFollowSession({ fileId, enabled, standalone, ready, permitted, seekToMeasure, setLoop, clearLoop, playTone, currentPosition, currentLoop, setTranspose = () => {}, openPiece = () => {}, leaderMoved = () => {}, leaderPlayback = () => null, followPlayback = () => {}, holdAt = () => {} }) {
+export function useFollowSession({ fileId, enabled, standalone, ready, permitted }, host) {
+	const viewer = { ...HOST_DEFAULTS, ...host }
 	const t = (text) => translate('scoreview', text)
 
 	const local = shallowRef(initialFollowState())
@@ -158,18 +181,6 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	// der ihn prueft.
 	let lastPlayback = null
 	let playbackTimer = null
-
-	/**
-	 * Die Andockstelle fuer das Mitverfolgen per Mikrofon: Ein Sprung der Leitung ist dort die neue Stelle, an der das
-	 * Mitverfolgen fortsetzt - sonst widersprechen sich die beiden Quellen
-	 * still. Bis das Mitverfolgen gebaut ist, tut sie nichts; sie steht
-	 * trotzdem schon hier, damit der Sprung sie heute schon aufruft und der
-	 * Anschluss spaeter keine Aenderung an diesem Ablauf braucht.
-	 */
-	const follower = {
-		// eslint-disable-next-line no-unused-vars
-		relocate(timeMs) {},
-	}
 
 	const url = (suffix = '') => generateUrl(`/apps/scoreview/api/scores/{fileId}/follow${suffix}`, { fileId: fileId() })
 
@@ -317,20 +328,20 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 						pendingLoop = action
 						break
 					}
-					setLoop(action.from, action.to)
+					viewer.setLoop(action.from, action.to)
 					break
 				case 'clearLoop':
 					pendingLoop = null
-					clearLoop()
+					viewer.clearLoop()
 					break
 				case 'tone':
-					playTone()
+					viewer.playTone()
 					break
 				case 'setTranspose':
-					setTranspose(action.semitones)
+					viewer.setTranspose(action.semitones)
 					break
 				case 'restoreTranspose':
-					setTranspose(null)
+					viewer.setTranspose(null)
 					break
 				case 'playback':
 					// Wie ein Sprung nur, solange gefolgt wird.
@@ -338,21 +349,21 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 						break
 					}
 					if (action.playing) {
-						followPlayback(() => leaderTimeMs(action, Date.now() + serverOffset))
+						viewer.followPlayback(() => leaderTimeMs(action, Date.now() + serverOffset))
 					} else {
-						followPlayback(null)
-						holdAt(action.timeMs)
+						viewer.followPlayback(null)
+						viewer.holdAt(action.timeMs)
 					}
 					break
 				case 'stopPlayback':
-					followPlayback(null)
+					viewer.followPlayback(null)
 					break
 				case 'openPiece':
-					leaderMoved(null)
-					openPiece({ fileId: action.fileId, setlistId: action.setlistId })
+					viewer.leaderMoved(null)
+					viewer.openPiece({ fileId: action.fileId, setlistId: action.setlistId })
 					break
 				case 'leaderMoved':
-					leaderMoved({ fileId: action.fileId, setlistId: action.setlistId })
+					viewer.leaderMoved({ fileId: action.fileId, setlistId: action.setlistId })
 					break
 				default:
 				// 'ended', 'leaderChanged': Die Anzeige liest den Zustand
@@ -364,10 +375,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 
 	function jump(action) {
 		pendingSeek = null
-		const timeMs = seekToMeasure(action.measure)
-		if (timeMs !== null && timeMs !== undefined) {
-			follower.relocate(timeMs)
-		}
+		viewer.seekToMeasure(action.measure)
 	}
 
 	/**
@@ -418,10 +426,6 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	}
 
 	// --- Leitung ------------------------------------------------------------
-
-	function message(err, fallback) {
-		return err?.response?.data?.error ?? fallback
-	}
 
 	// Leitungs-Aktionen laufen streng nacheinander und nach „der letzte Tipp
 	// gewinnt" (lib/leaderQueue.js). Knoepfe, die waehrend einer Anfrage
@@ -496,7 +500,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 				// Ohne eigene Meldung die allgemeine: Wuerfe der Fehlerzweig
 				// selbst, gaebe nichts mehr die Warteschlange frei - jeder
 				// weitere Tipp der Leitung bliebe bis zum Neuladen liegen.
-				error.value = message(err, (FALLBACK[step.last] ?? FALLBACK.position)())
+				error.value = serverError(err, (FALLBACK[step.last] ?? FALLBACK.position)())
 			}
 		}
 		for (const resolve of step.waiters) {
@@ -517,7 +521,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	 * gleich mit - sonst stuenden alle nach dem Start dort, wo jede gerade war.
 	 */
 	function start() {
-		return submit({ type: 'start', data: currentPosition() ?? {} })
+		return submit({ type: 'start', data: viewer.currentPosition() ?? {} })
 	}
 
 	function end() {
@@ -531,7 +535,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	 * @param {?{measure: number, mark: ?string}} [position] ohne Angabe die eigene Stelle
 	 */
 	function sendPosition(position = null) {
-		const target = position ?? currentPosition()
+		const target = position ?? viewer.currentPosition()
 		if (!target) {
 			return Promise.resolve(false)
 		}
@@ -539,7 +543,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	}
 
 	function sendLoop() {
-		return submit({ type: 'loop', loop: currentLoop() ?? null })
+		return submit({ type: 'loop', loop: viewer.currentLoop() ?? null })
 	}
 
 	function sendTone() {
@@ -569,7 +573,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 			await axios.post(url('/move'), { targetFileId, setlistId }, { timeout: REQUEST_TIMEOUT_MS })
 			return true
 		} catch (err) {
-			error.value = message(err, t('Could not take the session to the next piece.'))
+			error.value = serverError(err, t('Could not take the session to the next piece.'))
 			return false
 		}
 	}
@@ -590,7 +594,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		} else {
 			checkPlayback()
 		}
-		const wanted = mine.value && leaderPlayback()?.playing === true
+		const wanted = mine.value && viewer.leaderPlayback()?.playing === true
 		if (wanted && playbackTimer === null) {
 			playbackTimer = setInterval(checkPlayback, PLAYBACK_WATCH_MS)
 		} else if (!wanted && playbackTimer !== null) {
@@ -600,7 +604,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 	}
 
 	function checkPlayback() {
-		const now = leaderPlayback()
+		const now = viewer.leaderPlayback()
 		const nowMs = Date.now()
 		if (now && shouldSendPlayback(lastPlayback, now, nowMs)) {
 			lastPlayback = { ...now, sentAt: nowMs }
@@ -667,7 +671,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 			playbackTimer = null
 		}
 		lastPlayback = null
-		followPlayback(null)
+		viewer.followPlayback(null)
 	}
 
 	/** Fuer eine andere Partitur von vorn - aufgerufen beim Dateiwechsel. */
@@ -676,9 +680,9 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		// Wer die Transposition der Leitung trug, bekommt die eigene zurueck -
 		// im neuen Stueck gilt sie, bis dessen Sitzung etwas anderes sagt.
 		if (local.value.sessionTranspose) {
-			setTranspose(null)
+			viewer.setTranspose(null)
 		}
-		leaderMoved(null)
+		viewer.leaderMoved(null)
 		local.value = initialFollowState()
 		connected.value = true
 		disabled.value = false
@@ -703,7 +707,7 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 			// Zwischen Eintreffen und fertig geladener Partitur kann das
 			// Folgen geendet haben - dann gilt der Loop nicht mehr.
 			if (permitted('followJump')) {
-				setLoop(loop.from, loop.to)
+				viewer.setLoop(loop.from, loop.to)
 			}
 		}
 	})
@@ -723,13 +727,17 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		document.addEventListener('keydown', noteAttention, { passive: true })
 	}
 
-	onBeforeUnmount(() => {
-		stop()
-		pushSubscribers.delete(onPush)
-		document.removeEventListener('visibilitychange', onVisibilityChange)
-		document.removeEventListener('pointerdown', noteAttention)
-		document.removeEventListener('keydown', noteAttention)
-	})
+	if (getCurrentScope()) {
+		onScopeDispose(() => {
+			stop()
+			pushSubscribers.delete(onPush)
+			if (typeof document !== 'undefined') {
+				document.removeEventListener('visibilitychange', onVisibilityChange)
+				document.removeEventListener('pointerdown', noteAttention)
+				document.removeEventListener('keydown', noteAttention)
+			}
+		})
+	}
 
 	return {
 		active,
@@ -741,7 +749,6 @@ export function useFollowSession({ fileId, enabled, standalone, ready, permitted
 		error,
 		busy,
 		pushJoined,
-		follower,
 		noteNavigation,
 		resume,
 		start,

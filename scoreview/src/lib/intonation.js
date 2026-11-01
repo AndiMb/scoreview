@@ -95,15 +95,87 @@ export function targetAt(notes, myChannels, scoreMs, hz = null) {
 	if (!notes || !myChannels) {
 		return null
 	}
+	return targetIn(ownNotes(notes, myChannels), scoreMs, hz)
+}
+
+/**
+ * The notes of my part, sorted by onset once - the live needle asks for the
+ * note under the cursor 50 times a second, and filtering all notes of the
+ * score each time grew with the score, not with what sounds.
+ *
+ * @param {Array<{onMs:number, offMs:number, pitch:number, channel:number}>} notes
+ * @param {?Iterable<number>} myChannels
+ * @return {?{sorted: Array<object>, order: Map<object, number>, longestMs: number}}
+ *   `order` is each note's place in `notes`, so ties resolve as before
+ */
+export function ownNotes(notes, myChannels) {
+	if (!notes || !myChannels) {
+		return null
+	}
 	const channels = new Set(myChannels)
-	const klingend = notes.filter((n) => channels.has(n.channel) && n.onMs <= scoreMs && scoreMs < n.offMs)
+	const order = new Map()
+	const own = []
+	let longestMs = 0
+	notes.forEach((n, i) => {
+		if (channels.has(n.channel)) {
+			order.set(n, i)
+			own.push(n)
+			longestMs = Math.max(longestMs, n.offMs - n.onMs)
+		}
+	})
+	return { sorted: own.sort((a, b) => a.onMs - b.onMs), order, longestMs }
+}
+
+/**
+ * targetAt() on an ownNotes() index: the sounding notes are those with an
+ * onset in (scoreMs - longest note, scoreMs], found by binary search.
+ *
+ * @param {?{sorted: Array<object>, order: Map<object, number>, longestMs: number}} index
+ * @param {number} scoreMs
+ * @param {?number} [hz]
+ * @return {?object}
+ */
+export function targetIn(index, scoreMs, hz = null) {
+	if (!index) {
+		return null
+	}
+	const { sorted, order, longestMs } = index
+	const klingend = []
+	for (let i = firstOnsetAfter(sorted, scoreMs - longestMs - 1); i < sorted.length && sorted[i].onMs <= scoreMs; i++) {
+		const n = sorted[i]
+		if (scoreMs < n.offMs) {
+			klingend.push(n)
+		}
+	}
 	if (klingend.length === 0) {
 		return null
 	}
+	// In score order, as the unsorted filter saw them: on equal pitch or
+	// distance the first one wins.
+	klingend.sort((a, b) => order.get(a) - order.get(b))
 	if (klingend.length === 1 || !Number.isFinite(hz)) {
 		return klingend.reduce((a, b) => (b.pitch > a.pitch ? b : a))
 	}
 	return klingend.reduce((a, b) => (Math.abs(foldOctave(centsOff(hz, b.pitch))) < Math.abs(foldOctave(centsOff(hz, a.pitch))) ? b : a))
+}
+
+/**
+ * @param {Array<{onMs:number}>} sorted by onMs
+ * @param {number} ms
+ * @return {number} the first index with onMs > ms
+ */
+function firstOnsetAfter(sorted, ms) {
+	let lo = 0
+	let hi = sorted.length
+	while (lo < hi) {
+		const mid = (lo + hi) >> 1
+		if (sorted[mid].onMs <= ms) {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	return lo
 }
 
 /**
@@ -283,18 +355,30 @@ function median(values) {
  * @return {Array<{elid:number, staff:number, rank:number, size:number, cls:string, index:number}>}
  */
 export function noteMarks(evaluations, notes, myChannels, events, staff, toleranceMs = 40) {
+	return noteMarksIn(evaluations, ownNotes(notes ?? [], myChannels ?? []), events, staff, toleranceMs)
+}
+
+/**
+ * noteMarks() on an ownNotes() index - for the live marks, which are built
+ * again on every note change and need not sort the part each time.
+ *
+ * @param {Array<{note:object, class:string}>} evaluations
+ * @param {?{sorted: Array<object>}} index ownNotes()
+ * @param {Array<{timeMs:number, elid:number}>} events
+ * @param {number} staff
+ * @param {number} [toleranceMs]
+ * @return {Array<{elid:number, staff:number, rank:number, size:number, cls:string, index:number}>}
+ */
+export function noteMarksIn(evaluations, index, events, staff, toleranceMs = 40) {
 	if (!events || events.length === 0 || staff === null || staff === undefined) {
 		return []
 	}
-	const channels = new Set(myChannels ?? [])
-	// Einmal nach Einsatz sortiert statt je Bewertung ueber alle Noten
-	// gefiltert: Bei einer Aufnahme ueber eine ganze Partitur waren das
-	// Bewertungen mal Noten Vergleiche im Hauptthread.
-	const eigene = (notes ?? [])
-		.filter((n) => channels.has(n.channel))
-		.sort((a, b) => a.onMs - b.onMs)
+	// Sorted by onset once (ownNotes) instead of filtering all notes per
+	// evaluation: over a whole score that was evaluations times notes
+	// comparisons on the main thread.
+	const eigene = index?.sorted ?? []
 	const marks = []
-	evaluations.forEach((e, index) => {
+	evaluations.forEach((e, i) => {
 		const event = nearestEvent(events, e.note.onMs)
 		if (!event || Math.abs(event.timeMs - e.note.onMs) > toleranceMs) {
 			return
@@ -302,7 +386,7 @@ export function noteMarks(evaluations, notes, myChannels, events, staff, toleran
 		const akkord = chordAt(eigene, e.note.onMs)
 			.sort((a, b) => b.pitch - a.pitch)
 		const rank = Math.max(0, akkord.findIndex((n) => n.pitch === e.note.pitch))
-		marks.push({ elid: event.elid, staff, rank, size: Math.max(1, akkord.length), cls: e.class, index })
+		marks.push({ elid: event.elid, staff, rank, size: Math.max(1, akkord.length), cls: e.class, index: i })
 	})
 	return marks
 }

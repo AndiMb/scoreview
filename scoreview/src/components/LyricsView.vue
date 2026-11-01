@@ -89,6 +89,7 @@ import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwit
 import { translate } from '../l10n.js'
 import { activeSyllable, buildChoirLyrics, buildLyrics, choirActiveSyllables, choirVersesByElid, occurrences, seekTimeFor, systemKeyFor, versesByElid } from '../lib/lyricsLayout.js'
 import { spanInView } from '../lib/scrollPlan.js'
+import { readStored, writeStored } from '../lib/storage.js'
 import { findStepIndex } from '../lib/timingSync.js'
 
 /** Klasse der gesungenen Silbe. */
@@ -102,11 +103,7 @@ const ALL_PARTS_KEY = 'scoreview.lyricsAllParts'
 
 /** @return {boolean} */
 function readAllParts() {
-	try {
-		return window.localStorage?.getItem(ALL_PARTS_KEY) === '1'
-	} catch {
-		return false
-	}
+	return readStored(ALL_PARTS_KEY) === '1'
 }
 
 export default {
@@ -353,11 +350,7 @@ export default {
 		/** @param {boolean} on */
 		setAllParts(on) {
 			this.allParts = on
-			try {
-				window.localStorage?.setItem(ALL_PARTS_KEY, on ? '1' : '0')
-			} catch {
-				// Private mode: the choice lasts until the page closes.
-			}
+			writeStored(ALL_PARTS_KEY, on ? '1' : '0')
 		},
 
 		/**

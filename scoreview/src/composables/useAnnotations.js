@@ -5,23 +5,24 @@ import { translate } from '../l10n.js'
 import { classify, DIM, HIDE, resolveTarget, resolveTargets, targetNames } from '../lib/annotationFilter.js'
 import { decodeDrawing, encodeDrawing } from '../lib/drawingLayout.js'
 import { measurePositionToTimeMs } from '../lib/scoreLayout.js'
+import { serverError } from '../lib/serverError.js'
 import { anchorFromTap } from '../lib/stampLayout.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
 /**
- * Die Meldung des Servers, wo es eine gibt (etwa die Obergrenze je Partitur).
- * Die Drosselung (S4) antwortet dagegen mit Nextclouds eigener 429 ohne
- * Satz - roh bliebe davon „Request failed with status code 429".
+ * What a failed write shows. The throttle (S4) answers with Nextcloud's own
+ * 429 and no sentence of its own - raw it would read "Request failed with
+ * status code 429" - so that case gets a text here; otherwise the server's
+ * message (e.g. the per-score limit) wins over the transport's.
  *
  * @param {?object} err
  * @return {string}
  */
-function errorText(err) {
-	if (err?.response?.status === 429) {
-		return t('Too many changes in a short time. Please wait a moment and try again.')
-	}
-	return err?.response?.data?.error || err?.message || ''
+function failureText(err) {
+	return serverError(err, err?.response?.status === 429
+		? t('Too many changes in a short time. Please wait a moment and try again.')
+		: (err?.message || ''))
 }
 
 /**
@@ -187,6 +188,11 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 	 * part that the picture does not draw (another part shown alone, E19) is
 	 * not shown there - it would land on a stranger's staff.
 	 */
+	// Decoded drawings by their stored content. `drawings` recomputes on any
+	// change to any annotation - a new text note, a stamp, a part switch - and
+	// parsing every drawing's JSON again each time grows with the drawings,
+	// not with the change. Rebuilt per run, so deleted drawings drop out.
+	let decodedByContent = new Map()
 	const drawings = computed(() => {
 		const measures = measuresTimeline()
 		if (!measures) {
@@ -194,11 +200,18 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 		}
 		const scoreParts = parts() ?? []
 		const drawnIds = (pictureParts() ?? []).map((part) => String(part.id))
+		const previous = decodedByContent
+		decodedByContent = new Map()
+		const decode = (content) => {
+			const data = previous.has(content) ? previous.get(content) : decodeDrawing(content)
+			decodedByContent.set(content, data)
+			return data
+		}
 		return listed.value
 			.filter((a) => a.kind === 'drawing')
 			.map((a) => {
 				const measureRect = measures.elements[String(a.measureNumber - 1)] ?? null
-				const data = decodeDrawing(a.content)
+				const data = decode(a.content)
 				if (!measureRect || !data) {
 					return null
 				}
@@ -286,7 +299,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			if (mine !== generation) {
 				return
 			}
-			error.value = errorText(err)
+			error.value = failureText(err)
 		}
 	}
 
@@ -304,7 +317,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			if (mine !== generation) {
 				return
 			}
-			error.value = errorText(err)
+			error.value = failureText(err)
 		}
 	}
 
@@ -322,7 +335,7 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 			if (mine !== generation) {
 				return
 			}
-			error.value = errorText(err)
+			error.value = failureText(err)
 		}
 	}
 

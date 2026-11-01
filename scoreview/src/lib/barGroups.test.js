@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { anyGroupActive, barGroups, barPins, defaultPins, groupActive, isPinned, MAX_PINS, pinLimitReached, PINNABLE, togglePin } from './barGroups.js'
+import { anyGroupActive, barGroups, barPins, defaultPins, groupActive, isPinned, MAX_PINS, pinLimitReached, PINNABLE, togglePin, toolOn, toolValue } from './barGroups.js'
 import { allowed } from './interactionPolicy.js'
 
 function ctx(overrides = {}) {
@@ -22,19 +22,17 @@ function ctx(overrides = {}) {
 }
 
 const IDLE = {
+	panels: [],
 	metronomeEnabled: false,
+	autoScroll: false,
 	loopActive: false,
 	trainerActive: false,
-	showMixer: false,
-	showPractice: false,
-	showTuner: false,
+	singActive: false,
 	coachActive: false,
-	transposed: false,
+	transpose: 0,
 	focusMyPart: false,
 	showNoteNames: false,
 	showNoteText: false,
-	showAnnotations: false,
-	showRehearsal: false,
 	setlistEditorMode: null,
 }
 
@@ -207,21 +205,26 @@ describe('groupActive', () => {
 	})
 
 	it.each([
-		['metronomeEnabled', 'playback'],
-		['loopActive', 'playback'],
-		['coachActive', 'playback'],
-		['transposed', 'playback'],
-		['showNoteNames', 'view'],
-		['trainerActive', 'playback'],
-		['showMixer', 'playback'],
-		['showPractice', 'playback'],
-		['showTuner', 'playback'],
-		['focusMyPart', 'view'],
-		['showNoteText', 'view'],
-		['showAnnotations', 'view'],
-		['showRehearsal', 'score'],
-	])('%s setzt den Punkt an %s und nur dort', (flag, group) => {
-		const state = { ...IDLE, [flag]: true }
+		[{ metronomeEnabled: true }, 'playback'],
+		[{ loopActive: true }, 'playback'],
+		[{ coachActive: true }, 'playback'],
+		[{ transpose: -2 }, 'playback'],
+		[{ showNoteNames: true }, 'view'],
+		[{ trainerActive: true }, 'playback'],
+		[{ panels: ['mixer'] }, 'playback'],
+		[{ panels: ['recording'] }, 'playback'],
+		[{ panels: ['tuner'] }, 'playback'],
+		[{ panels: ['practiceLog'] }, 'playback'],
+		[{ panels: ['sing'] }, 'playback'],
+		[{ singActive: true }, 'playback'],
+		[{ focusMyPart: true }, 'view'],
+		[{ showNoteText: true }, 'view'],
+		[{ panels: ['annotations'] }, 'view'],
+		[{ panels: ['rehearsal'] }, 'score'],
+		[{ panels: ['partChoice'] }, 'score'],
+		[{ setlistEditorMode: 'new' }, 'score'],
+	])('%o setzt den Punkt an %s und nur dort', (change, group) => {
+		const state = { ...IDLE, ...change }
 		for (const id of ['playback', 'view', 'score']) {
 			expect(groupActive(id, state)).toBe(id === group)
 		}
@@ -231,6 +234,98 @@ describe('groupActive', () => {
 	it('zaehlt nur den Editor fuer eine NEUE Setliste zur Partitur', () => {
 		expect(groupActive('score', { ...IDLE, setlistEditorMode: 'new' })).toBe(true)
 		expect(groupActive('score', { ...IDLE, setlistEditorMode: 'edit' })).toBe(false)
+	})
+
+	it('lights no dot for scrolling along - a standing preference, nothing that runs', () => {
+		expect(toolOn('autoScroll', { ...IDLE, autoScroll: true })).toBe(true)
+		expect(anyGroupActive({ ...IDLE, autoScroll: true })).toBe(false)
+	})
+
+	it('agrees with toolOn: a tool that is on lights the dot of its own group and no other (A3)', () => {
+		const groups = barGroups(ctx({ intonationEnabled: true, singScoreEnabled: true, practiceLogEnabled: true }))
+		let checked = 0
+		for (const group of groups) {
+			for (const id of group.items) {
+				const alone = { ...IDLE, ...toolState(id) }
+				if (id === 'autoScroll' || !toolOn(id, alone)) {
+					continue
+				}
+				checked++
+				for (const other of ['playback', 'view', 'score']) {
+					expect(groupActive(other, alone), `${id} in ${other}`).toBe(other === group.id)
+				}
+			}
+		}
+		expect(checked).toBe(16)
+	})
+})
+
+/**
+ * The state with only this tool on.
+ *
+ * @param {string} id
+ * @return {object}
+ */
+function toolState(id) {
+	switch (id) {
+		case 'metronome': return { metronomeEnabled: true }
+		case 'myPart': return { focusMyPart: true }
+		case 'noteText': return { showNoteText: true }
+		case 'loop': return { loopActive: true }
+		case 'transpose': return { transpose: 1 }
+		case 'coach': return { coachActive: true }
+		case 'noteNames': return { showNoteNames: true }
+		case 'newSetlist': return { setlistEditorMode: 'new' }
+		default: return { panels: [id] }
+	}
+}
+
+describe('toolOn', () => {
+	it('counts a running sing run as on, card open or not (A3)', () => {
+		expect(toolOn('sing', { ...IDLE, singActive: true })).toBe(true)
+		expect(toolOn('sing', { ...IDLE, panels: ['sing'] })).toBe(true)
+		expect(toolOn('sing', IDLE)).toBe(false)
+	})
+
+	it('reads a panel from the open cards and nothing else', () => {
+		expect(toolOn('mixer', { ...IDLE, panels: ['mixer'] })).toBe(true)
+		expect(toolOn('mixer', { ...IDLE, panels: ['tuner'] })).toBe(false)
+		// Page tools and actions are never "open" as a card.
+		expect(toolOn('layout', { ...IDLE, panels: ['layout'] })).toBe(false)
+		expect(toolOn('print', { ...IDLE, panels: ['print'] })).toBe(false)
+	})
+
+	it('counts the speed trainer as a running loop', () => {
+		expect(toolOn('loop', { ...IDLE, trainerActive: true })).toBe(true)
+	})
+})
+
+describe('toolValue', () => {
+	const t = (text) => `[${text}]`
+
+	it('shows the running loop, the tempo and the transposition', () => {
+		expect(toolValue('loop', { loopActive: true, loopFrom: 12, loopTo: 16 }, t)).toBe('12–16')
+		expect(toolValue('loop', { loopActive: false, loopFrom: 12, loopTo: 16 }, t)).toBe('')
+		expect(toolValue('tempo', { tempoBpm: 80, tempoGuessed: false }, t)).toBe('♩ 80')
+		expect(toolValue('tempo', { tempoBpm: 120, tempoGuessed: true }, t)).toBe('♩ 120*')
+		expect(toolValue('transpose', { transpose: 2 }, t)).toBe('+2')
+		expect(toolValue('transpose', { transpose: -3 }, t)).toBe('−3')
+		expect(toolValue('transpose', { transpose: 0 }, t)).toBe('')
+	})
+
+	it('names note names and counts side by side', () => {
+		expect(toolValue('noteNames', { noteNames: 'de', countsOn: true }, t)).toBe('C D H · 1 + 2')
+		expect(toolValue('noteNames', { noteNames: 'off', countsOn: true }, t)).toBe('1 + 2')
+		expect(toolValue('noteNames', { noteNames: 'off', countsOn: false }, t)).toBe('')
+	})
+
+	it('translates through the caller and passes names through', () => {
+		expect(toolValue('coach', { coachActive: true }, t)).toBe('[On]')
+		expect(toolValue('layout', { layout: 'band' }, t)).toBe('[Band]')
+		expect(toolValue('layout', { layout: 'pages' }, t)).toBe('')
+		expect(toolValue('partChoice', { myPartLabel: 'Alto' }, t)).toBe('Alto')
+		expect(toolValue('export', { exportRunning: true }, t)).toBe('…')
+		expect(toolValue('mixer', {}, t)).toBe('')
 	})
 })
 

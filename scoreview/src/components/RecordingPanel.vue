@@ -379,6 +379,7 @@ import StopIcon from 'vue-material-design-icons/Stop.vue'
 import Waveform from 'vue-material-design-icons/Waveform.vue'
 import { translate } from '../l10n.js'
 import { formatCents } from '../lib/intonation.js'
+import { formatDuration } from '../lib/viewerFormat.js'
 
 /** Der Ausschnitt der Kurve: ±100 Cent, darueber wird am Rand gekappt. */
 const CURVE_RANGE_CENTS = 100
@@ -543,10 +544,7 @@ export default {
 			this.sharingId = null
 		},
 
-		formatDuration(ms) {
-			const total = Math.round((ms || 0) / 1000)
-			return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
-		},
+		formatDuration,
 
 		formatDate(seconds) {
 			return new Date(seconds * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })

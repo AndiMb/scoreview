@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue'
 import { allowed } from '../lib/interactionPolicy.js'
 
 /**
@@ -36,10 +36,12 @@ export const EXIT_HOLD_MS = 1000
  */
 export function usePerformanceMode({ rootEl, onKeydown, onEnter = () => {}, following = () => false, offline = () => false }) {
 	const active = ref(false)
-	// 0..1 waehrend das Schloss gehalten wird - treibt den Fortschrittsring.
-	const exitProgress = ref(0)
-	let holdStart = null
-	let frame = null
+	// Whether the lock is being held. The ring fills by a CSS animation of
+	// EXIT_HOLD_MS (ScoreLockButton.vue), not by a value written per frame:
+	// read in the viewer's template, such a value re-rendered the whole
+	// viewer every frame for the second of holding.
+	const holding = ref(false)
+	let timer = null
 
 	const context = computed(() => ({ performance: active.value, following: following(), offline: offline() }))
 
@@ -64,38 +66,27 @@ export function usePerformanceMode({ rootEl, onKeydown, onEnter = () => {}, foll
 		active.value = false
 	}
 
-	function tick() {
-		const elapsed = performance.now() - holdStart
-		exitProgress.value = Math.min(1, elapsed / EXIT_HOLD_MS)
-		if (exitProgress.value >= 1) {
-			frame = null
-			exit()
-			return
-		}
-		frame = requestAnimationFrame(tick)
-	}
-
 	/** Schloss gedrueckt: aus → an sofort, an → aus erst nach dem Halten. */
 	function lockDown() {
 		if (!active.value) {
 			enter()
 			return
 		}
-		if (holdStart !== null) {
+		if (timer !== null) {
 			return
 		}
-		holdStart = performance.now()
-		frame = requestAnimationFrame(tick)
+		holding.value = true
+		timer = setTimeout(() => {
+			timer = null
+			exit()
+		}, EXIT_HOLD_MS)
 	}
 
 	/** Losgelassen oder abgebrochen, bevor die Zeit um ist: nichts passiert. */
 	function cancelHold() {
-		if (frame !== null) {
-			cancelAnimationFrame(frame)
-			frame = null
-		}
-		holdStart = null
-		exitProgress.value = 0
+		clearTimeout(timer)
+		timer = null
+		holding.value = false
 	}
 
 	/**
@@ -139,14 +130,16 @@ export function usePerformanceMode({ rootEl, onKeydown, onEnter = () => {}, foll
 		}
 	})
 
-	onBeforeUnmount(() => {
-		cancelHold()
-		document.removeEventListener('keydown', onDocumentKeydown)
-	})
+	if (getCurrentScope()) {
+		onScopeDispose(() => {
+			cancelHold()
+			document.removeEventListener('keydown', onDocumentKeydown)
+		})
+	}
 
 	function reset() {
 		exit()
 	}
 
-	return { active, exitProgress, can, enter, exit, lockDown, cancelHold, lockKeydown, lockKeyup, reset }
+	return { active, holding, can, enter, exit, lockDown, cancelHold, lockKeydown, lockKeyup, reset }
 }

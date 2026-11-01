@@ -57,14 +57,14 @@ describe('useScoreVariant', () => {
 		vi.useFakeTimers()
 		// The tests run without a DOM: a localStorage of their own.
 		const store = new Map()
-		vi.stubGlobal('window', {
-			innerWidth: 1200,
-			localStorage: {
-				getItem: (k) => (store.has(k) ? store.get(k) : null),
-				setItem: (k, v) => store.set(k, String(v)),
-				removeItem: (k) => store.delete(k),
-			},
-		})
+		const localStorage = {
+			getItem: (k) => (store.has(k) ? store.get(k) : null),
+			setItem: (k, v) => store.set(k, String(v)),
+			removeItem: (k) => store.delete(k),
+		}
+		// lib/storage.js reads the global one, the width comes from window.
+		vi.stubGlobal('localStorage', localStorage)
+		vi.stubGlobal('window', { innerWidth: 1200, localStorage })
 	})
 
 	afterEach(() => {

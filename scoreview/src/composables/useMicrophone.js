@@ -70,6 +70,8 @@ export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 	let capturing = null
 	const blockListeners = new Set()
 	const stopHandlers = new Map()
+	// Whether a MessagePort is attached to the worklet (attachPort()).
+	let sidePort = false
 
 	/**
 	 * Mikrofon fuer einen Nutzer einschalten. Muss aus einer Nutzerhandlung
@@ -79,7 +81,7 @@ export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 	 * @param {object} [options]
 	 * @param {() => void} [options.onStop] gerufen, wenn die Strecke von aussen
 	 *   abgeschaltet wird (roter Punkt, Stueckwechsel)
-	 * @return {Promise<?{context: AudioContext, source: MediaStreamAudioSourceNode, inputLatencyMs: number, onBlocks?: (listener: (block: {samples: Float32Array, contextTimeSec: number}) => void) => (() => void)}>}
+	 * @return {Promise<?{context: AudioContext, source: MediaStreamAudioSourceNode, inputLatencyMs: number, onBlocks?: (listener: (block: {samples: Float32Array, contextTimeSec: number}) => void) => (() => void), attachPort?: (port: MessagePort) => boolean, detachPort?: () => void}>}
 	 *   null, wenn das Mikrofon nicht verfuegbar ist - dann steht der Grund in `error`
 	 */
 	async function acquire(consumer, { onStop } = {}) {
@@ -115,10 +117,56 @@ export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 		if (mayUseCapturePath(consumer)) {
 			handle.onBlocks = (listener) => {
 				blockListeners.add(listener)
-				return () => blockListeners.delete(listener)
+				updateToMain()
+				return () => {
+					blockListeners.delete(listener)
+					updateToMain()
+				}
 			}
+			handle.attachPort = attachPort
+			handle.detachPort = detachPort
 		}
 		return handle
+	}
+
+	/**
+	 * Sends the blocks also to `port`, straight from the audio thread - for
+	 * the pitch worker, which then needs no detour through the main thread.
+	 * One port at a time; a new one replaces the old. The blocks keep coming
+	 * through onBlocks() for whoever listens there (recording, tuner).
+	 *
+	 * @param {MessagePort} port transferred to the worklet
+	 * @return {boolean} false where the port cannot go there (no capture node,
+	 *   or a browser that cannot transfer a MessagePort to an AudioWorklet) -
+	 *   then the caller listens through onBlocks() instead
+	 */
+	function attachPort(port) {
+		if (!captureNode) {
+			return false
+		}
+		try {
+			captureNode.port.postMessage({ type: 'attach', port }, [port])
+		} catch {
+			return false
+		}
+		sidePort = true
+		return true
+	}
+
+	/** Ends attachPort(); the worklet closes its end of the port. */
+	function detachPort() {
+		if (sidePort && captureNode) {
+			captureNode.port.postMessage({ type: 'detach' })
+		}
+		sidePort = false
+	}
+
+	/**
+	 * Tells the worklet whether the main thread wants blocks: with only the
+	 * pitch worker listening (attachPort), none need to cross it.
+	 */
+	function updateToMain() {
+		captureNode?.port.postMessage({ type: 'main', on: blockListeners.size > 0 })
 	}
 
 	/**
@@ -226,6 +274,7 @@ export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 				listener(event.data)
 			}
 		}
+		updateToMain()
 		source.connect(captureNode)
 		// Das Worklet schreibt nichts in seinen Ausgang - angeschlossen wird
 		// er trotzdem: Ein Knoten ohne Weg zum Ausgang wird vom Browser nicht
@@ -234,7 +283,9 @@ export function useMicrophone({ audioContext, holdAudio = () => () => {} }) {
 	}
 
 	function teardown() {
+		sidePort = false
 		if (captureNode) {
+			// 'stop' also closes an attached port in the worklet.
 			captureNode.port.postMessage('stop')
 			captureNode.port.onmessage = null
 			captureNode.disconnect()

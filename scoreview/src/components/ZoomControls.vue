@@ -1,7 +1,7 @@
 <template>
 	<div class="scoreview-controls">
 		<label class="scoreview-popover-label">
-			{{ t('Zoom') }}: {{ percent }}%
+			{{ t('Zoom') }}: {{ shownPercent }}%
 			<input
 				type="range"
 				:min="min"
@@ -9,7 +9,8 @@
 				step="0.05"
 				:value="zoom"
 				:aria-label="t('Zoom')"
-				@input="$emit('input', $event)">
+				@input="onInput"
+				@change="$emit('change')">
 		</label>
 		<NcButton v-if="presets.includes('width')" wide @click="$emit('preset', 'width')">
 			<template #icon>
@@ -93,11 +94,39 @@ export default {
 		},
 	},
 
-	// `input` reicht das rohe Ereignis weiter (useZoom.onInput liest
-	// event.target), `preset` den Namen: 'width' | 'page' | 'actual' | 'default'.
-	emits: ['input', 'preset'],
+	// `input` reicht das rohe Ereignis weiter (event.target.value), `change`
+	// says the slider was let go, `preset` den Namen: 'width' | 'page' |
+	// 'actual' | 'default'.
+	emits: ['input', 'change', 'preset'],
+
+	data() {
+		return {
+			// The value being dragged. The zoom itself is set only when the
+			// slider is let go (zoomGesture.js), so the percentage follows the
+			// thumb from here - re-rendering only this, not the viewer.
+			dragged: null,
+		}
+	},
+
+	computed: {
+		shownPercent() {
+			return this.dragged === null ? this.percent : Math.round(this.dragged * 100)
+		},
+	},
+
+	watch: {
+		// Set at last (or set elsewhere): the prop speaks again.
+		zoom() {
+			this.dragged = null
+		},
+	},
 
 	methods: {
+		onInput(event) {
+			this.dragged = Number(event.target.value)
+			this.$emit('input', event)
+		},
+
 		t(text, vars) {
 			return translate('scoreview', text, vars)
 		},

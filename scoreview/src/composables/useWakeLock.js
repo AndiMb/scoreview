@@ -1,4 +1,4 @@
-import { onBeforeUnmount, watch } from 'vue'
+import { getCurrentScope, onScopeDispose, watch } from 'vue'
 
 /**
  * Den Bildschirm wachhalten, solange `wanted()` gilt: waehrend der
@@ -80,11 +80,13 @@ export function useWakeLock({ wanted }) {
 
 	// Beim Schliessen des Viewers: freigeben und nicht mehr zuhoeren. Der
 	// Watcher oben endet mit der Komponente von selbst, der Listener nicht.
-	onBeforeUnmount(() => {
-		closed = true
-		document.removeEventListener('visibilitychange', onVisibilityChange)
-		release()
-	})
+	if (getCurrentScope()) {
+		onScopeDispose(() => {
+			closed = true
+			document.removeEventListener('visibilitychange', onVisibilityChange)
+			release()
+		})
+	}
 
 	return { release }
 }

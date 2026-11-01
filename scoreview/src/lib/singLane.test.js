@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildLyrics } from './lyricsLayout.js'
-import { labelText, laneSyllables, laneWindow, NOW_AT, pitchRange, sungPitch, xOf, yOf } from './singLane.js'
+import { firstNoteFrom, labelText, laneSyllables, laneWindow, NOW_AT, pitchRange, sungPitch, syllableIndex, syllablesIn, xOf, yOf } from './singLane.js'
 
 const hzOf = (pitch, cents = 0) => 440 * 2 ** ((pitch - 69 + cents / 100) / 12)
 
@@ -79,5 +79,46 @@ describe('laneSyllables', () => {
 
 	it('has none without lyrics', () => {
 		expect(laneSyllables({ blocks: [], events, times, fromMs: 0, toMs: 2000 })).toEqual([])
+	})
+})
+
+describe('syllable index and window', () => {
+	const syllables = [
+		{ elid: 10, staff: 0, voice: 0, verse: 1, syllabic: 'single', text: 'one' },
+		{ elid: 11, staff: 0, voice: 0, verse: 1, syllabic: 'single', text: 'two' },
+		{ elid: 10, staff: 0, voice: 0, verse: 2, syllabic: 'single', text: 'three' },
+		{ elid: 11, staff: 0, voice: 0, verse: 2, syllabic: 'single', text: 'four' },
+	]
+	const { blocks } = buildLyrics({ syllables, staves: [0] })
+	// A repeat: the second pass sings verse 2.
+	const events = [{ elid: 10 }, { elid: 11 }, { elid: 10 }, { elid: 11 }]
+	const times = [0, 500, 1000, 1500]
+
+	it('takes the verse of each pass and keeps score order', () => {
+		const index = syllableIndex(blocks, events, times)
+		expect(index.sorted).toBe(true)
+		expect(index.entries.map((e) => e.text)).toEqual(['one', 'two', 'three', 'four'])
+		expect(syllablesIn(index, 400, 1000).map((e) => e.scoreMs)).toEqual([500, 1000])
+		expect(syllablesIn(index, 2000, 3000)).toEqual([])
+	})
+
+	it('answers each frame alike, built once or anew', () => {
+		const first = laneSyllables({ blocks, events, times, fromMs: 0, toMs: 600 })
+		expect(laneSyllables({ blocks, events, times, fromMs: 0, toMs: 600 })).toEqual(first)
+		expect(laneSyllables({ blocks, events: [...events], times, fromMs: 900, toMs: 1600 }).map((s) => s.text)).toEqual(['three', 'four'])
+	})
+
+	it('reads all syllables where the times run backwards', () => {
+		const index = syllableIndex(blocks, events, [0, 500, 200, 1500])
+		expect(index.sorted).toBe(false)
+		expect(syllablesIn(index, 100, 600).map((e) => e.scoreMs)).toEqual([500, 200])
+	})
+
+	it('starts the bars at the first note that can still reach the window', () => {
+		const notes = [{ onMs: 0 }, { onMs: 100 }, { onMs: 900 }, { onMs: 1000 }, { onMs: 2000 }]
+		expect(firstNoteFrom(notes, 1000, 200)).toBe(2)
+		expect(firstNoteFrom(notes, 1000, 0)).toBe(3)
+		expect(firstNoteFrom(notes, -50, 0)).toBe(0)
+		expect(firstNoteFrom(notes, 5000, 0)).toBe(5)
 	})
 })

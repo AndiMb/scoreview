@@ -1,6 +1,7 @@
 import { showInfo } from '@nextcloud/dialogs'
-import { watch } from 'vue'
+import { getCurrentScope, onScopeDispose, watch } from 'vue'
 import { translate } from '../l10n.js'
+import { readStored, writeStored } from '../lib/storage.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -75,14 +76,12 @@ export function useMediaSession({ isPlaying, metadata, exportAvailable = () => f
 			return
 		}
 		hiddenWhilePlaying = false
-		try {
-			if (window.localStorage.getItem(LOCK_HINT_KEY) === '1') {
-				return
-			}
-			window.localStorage.setItem(LOCK_HINT_KEY, '1')
-		} catch {
-			// Ohne Speicher (privater Modus) lieber einmal je Sitzung zu oft.
+		// Without storage (private mode) the hint shows once per session too
+		// often rather than never.
+		if (readStored(LOCK_HINT_KEY) === '1') {
+			return
 		}
+		writeStored(LOCK_HINT_KEY, '1')
 		showInfo(t('Playback continues while the screen is locked. For controls on the lock screen, save a practice track (Practice → Save as audio file).'), { timeout: 12000 })
 	}
 
@@ -108,6 +107,13 @@ export function useMediaSession({ isPlaying, metadata, exportAvailable = () => f
 				}
 			}
 		}
+	}
+
+	// The session and the document listener outlive the viewer (Files keeps
+	// the page) - released with the owner's scope even if nobody calls
+	// dispose(). Calling it twice does no harm.
+	if (getCurrentScope()) {
+		onScopeDispose(dispose)
 	}
 
 	return { setHandlers, dispose }

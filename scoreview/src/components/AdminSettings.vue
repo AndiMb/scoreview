@@ -285,7 +285,6 @@
 
 <script>
 import axios from '@nextcloud/axios'
-import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
@@ -297,7 +296,10 @@ import NcTextField from '@nextcloud/vue/components/NcTextField'
 import ContentSave from 'vue-material-design-icons/ContentSave.vue'
 import Refresh from 'vue-material-design-icons/Refresh.vue'
 import Stethoscope from 'vue-material-design-icons/Stethoscope.vue'
+import { readInitialState } from '../initialState.js'
 import { translate } from '../l10n.js'
+import { healthLines } from '../lib/adminDiagnostics.js'
+import { serverError } from '../lib/serverError.js'
 
 /**
  * Admin-Einstellungen, auf `@nextcloud/vue` statt auf handgeschriebenem DOM -
@@ -327,7 +329,7 @@ export default {
 	},
 
 	data() {
-		const initial = loadState('scoreview', 'admin-settings')
+		const initial = readInitialState('admin-settings') ?? {}
 		return {
 			initial,
 			form: {
@@ -453,64 +455,7 @@ export default {
 		},
 
 		healthLines() {
-			const h = this.health
-			if (!h) {
-				return []
-			}
-			const c = h.conversions
-			const stuck = (c.pending || 0) + (c.processing || 0)
-			return [
-				{
-					label: t('Conversion'),
-					...this.backendLine(h),
-				},
-				...(h.backend === 'local' && h.local.available && h.local.isolation
-					? [{
-							label: t('Isolation'),
-							...this.isolationLine(h.local.isolation),
-						}]
-					: []),
-				...(h.clientFallback?.active
-					? [{
-							label: t('Fallback'),
-							// Warnung, nicht Erfolg und nicht Fehler: Es
-							// funktioniert - aber jedes Geraet laedt dafuer rund
-							// 14 MB, und gecacht wird nichts.
-							type: 'warning',
-							ok: true,
-							detail: t('Scores are converted in the browser because this server cannot. Every device downloads the conversion engine once (about 14 MB), and nothing is cached on the server.'),
-						}]
-					: []),
-				{
-					label: t('SoundFont'),
-					...this.soundFontLine(h.soundFont),
-				},
-				{
-					label: t('Background jobs (cron)'),
-					ok: h.cron.healthy,
-					detail: h.cron.healthy
-						? t('mode {mode}, last run {age}', { mode: h.cron.mode, age: this.humanAge(h.cron.ageSeconds) })
-						: t('no run in the last 15 minutes ({age}) – conversions will stay pending', { age: this.humanAge(h.cron.ageSeconds) }),
-				},
-				...(h.follow?.enabled
-					? [{
-							label: t('“Follow me”'),
-							...this.followLine(h.follow),
-						}]
-					: []),
-				{
-					label: t('Conversions'),
-					// Nur dann ein Problem, wenn etwas haengt UND der Cron tot
-					// ist - ausstehende Konvertierungen bei laufendem Cron sind
-					// schlicht Arbeit in der Warteschlange.
-					ok: !(stuck > 0 && !h.cron.healthy),
-					detail: t('{ready} ready, {pending} pending, {failed} failed', {
-						ready: c.ready || 0,
-						pending: stuck,
-						failed: c.error || 0,
-					}),
-				},
-			]
+			return healthLines(this.health, t)
 		},
 	},
 
@@ -520,135 +465,6 @@ export default {
 
 	methods: {
 		t,
-
-		/**
-		 * Die Diagnosezeile des AKTIVEN Konvertierungswegs - beim Sidecar
-		 * "erreichbar?", lokal "node da, Konverter vollstaendig, darf PHP
-		 * ueberhaupt Prozesse starten?". Der Server liefert immer beides
-		 * (siehe Service\HealthService); welche Antwort zaehlt, entscheidet
-		 * sich hier, damit die Zeile nicht von einem Dienst rot wird, der gar
-		 * nicht benutzt wird.
-		 *
-		 * @param {object} h die Antwort des Health-Endpunkts
-		 * @return {{ok: boolean, detail: string}}
-		 */
-		backendLine(h) {
-			if (h.backend === 'local') {
-				const version = !h.local.nodeVersion
-					? ''
-					: h.local.runtime === 'deno'
-						? t('Deno {version}', { version: h.local.nodeVersion })
-						: t('Node.js {version}', { version: h.local.nodeVersion })
-				return {
-					ok: h.local.available,
-					detail: h.local.available ? t('on this server, {version}', { version }) : (h.local.error || ''),
-				}
-			}
-			const renderer = h.sidecar.renderer === 'musescore' ? t('with MuseScore') : t('with the scoreview-engine')
-			return {
-				ok: h.sidecar.reachable,
-				detail: h.sidecar.reachable ? `${h.sidecar.url}, ${renderer}` : (h.sidecar.error || t('not configured')),
-			}
-		},
-
-		/**
-		 * How far the runtime locks the local converter in (S11). Only a
-		 * statement for the admin: the level never decides whether the
-		 * server converts - an old Node keeps working, so this is a warning
-		 * and not an error.
-		 *
-		 * @param {string} isolation h.local.isolation from the health endpoint
-		 * @return {{ok: boolean, detail: string, type: string}}
-		 */
-		isolationLine(isolation) {
-			if (isolation === 'full') {
-				return {
-					ok: true,
-					type: 'success',
-					detail: t('The converter can only read the score and write its result – no other files, no network, no processes.'),
-				}
-			}
-			if (isolation === 'partial') {
-				return {
-					ok: true,
-					type: 'info',
-					detail: t('The converter can only read the score and write its result, and cannot start processes. This Node.js version cannot block network access; Node.js 25 or newer, or Deno, can.'),
-				}
-			}
-			return {
-				ok: true,
-				type: 'warning',
-				detail: t('This Node.js version cannot isolate the converter. Node.js 20.7 or newer, or Deno, runs it with access to the score only.'),
-			}
-		},
-
-		/**
-		 * Ob „Folgt mir" Push nutzt (E10). Ohne Push ist nichts kaputt - die
-		 * Geraete fragen ab -, deshalb Hinweis statt Fehler. Er nennt die
-		 * gemessenen Kosten, damit die Entscheidung fuer notify_push
-		 * nicht auf Vermutung beruht.
-		 *
-		 * @param {object} f h.follow aus dem Health-Endpunkt
-		 * @return {{ok: boolean, detail: string, type?: string}}
-		 */
-		followLine(f) {
-			if (f.pushAvailable) {
-				return { ok: true, detail: t('notify_push is available: devices get jumps pushed instead of asking every {ms} ms.', { ms: f.pollMs }) }
-			}
-			return {
-				ok: true,
-				type: 'info',
-				detail: t('Without notify_push every following device asks every {ms} ms, costing about 50 ms of CPU per request - with 40 devices about three cores during the session. From about {n} devices, installing notify_push is recommended.', { ms: f.pollMs, n: f.recommendPushFromDevices }),
-			}
-		},
-
-		/**
-		 * Wiedergabe ist auch dann moeglich, wenn die Quelle gerade nicht
-		 * erreichbar ist - solange eine Kopie im Cache liegt. Deshalb zaehlt
-		 * hier der Cache und NICHT die Erreichbarkeit: ein ✓ neben einer rohen
-		 * Verbindungsfehlermeldung waere eine Zeile, die sich selbst
-		 * widerspricht.
-		 *
-		 * @param {object} sf h.soundFont aus dem Health-Endpunkt
-		 * @return {{ok: boolean, detail: string, type?: string}}
-		 */
-		soundFontLine(sf) {
-			if (sf.overrideUrl) {
-				return { ok: true, detail: t('custom URL configured') }
-			}
-			if (sf.cached) {
-				return { ok: true, detail: sf.name || t('cached copy in use') }
-			}
-			if (sf.availableInSidecar) {
-				return { ok: true, detail: sf.name || '' }
-			}
-			if (sf.fetchUrl) {
-				// Nichts im Cache, aber die Quelle steht fest: der Zustand
-				// direkt nach der Installation. Rot waere hier ein Fehlalarm
-				// - es ist noch nichts schiefgegangen, es hat nur noch
-				// niemand abgespielt.
-				return {
-					ok: false,
-					type: 'warning',
-					detail: t('not fetched yet – the server downloads it on first playback ({url})', { url: sf.fetchUrl }),
-				}
-			}
-			return { ok: false, detail: sf.error || t('no SoundFont available') }
-		},
-
-		/**
-		 * @param {?number} seconds Alter in Sekunden, null wenn nie gelaufen
-		 * @return {string}
-		 */
-		humanAge(seconds) {
-			if (seconds === null || seconds === undefined) {
-				return t('never')
-			}
-			if (seconds < 60) {
-				return t('{n} s ago', { n: seconds })
-			}
-			return t('{n} min ago', { n: Math.floor(seconds / 60) })
-		},
 
 		/**
 		 * Text aus dem Feld, eine Zahl im Formular. Unlesbar heisst: die
@@ -698,7 +514,7 @@ export default {
 				this.loadHealth()
 			} catch (err) {
 				this.saveState = 'error'
-				this.saveError = err.response?.data?.error || err.message
+				this.saveError = serverError(err, err.message)
 			} finally {
 				this.saving = false
 			}
@@ -711,7 +527,7 @@ export default {
 				const res = await axios.get(generateUrl('/apps/scoreview/api/health'))
 				this.health = res.data
 			} catch (err) {
-				this.healthError = err.response?.data?.error || err.message
+				this.healthError = serverError(err, err.message)
 			} finally {
 				this.healthLoading = false
 			}
@@ -739,7 +555,7 @@ export default {
 						: (r.error || t('Self-test failed.')),
 				}
 			} catch (err) {
-				this.selfTest = { ok: false, text: t('Error: {message}', { message: err.response?.data?.error || err.message }) }
+				this.selfTest = { ok: false, text: t('Error: {message}', { message: serverError(err, err.message) }) }
 			} finally {
 				this.selfTestRunning = false
 			}

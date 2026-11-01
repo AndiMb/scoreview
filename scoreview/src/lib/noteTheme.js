@@ -13,7 +13,7 @@
 export const NOTE_THEME_AUTO = 'auto'
 export const NOTE_THEME_LIGHT = 'light'
 export const NOTE_THEME_DARK = 'dark'
-export const NOTE_THEMES = Object.freeze([NOTE_THEME_AUTO, NOTE_THEME_LIGHT, NOTE_THEME_DARK])
+const NOTE_THEMES = Object.freeze([NOTE_THEME_AUTO, NOTE_THEME_LIGHT, NOTE_THEME_DARK])
 
 /**
  * Die Farben je Modus. Kein reines Schwarz/Weiss im Dunkeln: Weiss auf

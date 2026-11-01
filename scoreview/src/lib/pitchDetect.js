@@ -154,7 +154,7 @@ function yinPitch(frame, sampleRate, o) {
 	const tauMin = Math.max(2, Math.floor(sampleRate / o.maxHz))
 	const tauMax = Math.min(Math.floor(frame.length / 2), Math.ceil(sampleRate / o.minHz))
 	const w = frame.length - tauMax
-	const d = new Float64Array(tauMax + 2)
+	const d = scratch('d', tauMax + 2, Float64Array)
 	for (let tau = 1; tau <= tauMax + 1 && tau + w <= frame.length; tau++) {
 		let sum = 0
 		for (let j = 0; j < w; j++) {
@@ -163,7 +163,7 @@ function yinPitch(frame, sampleRate, o) {
 		}
 		d[tau] = sum
 	}
-	const cmnd = new Float64Array(tauMax + 2)
+	const cmnd = scratch('cmnd', tauMax + 2, Float64Array)
 	cmnd[0] = 1
 	let running = 0
 	for (let tau = 1; tau < d.length; tau++) {
@@ -208,6 +208,29 @@ function yinPitch(frame, sampleRate, o) {
 	return { hz: sampleRate / tauExact, aperiodicity: Math.max(0, cmnd[best]) }
 }
 
+// Working arrays of the analysis, kept per name and size and zeroed on reuse.
+// A frame every 20 ms allocated about 40 KB of them - some 2 MB/s of garbage
+// in the worker for arrays whose size never changes during a session. Safe
+// to share: every use is synchronous, and none of them leaves the function
+// that took it.
+const scratchArrays = new Map()
+
+/**
+ * @param {string} name
+ * @param {number} size
+ * @param {Float64ArrayConstructor|Uint8ArrayConstructor} Type
+ * @return {Float64Array|Uint8Array} zero-filled, `size` long
+ */
+function scratch(name, size, Type) {
+	let array = scratchArrays.get(name)
+	if (!array || array.length !== size) {
+		array = new Type(size)
+		scratchArrays.set(name, array)
+		return array
+	}
+	return array.fill(0)
+}
+
 // The window depends only on the frame length, which never changes during a
 // session - computed once instead of 1024 cosines for every 20 ms frame.
 const hannWindows = new Map()
@@ -239,8 +262,8 @@ function hannWindow(n) {
  * @return {{harmonicRatio:number, fundamentalPresent:boolean}}
  */
 function harmonicAnalysis(frame, sampleRate, hz, o) {
-	const re = new Float64Array(FFT_SIZE)
-	const im = new Float64Array(FFT_SIZE)
+	const re = scratch('re', FFT_SIZE, Float64Array)
+	const im = scratch('im', FFT_SIZE, Float64Array)
 	const n = Math.min(frame.length, FFT_SIZE)
 	// Hann-Fenster: Ohne es verschmieren die Teiltoene ueber das ganze
 	// Spektrum und saehen aus wie Energie zwischen den Harmonischen.
@@ -252,7 +275,7 @@ function harmonicAnalysis(frame, sampleRate, hz, o) {
 	const binHz = sampleRate / FFT_SIZE
 	const minBin = Math.max(1, Math.floor(50 / binHz))
 	const maxBin = Math.min(FFT_SIZE / 2 - 1, Math.ceil(o.spectrumMaxHz / binHz))
-	const power = new Float64Array(maxBin + 1)
+	const power = scratch('power', maxBin + 1, Float64Array)
 	let total = 0
 	for (let k = minBin; k <= maxBin; k++) {
 		power[k] = re[k] * re[k] + im[k] * im[k]
@@ -261,7 +284,7 @@ function harmonicAnalysis(frame, sampleRate, hz, o) {
 	if (total <= 0) {
 		return { harmonicRatio: 0, fundamentalPresent: false }
 	}
-	const mask = new Uint8Array(maxBin + 1)
+	const mask = scratch('mask', maxBin + 1, Uint8Array)
 	const bandEnergy = []
 	for (let h = 1; h * hz <= o.spectrumMaxHz; h++) {
 		const center = (h * hz) / binHz
@@ -300,8 +323,14 @@ export function fft(re, im) {
 		}
 		j ^= bit
 		if (i < j) {
-			[re[i], re[j]] = [re[j], re[i]];
-			[im[i], im[j]] = [im[j], im[i]]
+			// A temporary, not a destructuring swap: that builds two arrays
+			// per swap, a few thousand per frame.
+			let tmp = re[i]
+			re[i] = re[j]
+			re[j] = tmp
+			tmp = im[i]
+			im[i] = im[j]
+			im[j] = tmp
 		}
 	}
 	for (let len = 2; len <= n; len <<= 1) {

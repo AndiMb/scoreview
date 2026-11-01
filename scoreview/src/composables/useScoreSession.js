@@ -1,9 +1,9 @@
-import axios from '@nextcloud/axios'
-import { computed, nextTick, ref, shallowRef, watch } from 'vue'
-import { buildTimeline, groupRectsByPage } from '../lib/scoreLayout.js'
+import { computed, getCurrentScope, nextTick, onScopeDispose, ref, shallowRef, watch } from 'vue'
+import { groupRectsByPage } from '../lib/scoreLayout.js'
 import { createScoreSync } from '../lib/scoreSync.js'
 import { createWakeWindow } from '../lib/timeLoopWake.js'
-import { elidMapping } from '../lib/variantChoice.js'
+import { elidMapping, mergePictureMeta, pictureParts as partsOfPicture } from '../lib/variantChoice.js'
+import { loadPictureArtifacts } from './pictureArtifacts.js'
 
 /**
  * Geteiltes leeres Array fuer Seiten ohne Takte - ein `[]` im Template waere
@@ -86,24 +86,10 @@ export function useScoreSession() {
 	// base meta with the variant's elid- and staff-bearing fields over it.
 	const variantMeta = shallowRef(null)
 	const variantKey = ref(null)
-	const pictureMeta = computed(() => {
-		const base = scoreMeta.value
-		const variant = variantMeta.value
-		if (!base || !variant) {
-			return base
-		}
-		const merged = { ...base, noteSpellings: variant.noteSpellings, pageFormat: variant.pageFormat ?? base.pageFormat, pages: variant.pages }
-		// Absent means "too much text" in both - keep that apart from "none".
-		if (Array.isArray(variant.lyricSyllables)) {
-			merged.lyricSyllables = variant.lyricSyllables
-		} else {
-			delete merged.lyricSyllables
-		}
-		return merged
-	})
+	const pictureMeta = computed(() => mergePictureMeta(scoreMeta.value, variantMeta.value))
 	// The parts the picture draws, in staff order - for "which staff is my
 	// part" (lib/staffBands.js); the mixer keeps scoreParts.
-	const pictureParts = computed(() => variantMeta.value?.parts ?? scoreParts.value)
+	const pictureParts = computed(() => partsOfPicture(scoreMeta.value, variantMeta.value))
 	// Segment numbers between picture and base (I3): notes are anchored
 	// against the base, whatever picture they were made in.
 	const elids = computed(() => elidMapping(variantMeta.value))
@@ -174,34 +160,29 @@ export function useScoreSession() {
 		const mine = generation
 		const stale = () => mine !== generation
 		try {
-			const [timingRes, measuresRes, metaRes] = await Promise.all([
-				axios.get(files.timingJson),
-				axios.get(files.measuresJson),
-				axios.get(files.metaJson),
-			])
+			const { timeline: notes, measures, meta } = await loadPictureArtifacts(files)
 			if (stale()) {
 				return
 			}
-			const notes = buildTimeline(timingRes.data)
 			timeline.value = notes
-			measuresTimeline.value = buildTimeline(measuresRes.data)
+			measuresTimeline.value = measures
 			pageUrls.value = files.pages
 			basePicture = { timeline: notes, measures: measuresTimeline.value, pages: files.pages }
 			variantMeta.value = null
 			variantKey.value = null
 			currentEtag.value = files.etag
-			scoreMeta.value = metaRes.data
-			hooks.applyMetadata(metaRes.data)
-			scoreParts.value = metaRes.data.parts ?? []
+			scoreMeta.value = meta
+			hooks.applyMetadata(meta)
+			scoreParts.value = meta.parts ?? []
 			// Herkunft der Darstellung (E3). Zwei verschiedene Aussagen, die
 			// leicht verwechselt werden: `renderer.backend` ist der
 			// Konvertierungsweg, `meta.mscoreVersion` die Version, mit der die
 			// Partitur GESCHRIEBEN wurde - siehe lib/viewerTexts.js.
 			rendererBackend.value = renderer?.backend ?? null
-			mscoreVersion.value = metaRes.data.mscoreVersion ?? null
+			mscoreVersion.value = meta.mscoreVersion ?? null
 			canReconvert.value = mayReconvert === true
 			canWriteFolder.value = mayWrite === true
-			totalMeasures.value = metaRes.data.measures ?? measuresTimeline.value.events.length
+			totalMeasures.value = meta.measures ?? measures.events.length
 			hooks.loadAnnotations()
 			// Die Studierbuchstaben kommen mit MuseScore auf dem Sidecar nur aus dem MIDI
 			// - und das laedt sonst nur, wer Ton hat (useScoreFacts).
@@ -285,21 +266,11 @@ export function useScoreSession() {
 		}
 		let next
 		if (answer?.files) {
-			const [timingRes, measuresRes, metaRes] = await Promise.all([
-				axios.get(answer.files.timingJson),
-				axios.get(answer.files.measuresJson),
-				axios.get(answer.files.metaJson),
-			])
+			const loaded = await loadPictureArtifacts(answer.files)
 			if (mine !== generation) {
 				return false
 			}
-			next = {
-				timeline: buildTimeline(timingRes.data),
-				measures: buildTimeline(measuresRes.data),
-				pages: answer.files.pages,
-				meta: metaRes.data,
-				key: answer.variant ?? metaRes.data?.variant ?? null,
-			}
+			next = { ...loaded, key: answer.variant ?? loaded.meta?.variant ?? null }
 		} else {
 			next = { ...basePicture, meta: null, key: null }
 		}
@@ -444,6 +415,17 @@ export function useScoreSession() {
 	 */
 	function forceAutoScrollFor(ms) {
 		forceScrollUntil = Date.now() + ms
+	}
+
+	// Only what this session owns: the frame loop. The others it drives
+	// through `hooks` dispose of themselves with the same scope, and their
+	// order on close is the viewer's (cleanup() from beforeUnmount).
+	if (getCurrentScope()) {
+		onScopeDispose(() => {
+			stopTimeDisplay()
+			sync = null
+			frameListeners.clear()
+		})
 	}
 
 	/** Wiedergabe, Schleife und Abfragen abbauen - beim Schliessen und in reset(). */

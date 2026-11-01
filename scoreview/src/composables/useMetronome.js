@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { getCurrentScope, onScopeDispose, ref } from 'vue'
 import { computeCountInDelaysMs, estimateBeatsInMeasure, planCountIn, resolveBeatInMeasure } from '../lib/metronome.js'
 import { createMetronomeClick } from '../lib/metronomeClick.js'
 import { findStepIndex } from '../lib/timingSync.js'
@@ -242,6 +242,13 @@ export function useMetronome({
 		clearCountIn()
 		click?.destroy?.()
 		click = null
+	}
+
+	// A safety net, not the order: the viewer stops this explicitly where
+	// the order matters (beforeUnmount/reset), and a forgotten line there
+	// must not leave it running. Calling it twice does no harm.
+	if (getCurrentScope()) {
+		onScopeDispose(destroy)
 	}
 
 	function reset() {

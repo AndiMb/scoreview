@@ -150,6 +150,7 @@ import DragVertical from 'vue-material-design-icons/DragVertical.vue'
 import FolderOpen from 'vue-material-design-icons/FolderOpen.vue'
 import Plus from 'vue-material-design-icons/Plus.vue'
 import { translate } from '../l10n.js'
+import { serverError } from '../lib/serverError.js'
 import { addScore, moveRow, payloadFor, removeRow, rowsFromSetlist } from '../lib/setlistEdit.js'
 
 /**
@@ -314,7 +315,7 @@ export default {
 						})
 				this.$emit('saved', res.data)
 			} catch (err) {
-				this.error = err?.response?.data?.error ?? this.t('The setlist could not be saved.')
+				this.error = serverError(err, this.t('The setlist could not be saved.'))
 			} finally {
 				this.busy = false
 			}

@@ -118,9 +118,16 @@ export function labelText(label, t) {
 	}
 }
 
+/** The last index laneSyllables built, by the identity of its inputs. */
+let memo = null
+
 /**
  * The syllables to write under the lane: each timing event in the window
  * that sings one (lyricsLayout.js decides which verse a repeat sings).
+ *
+ * Called on every frame of the stage view with the same lyrics and
+ * timeline, so the index behind it (syllableIndex) is built once per input
+ * and kept; a frame then costs a binary search and the syllables in view.
  *
  * @param {object} input
  * @param {Array} input.blocks buildLyrics().blocks
@@ -134,8 +141,23 @@ export function laneSyllables({ blocks, events, times, fromMs, toMs }) {
 	if (!blocks || blocks.length === 0 || !events || !times) {
 		return []
 	}
+	if (memo === null || memo.blocks !== blocks || memo.events !== events || memo.times !== times) {
+		memo = { blocks, events, times, index: syllableIndex(blocks, events, times) }
+	}
+	return syllablesIn(memo.index, fromMs, toMs)
+}
+
+/**
+ * Every sung syllable of the timeline, in score order.
+ *
+ * @param {Array} blocks buildLyrics().blocks
+ * @param {Array<{elid:number}>} events timing events, unrolled
+ * @param {number[]} times their score times
+ * @return {{entries: Array<{scoreMs:number, text:string}>, sorted: boolean}}
+ */
+export function syllableIndex(blocks, events, times) {
 	const text = new Map()
-	for (const b of blocks) {
+	for (const b of blocks ?? []) {
 		for (const v of b.verses) {
 			for (const w of v.words) {
 				for (const s of w.syllables) {
@@ -144,16 +166,72 @@ export function laneSyllables({ blocks, events, times, fromMs, toMs }) {
 			}
 		}
 	}
-	const index = { syllableVerses: versesByElid(blocks), events, occ: occurrences(events) }
-	const out = []
-	for (let i = 0; i < events.length; i++) {
-		if (times[i] < fromMs || times[i] > toMs) {
-			continue
-		}
+	const index = { syllableVerses: versesByElid(blocks ?? []), events, occ: occurrences(events) }
+	const entries = []
+	let sorted = true
+	for (let i = 0; i < (events?.length ?? 0); i++) {
 		const id = activeSyllable(index, i)
 		if (id !== null && text.has(id)) {
-			out.push({ scoreMs: times[i], text: text.get(id) })
+			if (entries.length > 0 && times[i] < entries[entries.length - 1].scoreMs) {
+				sorted = false
+			}
+			entries.push({ scoreMs: times[i], text: text.get(id) })
 		}
 	}
+	return { entries, sorted }
+}
+
+/**
+ * The syllables of a syllableIndex() inside [fromMs, toMs].
+ *
+ * @param {{entries: Array<{scoreMs:number, text:string}>, sorted: boolean}} index
+ * @param {number} fromMs
+ * @param {number} toMs
+ * @return {Array<{scoreMs:number, text:string}>}
+ */
+export function syllablesIn({ entries, sorted }, fromMs, toMs) {
+	if (!sorted) {
+		// Times that run backwards are not a timeline this app writes; read
+		// them all rather than miss one.
+		return entries.filter((e) => e.scoreMs >= fromMs && e.scoreMs <= toMs)
+	}
+	const out = []
+	for (let i = lowerBound(entries, fromMs, (e) => e.scoreMs); i < entries.length && entries[i].scoreMs <= toMs; i++) {
+		out.push(entries[i])
+	}
 	return out
+}
+
+/**
+ * Where the lane's target bars start to matter: the first note, in onset
+ * order, that can still reach into the window. A note's end is not sorted
+ * with its onset, so the search goes back by the longest note.
+ *
+ * @param {Array<{onMs:number}>} sortedNotes by onMs
+ * @param {number} fromMs
+ * @param {number} longestMs the longest offMs - onMs among them
+ * @return {number} index into sortedNotes
+ */
+export function firstNoteFrom(sortedNotes, fromMs, longestMs) {
+	return lowerBound(sortedNotes, fromMs - longestMs, (n) => n.onMs)
+}
+
+/**
+ * @param {Array} list ascending by key
+ * @param {number} value
+ * @param {function(object): number} key
+ * @return {number} the first index whose key is >= value
+ */
+function lowerBound(list, value, key) {
+	let lo = 0
+	let hi = list.length
+	while (lo < hi) {
+		const mid = (lo + hi) >>> 1
+		if (key(list[mid]) < value) {
+			lo = mid + 1
+		} else {
+			hi = mid
+		}
+	}
+	return lo
 }

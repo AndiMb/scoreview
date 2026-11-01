@@ -68,27 +68,31 @@
 
 <script>
 import axios from '@nextcloud/axios'
-import { loadState } from '@nextcloud/initial-state'
 import { getLanguage } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, ref, shallowRef } from 'vue'
 import PrintToolbar from './PrintToolbar.vue'
 import ScorePage from './ScorePage.vue'
+import { loadPictureArtifacts } from '../composables/pictureArtifacts.js'
 import { useAnnotations } from '../composables/useAnnotations.js'
 import { useConversionStatus } from '../composables/useConversionStatus.js'
 import { useLeaders } from '../composables/useLeaders.js'
 import { useMyPart } from '../composables/useMyPart.js'
 import { useScoreFacts } from '../composables/useScoreFacts.js'
 import { useViewerPreferences } from '../composables/useViewerPreferences.js'
+import { readInitialState } from '../initialState.js'
 import { translate } from '../l10n.js'
 import { capabilitiesOf } from '../lib/capabilities.js'
+import { noteNameStaves, noteNameSystem } from '../lib/noteNameSystem.js'
 import { spellingMap } from '../lib/noteSpellingIndex.js'
 import { createPdf } from '../lib/pdfWriter.js'
 import { pageBoxMm, pageCss } from '../lib/printLayout.js'
 import { keyByElid } from '../lib/scoreFacts.js'
-import { BASE_PAGE_WIDTH_PX, buildTimeline, groupRectsByPage } from '../lib/scoreLayout.js'
+import { BASE_PAGE_WIDTH_PX, groupRectsByPage } from '../lib/scoreLayout.js'
+import { serverError } from '../lib/serverError.js'
+import { createStaffMappingReports } from '../lib/staffMappingReports.js'
 import { svgPageToPdf } from '../lib/svgToPdf.js'
-import { elidMapping } from '../lib/variantChoice.js'
+import { elidMapping, mergePictureMeta, pictureParts as partsOfPicture } from '../lib/variantChoice.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -135,14 +139,6 @@ async function decodeImage(href) {
 	}
 }
 
-function readState(key) {
-	try {
-		return loadState('scoreview', key)
-	} catch {
-		return null
-	}
-}
-
 export default {
 	name: 'PrintApp',
 
@@ -152,7 +148,7 @@ export default {
 	},
 
 	setup() {
-		const page = readState('print') ?? {}
+		const page = readInitialState('print') ?? {}
 		const fileId = Number(page.fileId)
 
 		const pageUrls = shallowRef([])
@@ -164,10 +160,8 @@ export default {
 		// the piece stays scoreMeta's.
 		const variantKey = new URLSearchParams(window.location.search).get('variant')
 		const variantMeta = shallowRef(null)
-		const pictureMeta = computed(() => (variantMeta.value && scoreMeta.value
-			? { ...scoreMeta.value, noteSpellings: variantMeta.value.noteSpellings, pageFormat: variantMeta.value.pageFormat ?? scoreMeta.value.pageFormat }
-			: scoreMeta.value))
-		const pictureParts = computed(() => variantMeta.value?.parts ?? scoreMeta.value?.parts ?? [])
+		const pictureMeta = computed(() => mergePictureMeta(scoreMeta.value, variantMeta.value))
+		const pictureParts = computed(() => partsOfPicture(scoreMeta.value, variantMeta.value))
 		const elids = computed(() => elidMapping(variantMeta.value))
 		const currentEtag = ref(null)
 		// From the status body, as in the viewer: offer the PDF file only where
@@ -207,28 +201,19 @@ export default {
 			onReady: async ({ files, canWriteFolder: mayWrite }) => {
 				canWriteFolder.value = mayWrite === true
 				try {
-					const [timingRes, measuresRes, metaRes] = await Promise.all([
-						axios.get(files.timingJson),
-						axios.get(files.measuresJson),
-						axios.get(files.metaJson),
-					])
-					let picture = { timing: timingRes.data, measures: measuresRes.data, pages: files.pages, meta: null }
+					const base = await loadPictureArtifacts(files)
+					let picture = { ...base, meta: null }
 					if (variantKey) {
 						// Where the variant cannot be had, the score prints as
 						// the file has it - better than no print at all.
 						const answer = await conversion.requestVariant(variantKey)
 						if (answer?.status === 'ready') {
-							const [vTiming, vMeasures, vMeta] = await Promise.all([
-								axios.get(answer.files.timingJson),
-								axios.get(answer.files.measuresJson),
-								axios.get(answer.files.metaJson),
-							])
-							picture = { timing: vTiming.data, measures: vMeasures.data, pages: answer.files.pages, meta: vMeta.data }
+							picture = await loadPictureArtifacts(answer.files)
 						}
 					}
-					timeline.value = buildTimeline(picture.timing)
-					measuresTimeline.value = buildTimeline(picture.measures)
-					scoreMeta.value = metaRes.data
+					timeline.value = picture.timeline
+					measuresTimeline.value = picture.measures
+					scoreMeta.value = base.meta
 					variantMeta.value = picture.meta
 					currentEtag.value = files.etag
 					pageUrls.value = picture.pages
@@ -272,6 +257,8 @@ export default {
 			markers: annotations.markers,
 			stamps: annotations.stamps,
 			svgHasSegIds,
+			// Not reactive: only its answer is (staffMappingOk).
+			staffMappingReports: createStaffMappingReports(),
 			capabilities,
 			spellings,
 			elidKeys,
@@ -360,18 +347,12 @@ export default {
 			if (!this.noteNamesOn || !this.noteNamesPossible) {
 				return null
 			}
-			if (this.preferenceNoteNames !== 'off') {
-				return this.preferenceNoteNames
-			}
-			return getLanguage().toLowerCase().startsWith('de') ? 'de' : 'en'
+			return noteNameSystem(this.preferenceNoteNames, getLanguage())
 		},
 
 		/** Only my own staff, as in the viewer, where staves map to parts. */
 		noteNameStaves() {
-			if (!this.noteNamesMine || this.myPartIndex === null || !this.staffMappingOk) {
-				return null
-			}
-			return [this.myPartIndex]
+			return noteNameStaves(this.noteNamesMine, this.myPartIndex, this.staffMappingOk)
 		},
 	},
 
@@ -432,8 +413,8 @@ export default {
 			this.loadedCount = this.loaded.size
 		},
 
-		onStaffMapping(possible) {
-			this.staffMappingOk = possible
+		onStaffMapping(possible, page) {
+			this.staffMappingOk = this.staffMappingReports.report(page, possible)
 		},
 
 		onPageIndexed({ segIds }) {
@@ -481,7 +462,7 @@ export default {
 					return
 				}
 				this.pdfBlob = null
-				this.pdf = { state: 'error', error: data?.error ?? err?.message ?? String(err), unsupported: [...unsupported] }
+				this.pdf = { state: 'error', error: serverError(err, err?.message ?? String(err)), unsupported: [...unsupported] }
 			}
 		},
 

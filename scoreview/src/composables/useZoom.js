@@ -1,4 +1,4 @@
-import { computed, nextTick, ref, shallowRef } from 'vue'
+import { computed, getCurrentScope, nextTick, onScopeDispose, ref, shallowRef } from 'vue'
 import {
 	computeActualSizeZoom,
 	computeFitPageZoom,
@@ -9,6 +9,7 @@ import {
 } from '../lib/scoreLayout.js'
 import { fitSpreadPageZoom, fitSpreadWidthZoom } from '../lib/spreadLayout.js'
 import { createPinchPreview } from './pinchPreview.js'
+import { createZoomGesture } from './zoomGesture.js'
 
 // Zoomschritt fuer Tastatur (+/-) und Strg+Mausrad - multiplikativ, damit sich
 // die gefuehlte Schrittweite ueber den ganzen Bereich (0,25-4) gleich anfuehlt.
@@ -112,23 +113,35 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 		set(zoom.value * factor)
 	}
 
-	function onInput(event) {
-		set(Number(event.target.value))
+	// Slider and Ctrl+wheel: previewed while they move, set once at the end
+	// (zoomGesture.js).
+	const gesture = createZoomGesture({
+		target: () => scrollEl()?.querySelector('.scoreview-pages') ?? null,
+		current: () => zoom.value,
+		clamp: (value) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value)),
+		commit: set,
+	})
+
+	/**
+	 * The slider moves: a preview. Its `change` (inputDone) or a short rest
+	 * sets the zoom.
+	 *
+	 * @param {number} value
+	 */
+	function input(value) {
+		gesture.to(value)
 	}
 
 	/**
 	 * Strg+Mausrad zoomt die Partitur, nicht die Nextcloud-Oberfläche
-	 * (dasselbe Motiv wie beim Pinch-Zoom). Ohne Strg bleibt das Rad
-	 * gewöhnliches Scrollen.
+	 * (dasselbe Motiv wie beim Pinch-Zoom) - the caller has checked Ctrl
+	 * and prevented the browser's zoom. Scaled around the pointer while the
+	 * wheel turns.
 	 *
 	 * @param {WheelEvent} event
 	 */
-	function onWheel(event) {
-		if (!event.ctrlKey) {
-			return
-		}
-		event.preventDefault()
-		by(event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP)
+	function wheel(event) {
+		gesture.by(event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP, { x: event.clientX, y: event.clientY })
 	}
 
 	/**
@@ -403,9 +416,17 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 	function stop() {
 		viewportObserver?.disconnect()
 		viewportObserver = null
+		gesture.cancel()
 		cancelPinchFrame()
 		preview.end()
 		previewing = false
+	}
+
+	// A safety net, not the order: the viewer stops this explicitly where
+	// the order matters (beforeUnmount/reset), and a forgotten line there
+	// must not leave it running. Calling it twice does no harm.
+	if (getCurrentScope()) {
+		onScopeDispose(stop)
 	}
 
 	/**
@@ -450,8 +471,9 @@ export function useZoom({ rootEl, scrollEl, spread = () => false, onWidth = () =
 		step: ZOOM_STEP,
 		set,
 		by,
-		onInput,
-		onWheel,
+		input,
+		inputDone: gesture.finish,
+		wheel,
 		onPageLoaded,
 		applyPreset,
 		restore,

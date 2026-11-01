@@ -1,3 +1,9 @@
+// PARKED - part of the microphone score follower (automatic page turning),
+// which is paused; no viewer code imports it. Kept and tested because
+// tools/follow/replay.mjs measures it against recorded rehearsals, and the
+// work resumes from here. The switch `feature_score_follower` exists but
+// turns nothing on (docs/installation.md).
+//
 // Local following of a live performance against the score reference: an
 // online alignment in a band around the current place (after Dixon,
 // "Live tracking of musical performances using on-line time warping", 2005)

@@ -42,6 +42,7 @@
 					:cursorRect="crop.index === cursorCrop ? cursorRect : null"
 					:cursorElid="crop.index === cursorCrop ? cursorElid : null"
 					:needle="crop.index === cursorCrop ? needle : null"
+					:liveNoteMarks="crop.index === cursorCrop ? liveNoteMarks : NO_MARKS"
 					@noteClick="(e) => $emit('noteClick', e)"
 					@markerClick="(e) => $emit('markerClick', e)"
 					@indexed="(e) => $emit('indexed', e)" />
@@ -70,6 +71,9 @@ import { bandAnchor, bandScale, bandWindow, cropIndexAt, frameAt, lyricBaselines
 const LEAD = 0.08
 
 const NO_RECTS = Object.freeze([])
+// One empty list for every frame without the cursor: a new [] each render
+// would count as a changed prop.
+const NO_MARKS = Object.freeze([])
 
 export default {
 	name: 'SystemBand',
@@ -121,6 +125,13 @@ export default {
 		needle: {
 			type: Object,
 			default: null,
+		},
+
+		// The live intonation marks (B3), like the needle: they change with
+		// every frame of singing.
+		liveNoteMarks: {
+			type: Array,
+			default: () => NO_MARKS,
 		},
 
 		// Focus on the loop (B4): the looped measures' rectangles - only the
@@ -185,6 +196,7 @@ export default {
 
 	computed: {
 		NO_RECTS: () => NO_RECTS,
+		NO_MARKS: () => NO_MARKS,
 
 		/**
 		 * The frames shown: all systems, or - focused on the loop (B4) - only

@@ -7,8 +7,10 @@ import {
 	frameCents,
 	needleChanged,
 	noteMarks,
+	noteMarksIn,
+	ownNotes,
 	problemList,
-	targetAt,
+	targetIn,
 	worstClass,
 } from '../lib/intonation.js'
 import { captureToScoreMs, recordingToScoreMs } from '../lib/recordingAlign.js'
@@ -135,6 +137,21 @@ export function useIntonation({
 		return evaluated ? noteMarks(evaluated, notes(), myChannels(), events(), myStaff()) : []
 	})
 
+	// My part's notes sorted once (lib/intonation.js ownNotes), for the live
+	// frames: 50 a second, each asking for the note under the cursor. Rebuilt
+	// when the notes or the chosen part change - by identity and by the
+	// channel list, since myChannels() may hand out a fresh array.
+	let own = null
+	function ownIndex() {
+		const all = notes()
+		const channels = myChannels()
+		const key = channels ? [...channels].join(',') : null
+		if (!own || own.notes !== all || own.key !== key) {
+			own = { notes: all, key, index: ownNotes(all, channels) }
+		}
+		return own.index
+	}
+
 	function ensureWorker() {
 		if (worker || destroyed) {
 			return worker
@@ -233,12 +250,54 @@ export function useIntonation({
 		needleShownAt = -Infinity
 		liveMarksKey = null
 		w.postMessage({ type: 'live-reset' })
-		unsubscribe = handle.onBlocks(({ samples, contextTimeSec }) => {
+		unsubscribe = connectDirect(w, handle) ?? relayBlocks(w, handle)
+		live.value = true
+	}
+
+	/**
+	 * The blocks go from the worklet straight to the worker through a
+	 * MessageChannel: relayed by the main thread they were 50 messages a
+	 * second there, each one a copy, next to the viewer's frame loop.
+	 *
+	 * @param {Worker} w
+	 * @param {object} handle from microphone.acquire()
+	 * @return {?function(): void} the unsubscribe, or null where the port
+	 *   cannot reach the worklet - then relayBlocks()
+	 */
+	function connectDirect(w, handle) {
+		if (typeof MessageChannel === 'undefined' || !handle.attachPort) {
+			return null
+		}
+		const channel = new MessageChannel()
+		try {
+			w.postMessage({ type: 'live-port', port: channel.port1 }, [channel.port1])
+		} catch {
+			return null
+		}
+		if (!handle.attachPort(channel.port2)) {
+			w.postMessage({ type: 'live-port-close' })
+			return null
+		}
+		return () => {
+			handle.detachPort()
+			// The worker may be gone already (failWorker).
+			worker?.postMessage({ type: 'live-port-close' })
+		}
+	}
+
+	/**
+	 * Fallback: the blocks through the main thread.
+	 *
+	 * @param {Worker} w
+	 * @param {object} handle from microphone.acquire()
+	 * @return {function(): void} the unsubscribe
+	 */
+	function relayBlocks(w, handle) {
+		return handle.onBlocks(({ samples, contextTimeSec }) => {
 			// Eine Kopie: Den Block behaelt womoeglich gleichzeitig die Aufnahme.
 			const copy = samples.slice()
 			w.postMessage({ type: 'live', samples: copy, contextTimeSec }, [copy.buffer])
 		})
-		live.value = true
 	}
 
 	function stopLive() {
@@ -341,7 +400,8 @@ export function useIntonation({
 					inputLatencyMs: liveInputLatency,
 				})
 			: displayTimeMs()
-		const target = targetAt(notes(), myChannels(), scoreMs, frame.hz)
+		const index = ownIndex()
+		const target = targetIn(index, scoreMs, frame.hz)
 		if (!target) {
 			recent = []
 			showNeedle({ cents: null, cls: 'rest' }, null, () => [])
@@ -357,7 +417,7 @@ export function useIntonation({
 		// Mehrheit stimmlos: ehrlich „nicht auswertbar".
 		const cents = werte.length * 2 > recent.length ? median(werte) : null
 		const cls = classify(cents)
-		showNeedle({ cents, cls }, `${target.onMs}:${target.pitch}:${cls}`, () => noteMarks([{ note: target, class: cls }], notes(), myChannels(), events(), myStaff()))
+		showNeedle({ cents, cls }, `${target.onMs}:${target.pitch}:${cls}`, () => noteMarksIn([{ note: target, class: cls }], index, events(), myStaff()))
 	}
 
 	/**

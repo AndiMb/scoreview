@@ -1,3 +1,9 @@
+// PARKED - part of the microphone score follower (automatic page turning),
+// which is paused; no viewer code imports it. Kept and tested because
+// tools/follow/replay.mjs measures it against recorded rehearsals, and the
+// work resumes from here. The switch `feature_score_follower` exists but
+// turns nothing on (docs/installation.md).
+//
 // The microphone follower: features in, place in the score out - pure, no
 // DOM, no AudioContext, no clock of its own. Fed by the viewer from its
 // AnalyserNode and by tools/follow-replay.mjs from a file, which is what

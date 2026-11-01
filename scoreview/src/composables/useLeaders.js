@@ -3,6 +3,7 @@ import { generateUrl } from '@nextcloud/router'
 import { ref } from 'vue'
 import { translate } from '../l10n.js'
 import { candidateQuery, normalizeLeaders } from '../lib/leaders.js'
+import { serverError } from '../lib/serverError.js'
 
 /**
  * Die Leitungen der offenen Partitur (E9, Controller\LeaderController).
@@ -40,19 +41,6 @@ export function useLeaders({ fileId }) {
 		isLeader.value = normalized.isLeader
 	}
 
-	/**
-	 * Die Meldung des Servers, wenn er eine hat - sie nennt den Grund
-	 * (Eigentuemerin, kein Zugriff) genauer, als es hier ein fester Text
-	 * koennte.
-	 *
-	 * @param {Error} err Fehler aus axios
-	 * @param {string} fallback Text, wenn der Server keinen mitschickt
-	 * @return {string}
-	 */
-	function message(err, fallback) {
-		return err?.response?.data?.error ?? fallback
-	}
-
 	async function load() {
 		const mine = ++generation
 		try {
@@ -78,7 +66,7 @@ export function useLeaders({ fileId }) {
 				candidates.value = candidates.value.filter((c) => c.userId !== userId)
 			}
 		} catch (err) {
-			error.value = message(err, t('Could not appoint this person.'))
+			error.value = serverError(err, t('Could not appoint this person.'))
 		}
 	}
 
@@ -91,7 +79,7 @@ export function useLeaders({ fileId }) {
 				apply(res.data)
 			}
 		} catch (err) {
-			error.value = message(err, t('Could not remove this leader.'))
+			error.value = serverError(err, t('Could not remove this leader.'))
 			// Die Liste kann sich inzwischen geaendert haben (jemand anderes
 			// hat zuerst abberufen) - neu laden statt einen alten Stand zu zeigen.
 			load()
@@ -113,7 +101,7 @@ export function useLeaders({ fileId }) {
 		} catch (err) {
 			if (mine === searchGeneration) {
 				candidates.value = []
-				error.value = message(err, t('Search failed.'))
+				error.value = serverError(err, t('Search failed.'))
 			}
 		}
 	}

@@ -140,13 +140,31 @@
 		<!--
 			Tonnamen (H3) links neben den Notenkoepfen. Nicht klickbar: Ein
 			Tipp soll die Note treffen, nicht ihr Etikett.
+
+			SVG text in page units, like the beat numbers, not one HTML span
+			per name: hundreds of spans per page would fall under Nextcloud's
+			stylesheet, and every zoom step would rewrite their inline styles.
+			In page units they scale with the notation by themselves; they are
+			placed again only when the zoom leaves its band
+			(noteLabelLayout.js labelScale). Behind the notation (no z-index);
+			the halo keeps them legible over the lines.
 		-->
-		<span
-			v-for="label in noteLabels"
-			:key="label.key"
-			class="score-page-note-name"
-			:style="{ left: label.left + '%', top: label.top + '%', fontSize: label.size + 'px', lineHeight: label.lineHeight + 'px', width: label.width + 'px', textAlign: label.align }"
-			aria-hidden="true">{{ label.text }}</span>
+		<svg
+			v-if="noteLabels.texts.length > 0"
+			class="score-page-name-layer"
+			:viewBox="viewBoxAttr"
+			aria-hidden="true">
+			<g class="score-page-note-names" :stroke-width="noteLabels.halo">
+				<text
+					v-for="label in noteLabels.texts"
+					:key="label.key"
+					:x="label.x"
+					:y="label.y"
+					:font-size="label.size"
+					:text-anchor="label.anchor"
+					dominant-baseline="central">{{ label.text }}</text>
+			</g>
+		</svg>
 		<!--
 			Beat numbers (B1) as SVG text in page units: they scale with the
 			notation, and - like the cursor - cost no style recalculation
@@ -233,11 +251,13 @@ import { translate } from '../l10n.js'
 import { placeCountLabels } from '../lib/countLayout.js'
 import { formatCents } from '../lib/intonation.js'
 import { createLru } from '../lib/lruCache.js'
-import { placeNoteLabels } from '../lib/noteLabelLayout.js'
+import { labelScale, noteNameTexts, placeNoteLabels } from '../lib/noteLabelLayout.js'
 import { nameOf } from '../lib/noteNames.js'
 import { hitNotehead, matchNoteheads } from '../lib/noteSpellingIndex.js'
+import { bandStyle, cursorBands, percentStyle, percentX, percentY, stackNoteTexts } from '../lib/pageGeometry.js'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
 import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, stavesOfPart } from '../lib/staffBands.js'
+import { systemOf } from '../lib/stampLayout.js'
 import { buildNoteIndex, buildSegmentIndex, pickNoteheads, setHighlight } from '../lib/svgIndex.js'
 import { sanitizeSvgPage } from '../lib/svgSanitizer.js'
 import { yieldToMain } from '../lib/yieldToMain.js'
@@ -259,6 +279,13 @@ const CLICK_MOVE_TOLERANCE_PX = 8
 
 // Cursor bands of a page the cursor is not on (see cursorRects()).
 const NO_CURSOR_RECTS = Object.freeze([])
+
+// No note names (see noteLabels in data()).
+const NO_NOTE_LABELS = Object.freeze({ halo: 0, texts: Object.freeze([]) })
+
+// Layouts of the note names kept per page, one per zoom band (labelScale):
+// zooming back and forth between two bands re-places nothing.
+const NOTE_LABEL_LAYOUTS = 4
 
 // Abstand zum Sichtbereich, ab dem eine Seite geladen (LOAD) bzw. wieder
 // freigegeben wird (UNLOAD). Der Unterschied ist
@@ -531,10 +558,12 @@ export default {
 			// selbst steht bewusst ausserhalb von data() (siehe created()); dieses
 			// eine Bit liest das Template, es entscheidet, ob das Band malt.
 			notesHighlighted: false,
-			// Die Tonnamen dieser Seite: {key, left, top, size, text}, die
-			// linke obere Ecke in Prozent der Seite. Einmal je Seite und Einstellung berechnet,
-			// nicht je Rahmen (die Arbeit aus 1.10.2 bleibt so erhalten).
-			noteLabels: [],
+			// The note names of this page as SVG text in page units,
+			// {halo, texts: [{key, x, y, size, anchor, text}]}
+			// (noteLabelLayout.js noteNameTexts) - computed per page, setting
+			// and zoom band, never per frame. Frozen: nothing in it changes
+			// in place, and Vue need not proxy hundreds of entries.
+			noteLabels: NO_NOTE_LABELS,
 			// The beat numbers of this page: {key, x, y, size, text} in SVG
 			// units (lib/countLayout.js) - drawn as SVG text, so playback
 			// never touches a style attribute for them.
@@ -603,16 +632,12 @@ export default {
 			}
 			let top = rect.y
 			if (this.partsMappable) {
-				const system = this.staffSystems.find((s) => rect.y < s.bottom + 1 && rect.y + rect.h > s.top - 1)
-				const band = system?.staves[this.myPartIndex]
+				const band = systemOf(this.staffSystems, rect)?.staves[this.myPartIndex]
 				if (band) {
 					top = band.top - (band.bottom - band.top) * 1.6
 				}
 			}
-			return {
-				left: `${((rect.x - box.minX) / box.width) * 100}%`,
-				top: `${((top - box.minY) / box.height) * 100}%`,
-			}
+			return percentStyle(box, rect.x, top)
 		},
 
 		needlePercent() {
@@ -637,6 +662,16 @@ export default {
 			return this.t('{cents} cents', { cents: formatCents(this.needle.cents) })
 		},
 
+		/**
+		 * Whether the playback cursor stands on this page - null while there
+		 * is no cursor at all.
+		 *
+		 * @return {?boolean}
+		 */
+		onCursorPage() {
+			return this.cursorRect ? this.cursorRect.page === this.pageIndex : null
+		},
+
 		/** Die viewBox der Seite fuer die Cursor-Ebene. */
 		viewBoxAttr() {
 			const box = this.viewBox
@@ -657,19 +692,7 @@ export default {
 				// change and would re-render the page for nothing.
 				return NO_CURSOR_RECTS
 			}
-			const system = this.staffSystems.find((s) => rect.y < s.bottom + 1 && rect.y + rect.h > s.top - 1)
-			if (!system) {
-				return [{ x: rect.x, y: rect.y, w: rect.w, h: rect.h }]
-			}
-			// Etwas ueber die aeusseren Notenlinien hinaus, damit Noten in
-			// Hilfslinien noch im Band liegen.
-			const luft = (system.staves[0].bottom - system.staves[0].top) / 4
-			return system.staves.map((band) => ({
-				x: rect.x,
-				y: band.top - luft,
-				w: rect.w,
-				h: band.bottom - band.top + 2 * luft,
-			}))
+			return cursorBands(rect, this.staffSystems)
 		},
 
 		/**
@@ -690,7 +713,7 @@ export default {
 			if (!this.partsMappable) {
 				return []
 			}
-			return stavesOfPart(this.staffSystems, this.myPartIndex).map((band) => this.bandStyle(band))
+			return stavesOfPart(this.staffSystems, this.myPartIndex).map((band) => bandStyle(band, this.viewBox))
 		},
 
 		/** Die uebrigen Zeilen, wenn „nur meine Zeile" eingeschaltet ist. */
@@ -700,7 +723,7 @@ export default {
 			}
 			return this.staffSystems
 				.flatMap((system) => system.staves.filter((_, i) => i !== this.myPartIndex))
-				.map((band) => this.bandStyle(band, 1.2))
+				.map((band) => bandStyle(band, this.viewBox, 1.2))
 		},
 
 		pageMarkers() {
@@ -715,10 +738,7 @@ export default {
 					visibility: m.visibility,
 					dimmed: m.dimmed === true,
 					voices: m.voices ?? [],
-					style: {
-						left: `${((m.x - box.minX) / box.width) * 100}%`,
-						top: `${((m.y - box.minY) / box.height) * 100}%`,
-					},
+					style: percentStyle(box, m.x, m.y),
 				}))
 		},
 
@@ -747,41 +767,25 @@ export default {
 			if (!box || !this.showNoteText) {
 				return []
 			}
-			// Mehrere Notizen koennen am selben Takt haengen - in einer Probe
-			// ist das der Normalfall, nicht die Ausnahme. Gestapelt statt
-			// uebereinander gedruckt: ohne das ueberlagern sich die Texte bis
-			// zur Unlesbarkeit (an zwei Notizen im selben Takt nachgestellt).
-			const belegt = []
-			return this.markers
-				.filter((m) => m.page === this.pageIndex && (m.content ?? '') !== '')
-				.map((m) => {
-					const system = this.staffSystems.find((sys) => m.y < sys.bottom + 1 && m.y + m.h > sys.top - 1)
-					const oben = system ? system.top : m.y
-					// Ein Notenzeilen-Abstand ueber dem System - genug, um nicht
-					// auf den Noten zu liegen, nah genug, um zuzugehoeren.
-					const abstand = system ? (system.staves[0].bottom - system.staves[0].top) / 2 : m.h / 2
-					const links = ((m.x - box.minX) / box.width) * 100
-					const zeile = ((oben - abstand - box.minY) / box.height) * 100
-
-					// Als belegt gilt, was in derselben Hoehe steht und
-					// waagerecht naeher als eine Textbreite liegt.
-					const stapel = belegt.filter((b) => Math.abs(b.zeile - zeile) < 0.5 && Math.abs(b.links - links) < 12).length
-					belegt.push({ links, zeile })
-
-					return {
-						id: m.id,
-						content: m.content,
-						visibility: m.visibility,
-						dimmed: m.dimmed === true,
-						voices: m.voices ?? [],
-						style: {
-							left: `${links}%`,
-							top: `${zeile}%`,
-							maxWidth: `${100 - links}%`,
-							transform: `translateY(calc(-100% - ${stapel * 1.7}em))`,
-						},
-					}
-				})
+			// Several notes on one measure are stacked (lib/pageGeometry.js).
+			const notes = this.markers.filter((m) => m.page === this.pageIndex && (m.content ?? '') !== '')
+			const spots = stackNoteTexts(notes, this.staffSystems, box)
+			return notes.map((m, i) => {
+				const { left, top, stack } = spots[i]
+				return {
+					id: m.id,
+					content: m.content,
+					visibility: m.visibility,
+					dimmed: m.dimmed === true,
+					voices: m.voices ?? [],
+					style: {
+						left: `${left}%`,
+						top: `${top}%`,
+						maxWidth: `${100 - left}%`,
+						transform: `translateY(calc(-100% - ${stack * 1.7}em))`,
+					},
+				}
+			})
 		},
 
 		pageLoopMarkers() {
@@ -795,8 +799,7 @@ export default {
 					id: m.id,
 					kind: m.kind,
 					style: {
-						left: `${((m.x - box.minX) / box.width) * 100}%`,
-						top: `${((m.y - box.minY) / box.height) * 100}%`,
+						...percentStyle(box, m.x, m.y),
 						height: `${(m.h / box.height) * 100}%`,
 					},
 				}))
@@ -825,16 +828,22 @@ export default {
 			this.applyLiveNoteMarks()
 		},
 
+		// The live mark belongs to the page the cursor is on (see
+		// applyLiveNoteMarks); it moves when the cursor turns the page.
+		onCursorPage() {
+			this.applyLiveNoteMarks()
+		},
+
 		spellings() {
 			this.indexSpellings()
 		},
 
 		noteNameSystem() {
-			this.updateNoteLabels()
+			this.relayoutNoteLabels()
 		},
 
 		noteNameStaves() {
-			this.updateNoteLabels()
+			this.relayoutNoteLabels()
 		},
 
 		countOfElid() {
@@ -846,7 +855,8 @@ export default {
 		},
 
 		zoom() {
-			// Die Schriftgroesse der Tonnamen folgt dem Notenbild.
+			// The names scale with the notation by themselves (SVG text in
+			// page units); a new layout only when the zoom leaves its band.
 			this.updateNoteLabels()
 		},
 
@@ -881,6 +891,15 @@ export default {
 		this.noteItemsMeasured = false
 		// Hindernisse fuer die Tonnamen, gemessen beim ersten Bedarf.
 		this.labelObstacles = null
+		// Note name layouts of the current setting by zoom band
+		// (relayoutNoteLabels() empties it), and the band shown now.
+		this.labelLayouts = new Map()
+		this.labelScaleKey = null
+		// Vertical place of a notehead in page units, for the order of the
+		// heads in a chord (replaceMarks). Read once per head: the SVG never
+		// changes, and reading after a class change forced a style
+		// recalculation in a frame of some 17,000 nodes.
+		this.headYs = new WeakMap()
 		this.tapTimer = null
 		// The frame with the page SVG and the element in it that holds the
 		// SVG (see the template and attachSvgRoot()) - DOM nodes, so not in
@@ -941,7 +960,7 @@ export default {
 			this.labelObstacles = null
 			this.noteItems = []
 			this.noteItemsMeasured = false
-			this.updateNoteLabels()
+			this.relayoutNoteLabels()
 			this.updateCountLabels()
 		},
 
@@ -981,19 +1000,53 @@ export default {
 				: []
 		},
 
+		/** The names' inputs changed: drop the kept layouts and place them anew. */
+		relayoutNoteLabels() {
+			this.labelLayouts.clear()
+			this.labelScaleKey = null
+			this.updateNoteLabels()
+		},
+
+		/**
+		 * The note names for the current zoom band - kept from before if this
+		 * band was laid out already, otherwise placed now.
+		 */
 		updateNoteLabels() {
 			const box = this.viewBox
-			if (!this.noteNameSystem || !box || this.measuredNoteItems().length === 0) {
-				this.noteLabels = []
+			const scale = box ? labelScale((BASE_PAGE_WIDTH_PX * this.zoom) / box.width) : null
+			if (!this.noteNameSystem || !scale || this.measuredNoteItems().length === 0) {
+				this.noteLabels = NO_NOTE_LABELS
+				this.labelScaleKey = null
 				return
 			}
+			if (scale.key === this.labelScaleKey) {
+				return
+			}
+			let layout = this.labelLayouts.get(scale.key)
+			if (!layout) {
+				layout = Object.freeze(this.layoutNoteLabels(scale.pxPerUnit))
+				if (this.labelLayouts.size >= NOTE_LABEL_LAYOUTS) {
+					this.labelLayouts.delete(this.labelLayouts.keys().next().value)
+				}
+				this.labelLayouts.set(scale.key, layout)
+			}
+			this.labelScaleKey = scale.key
+			this.noteLabels = layout
+		},
+
+		/**
+		 * @param {number} pxPerUnit the scale of the zoom band
+		 * @return {{halo: number, texts: Array<object>}} noteLabelLayout.js noteNameTexts
+		 */
+		layoutNoteLabels(pxPerUnit) {
 			const staves = this.noteNameStaves ? new Set(this.noteNameStaves) : null
 			// Schriftgroesse aus der Kopfhoehe: deutlich groesser als ein
 			// Notenkopf, damit sie am Notenstaender lesbar bleibt; wo es dafuer
 			// zu eng ist, weicht der Name aus (lib/noteLabelLayout.js). Die
 			// Untergrenze bleibt klein: Bei Seitenbreite am Telefon sind die
 			// Koepfe nur 4 px hoch, groessere Namen deckten dort alles zu.
-			const pxPerUnit = (BASE_PAGE_WIDTH_PX * this.zoom) / box.width
+			// Not rounded to whole pixels: as SVG text the size is in page
+			// units, and inside the limits it then stays the same at every zoom.
 			const items = this.noteItems
 				.map((item, id) => ({ item, id }))
 				.filter(({ item }) => staves === null || staves.has(item.staff))
@@ -1001,21 +1054,11 @@ export default {
 					key: `${item.elid}:${item.staff}:${item.voice}:${id}`,
 					id,
 					head: item.box,
-					sizePx: Math.round(Math.max(9, Math.min(24, item.box.height * pxPerUnit * 1.4))),
+					sizePx: Math.max(9, Math.min(24, item.box.height * pxPerUnit * 1.4)),
 					text: nameOf({ tpc: item.tpc, system: this.noteNameSystem, concertKey: this.keyOfElid(item.elid) }),
 				}))
-			this.noteLabels = placeNoteLabels(items, this.obstacles(), pxPerUnit).map((label) => ({
-				key: label.key,
-				text: label.text,
-				size: label.sizePx,
-				lineHeight: label.box.height * pxPerUnit,
-				// Die Breite ist geschaetzt - zum Kopf hin buendig, damit eine
-				// Abweichung nach aussen geht und nicht auf den Kopf.
-				width: label.box.width * pxPerUnit,
-				align: { left: 'right', right: 'left' }[label.side] ?? 'center',
-				left: ((label.box.x - box.minX) / box.width) * 100,
-				top: ((label.box.y - box.minY) / box.height) * 100,
-			}))
+			const { halo, texts } = noteNameTexts(placeNoteLabels(items, this.obstacles(), pxPerUnit), pxPerUnit)
+			return { halo, texts: Object.freeze(texts) }
 		},
 
 		/**
@@ -1068,8 +1111,8 @@ export default {
 				pitch: hit.pitch,
 				tpc: hit.tpc,
 				elid: hit.elid,
-				left: ((hit.box.x + hit.box.width / 2 - box.minX) / box.width) * 100,
-				top: ((hit.box.y - box.minY) / box.height) * 100,
+				left: percentX(box, hit.box.x + hit.box.width / 2),
+				top: percentY(box, hit.box.y),
 			}
 		},
 
@@ -1092,18 +1135,15 @@ export default {
 		},
 
 		/**
-		 * Laedt das Seiten-SVG nach (lazy, siehe IntersectionObserver in
+		 * Loads the page SVG (lazily, see the IntersectionObserver in
 		 * mounted()).
 		 *
-		 * Der Observer wird erst NACH Erfolg abgemeldet. Vorher
-		 * geschah es davor, und zusammen mit dem fehlenden catch war ein
-		 * einzelner Fehlschlag endgueltig: die Seite blieb fuer den Rest der
-		 * Sitzung weiss, ohne Hinweis, und weil der Observer schon weg war,
-		 * loeste auch erneutes Hinscrollen keinen zweiten Versuch mehr aus.
-		 * Das ist kein theoretischer Fall - `gcOldVersions()` raeumt den
-		 * etag-Ordner einer aelteren Fassung weg, waehrend jemand sie noch
-		 * offen hat (ConversionService), und dann antwortet genau diese Route
-		 * mit 404.
+		 * A failure must not be final: it shows on the page with a retry
+		 * button (loadError), and the load observer stays attached, so
+		 * scrolling back tries again. That is no theoretical case -
+		 * `gcOldVersions()` removes the etag folder of an older version
+		 * while someone still has it open (ConversionService), and then this
+		 * very route answers 404.
 		 */
 		async load() {
 			if (this.svgMarkup || this.loading) {
@@ -1151,7 +1191,7 @@ export default {
 				// the music pages, and the page that happened to load last
 				// would decide whether "my part" can be marked at all.
 				if (this.staffSystems.length > 0) {
-					this.$emit('staffMapping', this.staffMappingPossible)
+					this.$emit('staffMapping', this.staffMappingPossible, this.pageIndex)
 				}
 				// The SVG is in the document now. Indexing it is the next long
 				// stretch, so the main thread is given back first; the overlays
@@ -1240,6 +1280,7 @@ export default {
 			this.noteIndex = buildNoteIndex(this.svgRoot)
 			this.marked = []
 			this.liveMarked = []
+			this.headYs = new WeakMap()
 			this.indexSpellings()
 			// Ob das SVG Kennungen traegt (M10) - eine Faehigkeit der Artefakte,
 			// nach der der Viewer Liedtext und Tonnamen anbietet (E15).
@@ -1259,9 +1300,15 @@ export default {
 			this.marked = this.replaceMarks(this.marked, this.noteMarks, this.liveMarked)
 		},
 
-		/** Die Live-Nadel in den Notenkopf - hoechstens eine Note je Rahmen. */
+		/**
+		 * Die Live-Nadel in den Notenkopf - hoechstens eine Note je Rahmen.
+		 * Only on the page the cursor is on, like the needle itself: the
+		 * same segment can stand on two pages (a repeat, M7), and every other
+		 * page would look up the mark for nothing on each note change.
+		 */
 		applyLiveNoteMarks() {
-			this.liveMarked = this.replaceMarks(this.liveMarked, this.liveNoteMarks, this.marked)
+			const marks = this.onCursorPage === false ? [] : this.liveNoteMarks
+			this.liveMarked = this.replaceMarks(this.liveMarked, marks, this.marked)
 		},
 
 		/**
@@ -1276,25 +1323,49 @@ export default {
 		 * @return {Array<{node: Element, cls: string}>}
 		 */
 		replaceMarks(previous, marks, keep) {
+			// All reads before the first write: picking a head in a chord
+			// reads positions, and a read right after a class change forces
+			// a style recalculation of the whole frame.
+			const next = []
+			if (this.noteIndex && this.noteIndex.size > 0) {
+				for (const mark of marks) {
+					const nodes = pickNoteheads(this.noteIndex.get(`${mark.elid}:${mark.staff}`), mark.rank, mark.size, this.headY)
+					const cls = `scoreview-intonation-${mark.cls}`
+					for (const node of nodes) {
+						next.push({ node, cls })
+					}
+				}
+			}
 			for (const { node, cls } of previous) {
 				if (!keep.some((k) => k.node === node && k.cls === cls)) {
 					node.classList?.remove(cls)
 				}
 			}
-			const next = []
-			if (!this.noteIndex || this.noteIndex.size === 0) {
-				return next
-			}
-			const yOf = (node) => node.getBoundingClientRect?.().top ?? 0
-			for (const mark of marks) {
-				const nodes = pickNoteheads(this.noteIndex.get(`${mark.elid}:${mark.staff}`), mark.rank, mark.size, yOf)
-				const cls = `scoreview-intonation-${mark.cls}`
-				for (const node of nodes) {
-					node.classList?.add(cls)
-					next.push({ node, cls })
-				}
+			for (const { node, cls } of next) {
+				node.classList?.add(cls)
 			}
 			return next
+		},
+
+		/**
+		 * The vertical place of a notehead, in page units - read once, the
+		 * page SVG never changes (see headYs in created()).
+		 *
+		 * @param {Element} node
+		 * @return {number}
+		 */
+		headY(node) {
+			let y = this.headYs.get(node)
+			if (y === undefined) {
+				try {
+					y = node.getBBox().y
+				} catch {
+					// Without layout (hidden) there is no place to sort by.
+					y = 0
+				}
+				this.headYs.set(node, y)
+			}
+			return y
 		},
 
 		/** Haengt die Hervorhebung auf das gerade klingende Segment um. */
@@ -1350,7 +1421,10 @@ export default {
 			this.liveMarked = []
 			this.noteItems = []
 			this.noteItemsMeasured = false
-			this.noteLabels = []
+			this.noteLabels = NO_NOTE_LABELS
+			this.labelLayouts.clear()
+			this.labelScaleKey = null
+			this.headYs = new WeakMap()
 			this.countLabels = []
 			this.labelObstacles = null
 		},
@@ -1453,23 +1527,6 @@ export default {
 			}
 		},
 
-		/**
-		 * Ein Notenzeilen-Band als CSS-Position, ueber die volle Systembreite.
-		 *
-		 * @param {{top:number,bottom:number,left:number,right:number}} band
-		 * @param {number} luftFaktor Vielfaches des Linienabstands als Rand
-		 * @return {object}
-		 */
-		bandStyle(band, luftFaktor = 0.5) {
-			const box = this.viewBox
-			const luft = ((band.bottom - band.top) / 4) * luftFaktor
-			return {
-				left: `${((band.left - box.minX) / box.width) * 100}%`,
-				top: `${((band.top - luft - box.minY) / box.height) * 100}%`,
-				width: `${((band.right - band.left) / box.width) * 100}%`,
-				height: `${((band.bottom - band.top + 2 * luft) / box.height) * 100}%`,
-			}
-		},
 	},
 }
 </script>
@@ -1609,15 +1666,26 @@ export default {
 	fill: transparent;
 }
 
-.score-page-note-name {
-	/* Linke obere Ecke und Zeilenhoehe kommen aus lib/noteLabelLayout.js,
-	   das den Platz neben dem Kopf schon gewaehlt hat. */
+/* Note names: positioned without a z-index, so behind the notation
+   (.score-page-svg has z-index 1) - the halo keeps them legible there. */
+.score-page-name-layer {
 	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
 	pointer-events: none;
+	overflow: visible;
+}
+
+/* Place and size come from lib/noteLabelLayout.js, which chose the spot
+   beside the head. The outline in the background colour lies under the fill
+   (paint-order): a halo that lifts the name off staff lines and stems. */
+.score-page-note-names {
+	fill: var(--color-primary-element, #00679e);
+	stroke: var(--color-main-background, #fff);
+	stroke-linejoin: round;
+	paint-order: stroke;
 	font-weight: 600;
-	white-space: nowrap;
-	color: var(--color-primary-element, #00679e);
-	text-shadow: 0 0 2px var(--color-main-background, #fff), 0 0 2px var(--color-main-background, #fff);
 }
 
 /* Above everything on the page, the notation included: the bubble sits right

@@ -2,6 +2,7 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { computed, ref, shallowRef } from 'vue'
 import { translate } from '../l10n.js'
+import { serverError } from '../lib/serverError.js'
 import { firstPlayableIndex, indexOfFile, nextIndex, positionOf, previousIndex } from '../lib/setlistNav.js'
 
 /**
@@ -26,9 +27,12 @@ import { firstPlayableIndex, indexOfFile, nextIndex, positionOf, previousIndex }
  * @param {() => (number|string)} [deps.originFileId] die Partitur, mit der die
  *   Seite geoeffnet wurde - auf der eigenstaendigen Seite die Datei ihres
  *   Direct-Editing-Tokens
+ * @param {(action: string) => boolean} [deps.can] the interaction policy
+ *   (usePerformanceMode.can): paging through the list is `nextPiece` - it
+ *   works in performance mode too -, the editor is `settings`
  * @return {object}
  */
-export function useSetlist({ fileId, setFileId, standalone, originFileId = fileId }) {
+export function useSetlist({ fileId, setFileId, standalone, originFileId = fileId, can = () => true }) {
 	const t = (text) => translate('scoreview', text)
 
 	// Die geladene Liste, wie GET /api/setlists/{id} sie liefert.
@@ -41,7 +45,8 @@ export function useSetlist({ fileId, setFileId, standalone, originFileId = fileI
 	const offerDismissed = ref(false)
 	const folderFileId = ref(null)
 	const canCreate = ref(false)
-	const editorOpen = ref(false)
+	// The editor card: 'edit' | 'new' | null (closed).
+	const editorMode = ref(null)
 
 	// Antworten, die nach einem Stueck- oder Listenwechsel eintreffen, sind
 	// veraltet - wie in useLeaders.
@@ -52,10 +57,6 @@ export function useSetlist({ fileId, setFileId, standalone, originFileId = fileI
 	const entries = computed(() => setlist.value?.entries ?? [])
 	const position = computed(() => positionOf(entries.value, index.value))
 	const current = computed(() => (index.value === null ? null : entries.value[index.value] ?? null))
-
-	function message(err, fallback) {
-		return err?.response?.data?.error ?? fallback
-	}
 
 	/**
 	 * Oeffnet eine Liste. Ohne `at` beginnt sie beim ersten spielbaren Stueck
@@ -77,7 +78,7 @@ export function useSetlist({ fileId, setFileId, standalone, originFileId = fileI
 				loaded = (await axios.get(generateUrl('/apps/scoreview/api/setlists/{id}', { id: setlistId }))).data
 			} catch (err) {
 				if (mine === generation) {
-					error.value = message(err, t('The setlist could not be loaded.'))
+					error.value = serverError(err, t('The setlist could not be loaded.'))
 				}
 				return false
 			}
@@ -108,20 +109,32 @@ export function useSetlist({ fileId, setFileId, standalone, originFileId = fileI
 	/** Naechstes Stueck; fehlende werden uebersprungen. */
 	function next() {
 		const i = nextIndex(entries.value, index.value ?? -1)
-		if (i !== null) {
+		if (i !== null && can('nextPiece')) {
 			show(i)
 		}
 	}
 
 	function previous() {
 		const i = previousIndex(entries.value, index.value ?? -1)
-		if (i !== null) {
+		if (i !== null && can('nextPiece')) {
 			show(i)
 		}
 	}
 
 	/** @param {number} i direkt zu einem Eintrag - nur, wenn er spielbar ist */
 	function goTo(i) {
+		if (can('nextPiece')) {
+			showEntry(i)
+		}
+	}
+
+	/**
+	 * To an entry without asking the policy - for the leader's move to a
+	 * piece of the list (H7), which is not an own action of this device.
+	 *
+	 * @param {number} i
+	 */
+	function showEntry(i) {
 		const entry = entries.value[i]
 		if (entry && entry.status === 'ok' && entry.fileId !== null) {
 			show(i)
@@ -132,17 +145,35 @@ export function useSetlist({ fileId, setFileId, standalone, originFileId = fileI
 		generation++
 		setlist.value = null
 		index.value = null
-		editorOpen.value = false
+	}
+
+	/**
+	 * Opens the editor, or closes it when it is open in this mode already.
+	 *
+	 * @param {'edit'|'new'} mode
+	 */
+	function toggleEditor(mode) {
+		if (!can('settings')) {
+			return
+		}
+		editorMode.value = editorMode.value === mode ? null : mode
+	}
+
+	function closeEditor() {
+		editorMode.value = null
 	}
 
 	/**
 	 * Nach dem Speichern im Editor: die neue Fassung uebernehmen und die
 	 * Stelle halten - das offene Stueck bleibt offen, auch wenn es jetzt
-	 * woanders in der Liste steht.
+	 * woanders in der Liste steht. Gespeichert oder angelegt, die Liste
+	 * gilt ab jetzt, auch eine neue - wer eine Setliste anlegt, will sie
+	 * gleich benutzen; the editor closes.
 	 *
 	 * @param {object} data Antwort von PUT/POST
 	 */
 	function applySaved(data) {
+		editorMode.value = null
 		generation++
 		setlist.value = data
 		const here = indexOfFile(data.entries, fileId(), index.value)
@@ -210,12 +241,15 @@ export function useSetlist({ fileId, setFileId, standalone, originFileId = fileI
 		offerDismissed,
 		folderFileId,
 		canCreate,
-		editorOpen,
+		editorMode,
 		open,
 		next,
 		previous,
 		goTo,
+		showEntry,
 		close,
+		toggleEditor,
+		closeEditor,
 		applySaved,
 		loadOffers,
 		acceptOffer,

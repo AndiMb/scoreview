@@ -11,10 +11,27 @@
  * @return {string}
  */
 export function formatTime(ms) {
-	const totalSeconds = Math.floor(ms / 1000)
-	const minutes = Math.floor(totalSeconds / 60)
-	const seconds = totalSeconds % 60
-	return `${minutes}:${String(seconds).padStart(2, '0')}`
+	return minutesSeconds(Math.floor(ms / 1000))
+}
+
+/**
+ * A length as "m:ss" - a recording's duration. Rounded, not floored like
+ * formatTime(): a take of 4.8 s is "0:05" long, while a position of 4.8 s
+ * has not reached 0:05 yet. Same digits, two different questions.
+ *
+ * @param {?number} ms
+ * @return {string}
+ */
+export function formatDuration(ms) {
+	return minutesSeconds(Math.round((ms || 0) / 1000))
+}
+
+/**
+ * @param {number} totalSeconds
+ * @return {string}
+ */
+function minutesSeconds(totalSeconds) {
+	return `${Math.floor(totalSeconds / 60)}:${String(totalSeconds % 60).padStart(2, '0')}`
 }
 
 /**

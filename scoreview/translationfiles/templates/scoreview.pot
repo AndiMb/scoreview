@@ -8,10 +8,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: lib/Controller/AnnotationController.php lib/Controller/ConversionController.php lib/Controller/FollowController.php lib/Controller/LeaderController.php lib/Controller/MyPartController.php lib/Controller/PageController.php lib/Controller/PdfController.php lib/Controller/PracticeLogController.php lib/Controller/PracticeTrackController.php lib/Controller/RecordingController.php lib/Controller/SetlistController.php lib/Controller/SingRunController.php lib/Controller/VariantController.php
-msgid "File not found or no access."
-msgstr ""
-
 #: lib/Controller/AnnotationController.php
 msgid "You do not have permission to create shared notes for this file."
 msgstr ""
@@ -60,6 +56,10 @@ msgstr ""
 msgid "Invalid note anchor."
 msgstr ""
 
+#: lib/Controller/ConversionController.php lib/Controller/JsonErrors.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
+msgid "File not found or no access."
+msgstr ""
+
 #: lib/Controller/ConversionController.php
 msgid "Not allowed to convert this score again."
 msgstr ""
@@ -92,6 +92,26 @@ msgstr ""
 msgid "Another leader changed the session at the same moment. Please try again."
 msgstr ""
 
+#: lib/Controller/JsonErrors.php
+msgid "A file with this name already exists."
+msgstr ""
+
+#: lib/Controller/JsonErrors.php lib/Controller/PdfController.php
+msgid "You cannot save files in this folder."
+msgstr ""
+
+#: lib/Controller/JsonErrors.php
+msgid "Not enough storage space."
+msgstr ""
+
+#: lib/Controller/JsonErrors.php
+msgid "The file or folder is in use right now. Try again in a moment."
+msgstr ""
+
+#: lib/Controller/JsonErrors.php
+msgid "Invalid file name or folder."
+msgstr ""
+
 #: lib/Controller/LeaderController.php
 msgid "Only people who can open this score can lead it."
 msgstr ""
@@ -116,28 +136,8 @@ msgstr ""
 msgid "Saving here is not possible from the mobile app."
 msgstr ""
 
-#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
-msgid "You cannot save files in this folder."
-msgstr ""
-
 #: lib/Controller/PdfController.php
 msgid "This is not a PDF file."
-msgstr ""
-
-#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
-msgid "A file with this name already exists."
-msgstr ""
-
-#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
-msgid "Not enough storage space."
-msgstr ""
-
-#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
-msgid "The file or folder is in use right now. Try again in a moment."
-msgstr ""
-
-#: lib/Controller/PdfController.php lib/Controller/PracticeTrackController.php
-msgid "Invalid file name or folder."
 msgstr ""
 
 #: lib/Controller/PdfController.php
@@ -461,122 +461,6 @@ msgid "Storage for recordings on this server (MB)"
 msgstr ""
 
 #: src/components/AdminSettings.vue
-msgid "Conversion"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "Isolation"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "Fallback"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "Scores are converted in the browser because this server cannot. Every device downloads the conversion engine once (about 14 MB), and nothing is cached on the server."
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "SoundFont"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "Background jobs (cron)"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "mode {mode}, last run {age}"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "no run in the last 15 minutes ({age}) – conversions will stay pending"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "“Follow me”"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "Conversions"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "{ready} ready, {pending} pending, {failed} failed"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "Deno {version}"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "Node.js {version}"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "on this server, {version}"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "with MuseScore"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "with the scoreview-engine"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "not configured"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "The converter can only read the score and write its result – no other files, no network, no processes."
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "The converter can only read the score and write its result, and cannot start processes. This Node.js version cannot block network access; Node.js 25 or newer, or Deno, can."
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "This Node.js version cannot isolate the converter. Node.js 20.7 or newer, or Deno, runs it with access to the score only."
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "notify_push is available: devices get jumps pushed instead of asking every {ms} ms."
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "Without notify_push every following device asks every {ms} ms, costing about 50 ms of CPU per request - with 40 devices about three cores during the session. From about {n} devices, installing notify_push is recommended."
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "custom URL configured"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "cached copy in use"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "not fetched yet – the server downloads it on first playback ({url})"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "no SoundFont available"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "never"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "{n} s ago"
-msgstr ""
-
-#: src/components/AdminSettings.vue
-msgid "{n} min ago"
-msgstr ""
-
-#: src/components/AdminSettings.vue
 msgid "MuseScore {version} works as expected ({pages} page(s), {events} events, {seconds} s)"
 msgstr ""
 
@@ -852,7 +736,7 @@ msgstr ""
 msgid "Name of the loop"
 msgstr ""
 
-#: src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
+#: src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue src/components/ViewerBar.vue src/composables/useSingView.js
 msgid "Measures {from}–{to}"
 msgstr ""
 
@@ -904,7 +788,7 @@ msgstr ""
 msgid "Intonation"
 msgstr ""
 
-#: src/components/MicIndicator.vue src/components/ScoreViewer.vue
+#: src/components/MicIndicator.vue src/components/ScoreViewer.vue src/components/barTools.js
 msgid "Tuner"
 msgstr ""
 
@@ -916,7 +800,7 @@ msgstr ""
 msgid "Microphone on for: {purpose}. Tap to turn it off."
 msgstr ""
 
-#: src/components/MyPartControls.vue src/components/ScoreViewer.vue
+#: src/components/MyPartControls.vue src/components/ScoreViewer.vue src/components/barTools.js
 msgid "My part"
 msgstr ""
 
@@ -1000,7 +884,7 @@ msgstr ""
 msgid "Setlist with {count} pieces"
 msgstr ""
 
-#: src/components/OfflineApp.vue src/components/ScoreViewer.vue
+#: src/components/OfflineApp.vue src/components/ViewerBar.vue src/components/barTools.js
 msgid "Score"
 msgstr ""
 
@@ -1060,7 +944,7 @@ msgstr ""
 msgid "Save again"
 msgstr ""
 
-#: src/components/PinControls.vue src/components/ScoreViewer.vue
+#: src/components/PinControls.vue src/components/barTools.js
 msgid "Save for offline use"
 msgstr ""
 
@@ -1104,7 +988,7 @@ msgstr ""
 msgid "Choose a folder…"
 msgstr ""
 
-#: src/components/PracticeExportControls.vue src/components/ScoreViewer.vue
+#: src/components/PracticeExportControls.vue src/components/barTools.js
 msgid "Save as audio file"
 msgstr ""
 
@@ -1200,7 +1084,7 @@ msgstr ""
 msgid "Counted while the score plays or you record. Only you see your practice time."
 msgstr ""
 
-#: src/components/PrintToolbar.vue src/components/ScoreViewer.vue
+#: src/components/PrintToolbar.vue src/components/barTools.js
 msgid "Print"
 msgstr ""
 
@@ -1308,7 +1192,7 @@ msgstr ""
 msgid "Stop"
 msgstr ""
 
-#: src/components/RecordingPanel.vue src/components/ScoreViewer.vue
+#: src/components/RecordingPanel.vue src/components/ViewerBar.vue
 msgid "Play"
 msgstr ""
 
@@ -1524,7 +1408,7 @@ msgstr ""
 msgid "No notes yet. Click a note or use \"+ At current position\" to add one."
 msgstr ""
 
-#: src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
+#: src/components/ScoreAnnotations.vue src/components/ViewerBar.vue
 msgid "Measure {n}"
 msgstr ""
 
@@ -1536,7 +1420,7 @@ msgstr ""
 msgid "(orphaned)"
 msgstr ""
 
-#: src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
+#: src/components/ScoreAnnotations.vue src/components/ViewerBar.vue
 msgid "by {name}"
 msgstr ""
 
@@ -1556,7 +1440,7 @@ msgstr ""
 msgid "Voice no longer in the score ({voices}) – shown to everyone"
 msgstr ""
 
-#: src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
+#: src/components/ScoreAnnotations.vue src/components/ViewerBar.vue
 msgid "For {voices}"
 msgstr ""
 
@@ -1572,7 +1456,7 @@ msgstr ""
 msgid "Delete"
 msgstr ""
 
-#: src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue
+#: src/components/ScoreAnnotations.vue src/components/ViewerBar.vue
 msgid "Saved loops"
 msgstr ""
 
@@ -1704,7 +1588,7 @@ msgstr ""
 msgid "Score page {n}"
 msgstr ""
 
-#: src/components/ScorePanel.vue src/components/ScoreViewer.vue
+#: src/components/ScorePanel.vue src/components/ScoreViewer.vue src/components/ViewerBar.vue
 msgid "Close"
 msgstr ""
 
@@ -1821,82 +1705,6 @@ msgid "Technical detail"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
-msgid "From measure"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "To measure"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Loop from current measure"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Loop on"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Loop off"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Show only the loop"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Save this loop…"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Pause"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Playback position"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Measure"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Measure – enter a number or a rehearsal mark (C, C+3) and press Enter to jump there"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Measure – enter a number and press Enter to jump there"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Rehearsal marks"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Go to rehearsal mark {mark} (measure {n})"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Starting note"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Key note of the current key"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Key note"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "The first note of my voice"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "My note"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
 msgid "The leader has moved on to another piece."
 msgstr ""
 
@@ -1976,7 +1784,7 @@ msgstr ""
 msgid "Tap the score where the {stamp} belongs."
 msgstr ""
 
-#: src/components/ScoreViewer.vue
+#: src/components/ScoreViewer.vue src/components/barTools.js
 msgid "New setlist"
 msgstr ""
 
@@ -1988,7 +1796,7 @@ msgstr ""
 msgid "Choose your part first."
 msgstr ""
 
-#: src/components/ScoreViewer.vue
+#: src/components/ScoreViewer.vue src/components/barTools.js
 msgid "Mixer"
 msgstr ""
 
@@ -2004,156 +1812,24 @@ msgstr ""
 msgid "My voice on the right, the others on the left"
 msgstr ""
 
-#: src/components/ScoreViewer.vue
+#: src/components/ScoreViewer.vue src/components/barTools.js
 msgid "Notes"
 msgstr ""
 
-#: src/components/ScoreViewer.vue
+#: src/components/ScoreViewer.vue src/components/barTools.js
 msgid "Recording and intonation"
 msgstr ""
 
-#: src/components/ScoreViewer.vue
+#: src/components/ScoreViewer.vue src/components/barTools.js
 msgid "Practice log"
 msgstr ""
 
-#: src/components/ScoreViewer.vue
+#: src/components/ScoreViewer.vue src/components/barTools.js
 msgid "Scored singing"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "Rehearsal"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Full score"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "{part} (generated)"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Exit fullscreen"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Fullscreen"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Fullscreen (inside the app)"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Only in the page view."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Needs a page area at least {px} px wide - this one is narrower."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Band"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Text"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Whole piece"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Measure {measure}"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/SingPanel.vue
-msgid "Beginner"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/SingPanel.vue
-msgid "Choir"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/SingPanel.vue
-msgid "Strict"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Playback and practice"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/SingPanel.vue
-msgid "View"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Loop"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/TempoControls.vue
-msgid "Metronome"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Tempo"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Transpose"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/composables/usePracticeExport.js
-msgid "Coach"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Scroll along with playback"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Show only my part"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Note names and counting"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Show notes in the score"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Pages and edition"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Colours"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Leaders and “Follow me”"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Info and diagnostics"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "On"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "This score has no lyrics."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "This score has too much text for the lyrics view."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "These pages were set without the data this view needs. A reconversion on this server cannot add it."
 msgstr ""
 
 #: src/components/SetlistBar.vue src/components/SetlistEditor.vue
@@ -2292,6 +1968,10 @@ msgstr ""
 msgid "Level"
 msgstr ""
 
+#: src/components/SingPanel.vue src/components/barTools.js
+msgid "View"
+msgstr ""
+
 #: src/components/SingPanel.vue
 msgid "Lane under the score"
 msgstr ""
@@ -2368,6 +2048,18 @@ msgstr ""
 msgid "Delete my results for this piece"
 msgstr ""
 
+#: src/components/SingPanel.vue src/composables/useSingView.js
+msgid "Beginner"
+msgstr ""
+
+#: src/components/SingPanel.vue src/composables/useSingView.js
+msgid "Choir"
+msgstr ""
+
+#: src/components/SingPanel.vue src/composables/useSingView.js
+msgid "Strict"
+msgstr ""
+
 #: src/components/SingPanel.vue
 msgid "{level} · tempo {tempo} % · {notes} notes"
 msgstr ""
@@ -2386,6 +2078,10 @@ msgstr ""
 
 #: src/components/TempoControls.vue
 msgid "Tempo (BPM)"
+msgstr ""
+
+#: src/components/TempoControls.vue src/components/barTools.js
+msgid "Metronome"
 msgstr ""
 
 #: src/components/TempoControls.vue
@@ -2504,6 +2200,102 @@ msgstr ""
 msgid "The microphone is in use by another application."
 msgstr ""
 
+#: src/components/ViewerBar.vue
+msgid "From measure"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "To measure"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Loop from current measure"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Loop on"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Loop off"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Show only the loop"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Save this loop…"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Pause"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Playback position"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Measure"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Measure – enter a number or a rehearsal mark (C, C+3) and press Enter to jump there"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Measure – enter a number and press Enter to jump there"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Rehearsal marks"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Go to rehearsal mark {mark} (measure {n})"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Starting note"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Key note of the current key"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Key note"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "The first note of my voice"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "My note"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Exit fullscreen"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Fullscreen"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Fullscreen (inside the app)"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "Full score"
+msgstr ""
+
+#: src/components/ViewerBar.vue
+msgid "{part} (generated)"
+msgstr ""
+
 #: src/components/ZoomControls.vue
 msgid "Zoom"
 msgstr ""
@@ -2522,6 +2314,58 @@ msgstr ""
 
 #: src/components/ZoomControls.vue
 msgid "Default size"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Loop"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Tempo"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Transpose"
+msgstr ""
+
+#: src/components/barTools.js src/composables/usePracticeExport.js
+msgid "Coach"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Scroll along with playback"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Show only my part"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Note names and counting"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Show notes in the score"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Pages and edition"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Colours"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Leaders and “Follow me”"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Info and diagnostics"
+msgstr ""
+
+#: src/components/barTools.js
+msgid "Playback and practice"
 msgstr ""
 
 #: src/composables/useAnnotations.js
@@ -2669,6 +2513,10 @@ msgid "The practice goal could not be saved."
 msgstr ""
 
 #: src/composables/useRecorder.js
+msgid "The recording could not be played."
+msgstr ""
+
+#: src/composables/useRecorder.js
 msgid "The recordings could not be loaded."
 msgstr ""
 
@@ -2685,11 +2533,27 @@ msgid "The recording could not be shared."
 msgstr ""
 
 #: src/composables/useRecorder.js
-msgid "The recording could not be played."
+msgid "No connection to the server."
 msgstr ""
 
-#: src/composables/useRecorder.js
-msgid "No connection to the server."
+#: src/composables/useScoreDisplay.js
+msgid "This score has no lyrics."
+msgstr ""
+
+#: src/composables/useScoreDisplay.js
+msgid "This score has too much text for the lyrics view."
+msgstr ""
+
+#: src/composables/useScoreDisplay.js
+msgid "These pages were set without the data this view needs. A reconversion on this server cannot add it."
+msgstr ""
+
+#: src/composables/useScoreDisplay.js
+msgid "Only in the page view."
+msgstr ""
+
+#: src/composables/useScoreDisplay.js
+msgid "Needs a page area at least {px} px wide - this one is narrower."
 msgstr ""
 
 #: src/composables/useScoreVariant.js
@@ -2736,12 +2600,148 @@ msgstr ""
 msgid "The results could not be deleted."
 msgstr ""
 
+#: src/composables/useSingView.js
+msgid "Whole piece"
+msgstr ""
+
+#: src/composables/useSingView.js
+msgid "Measure {measure}"
+msgstr ""
+
 #: src/composables/useStartTone.js
 msgid "The starting note needs sound, and no SoundFont is loaded."
 msgstr ""
 
 #: src/composables/useStartTone.js
 msgid "The score uses every MIDI channel, so there is none left for the starting note."
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "Conversion"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "Isolation"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "Fallback"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "Scores are converted in the browser because this server cannot. Every device downloads the conversion engine once (about 14 MB), and nothing is cached on the server."
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "SoundFont"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "Background jobs (cron)"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "mode {mode}, last run {age}"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "no run in the last 15 minutes ({age}) – conversions will stay pending"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "“Follow me”"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "Conversions"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "{ready} ready, {pending} pending, {failed} failed"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "Deno {version}"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "Node.js {version}"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "on this server, {version}"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "with MuseScore"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "with the scoreview-engine"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "not configured"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "The converter can only read the score and write its result – no other files, no network, no processes."
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "The converter can only read the score and write its result, and cannot start processes. This Node.js version cannot block network access; Node.js 25 or newer, or Deno, can."
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "This Node.js version cannot isolate the converter. Node.js 20.7 or newer, or Deno, runs it with access to the score only."
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "notify_push is available: devices get jumps pushed instead of asking every {ms} ms."
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "Without notify_push every following device asks every {ms} ms, costing about 50 ms of CPU per request - with 40 devices about three cores during the session. From about {n} devices, installing notify_push is recommended."
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "custom URL configured"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "cached copy in use"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "not fetched yet – the server downloads it on first playback ({url})"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "no SoundFont available"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "never"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "{n} s ago"
+msgstr ""
+
+#: src/lib/adminDiagnostics.js
+msgid "{n} min ago"
+msgstr ""
+
+#: src/lib/barGroups.js
+msgid "On"
+msgstr ""
+
+#: src/lib/barGroups.js
+msgid "Band"
+msgstr ""
+
+#: src/lib/barGroups.js
+msgid "Text"
 msgstr ""
 
 #: src/lib/singLane.js

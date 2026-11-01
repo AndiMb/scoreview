@@ -21,14 +21,15 @@
 		<svg
 			v-if="active"
 			class="scoreview-lock-ring"
+			:class="{ 'scoreview-lock-ring--holding': holding }"
+			:style="{ '--scoreview-lock-hold': `${holdMs}ms`, '--scoreview-lock-circumference': circumference }"
 			viewBox="0 0 36 36"
 			aria-hidden="true">
 			<circle
 				cx="18"
 				cy="18"
 				r="16"
-				:stroke-dasharray="circumference"
-				:stroke-dashoffset="circumference * (1 - progress)" />
+				:stroke-dasharray="circumference" />
 		</svg>
 		<Lock v-if="active" :size="20" />
 		<LockOpenVariantOutline v-else :size="20" />
@@ -38,6 +39,7 @@
 <script>
 import Lock from 'vue-material-design-icons/Lock.vue'
 import LockOpenVariantOutline from 'vue-material-design-icons/LockOpenVariantOutline.vue'
+import { EXIT_HOLD_MS } from '../composables/usePerformanceMode.js'
 import { translate } from '../l10n.js'
 
 const RADIUS = 16
@@ -58,10 +60,10 @@ export default {
 			default: false,
 		},
 
-		// 0..1, wie weit das Halten zum Verlassen ist.
-		progress: {
-			type: Number,
-			default: 0,
+		// The lock is being held to leave: the ring fills in EXIT_HOLD_MS.
+		holding: {
+			type: Boolean,
+			default: false,
 		},
 	},
 
@@ -70,6 +72,10 @@ export default {
 	computed: {
 		circumference() {
 			return 2 * Math.PI * RADIUS
+		},
+
+		holdMs() {
+			return EXIT_HOLD_MS
 		},
 
 		label() {
@@ -144,5 +150,18 @@ export default {
 	fill: none;
 	stroke: var(--color-primary-element-text);
 	stroke-width: 3;
+	stroke-dashoffset: var(--scoreview-lock-circumference);
+}
+
+/* Filled by the compositor's clock, not by a value per frame
+ * (usePerformanceMode.js): the timer that leaves the mode runs as long. */
+.scoreview-lock-ring--holding circle {
+	animation: scoreview-lock-fill var(--scoreview-lock-hold) linear forwards;
+}
+
+@keyframes scoreview-lock-fill {
+	to {
+		stroke-dashoffset: 0;
+	}
 }
 </style>

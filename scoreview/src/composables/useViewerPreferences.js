@@ -1,7 +1,7 @@
 import axios from '@nextcloud/axios'
-import { loadState } from '@nextcloud/initial-state'
 import { generateUrl } from '@nextcloud/router'
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue'
+import { readInitialState } from '../initialState.js'
 import { COUNT_MODES } from '../lib/countLabels.js'
 import {
 	highlightCssVars,
@@ -81,7 +81,9 @@ export function useViewerPreferences() {
 		})
 	}
 	farbschema?.addEventListener?.('change', onSchemeChange)
-	onBeforeUnmount(() => farbschema?.removeEventListener?.('change', onSchemeChange))
+	if (getCurrentScope()) {
+		onScopeDispose(() => farbschema?.removeEventListener?.('change', onSchemeChange))
+	}
 
 	const resolvedNoteTheme = computed(() => resolveNoteTheme(noteTheme.value, themeIsDark.value))
 
@@ -177,9 +179,5 @@ function leseThemeDunkel() {
  * @return {{highlightColor?: string, highlightMode?: string, stereoMyPart?: boolean, noteTheme?: string}}
  */
 function leseAnfangszustand() {
-	try {
-		return loadState('scoreview', 'viewer-preferences') ?? {}
-	} catch {
-		return {}
-	}
+	return readInitialState('viewer-preferences') ?? {}
 }

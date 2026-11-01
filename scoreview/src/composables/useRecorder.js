@@ -1,11 +1,11 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
-import { computed, getCurrentScope, onScopeDispose, ref, shallowRef, watch } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
 import { translate } from '../l10n.js'
-import { createAudioContext } from '../lib/audioSession.js'
-import { createGeneration } from '../lib/generation.js'
-import { captureToScoreMs, playbackSchedule, tempoAfterListening } from '../lib/recordingAlign.js'
+import { captureToScoreMs } from '../lib/recordingAlign.js'
+import { serverError } from '../lib/serverError.js'
 import { encodeWav, WAV_SAMPLE_RATE } from '../lib/wavCodec.js'
+import { useRecordingPlayer } from './useRecordingPlayer.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -23,13 +23,7 @@ export const PENDING = 'pending'
  * `scoreStartMs` (lib/recordingAlign.js). Ohne Begleitung laeuft der
  * Sequencer trotzdem - stumm, damit Cursor und Einzaehler bleiben.
  *
- * **Abhoeren:** Die WAV wird im SELBEN AudioContext wie der Sequencer
- * gestartet, auf dessen Kontextzeit. Beide laufen danach durch
- * dieselbe Ausgabekette, und der Cursor bekommt die Latenz wie immer
- * (lib/playbackTime.js). Anhalten, Suchlauf und Loop-Ruecksprung starten die
- * Aufnahme neu an der passenden Stelle. Der Sequencer uebernimmt dafuer das
- * Tempo der Aufnahme - eine Aufnahme laesst sich nicht strecken; nach dem
- * Abhoeren gilt wieder das eigene (lib/recordingAlign.js).
+ * **Abhoeren:** useRecordingPlayer.js, hier nur angebunden.
  *
  * **Scheitert das Speichern**, bleibt die WAV im Speicher, ist
  * abspielbar und laesst sich erneut speichern. Ein Neuladen der Seite
@@ -105,10 +99,6 @@ export function useRecorder({
 	const pendingHere = computed(() => (pending.value && String(pending.value.meta.fileId) === String(fileId())
 		? pending.value
 		: null))
-	/** Welche Aufnahme gerade mitlaeuft: id, PENDING oder null. */
-	const listening = ref(null)
-	const recordingVolume = ref(1)
-	const accompanimentVolume = ref(1)
 
 	let generation = 0
 	let confirmFor = null
@@ -130,28 +120,28 @@ export function useRecorder({
 	let recordingFileId = null
 	let unsubscribe = null
 	let handle = null
-	// Abhoeren.
-	let source = null
-	let gainNode = null
-	let gainContext = null
-	let listenBuffer = null
-	let listenMeta = null
-	// Laden und Dekodieren dauern - wer inzwischen stoppt, das Stueck wechselt
-	// oder eine andere Aufnahme waehlt, darf nicht von der alten ueberholt
-	// werden, die danach Tempo, Position und Wiedergabe umstellte.
-	const listenGeneration = createGeneration()
-	// Das eigene Tempo vor dem ersten Abhoeren - beim Wechsel von einer
-	// Aufnahme zur naechsten bleibt das urspruengliche gemerkt.
-	let tempoBeforeListen = null
 	const audioCache = new Map()
-	const decodedCache = new WeakMap()
-	let releaseListenAudio = null
-	let ownContext = null
-	// Nach einem Suchlauf meldet der Sequencer kurz die alte Stelle (siehe
-	// lib/player.js, 'timechange') - so lange wird nicht angesetzt, sonst
-	// liefe die Aufnahme um den Sprung versetzt.
-	let settling = false
-	let settleTimer = null
+
+	// Listening back lives in its own composable; the recorder only decides
+	// when it may start (not while a take runs) and where errors show.
+	const player = useRecordingPlayer({
+		clock,
+		audioContext,
+		holdAudio,
+		isPlaying,
+		playing,
+		play,
+		pause,
+		seek,
+		tempoFactor,
+		setTempoFactor,
+		setAccompanimentGain,
+		ready: () => phase.value === 'idle',
+		onError: (err) => {
+			error.value = messageOf(err, t('The recording could not be played.'))
+		},
+	})
+	const { listening, recordingVolume, accompanimentVolume, stopListening } = player
 
 	const baseUrl = (id = fileId()) => generateUrl('/apps/scoreview/api/scores/{fileId}/recordings', { fileId: id })
 
@@ -402,25 +392,6 @@ export function useRecorder({
 		return audioCache.get(recording.id)
 	}
 
-	function playbackContext() {
-		return audioContext() ?? (ownContext = ownContext ?? createAudioContext())
-	}
-
-	async function decode(key, bytes) {
-		const context = playbackContext()
-		let perContext = decodedCache.get(context)
-		if (!perContext) {
-			perContext = new Map()
-			decodedCache.set(context, perContext)
-		}
-		if (!perContext.has(key)) {
-			// decodeAudioData uebernimmt den Puffer - die Kopie haelt den
-			// Cache fuer die Auswertung heil.
-			perContext.set(key, await context.decodeAudioData(bytes.slice(0)))
-		}
-		return perContext.get(key)
-	}
-
 	/**
 	 * Eine Aufnahme mitlaufen lassen - ab ihrem Anfang in der Partitur.
 	 *
@@ -436,180 +407,14 @@ export function useRecorder({
 		if (!meta) {
 			return
 		}
-		const mine = listenGeneration.next()
-		let buffer
-		try {
-			const bytes = isPending ? pending.value.wav : await loadAudio(recording)
-			buffer = await decode(isPending ? `pending:${meta.scoreStartMs}:${meta.durationMs}` : recording.id, bytes)
-		} catch (err) {
-			if (listenGeneration.isCurrent(mine)) {
-				error.value = messageOf(err, t('The recording could not be played.'))
-			}
-			return
-		}
-		if (!listenGeneration.isCurrent(mine) || phase.value !== 'idle') {
-			return
-		}
-		stopSource()
-		if (tempoBeforeListen === null) {
-			tempoBeforeListen = tempoFactor()
-		}
-		listenBuffer = buffer
-		listenMeta = { scoreStartMs: meta.scoreStartMs, tempoFactor: meta.tempoFactor || 1, durationMs: listenBuffer.duration * 1000 }
-		listening.value = isPending ? PENDING : recording.id
-		setTempoFactor(listenMeta.tempoFactor)
-		setAccompanimentGain(accompanimentVolume.value)
-		if (isPlaying()) {
-			pause()
-		}
-		// The recording sounds through the playback context, also past the
-		// end of the score - keep it awake until listening stops.
-		releaseListenAudio?.()
-		releaseListenAudio = holdAudio('listening')
-		seek(Math.max(0, listenMeta.scoreStartMs))
-		await play()
-		schedule()
-	}
-
-	/**
-	 * Nach einem Suchlauf: Aufnahme anhalten und erst wieder ansetzen, wenn
-	 * der Sequencer die neue Stelle bestaetigt hat - hoechstens eine halbe
-	 * Sekunde, falls die Bestaetigung ausbleibt.
-	 */
-	function settleThenSchedule() {
-		stopSource()
-		if (!clock()?.seekIsAsync) {
-			schedule()
-			return
-		}
-		settling = true
-		clearTimeout(settleTimer)
-		settleTimer = setTimeout(settled, 500)
-	}
-
-	function settled() {
-		clearTimeout(settleTimer)
-		settleTimer = null
-		if (!settling) {
-			return
-		}
-		settling = false
-		if (listening.value && isPlaying()) {
-			schedule()
-		}
-	}
-
-	function stopListening() {
-		listenGeneration.invalidate()
-		releaseListenAudio?.()
-		releaseListenAudio = null
-		const restore = tempoAfterListening({
-			before: tempoBeforeListen,
-			listened: listenMeta?.tempoFactor ?? null,
-			current: tempoFactor(),
+		const wav = isPending ? pending.value.wav : null
+		await player.listen({
+			id: isPending ? PENDING : recording.id,
+			cacheKey: isPending ? `pending:${meta.scoreStartMs}:${meta.durationMs}` : recording.id,
+			meta,
+			bytes: () => (wav ? Promise.resolve(wav) : loadAudio(recording)),
 		})
-		tempoBeforeListen = null
-		listening.value = null
-		listenBuffer = null
-		listenMeta = null
-		stopSource()
-		setAccompanimentGain(1)
-		if (restore !== null) {
-			setTempoFactor(restore)
-		}
 	}
-
-	function ensureGain(context) {
-		if (gainNode && gainContext === context) {
-			return gainNode
-		}
-		gainNode?.disconnect()
-		gainNode = context.createGain()
-		gainNode.connect(context.destination)
-		gainContext = context
-		gainNode.gain.value = recordingVolume.value
-		return gainNode
-	}
-
-	/**
-	 * Die Aufnahme auf die Kontextzeit des Sequencers setzen. Nach jedem
-	 * Start, Suchlauf und Loop-Ruecksprung neu - ein einmal gestarteter
-	 * AudioBufferSourceNode laesst sich nicht versetzen.
-	 */
-	function schedule() {
-		stopSource()
-		if (settling || !listenBuffer || !listenMeta || !isPlaying()) {
-			return
-		}
-		const context = playbackContext()
-		const plan = playbackSchedule({
-			recording: listenMeta,
-			anchor: { contextTimeSec: context.currentTime, scoreMs: clock()?.getCurrentTimeMs() ?? 0 },
-			tempoFactor: tempoFactor(),
-		})
-		if (!plan) {
-			return
-		}
-		source = context.createBufferSource()
-		source.buffer = listenBuffer
-		source.connect(ensureGain(context))
-		source.start(plan.whenSec, plan.offsetSec)
-	}
-
-	function stopSource() {
-		if (source) {
-			try {
-				source.stop()
-			} catch {
-				// Noch nicht gestartet oder schon zu Ende - beides ist „aus".
-			}
-			source.disconnect()
-			source = null
-		}
-	}
-
-	// `playing` ist die reaktive Anzeige (einmal je Bild nachgefuehrt),
-	// `isPlaying()` fragt die Zeitquelle selbst - fuer Entscheidungen im
-	// selben Moment.
-	watch(playing, (laeuft) => {
-		if (!listening.value) {
-			return
-		}
-		if (laeuft) {
-			schedule()
-		} else {
-			stopSource()
-		}
-	})
-
-	watch(recordingVolume, (v) => {
-		if (gainNode) {
-			gainNode.gain.setTargetAtTime(v, gainContext.currentTime, 0.01)
-		}
-	})
-
-	watch(accompanimentVolume, (v) => {
-		if (listening.value) {
-			setAccompanimentGain(v)
-		}
-	})
-
-	// Suchlauf und Loop-Ruecksprung melden sich als 'seeked' an der
-	// Zeitquelle - danach die Aufnahme neu ansetzen.
-	const onSeeked = () => {
-		if (listening.value) {
-			settleThenSchedule()
-		}
-	}
-	watch(clock, (neu, alt) => {
-		alt?.removeEventListener?.('seeked', onSeeked)
-		alt?.removeEventListener?.('timechange', settled)
-		neu?.addEventListener?.('seeked', onSeeked)
-		neu?.addEventListener?.('timechange', settled)
-		if (alt && neu !== alt) {
-			stopListening()
-		}
-	}, { immediate: true })
 
 	function reset() {
 		generation++
@@ -626,12 +431,7 @@ export function useRecorder({
 
 	function destroy() {
 		reset()
-		gainNode?.disconnect()
-		gainNode = null
-		if (ownContext) {
-			ownContext.close().catch(() => {})
-			ownContext = null
-		}
+		player.destroy()
 	}
 
 	// Raeumt sich selbst ab, wenn der Besitzer geht - ScoreViewer ruft den
@@ -680,12 +480,10 @@ export function useRecorder({
  * @return {string}
  */
 function messageOf(err, fallback) {
-	const fromServer = err?.response?.data?.error
-	if (typeof fromServer === 'string' && fromServer !== '') {
-		return fromServer
-	}
+	// No response at all is a lost connection, not a refusal - say so in
+	// front of the fallback, or "could not be saved" reads like a verdict.
 	if (!err?.response) {
 		return t('No connection to the server.') + ' ' + fallback
 	}
-	return fallback
+	return serverError(err, fallback)
 }

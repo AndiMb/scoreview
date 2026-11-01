@@ -5,7 +5,9 @@
 // Auswertung einer zehnminuetigen Aufnahme blockierte die Seite sekundenlang.
 //
 // Zwei Auftraege:
-// - `live`: Bloecke aus dem Aufnahme-Worklet, zurueck kommen die Rahmen mit
+// - `live`: Bloecke aus dem Aufnahme-Worklet - over the port of
+//   `live-port` straight from the audio thread, or (fallback) relayed by
+//   the main thread as `live` messages. Zurueck kommen die Rahmen mit
 //   Kontextzeit (useIntonation.js, Live-Nadel), and the level envelope for
 //   live scoring (lib/singScore.js), which traces onsets after silence.
 // - `analyze`: eine ganze gespeicherte Aufnahme, in Stuecken mit
@@ -18,23 +20,48 @@ import { createLevelStream, levelEnvelope } from '../lib/rhythm.js'
 
 let stream = createPitchStream()
 let levelStream = createLevelStream()
+// The port the worklet sends blocks through (useIntonation.js), or null.
+let livePort = null
 
 // Ein Stueck zu je 30 s: Zwischen zwei Stuecken kommt die Fortschrittsmeldung
 // heraus, und ein neuer `live`-Auftrag muss nicht auf die ganze Aufnahme
 // warten.
 const ANALYZE_CHUNK_FRAMES = Math.round((30 * 16000) / HOP_SIZE)
 
+/**
+ * One block of live input, wherever it came from.
+ *
+ * @param {{samples: Float32Array, contextTimeSec: number}} block
+ */
+function onLiveBlock({ samples, contextTimeSec }) {
+	const frames = stream.push(samples, contextTimeSec)
+	const level = levelStream.push(samples, contextTimeSec)
+	if (frames.length > 0 || level.length > 0) {
+		self.postMessage({ type: 'live', frames, level })
+	}
+}
+
+function closeLivePort() {
+	if (livePort) {
+		livePort.onmessage = null
+		livePort.close()
+		livePort = null
+	}
+}
+
 self.onmessage = (event) => {
 	const message = event.data
 	if (message.type === 'live-reset') {
 		stream = createPitchStream()
 		levelStream = createLevelStream()
+	} else if (message.type === 'live-port') {
+		closeLivePort()
+		livePort = message.port
+		livePort.onmessage = (e) => onLiveBlock(e.data)
+	} else if (message.type === 'live-port-close') {
+		closeLivePort()
 	} else if (message.type === 'live') {
-		const frames = stream.push(message.samples, message.contextTimeSec)
-		const level = levelStream.push(message.samples, message.contextTimeSec)
-		if (frames.length > 0 || level.length > 0) {
-			self.postMessage({ type: 'live', frames, level })
-		}
+		onLiveBlock(message)
 	} else if (message.type === 'analyze') {
 		const { id, samples, sampleRate } = message
 		const frames = []

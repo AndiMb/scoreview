@@ -20,8 +20,9 @@ import {
 	upsertEntry,
 	variantUrlFor,
 } from '../lib/offlinePlan.js'
-import { WORKLET_URL } from '../lib/player.js'
 import { isPlayable } from '../lib/setlistNav.js'
+import { readStored } from '../lib/storage.js'
+import { WORKLET_URL } from '../lib/workletUrl.js'
 import { LAST_VARIANT_PREFIX } from './useScoreVariant.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
@@ -42,7 +43,7 @@ export function offlineSupported() {
 }
 
 /** @return {Promise<import('../lib/offlinePlan.js').PinEntry[]>} */
-export async function readManifest() {
+async function readManifest() {
 	const cache = await caches.open(DATA_CACHE)
 	const res = await cache.match(manifestUrl())
 	if (!res) {
@@ -67,7 +68,7 @@ async function deleteUrls(urls) {
 }
 
 /** @return {Promise<Set<string>>} was im Cache liegt, als Pfad wie generateUrl ihn baut */
-export async function cachedUrls() {
+async function cachedUrls() {
 	const cache = await caches.open(DATA_CACHE)
 	const keys = await cache.keys()
 	const origin = window.location.origin
@@ -179,11 +180,7 @@ async function store(cache, url) {
  * @return {?string}
  */
 function lastVariantKey(fileId) {
-	try {
-		return window.localStorage.getItem(LAST_VARIANT_PREFIX + fileId)
-	} catch {
-		return null
-	}
+	return readStored(LAST_VARIANT_PREFIX + fileId)
 }
 
 /**

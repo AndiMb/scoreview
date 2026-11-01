@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availableSource, elidMapping, keyForChoice, sourceOptions } from './variantChoice.js'
+import { availableSource, elidMapping, keyForChoice, mergePictureMeta, pictureParts, sourceOptions } from './variantChoice.js'
 
 // parts-test.mscz in the shape of its meta.json: stored parts "Sopran"
 // (part 1) and "Frauenstimmen" (1 + 2), clarinet (3) and piano (4) without.
@@ -79,5 +79,49 @@ describe('elidMapping', () => {
 		expect(m.toPicture(4)).toBe(1)
 		expect(m.toPicture(5)).toBeNull()
 		expect(m.toBase(77)).toBeNull()
+	})
+})
+
+describe('mergePictureMeta', () => {
+	const base = {
+		parts: [{ id: '1' }, { id: '2' }],
+		duration: 90,
+		noteSpellings: [{ elid: 1 }],
+		lyricSyllables: [{ elid: 1, text: 'la' }],
+		pageFormat: { width: 210, height: 297 },
+		pages: 3,
+	}
+
+	it('is the base itself without a variant', () => {
+		expect(mergePictureMeta(base, null)).toBe(base)
+		expect(mergePictureMeta(null, { pages: 1 })).toBe(null)
+	})
+
+	it('takes the picture fields from the variant and keeps the piece', () => {
+		const variant = { noteSpellings: [{ elid: 9 }], lyricSyllables: [], pageFormat: { width: 100, height: 200 }, pages: 7, parts: [{ id: '2' }] }
+		const merged = mergePictureMeta(base, variant)
+		expect(merged.noteSpellings).toEqual([{ elid: 9 }])
+		expect(merged.pageFormat).toEqual({ width: 100, height: 200 })
+		expect(merged.pages).toBe(7)
+		// "none" stays none rather than the base's syllables.
+		expect(merged.lyricSyllables).toEqual([])
+		expect(merged.duration).toBe(90)
+		expect(merged.parts).toBe(base.parts)
+	})
+
+	it('keeps "absent" apart from "empty" for syllables and falls back for the page format', () => {
+		const merged = mergePictureMeta(base, { noteSpellings: [], pages: 2 })
+		expect('lyricSyllables' in merged).toBe(false)
+		expect(merged.pageFormat).toBe(base.pageFormat)
+		// The base is not touched.
+		expect(base.lyricSyllables).toHaveLength(1)
+	})
+})
+
+describe('pictureParts', () => {
+	it('prefers the variant parts, then the base parts, else none', () => {
+		expect(pictureParts({ parts: [1, 2] }, { parts: [2] })).toEqual([2])
+		expect(pictureParts({ parts: [1, 2] }, null)).toEqual([1, 2])
+		expect(pictureParts(null, null)).toEqual([])
 	})
 })

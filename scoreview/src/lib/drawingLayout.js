@@ -277,5 +277,17 @@ export function layoutDrawings(drawings, systems, mappable) {
  * @return {string}
  */
 export function pathOf(points) {
-	return (points ?? []).map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join('')
+	return (points ?? []).map((p, i) => pathStep(p, i === 0)).join('')
+}
+
+/**
+ * One point of a path as pathOf() writes it - for the pen, which appends
+ * point by point instead of writing the whole stroke again on every move.
+ *
+ * @param {{x:number, y:number}} p
+ * @param {boolean} first
+ * @return {string}
+ */
+export function pathStep(p, first) {
+	return `${first ? 'M' : 'L'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`
 }
