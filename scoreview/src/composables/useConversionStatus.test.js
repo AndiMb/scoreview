@@ -10,8 +10,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const axiosGet = vi.fn()
+const axiosPost = vi.fn()
+const showWarning = vi.fn()
 
-vi.mock('@nextcloud/axios', () => ({ default: { get: axiosGet, post: vi.fn() } }))
+vi.mock('@nextcloud/axios', () => ({ default: { get: axiosGet, post: axiosPost } }))
+vi.mock('@nextcloud/dialogs', () => ({ showWarning }))
 vi.mock('@nextcloud/router', () => ({ generateUrl: (url) => url }))
 vi.mock('@nextcloud/l10n', () => ({ translate: (app, text) => text }))
 // Der Rückfall im Browser ist hier nicht die Frage - er soll nur nicht
@@ -80,6 +83,22 @@ describe('useConversionStatus', () => {
 		expect(status.langeWartezeit.value).toBe(true)
 		// Der Kreisel dreht weiter - der Hinweis ist eine Auskunft, kein Urteil.
 		expect(status.state.value).toBe('converting')
+	})
+
+	it('keeps the score after a rate-limited reconversion instead of showing an error', async () => {
+		axiosGet.mockResolvedValue({ data: { status: 'ready', files: {} } })
+		axiosPost.mockRejectedValueOnce(Object.assign(new Error('Request failed with status code 429'), { response: { status: 429 } }))
+		const onReady = vi.fn()
+		const status = useConversionStatus({ fileId: () => 42, onReady })
+		await status.poll()
+		onReady.mockClear()
+
+		await status.reconvert()
+
+		expect(showWarning).toHaveBeenCalledTimes(1)
+		expect(status.state.value).not.toBe('error')
+		// Nothing was discarded on the server: the poll brings the result back.
+		expect(onReady).toHaveBeenCalledTimes(1)
 	})
 
 	it('meldet keine lange Wartezeit, wenn die Konvertierung zügig fertig wird', async () => {

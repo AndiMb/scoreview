@@ -1,4 +1,5 @@
 import axios from '@nextcloud/axios'
+import { showWarning } from '@nextcloud/dialogs'
 import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { translate } from '../l10n.js'
@@ -353,6 +354,14 @@ export function useConversionStatus({ fileId, onReady }) {
 			await axios.post(generateUrl('/apps/scoreview/api/scores/{fileId}/reconvert', { fileId: fileId() }))
 		} catch (err) {
 			if (mine !== generation) {
+				return
+			}
+			if (err.response?.status === 429) {
+				// Rate limit on the route (S4): the server discarded nothing,
+				// so the status poll brings the existing result straight back -
+				// a hint instead of an error page in place of the score.
+				showWarning(t('The score was converted again several times in a row. Try again in a few minutes.'))
+				await poll()
 				return
 			}
 			state.value = 'error'

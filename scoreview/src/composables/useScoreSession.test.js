@@ -19,7 +19,7 @@ vi.mock('../lib/scoreSync.js', () => ({
 	},
 }))
 
-const { useScoreSession } = await import('./useScoreSession.js')
+const { HIDDEN_STEP_MS, useScoreSession } = await import('./useScoreSession.js')
 
 const FILES = {
 	timingJson: 'timing',
@@ -273,6 +273,55 @@ describe('useScoreSession', () => {
 		now = 60001
 		runFrame()
 		expect(frames.size).toBe(0)
+	})
+
+	it('keeps loop and metronome going on a timer while the page is hidden', async () => {
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+		const doc = new EventTarget()
+		doc.visibilityState = 'visible'
+		vi.stubGlobal('document', doc)
+		let playing = true
+		const session = useScoreSession()
+		const hooks = connectHooks(session)
+		hooks.useRealPlayer.mockImplementation(async () => {
+			session.clock.value = { isPlaying: () => playing }
+		})
+		await session.load({ files: FILES, soundFontUrl: 'sf', renderer: null, canReconvert: false })
+		expect(frames.size).toBe(1)
+
+		// Screen locked: the pending frame never fires - a timer replaces it.
+		doc.visibilityState = 'hidden'
+		doc.dispatchEvent(new Event('visibilitychange'))
+		expect(frames.size).toBe(0)
+		syncUpdate.mockClear()
+		hooks.wrapLoop.mockClear()
+		hooks.tickMetronome.mockClear()
+		const listener = vi.fn()
+		session.onFrame(listener)
+		vi.advanceTimersByTime(HIDDEN_STEP_MS * 4)
+		expect(hooks.wrapLoop).toHaveBeenCalledTimes(4)
+		expect(hooks.tickMetronome).toHaveBeenLastCalledWith(1200)
+		// Nothing that only paints.
+		expect(syncUpdate).not.toHaveBeenCalled()
+		expect(listener).not.toHaveBeenCalled()
+
+		// Back on screen: frames again, no timer left behind.
+		doc.visibilityState = 'visible'
+		doc.dispatchEvent(new Event('visibilitychange'))
+		expect(frames.size).toBe(1)
+		expect(vi.getTimerCount()).toBe(0)
+		runFrame()
+		expect(syncUpdate).toHaveBeenCalled()
+
+		// Hidden and paused: the timer runs out instead of ticking on.
+		doc.visibilityState = 'hidden'
+		doc.dispatchEvent(new Event('visibilitychange'))
+		playing = false
+		vi.advanceTimersByTime(HIDDEN_STEP_MS)
+		expect(vi.getTimerCount()).toBe(0)
+
+		session.cleanup()
+		vi.useRealTimers()
 	})
 
 	it('keeps running while the display follows the leader', async () => {

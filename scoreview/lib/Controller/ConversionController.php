@@ -21,6 +21,7 @@ use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\StreamResponse;
 use OCP\BackgroundJob\IJobList;
@@ -222,8 +223,13 @@ class ConversionController extends Controller {
 	 * sich). Wer sie nur lesen darf, soll die Darstellung nicht fuer alle
 	 * anderen verwerfen koennen - der Cache haengt an der fileId, nicht an
 	 * der Nutzerin.
+	 *
+	 * Rate-limited (S4): every call discards the cache and queues a full
+	 * conversion. Session only - the route carries no DirectTokenOrSession,
+	 * so there is no anonymous counterpart to limit.
 	 */
 	#[NoAdminRequired]
+	#[UserRateLimit(limit: 5, period: 300)]
 	public function reconvert(int $fileId): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {

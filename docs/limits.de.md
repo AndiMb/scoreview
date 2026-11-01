@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:d8dac2ce08d2 -->
+<!-- translation-of: limits.md sha256:f74109456c64 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -765,7 +765,11 @@ weiter**, in Chrome (rund 10 s gesperrt, lückenlos) und in der Nextcloud-App
 nicht**, auch nicht über ein `<audio>` mit `MediaStream`, und die
 Kopfhörertaste wirkt nicht. Daran kann die App nichts ändern; der Ausweg ist
 der Übe-Track, den jeder Player mit Steuerung abspielt. Eine Sperre über
-mehrere Minuten ist nicht gemessen.
+mehrere Minuten ist nicht gemessen. Solange die Seite verborgen ist, laufen
+der Rücksprung des Loops und das Metronom über einen 25-ms-Timer statt über
+Animationsframes, die der Browser dort anhält; der Cursor holt auf, sobald
+der Bildschirm wieder an ist. Geprüft im Desktop-Browser, am Handy noch
+nicht.
 
 ### Darstellungen
 

@@ -6,6 +6,27 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- With the screen locked or the tab in the background, a practice loop
+  jumps back at its end and the metronome keeps clicking - both hung on
+  animation frames, which the browser stops for a hidden page while the
+  music plays on.
+- Administration settings can be delegated to a group (Administration
+  privileges): the page now implements `IDelegatedSettings`, without which
+  Nextcloud never offered it.
+
+### Changed
+
+- The mobile page extends its access token at most once a minute instead of
+  writing to the database on every request.
+- "Convert again" is limited to five times in five minutes per person; a
+  further click shows a hint and keeps the score.
+- The sidecar's SoundFont check gives up after 5 s and serves the cached
+  copy, instead of waiting for the HTTP client's default timeout.
+- `IQueryBuilder::PARAM_DATE` (deprecated since Nextcloud 31) replaced by
+  `PARAM_DATETIME_MUTABLE`.
+
 ## [1.29.0] – 2026-11-01
 
 ### Changed

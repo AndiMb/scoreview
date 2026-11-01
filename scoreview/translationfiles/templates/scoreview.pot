@@ -2428,6 +2428,10 @@ msgstr ""
 msgid "Unknown error."
 msgstr ""
 
+#: src/composables/useConversionStatus.js
+msgid "The score was converted again several times in a row. Try again in a few minutes."
+msgstr ""
+
 #: src/composables/useFollowSession.js
 msgid "Could not start the session."
 msgstr ""

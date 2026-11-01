@@ -15,7 +15,7 @@ use OCP\AppFramework\Services\IInitialState;
 use OCP\IAppConfig;
 use OCP\IGroupManager;
 use OCP\IUserSession;
-use OCP\Settings\ISettings;
+use OCP\Settings\IDelegatedSettings;
 use OCP\Util;
 
 /**
@@ -33,7 +33,7 @@ use OCP\Util;
  * SettingsController und Migration\Version000100Date20260824100000), hat im
  * ausgelieferten HTML nichts verloren.
  */
-class AdminSettings implements ISettings {
+class AdminSettings implements IDelegatedSettings {
 	private const MB = 1024 * 1024;
 
 	public function __construct(
@@ -118,5 +118,28 @@ class AdminSettings implements ISettings {
 
 	public function getPriority(): int {
 		return 50;
+	}
+
+	/**
+	 * IDelegatedSettings is what makes this form selectable under
+	 * Administration privileges - without it #[AuthorizedAdminSetting] on
+	 * SettingsController only ever admits full admins and the S9 handling
+	 * for delegated admins can never take effect.
+	 */
+	public function getName(): ?string {
+		// One form per section: the section name says it all.
+		return null;
+	}
+
+	/**
+	 * No app config keys through core's provisioning API: every write goes
+	 * through SettingsController, which validates the values and keeps the
+	 * privileged keys (node path, sidecar, SoundFont source) for full admins
+	 * (S9). Opening core's generic setter would bypass both.
+	 *
+	 * @return array<string, list<string>>
+	 */
+	public function getAuthorizedAppConfig(): array {
+		return [];
 	}
 }

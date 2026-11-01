@@ -14,7 +14,10 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Middleware;
 use OCP\DirectEditing\IManager;
+use OCP\DirectEditing\IToken;
 use OCP\Files\IRootFolder;
+use OCP\ICache;
+use OCP\ICacheFactory;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IUserSession;
@@ -63,9 +66,21 @@ class DirectAccessMiddleware extends Middleware {
 	public const HEADER = 'X-ScoreView-Token';
 	public const COMPANION_HEADER = 'X-ScoreView-Companion';
 
+	/**
+	 * How often a token is extended at most. Core's extend() is an UPDATE on
+	 * oc_direct_edit, and the mobile page polls "Follow me" every 800 ms
+	 * without notify_push - 40 phones would be ~50 writes a second, which
+	 * SQLite answers with "database is locked". Core expires a token 12 h
+	 * after its last extension, so a minute of slack costs nothing.
+	 */
+	public const EXTEND_INTERVAL_SECONDS = 60;
+
 	/** Siehe Festlegung 3 - nur der selbst gesetzte Scope wird zurueckgenommen. */
 	private bool $scopeSetHere = false;
 	private bool $volatileSetHere = false;
+
+	/** Null without a memory cache - then every request extends, as before. */
+	private ?ICache $extendCache;
 
 	public function __construct(
 		private IRequest $request,
@@ -75,7 +90,9 @@ class DirectAccessMiddleware extends Middleware {
 		private IRootFolder $rootFolder,
 		private CompanionTokenService $companions,
 		private DirectAccessContext $context,
+		ICacheFactory $cacheFactory,
 	) {
+		$this->extendCache = $cacheFactory->isAvailable() ? $cacheFactory->createDistributed('scoreview-token-extend') : null;
 	}
 
 	public function beforeController(Controller $controller, string $methodName): void {
@@ -116,7 +133,7 @@ class DirectAccessMiddleware extends Middleware {
 			// soll gar nicht erst zu einer Sitzung fuehren. Auch Anfragen mit
 			// Begleit-Token halten es am Leben - sie kommen von derselben
 			// offenen Seite.
-			$token->extend();
+			$this->extendAtMostEveryMinute($token, $header);
 			$uid = $token->getUser();
 			$file = $token->getFile();
 		} catch (Throwable) {
@@ -244,6 +261,24 @@ class DirectAccessMiddleware extends Middleware {
 		}
 
 		throw $exception;
+	}
+
+	/**
+	 * extend() at most every EXTEND_INTERVAL_SECONDS per token. Keyed by the
+	 * token's digest, never the token itself - cache keys can end up in a
+	 * memcache dump. A race between two requests costs one extra UPDATE.
+	 */
+	private function extendAtMostEveryMinute(IToken $token, string $header): void {
+		if ($this->extendCache === null) {
+			$token->extend();
+			return;
+		}
+		$key = CompanionTokenService::digest($header);
+		if ($this->extendCache->get($key) !== null) {
+			return;
+		}
+		$token->extend();
+		$this->extendCache->set($key, 1, self::EXTEND_INTERVAL_SECONDS);
 	}
 
 	/**

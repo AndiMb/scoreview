@@ -1107,6 +1107,14 @@ Was ohne Sitzung erreichbar ist, darf nicht unbegrenzt Arbeit auslösen:
   ändern, Setliste speichern und anlegen) tragen
   `#[UserRateLimit]` **und** `#[AnonRateLimit]`: Anfragen mit Token sind für
   Nextclouds Drosselung anonym, weil sie vor der eigenen Middleware läuft.
+- „Neu konvertieren“ verwirft den Cache und reiht eine volle Konvertierung
+  ein – höchstens fünfmal in fünf Minuten je Person (`#[UserRateLimit]`;
+  die Route kennt kein Token, also keine anonyme Drosselung). Der Viewer
+  zeigt bei 429 einen Hinweis und behält die Partitur.
+- Ein Direct-Editing-Token wird höchstens einmal je Minute verlängert
+  (`DirectAccessMiddleware`, Merker im verteilten Cache): Nextclouds
+  `extend()` ist ein UPDATE, und die Handy-Seite pollt „Folgt mir“ ohne
+  notify_push alle 800 ms. Ohne Speichercache bleibt es bei jeder Anfrage.
 - Die Nutzersuche für Leitungen prüft höchstens 30 Treffer auf Dateizugriff –
   jede Prüfung richtet den Dateibaum einer anderen Person ein.
 - Eine Person hat je Partitur höchstens 500 Notizen (409), denn wer nur lesen
@@ -1157,7 +1165,11 @@ nicht darf, bekommt 403. Sonst ließe sich abtasten, welche fileIds es gibt
 ### S9: Was Programme startet oder Adressen abruft, stellt nur ein voller Admin ein
 
 Nextcloud kann Verwaltungsseiten an Gruppen delegieren
-(`#[AuthorizedAdminSetting]`). Vier Einstellungen reichen aber über die App
+(`#[AuthorizedAdminSetting]`); anbieten lässt sich dafür nur eine Seite, die
+`IDelegatedSettings` implementiert (`Settings\AdminSettings`). Über Nextclouds
+allgemeinen App-Config-Setter gibt sie keinen Schlüssel frei
+(`getAuthorizedAppConfig()` leer) – geschrieben wird nur über
+`SettingsController`, der prüft. Vier Einstellungen reichen aber über die App
 hinaus: `node_path` wird als Programm gestartet, `sidecar_url` und
 `soundfont_fetch_url` ruft der Server selbst ab, und `sidecar_secret` öffnet
 den Konvertierungsdienst. Aus „darf ScoreView einstellen“ würde damit

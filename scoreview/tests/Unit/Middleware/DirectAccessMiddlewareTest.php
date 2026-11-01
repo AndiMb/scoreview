@@ -21,6 +21,8 @@ use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\IAppConfig;
+use OCP\ICache;
+use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\IRequest;
 use OCP\IUser;
@@ -64,6 +66,7 @@ class DirectAccessMiddlewareTest extends TestCase {
 	private string $geheimnis = self::SECRET;
 	/** @var list<int> fileIds, die die Nutzerin (noch) sieht */
 	private array $sichtbar = [42, 43, 50];
+	private ICacheFactory&MockObject $cacheFactory;
 
 	protected function setUp(): void {
 		$this->request = $this->createMock(IRequest::class);
@@ -89,10 +92,12 @@ class DirectAccessMiddlewareTest extends TestCase {
 			return $ordner;
 		});
 		$this->context = new DirectAccessContext();
+		$this->cacheFactory = $this->createMock(ICacheFactory::class);
+		$this->cacheFactory->method('isAvailable')->willReturn(false);
 		$this->companions = $this->dienst();
 		$this->middleware = new DirectAccessMiddleware(
 			$this->request, $this->userSession, $this->directEditing,
-			$this->userManager, $this->rootFolder, $this->companions, $this->context);
+			$this->userManager, $this->rootFolder, $this->companions, $this->context, $this->cacheFactory);
 	}
 
 	/** Ein Token-Dienst gegen die Attrappen dieses Tests - `$geheimnis` bestimmt den Schluessel. */
@@ -235,6 +240,42 @@ class DirectAccessMiddlewareTest extends TestCase {
 	}
 
 	/**
+	 * Polling must not write to oc_direct_edit on every request: with a
+	 * memory cache the token is extended once per interval, and the check
+	 * itself still runs on every request.
+	 */
+	public function testVerlaengertHoechstensEinmalJeIntervall(): void {
+		$store = [];
+		$cache = $this->createMock(ICache::class);
+		$cache->method('get')->willReturnCallback(function (string $k) use (&$store) {
+			return $store[$k] ?? null;
+		});
+		$cache->method('set')->willReturnCallback(function (string $k, $v) use (&$store) {
+			$store[$k] = $v;
+			return true;
+		});
+		$factory = $this->createMock(ICacheFactory::class);
+		$factory->method('isAvailable')->willReturn(true);
+		$factory->method('createDistributed')->willReturn($cache);
+		$this->middleware = new DirectAccessMiddleware(
+			$this->request, $this->userSession, $this->directEditing,
+			$this->userManager, $this->rootFolder, $this->companions, $this->context, $factory);
+
+		$this->userSession->method('getUser')->willReturn(null);
+		$this->header[DirectAccessMiddleware::HEADER] = self::DE_TOKEN;
+		$this->params['fileId'] = '42';
+		$token = $this->token(42);
+		$token->expects($this->once())->method('extend');
+		$token->expects($this->exactly(3))->method('useTokenScope');
+		$this->directEditing->method('getToken')->with(self::DE_TOKEN)->willReturn($token);
+
+		for ($i = 0; $i < 3; $i++) {
+			$this->middleware->beforeController($this->controller(), 'mitCsrf');
+		}
+		$this->assertSame([CompanionTokenService::digest(self::DE_TOKEN)], array_keys($store));
+	}
+
+	/**
 	 * Der Kern der Sicherheitszusage: Ein Token fuer Partitur A darf kein
 	 * Schluessel fuer Partitur B derselben Nutzerin sein.
 	 */
@@ -353,7 +394,7 @@ class DirectAccessMiddlewareTest extends TestCase {
 		$this->companions = $this->dienst();
 		$this->middleware = new DirectAccessMiddleware(
 			$this->request, $this->userSession, $this->directEditing,
-			$this->userManager, $this->rootFolder, $this->companions, $this->context);
+			$this->userManager, $this->rootFolder, $this->companions, $this->context, $this->cacheFactory);
 		$this->mobil($alt);
 		$this->params['fileId'] = '43';
 

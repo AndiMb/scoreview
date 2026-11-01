@@ -112,7 +112,7 @@ class FollowMapper extends QBMapper {
 	public function touchIfVersion(int $fileId, int $expected, \DateTimeInterface $heartbeat): bool {
 		$qb = $this->db->getQueryBuilder();
 		$qb->update($this->getTableName())
-			->set('heartbeat_at', $qb->createNamedParameter($heartbeat, IQueryBuilder::PARAM_DATE))
+			->set('heartbeat_at', $qb->createNamedParameter($heartbeat, IQueryBuilder::PARAM_DATETIME_MUTABLE))
 			->where($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('version', $qb->createNamedParameter($expected, IQueryBuilder::PARAM_INT)));
 		return $qb->executeStatement() > 0;
@@ -176,7 +176,7 @@ class FollowMapper extends QBMapper {
 	public function deleteHeartbeatBefore(\DateTimeInterface $cutoff): int {
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete($this->getTableName())
-			->where($qb->expr()->lt('heartbeat_at', $qb->createNamedParameter($cutoff, IQueryBuilder::PARAM_DATE)));
+			->where($qb->expr()->lt('heartbeat_at', $qb->createNamedParameter($cutoff, IQueryBuilder::PARAM_DATETIME_MUTABLE)));
 		return $qb->executeStatement();
 	}
 

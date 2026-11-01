@@ -316,6 +316,11 @@ class SidecarClient {
 		try {
 			$response = $client->get($this->getBaseUrl() . '/soundfont/info', [
 				'headers' => $this->headers(),
+				// SoundFontService asks on every SoundFont request and falls
+				// back to its cached copy when this fails - so a hanging
+				// sidecar must fail fast, not after the client's default
+				// timeout, or playback waits on a service it does not need.
+				'timeout' => 5,
 			]);
 		} catch (\Exception $e) {
 			throw new SidecarException('Sidecar SoundFont request failed: ' . $e->getMessage(), 0, $e);

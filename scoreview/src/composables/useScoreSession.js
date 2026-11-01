@@ -6,6 +6,15 @@ import { elidMapping, mergePictureMeta, pictureParts as partsOfPicture } from '.
 import { loadPictureArtifacts } from './pictureArtifacts.js'
 
 /**
+ * Step interval while the document is hidden (screen locked, other tab).
+ * Browsers stop animation frames there, but the AudioContext plays on - and
+ * the loop's jump back and the metronome's clicks hang on this loop. Below
+ * the metronome's 60 ms lookahead (useMetronome.js), so no beat slips
+ * through; Chrome does not throttle timers of a page that is playing sound.
+ */
+export const HIDDEN_STEP_MS = 25
+
+/**
  * Geteiltes leeres Array fuer Seiten ohne Takte - ein `[]` im Template waere
  * bei jedem Render ein neues und liesse die Props der Seite jedes Mal als
  * geaendert erscheinen.
@@ -102,6 +111,8 @@ export function useScoreSession() {
 	let generation = 0
 	let sync = null
 	let frameHandle = null
+	// frameHandle is a setTimeout handle while hidden, a rAF handle otherwise.
+	let frameIsTimer = false
 	// Whether the loop is switched on at all (between pumpTimeDisplay() and
 	// stopTimeDisplay()) - it may still be asleep (frameHandle === null).
 	let pumping = false
@@ -320,8 +331,47 @@ export function useScoreSession() {
 		// die erste sonst ohne Griff weiterlaufen - auch nach dem Schliessen.
 		stopTimeDisplay()
 		pumping = true
+		globalThis.document?.addEventListener('visibilitychange', onVisibilityChange)
 		wakeWindow.wake(performance.now())
 		step()
+	}
+
+	function isHidden() {
+		return globalThis.document?.visibilityState === 'hidden'
+	}
+
+	function scheduleStep() {
+		frameIsTimer = isHidden()
+		frameHandle = frameIsTimer
+			? setTimeout(step, HIDDEN_STEP_MS)
+			: requestAnimationFrame(step)
+	}
+
+	function cancelStep() {
+		if (frameHandle === null) {
+			return
+		}
+		if (frameIsTimer) {
+			clearTimeout(frameHandle)
+		} else {
+			cancelAnimationFrame(frameHandle)
+		}
+		frameHandle = null
+	}
+
+	/**
+	 * Switch between frames and timer as the document hides or shows: a rAF
+	 * requested while visible never fires once hidden, so it is replaced, and
+	 * on return the frame loop takes over again with a settle window to put
+	 * the cursor where the music has got to meanwhile.
+	 */
+	function onVisibilityChange() {
+		if (!pumping) {
+			return
+		}
+		cancelStep()
+		wakeWindow.wake(performance.now())
+		scheduleStep()
 	}
 
 	function step() {
@@ -329,7 +379,15 @@ export function useScoreSession() {
 		if (!pumping) {
 			return
 		}
-		if (clock.value) {
+		// Hidden, only what is heard counts: loop and metronome. Cursor,
+		// note anchor and frame listeners only paint, and painting a hidden
+		// page is work nobody sees - the first visible frame catches up.
+		const hidden = isHidden()
+		if (clock.value && hidden) {
+			hooks.sampleTime()
+			hooks.wrapLoop(hooks.currentTimeMs())
+			hooks.tickMetronome(hooks.currentTimeMs())
+		} else if (clock.value) {
 			hooks.sampleTime()
 			// Eine Auflösung für beides: der Cursor braucht das Rechteck,
 			// eine Notiz das elid (currentAnchor) - so wird nicht zweimal
@@ -354,16 +412,23 @@ export function useScoreSession() {
 			// Fehler wäre verdoppelt statt behoben.
 			hooks.tickMetronome(hooks.currentTimeMs())
 		}
-		for (const listener of frameListeners) {
-			listener()
+		if (!hidden) {
+			for (const listener of frameListeners) {
+				listener()
+			}
 		}
-		const keepRunning = wakeWindow.shouldRun({
-			playing: clock.value?.isPlaying?.() ?? false,
-			following: hooks?.isFollowing?.() ?? false,
-			nowMs: performance.now(),
-		})
+		const playing = clock.value?.isPlaying?.() ?? false
+		// Hidden, only own playback keeps the timer going: following the
+		// leader or a settle window has nothing audible to keep in step.
+		const keepRunning = hidden
+			? playing
+			: wakeWindow.shouldRun({
+					playing,
+					following: hooks?.isFollowing?.() ?? false,
+					nowMs: performance.now(),
+				})
 		if (keepRunning) {
-			frameHandle = requestAnimationFrame(step)
+			scheduleStep()
 		}
 	}
 
@@ -375,7 +440,7 @@ export function useScoreSession() {
 	function wakeTimeDisplay() {
 		wakeWindow.wake(performance.now())
 		if (pumping && frameHandle === null) {
-			frameHandle = requestAnimationFrame(step)
+			scheduleStep()
 		}
 	}
 
@@ -401,10 +466,8 @@ export function useScoreSession() {
 
 	function stopTimeDisplay() {
 		pumping = false
-		if (frameHandle) {
-			cancelAnimationFrame(frameHandle)
-			frameHandle = null
-		}
+		globalThis.document?.removeEventListener('visibilitychange', onVisibilityChange)
+		cancelStep()
 	}
 
 	/**

@@ -2428,6 +2428,10 @@ msgstr "Bei der Konvertierung ist ein unbekannter Fehler aufgetreten."
 msgid "Unknown error."
 msgstr "Unbekannter Fehler."
 
+#: src/composables/useConversionStatus.js
+msgid "The score was converted again several times in a row. Try again in a few minutes."
+msgstr "Die Partitur wurde mehrmals hintereinander neu konvertiert. Bitte in ein paar Minuten noch einmal versuchen."
+
 #: src/composables/useFollowSession.js
 msgid "Could not start the session."
 msgstr "Die Sitzung konnte nicht gestartet werden."

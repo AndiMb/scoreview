@@ -750,6 +750,10 @@ hand). **Lock-screen controls do not appear for Web Audio**, not even via an
 `<audio>` with a `MediaStream`, and the headphone button has no effect. The
 app cannot change this; the way out is the practice track, which any player
 plays with controls. A lock lasting several minutes has not been measured.
+While the page is hidden, the loop's jump back and the metronome run on a
+25 ms timer instead of animation frames, which the browser stops there;
+the cursor catches up when the screen comes back. Checked in a desktop
+browser, not yet on the phone.
 
 ### Views
 
