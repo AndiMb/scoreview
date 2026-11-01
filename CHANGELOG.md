@@ -43,6 +43,14 @@ All notable changes to ScoreView. The format follows
   cannot simply leaves the marking out.
 - A reconversion that yields fewer pages removes the extra old page files,
   and the local converter cleans up its output directory after each run.
+- Note names show on Android phones again: they lay behind the frame that
+  holds the notation, which Chrome on Android draws opaque on screen. They
+  now lie above it, with an outline in the page colour instead of the dark
+  colour of the viewer around it.
+- In the band view, “Only my part” for note names takes effect wherever a
+  page's staves can be matched to parts; the band never passed that on.
+- Scored singing shows a refused microphone as a sentence with a link to open
+  the score in the browser (as recording does), instead of raw data.
 
 - A note sung flat a semitone above the next one no longer makes the next
   note's onset “early”. The troughs of its vibrato came closer to the next

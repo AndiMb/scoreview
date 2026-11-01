@@ -45,7 +45,8 @@
 					:liveNoteMarks="crop.index === cursorCrop ? liveNoteMarks : NO_MARKS"
 					@noteClick="(e) => $emit('noteClick', e)"
 					@markerClick="(e) => $emit('markerClick', e)"
-					@indexed="(e) => $emit('indexed', e)" />
+					@indexed="(e) => $emit('indexed', e)"
+					@staffMapping="(ok, page) => $emit('staffMapping', ok, page)" />
 			</div>
 		</div>
 	</div>
@@ -168,7 +169,7 @@ export default {
 		},
 	},
 
-	emits: ['noteClick', 'markerClick', 'indexed', 'cursorVisible'],
+	emits: ['noteClick', 'markerClick', 'indexed', 'cursorVisible', 'staffMapping'],
 
 	data() {
 		return {

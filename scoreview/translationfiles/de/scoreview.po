@@ -1140,7 +1140,7 @@ msgstr "{count} Seiten bereit zum Drucken."
 msgid "Loading page {loaded} of {count}…"
 msgstr "Lade Seite {loaded} von {count}…"
 
-#: src/components/RecordingPanel.vue
+#: src/components/RecordingPanel.vue src/components/SingPanel.vue
 msgid "Open in browser"
 msgstr "Im Browser öffnen"
 
@@ -1348,19 +1348,19 @@ msgstr "Einsätze im Mittel {ms} ms zu spät."
 msgid "Onsets on average {ms} ms early."
 msgstr "Einsätze im Mittel {ms} ms zu früh."
 
-#: src/components/RecordingPanel.vue
+#: src/components/RecordingPanel.vue src/components/SingPanel.vue
 msgid "The microphone is not available here. In the Nextcloud app it cannot be used; in a browser it may have been blocked for this site."
 msgstr "Das Mikrofon ist hier nicht verfügbar. In der Nextcloud-App lässt es sich nicht nutzen; im Browser ist es für diese Seite vielleicht gesperrt."
 
-#: src/components/RecordingPanel.vue
+#: src/components/RecordingPanel.vue src/components/SingPanel.vue
 msgid "No microphone was found."
 msgstr "Es wurde kein Mikrofon gefunden."
 
-#: src/components/RecordingPanel.vue
+#: src/components/RecordingPanel.vue src/components/SingPanel.vue
 msgid "The microphone is being used by another application."
 msgstr "Das Mikrofon wird von einer anderen Anwendung benutzt."
 
-#: src/components/RecordingPanel.vue src/components/TunerPanel.vue
+#: src/components/RecordingPanel.vue src/components/SingPanel.vue src/components/TunerPanel.vue
 msgid "The microphone could not be started."
 msgstr "Das Mikrofon ließ sich nicht einschalten."
 

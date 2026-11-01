@@ -252,6 +252,7 @@
 							@noteClick="onNoteClick"
 							@markerClick="onMarkerClick"
 							@indexed="onPageIndexed"
+							@staffMapping="onStaffMapping"
 							@cursorVisible="layoutCursorShown = $event" />
 					</LiveValue>
 					<LiveValue
@@ -488,6 +489,7 @@
 							:unitLabel="sing.unitLabel"
 							:needPart="intonation.needPart"
 							:micError="microphone.error"
+							:browserUrl="browserUrl"
 							:error="singScore.error || intonation.error"
 							:lastRun="singScore.lastRun"
 							:history="singScore.history"

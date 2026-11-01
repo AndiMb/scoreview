@@ -7,8 +7,15 @@
 		<NcNoteCard v-if="needPart" type="info">
 			{{ t('Choose your part first.') }}
 		</NcNoteCard>
-		<NcNoteCard v-if="micError" type="warning">
-			{{ micError }}
+		<!-- As in RecordingPanel (E8): the Android app's WebView refuses the
+			microphone, the browser grants it. -->
+		<NcNoteCard v-if="micError" :type="micError.kind === 'blocked' ? 'warning' : 'error'">
+			<p>{{ micErrorText }}</p>
+			<p v-if="micError.kind === 'blocked' && browserUrl">
+				<a :href="browserUrl" target="_blank" rel="noopener noreferrer">
+					{{ t('Open in browser') }}
+				</a>
+			</p>
 		</NcNoteCard>
 		<NcNoteCard v-if="error" type="error">
 			{{ error }}
@@ -173,7 +180,10 @@ export default {
 		view: { type: String, default: 'band' },
 		unitLabel: { type: String, default: '' },
 		needPart: { type: Boolean, default: false },
-		micError: { type: String, default: '' },
+		/** {kind, name} from useMicrophone, or null. */
+		micError: { type: Object, default: null },
+		/** The same viewer in a browser tab, where the microphone works. */
+		browserUrl: { type: String, default: '' },
 		error: { type: String, default: '' },
 		lastRun: { type: Object, default: null },
 		/** Newest first, as the server sends them. */
@@ -183,6 +193,19 @@ export default {
 	emits: ['toggle', 'update:level', 'update:view', 'jump', 'loop', 'clear', 'dismiss'],
 
 	computed: {
+		micErrorText() {
+			switch (this.micError?.kind) {
+				case 'blocked':
+					return this.t('The microphone is not available here. In the Nextcloud app it cannot be used; in a browser it may have been blocked for this site.')
+				case 'noDevice':
+					return this.t('No microphone was found.')
+				case 'busy':
+					return this.t('The microphone is being used by another application.')
+				default:
+					return this.t('The microphone could not be started.')
+			}
+		},
+
 		levels() {
 			return [
 				{ id: 'easy', label: this.t('Beginner') },

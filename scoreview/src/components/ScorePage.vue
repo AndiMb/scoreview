@@ -146,8 +146,8 @@
 			stylesheet, and every zoom step would rewrite their inline styles.
 			In page units they scale with the notation by themselves; they are
 			placed again only when the zoom leaves its band
-			(noteLabelLayout.js labelScale). Behind the notation (no z-index);
-			the halo keeps them legible over the lines.
+			(noteLabelLayout.js labelScale). Above the notation (z-index 2,
+			see the style); the halo keeps them legible over the lines.
 		-->
 		<svg
 			v-if="noteLabels.texts.length > 0"
@@ -1666,10 +1666,13 @@ export default {
 	fill: transparent;
 }
 
-/* Note names: positioned without a z-index, so behind the notation
-   (.score-page-svg has z-index 1) - the halo keeps them legible there. */
+/* Note names above the notation (.score-page-svg has z-index 1), the halo
+   keeps lines and stems from crossing them. Not behind it: Chrome on
+   Android drew the notation frame opaque on screen and hid every name -
+   only a screenshot, composited anew, showed them. */
 .score-page-name-layer {
 	position: absolute;
+	z-index: 2;
 	inset: 0;
 	width: 100%;
 	height: 100%;
@@ -1678,11 +1681,13 @@ export default {
 }
 
 /* Place and size come from lib/noteLabelLayout.js, which chose the spot
-   beside the head. The outline in the background colour lies under the fill
-   (paint-order): a halo that lifts the name off staff lines and stems. */
+   beside the head. The outline in the page colour lies under the fill
+   (paint-order): a halo that lifts the name off staff lines and stems. The
+   page colour, not Nextcloud's background: the viewer modal is dark, and
+   its background drew a black outline round every letter. */
 .score-page-note-names {
 	fill: var(--color-primary-element, #00679e);
-	stroke: var(--color-main-background, #fff);
+	stroke: var(--scoreview-page, #fff);
 	stroke-linejoin: round;
 	paint-order: stroke;
 	font-weight: 600;
