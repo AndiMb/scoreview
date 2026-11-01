@@ -124,4 +124,23 @@ describe('pictureParts', () => {
 		expect(pictureParts({ parts: [1, 2] }, null)).toEqual([1, 2])
 		expect(pictureParts(null, null)).toEqual([])
 	})
+
+	// Human.mscz: five voices and an invisible drum kit - five staves per
+	// system, six parts in meta.json, so no page mapped staves to parts.
+	const voices = ['S', 'A', 'T', 'B'].map((name, i) => ({ id: String(i + 1), name, isVisible: 'true' }))
+	const drums = { id: '5', name: 'Drums', isVisible: 'false' }
+
+	it('leaves out parts the score does not show', () => {
+		expect(pictureParts({ parts: [...voices, drums] }, null)).toEqual(voices)
+		expect(pictureParts({ parts: [voices[0], { ...drums, isVisible: false }] }, null)).toEqual([voices[0]])
+	})
+
+	it('leaves them out of a variant too, whose parts carry no visibility', () => {
+		const variant = { parts: [...voices, drums].map(({ id, name }) => ({ id, name })) }
+		expect(pictureParts({ parts: [...voices, drums] }, variant).map((p) => p.id)).toEqual(['1', '2', '3', '4'])
+	})
+
+	it('keeps an invisible part that a variant draws on its own', () => {
+		expect(pictureParts({ parts: [...voices, drums] }, { parts: [{ id: '5', name: 'Drums' }] })).toEqual([{ id: '5', name: 'Drums' }])
+	})
 })

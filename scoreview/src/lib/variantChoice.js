@@ -158,10 +158,25 @@ export function mergePictureMeta(base, variant) {
  * The parts the picture draws, in staff order - for "which staff is my
  * part" (lib/staffBands.js). A part variant draws fewer than the score has.
  *
+ * A part the score hides (`isVisible` false in the base meta.json - the
+ * engine writes it as a string) has no staff on the page. Counted anyway,
+ * staves and parts never matched, and "only my part" fell back to all
+ * staves on every page - measured: Human.mscz, five voices and a hidden drum
+ * kit. A variant's meta.json carries no visibility, so the base decides,
+ * unless the variant draws nothing else: then it was asked for that part.
+ *
  * @param {?object} base the base meta.json
  * @param {?object} variant meta.json of the variant shown, null for the base
  * @return {Array<object>}
  */
 export function pictureParts(base, variant) {
-	return variant?.parts ?? base?.parts ?? []
+	const parts = variant?.parts ?? base?.parts ?? []
+	const hidden = new Set((base?.parts ?? [])
+		.filter((part) => part?.isVisible === false || part?.isVisible === 'false')
+		.map((part) => String(part.id)))
+	if (hidden.size === 0) {
+		return parts
+	}
+	const shown = parts.filter((part) => !hidden.has(String(part?.id)))
+	return shown.length > 0 ? shown : parts
 }

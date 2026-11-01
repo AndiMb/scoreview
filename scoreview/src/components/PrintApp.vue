@@ -298,7 +298,9 @@ export default {
 				const name = this.scoreMeta?.excerpts?.[Number(stored[1])]?.name
 				return name ? `${base} - ${name}` : base
 			}
-			const isPart = this.pictureParts.length > 0 && this.pictureParts.length < (this.scoreMeta?.parts?.length ?? 0)
+			// Against the parts the full score shows: a hidden part is in
+			// neither picture and must not make the full score look like a part.
+			const isPart = this.pictureParts.length > 0 && this.pictureParts.length < partsOfPicture(this.scoreMeta, null).length
 			return isPart ? `${base} - ${this.pictureParts.map((p) => p.name).filter(Boolean).join(', ')}` : base
 		},
 
