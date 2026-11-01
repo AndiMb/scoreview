@@ -45,6 +45,8 @@ use OCP\IRequest;
  * fragen nach ihrem Schalter.
  */
 class LeaderController extends Controller {
+	use JsonErrors;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -156,10 +158,6 @@ class LeaderController extends Controller {
 		$userId = $this->fileResolver->currentUserId();
 		$node = $userId === null ? null : $this->fileResolver->resolveOwnNode($fileId);
 		return $node === null ? [null, ''] : [$node, $userId];
-	}
-
-	private function notFound(): JSONResponse {
-		return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 	}
 
 	private function refused(LeaderException $e): JSONResponse {

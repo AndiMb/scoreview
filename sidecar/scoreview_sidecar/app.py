@@ -20,7 +20,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, request, send_file
 
-from . import config, engine, jobs
+from . import config, engine, errors, jobs
 from .musescore import check_promises, run_score_media
 
 # The only endpoint without a secret (see sidecar/README.md): it is what
@@ -77,6 +77,16 @@ def _files_body(job_id: str, job: dict) -> dict:
     if "midi" in files:
         body["midi"] = f"/convert/{job_id}/artifact/midi"
     return body
+
+
+def _error_body(job: dict) -> dict:
+    """`error` for people, `errorCode` for the app, which translates the
+    code (E4) and takes it as it is - the same names whichever renderer
+    ran (E3)."""
+    return {
+        "error": job.get("error", "unknown error"),
+        "errorCode": job.get("errorCode", errors.CONVERSION_FAILED),
+    }
 
 
 def _ready_job(job_id: str) -> dict:
@@ -216,11 +226,11 @@ def create_app(start_reaper: bool = True) -> Flask:
 
         # `renderer` says what actually ran, so the app can tell an image
         # without the engine from one that has it.
-        body = {"status": job["status"], "renderer": job.get("renderer", config.RENDERER_MUSESCORE)}
+        body = {"status": job["status"], "renderer": jobs.renderer_of(job)}
         if job["status"] == "ready":
             body["files"] = _files_body(job_id, job)
         elif job["status"] == "error":
-            body["error"] = job.get("error", "unknown error")
+            body.update(_error_body(job))
         return jsonify(body)
 
     @app.post("/variant")
@@ -252,7 +262,7 @@ def create_app(start_reaper: bool = True) -> Flask:
         if job["status"] == "ready":
             body["files"] = _files_body(job_id, job)
         else:
-            body["error"] = job.get("error", "unknown error")
+            body.update(_error_body(job))
         return jsonify(body)
 
     # EINE Auslieferungsroute statt fuenf fast identischer: die frueheren

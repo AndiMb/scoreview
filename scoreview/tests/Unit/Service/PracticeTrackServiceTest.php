@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Tests\Unit\Service;
 
 use OCA\ScoreView\Service\FileNames;
-use OCA\ScoreView\Service\PracticeTrackException;
 use OCA\ScoreView\Service\PracticeTrackService;
+use OCA\ScoreView\Service\SiblingFileException;
+use OCA\ScoreView\Service\SiblingFileService;
 use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
@@ -48,7 +49,7 @@ class PracticeTrackServiceTest extends TestCase {
 		$l->method('t')->willReturnCallback(fn (string $text) => $this->language === 'de' ? 'Übe-Tracks' : $text);
 		$factory = $this->createMock(IFactory::class);
 		$factory->method('get')->willReturn($l);
-		return new PracticeTrackService($this->root, $config, $factory);
+		return new PracticeTrackService($this->root, $config, $factory, new SiblingFileService($this->root));
 	}
 
 	private function datei(string $name): File&MockObject {
@@ -77,8 +78,8 @@ class PracticeTrackServiceTest extends TestCase {
 		try {
 			$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, false);
 			$this->fail('kein Fehler');
-		} catch (PracticeTrackException $e) {
-			$this->assertSame(PracticeTrackException::STORAGE_FULL, $e->getReason());
+		} catch (SiblingFileException $e) {
+			$this->assertSame(SiblingFileException::STORAGE_FULL, $e->getReason());
 		}
 	}
 
@@ -89,7 +90,7 @@ class PracticeTrackServiceTest extends TestCase {
 		$this->parent->method('isCreatable')->willReturn(true);
 		$this->parent->method('get')->willReturn($halb);
 		$this->parent->method('newFile')->willThrowException(new NotPermittedException('quota'));
-		$this->expectException(PracticeTrackException::class);
+		$this->expectException(SiblingFileException::class);
 		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, false);
 	}
 
@@ -137,7 +138,7 @@ class PracticeTrackServiceTest extends TestCase {
 	public function testGleichnamigeDateiStattUnterordner(): void {
 		$this->parent->method('nodeExists')->willReturn(true);
 		$this->parent->method('get')->willReturn($this->createMock(File::class));
-		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::INVALID));
+		$this->expectExceptionObject(new SiblingFileException(SiblingFileException::INVALID));
 		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'sub', null, false);
 	}
 
@@ -145,7 +146,7 @@ class PracticeTrackServiceTest extends TestCase {
 		$this->parent->method('nodeExists')->willReturn(false);
 		$this->parent->method('isCreatable')->willReturn(false);
 		$this->parent->expects($this->never())->method('newFile');
-		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::FORBIDDEN));
+		$this->expectExceptionObject(new SiblingFileException(SiblingFileException::FORBIDDEN));
 		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, false);
 	}
 
@@ -155,8 +156,8 @@ class PracticeTrackServiceTest extends TestCase {
 		try {
 			$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, false);
 			$this->fail('kein Konflikt');
-		} catch (PracticeTrackException $e) {
-			$this->assertSame(PracticeTrackException::EXISTS, $e->getReason());
+		} catch (SiblingFileException $e) {
+			$this->assertSame(SiblingFileException::EXISTS, $e->getReason());
 			$this->assertSame('x (3).mp3', $e->getSuggested());
 		}
 	}
@@ -167,7 +168,7 @@ class PracticeTrackServiceTest extends TestCase {
 		$alt->expects($this->never())->method('putContent');
 		$this->parent->method('nodeExists')->willReturn(true);
 		$this->parent->method('get')->willReturn($alt);
-		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::FORBIDDEN));
+		$this->expectExceptionObject(new SiblingFileException(SiblingFileException::FORBIDDEN));
 		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, true);
 	}
 
@@ -186,7 +187,7 @@ class PracticeTrackServiceTest extends TestCase {
 		$alt->method('putContent')->willThrowException(new \OCP\Lock\LockedException('x.mp3'));
 		$this->parent->method('nodeExists')->willReturn(true);
 		$this->parent->method('get')->willReturn($alt);
-		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::BUSY));
+		$this->expectExceptionObject(new SiblingFileException(SiblingFileException::BUSY));
 		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, true);
 	}
 
@@ -194,13 +195,13 @@ class PracticeTrackServiceTest extends TestCase {
 		$this->parent->method('nodeExists')->willReturn(false);
 		$this->parent->method('isCreatable')->willReturn(true);
 		$this->parent->method('newFile')->willThrowException(new \OCP\Files\ForbiddenException('rule', false));
-		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::FORBIDDEN));
+		$this->expectExceptionObject(new SiblingFileException(SiblingFileException::FORBIDDEN));
 		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, false);
 	}
 
 	public function testEigenerOrdnerNurImNutzerordner(): void {
 		$this->userFolder->method('getById')->willReturn([]);
-		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::INVALID));
+		$this->expectExceptionObject(new SiblingFileException(SiblingFileException::INVALID));
 		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'own', 77, false);
 	}
 
@@ -208,12 +209,12 @@ class PracticeTrackServiceTest extends TestCase {
 		$this->parent->method('nodeExists')->willReturn(false);
 		$this->parent->method('isCreatable')->willReturn(true);
 		$this->parent->method('newFile')->willThrowException(new NotEnoughSpaceException());
-		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::STORAGE_FULL));
+		$this->expectExceptionObject(new SiblingFileException(SiblingFileException::STORAGE_FULL));
 		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'folder', null, false);
 	}
 
 	public function testUnbrauchbarerName(): void {
-		$this->expectExceptionObject(new PracticeTrackException(PracticeTrackException::INVALID));
+		$this->expectExceptionObject(new SiblingFileException(SiblingFileException::INVALID));
 		$this->service()->save($this->score, 'anna', $this->mp3(), ' .. ', 'folder', null, false);
 	}
 

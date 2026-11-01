@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Settings;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Controller\SettingsController;
 use OCA\ScoreView\Service\ConversionBackend;
+use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\SoundFontService;
 use OCP\AppFramework\Http\TemplateResponse;
@@ -55,16 +56,16 @@ class AdminSettings implements ISettings {
 			// SettingsController::update). Das Formular sperrt die Felder
 			// danach, statt erst beim Speichern ein 403 zu zeigen.
 			'fullAdmin' => SettingsController::isFullAdmin($this->userSession, $this->groupManager),
-			'nodePath' => $this->appConfig->getValueString(Application::APP_ID, 'node_path'),
+			'nodePath' => $this->appConfig->getValueString(Application::APP_ID, ConversionConfig::NODE_PATH),
 			'soundFontFetchUrl' => $this->appConfig->getValueString(Application::APP_ID, SoundFontService::FETCH_URL_KEY),
 			// Roh aus der Konfiguration oben, die Vorbelegung getrennt daneben:
 			// Als Platzhalter zeigt sie, was ein leeres Feld bedeutet, ohne
 			// sich beim Speichern als eingetragener Wert auszugeben.
 			'soundFontFetchUrlDefault' => SoundFontService::DEFAULT_FETCH_URL,
-			'sidecarUrl' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'),
-			'sidecarSecretSet' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_secret') !== '',
+			'sidecarUrl' => $this->appConfig->getValueString(Application::APP_ID, ConversionConfig::SIDECAR_URL),
+			'sidecarSecretSet' => $this->appConfig->getValueString(Application::APP_ID, ConversionConfig::SIDECAR_SECRET) !== '',
 			'eagerConversion' => $this->appConfig->getValueBool(Application::APP_ID, 'eager_conversion'),
-			'soundFontUrl' => $this->appConfig->getValueString(Application::APP_ID, 'soundfont_url'),
+			'soundFontUrl' => $this->appConfig->getValueString(Application::APP_ID, ConversionConfig::SOUNDFONT_URL),
 			'featureFollowSession' => $this->features->isEnabled(FeatureConfig::FOLLOW_SESSION),
 			'featureRecording' => $this->features->isEnabled(FeatureConfig::RECORDING),
 			'featureIntonation' => $this->features->isEnabled(FeatureConfig::INTONATION),

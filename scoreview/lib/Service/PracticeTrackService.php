@@ -33,33 +33,23 @@ class PracticeTrackService {
 	public const TARGET_SUB = 'sub';
 	public const TARGET_OWN = 'own';
 
-	private SiblingFileService $files;
-
 	public function __construct(
 		private IRootFolder $rootFolder,
 		private IConfig $config,
 		private IFactory $l10nFactory,
-		?SiblingFileService $files = null,
+		private SiblingFileService $files,
 	) {
-		// Optional only so that existing callers and tests need no change;
-		// the container always passes one.
-		$this->files = $files ?? new SiblingFileService($rootFolder);
 	}
 
 	/**
 	 * @param resource $mp3 der gepruefte Inhalt, am Anfang
 	 * @param ?int $ownFolderId nur bei TARGET_OWN: ein Ordner im Nutzerordner
 	 * @return array{fileId: int, name: string, path: string}
-	 * @throws PracticeTrackException
+	 * @throws SiblingFileException
 	 */
 	public function save(Node $score, string $userId, $mp3, string $name, string $target, ?int $ownFolderId, bool $replace): array {
 		$folder = $this->targetFolder($score, $userId, $target, $ownFolderId);
-		try {
-			return $this->files->save($folder, $userId, $mp3, $name, self::EXTENSION, $replace);
-		} catch (SiblingFileException $e) {
-			// The practice-track API keeps its own exception (and its tests).
-			throw new PracticeTrackException($e->getReason(), $e->getSuggested());
-		}
+		return $this->files->save($folder, $userId, $mp3, $name, self::EXTENSION, $replace);
 	}
 
 	/** Eine Partitur, kein Ordner und keine beliebige Datei. */
@@ -95,7 +85,7 @@ class PracticeTrackService {
 	}
 
 	/**
-	 * @throws PracticeTrackException
+	 * @throws SiblingFileException
 	 */
 	private function targetFolder(Node $score, string $userId, string $target, ?int $ownFolderId): Folder {
 		try {
@@ -103,12 +93,12 @@ class PracticeTrackService {
 				self::TARGET_FOLDER => $score->getParent(),
 				self::TARGET_SUB => $this->subfolder($score->getParent()),
 				self::TARGET_OWN => $this->ownFolder($userId, $ownFolderId),
-				default => throw new PracticeTrackException(PracticeTrackException::INVALID),
+				default => throw new SiblingFileException(SiblingFileException::INVALID),
 			};
 		} catch (NotFoundException) {
-			throw new PracticeTrackException(PracticeTrackException::INVALID);
+			throw new SiblingFileException(SiblingFileException::INVALID);
 		} catch (NotPermittedException) {
-			throw new PracticeTrackException(PracticeTrackException::FORBIDDEN);
+			throw new SiblingFileException(SiblingFileException::FORBIDDEN);
 		}
 	}
 
@@ -116,19 +106,19 @@ class PracticeTrackService {
 	 * Den Unterordner neben der Partitur - angelegt, wenn es ihn noch nicht
 	 * gibt. Eine gleichnamige DATEI dort ist ein Fehler, kein Ordner.
 	 *
-	 * @throws PracticeTrackException
+	 * @throws SiblingFileException
 	 */
 	private function subfolder(Folder $parent): Folder {
 		$name = $this->subfolderName();
 		if ($parent->nodeExists($name)) {
 			$node = $parent->get($name);
 			if (!$node instanceof Folder) {
-				throw new PracticeTrackException(PracticeTrackException::INVALID);
+				throw new SiblingFileException(SiblingFileException::INVALID);
 			}
 			return $node;
 		}
 		if (!$parent->isCreatable()) {
-			throw new PracticeTrackException(PracticeTrackException::FORBIDDEN);
+			throw new SiblingFileException(SiblingFileException::FORBIDDEN);
 		}
 		return $parent->newFolder($name);
 	}
@@ -137,15 +127,15 @@ class PracticeTrackService {
 	 * Ein selbst gewaehlter Ordner - nur im eigenen Nutzerordner, nie ein
 	 * Pfad aus der Anfrage (S6).
 	 *
-	 * @throws PracticeTrackException
+	 * @throws SiblingFileException
 	 */
 	private function ownFolder(string $userId, ?int $folderId): Folder {
 		if ($folderId === null) {
-			throw new PracticeTrackException(PracticeTrackException::INVALID);
+			throw new SiblingFileException(SiblingFileException::INVALID);
 		}
 		$node = $this->rootFolder->getUserFolder($userId)->getById($folderId)[0] ?? null;
 		if (!$node instanceof Folder) {
-			throw new PracticeTrackException(PracticeTrackException::INVALID);
+			throw new SiblingFileException(SiblingFileException::INVALID);
 		}
 		return $node;
 	}

@@ -52,6 +52,8 @@ use OCP\IUserManager;
  * Sitzung.
  */
 class RecordingController extends Controller {
+	use JsonErrors;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -282,10 +284,6 @@ class RecordingController extends Controller {
 		return $seconds % 60 === 0
 			? $this->l->t('The recording is longer than the %s minutes allowed on this server.', [(string)intdiv($seconds, 60)])
 			: $this->l->t('The recording is longer than the %s seconds allowed on this server.', [(string)$seconds]);
-	}
-
-	private function notFound(): JSONResponse {
-		return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 	}
 
 	private function refused(RecordingException $e): JSONResponse {

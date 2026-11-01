@@ -186,6 +186,25 @@ class SidecarClientTest extends TestCase {
 		}
 	}
 
+	public function testEineVarianteOhneSeitenTraegtDenCodeDesSidecars(): void {
+		// The same code as on the local path and for a base conversion (E3).
+		$client = $this->antwortender(['http://sidecar:8765/variant' => '{"status":"error","error":"the engine returned no SVG page","errorCode":"no_pages"}']);
+		try {
+			$client->convertVariant(fopen('php://memory', 'rb'), 'probe.mscz', 'ex1~orig~w~0', '{}', '{}');
+			$this->fail('SidecarException erwartet');
+		} catch (SidecarException $e) {
+			$this->assertSame(ScoreConversion::ERROR_NO_PAGES, $e->getErrorCode());
+		}
+	}
+
+	public function testNimmtNurCodesDerPartiturVomSidecar(): void {
+		$this->assertSame(ScoreConversion::ERROR_NO_PAGES, SidecarClient::jobErrorCode('no_pages'));
+		$this->assertSame(ScoreConversion::ERROR_TIMEOUT, SidecarClient::jobErrorCode('timeout'));
+		$this->assertSame(ScoreConversion::ERROR_CONVERSION_FAILED, SidecarClient::jobErrorCode(null));
+		$this->assertSame(ScoreConversion::ERROR_CONVERSION_FAILED, SidecarClient::jobErrorCode(ScoreConversion::ERROR_LOCAL_UNAVAILABLE));
+		$this->assertSame(ScoreConversion::ERROR_CONVERSION_FAILED, SidecarClient::jobErrorCode(['no_pages']));
+	}
+
 	/** @return array<string, array{\Throwable, string}> */
 	public static function variantenFehler(): array {
 		return [

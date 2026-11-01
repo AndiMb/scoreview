@@ -7,8 +7,8 @@ namespace OCA\ScoreView\BackgroundJob;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\SidecarClient;
-use OCA\ScoreView\Service\SidecarException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\QueuedJob;
@@ -55,12 +55,7 @@ class PollConversionJob extends QueuedJob {
 		try {
 			$result = $this->sidecarClient->pollStatus($jobId);
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: sidecar status request failed for fileId={fileId}: {message}', [
-				'fileId' => $fileId,
-				'message' => $e->getMessage(),
-				'exception' => $e,
-			]);
-			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof SidecarException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
+			$this->fail($conversion, 'ScoreView: sidecar status request failed for fileId={fileId}: {message}', $e);
 			return;
 		}
 
@@ -69,16 +64,11 @@ class PollConversionJob extends QueuedJob {
 			return;
 		}
 		if ($result['status'] === 'error') {
-			$message = (string)($result['error'] ?? 'Unknown sidecar error');
-			// Einzige textbasierte Codeerkennung hier (statt eines eigenen
-			// Sidecar-Fehlerformats): sidecar/server.py wirft fuer eine
-			// Partitur ohne Seiten exakt diese RuntimeException-Message (siehe
-			// dort) - alles andere aus mscore4portable/der Konvertierung selbst
-			// landet unter conversion_failed.
-			$errorCode = str_contains($message, 'returned no SVG pages')
-				? ScoreConversion::ERROR_NO_PAGES
-				: ScoreConversion::ERROR_CONVERSION_FAILED;
-			$this->conversionService->markError($conversion, $message, $errorCode);
+			$this->conversionService->markError(
+				$conversion,
+				(string)($result['error'] ?? 'Unknown sidecar error'),
+				SidecarClient::jobErrorCode($result['errorCode'] ?? null),
+			);
 			return;
 		}
 
@@ -105,12 +95,16 @@ class PollConversionJob extends QueuedJob {
 			// die Herkunft steht hier also fest und wird nicht nachgeschlagen.
 			$this->conversionService->markReady($conversion, $pageSvgs, $midi, $timingJson, $measuresJson, $metaJson, ConversionBackend::SIDECAR, null);
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: conversion failed for fileId={fileId}: {message}', [
-				'fileId' => $conversion->getFileId(),
-				'message' => $e->getMessage(),
-				'exception' => $e,
-			]);
-			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof SidecarException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
+			$this->fail($conversion, 'ScoreView: conversion failed for fileId={fileId}: {message}', $e);
 		}
+	}
+
+	private function fail(ScoreConversion $conversion, string $logMessage, \Throwable $e): void {
+		$this->logger->error($logMessage, [
+			'fileId' => $conversion->getFileId(),
+			'message' => $e->getMessage(),
+			'exception' => $e,
+		]);
+		$this->conversionService->markError($conversion, $e->getMessage(), ConverterException::codeOf($e));
 	}
 }

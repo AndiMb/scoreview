@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Service;
 
-use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
-use OCA\ScoreView\Db\ScoreConversion;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\File;
 use OCP\Files\Folder;
@@ -491,15 +489,12 @@ class SetlistService {
 				// Wo der Server nicht konvertiert, gibt es vorab nichts zu waermen.
 				return;
 			}
-			$maxBytes = $this->appConfig->getValueInt(Application::APP_ID, 'max_score_bytes', ConvertScoreJob::DEFAULT_MAX_BYTES);
 			foreach ($nodes as $node) {
-				if ($maxBytes > 0 && $node->getSize() > $maxBytes) {
+				if (ConversionConfig::exceedsMaxScoreBytes($this->appConfig, $node->getSize())) {
 					continue;
 				}
 				$conversion = $this->conversionService->find($node->getId(), $node->getEtag());
-				$needed = $conversion === null
-					|| ($conversion->getStatus() === ScoreConversion::STATUS_READY && !$this->conversionService->isCurrent($conversion));
-				if ($needed) {
+				if ($this->conversionService->needsConversion($conversion, retryErrors: false)) {
 					$this->jobList->add(ConvertScoreJob::class, ['userId' => $uid, 'fileId' => $node->getId()]);
 				}
 			}

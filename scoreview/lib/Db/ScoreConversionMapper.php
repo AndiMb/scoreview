@@ -87,6 +87,24 @@ class ScoreConversionMapper extends QBMapper {
 	}
 
 	/**
+	 * Ready conversions from before the count columns, in id order - for the
+	 * repair step BackfillScoreCounts, which walks them in batches.
+	 *
+	 * @return ScoreConversion[]
+	 */
+	public function findReadyWithoutPageCount(int $afterId, int $limit): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('status', $qb->createNamedParameter(ScoreConversion::STATUS_READY)))
+			->andWhere($qb->expr()->isNull('page_count'))
+			->andWhere($qb->expr()->gt('id', $qb->createNamedParameter($afterId, IQueryBuilder::PARAM_INT)))
+			->orderBy('id', 'ASC')
+			->setMaxResults($limit);
+		return $this->findEntities($qb);
+	}
+
+	/**
 	 * Ready conversions from before the search columns, in id order - for
 	 * the repair step BackfillSearchText, which walks them in batches.
 	 *

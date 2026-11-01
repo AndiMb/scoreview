@@ -8,6 +8,8 @@ use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
+use OCP\ICache;
+use OCP\ICacheFactory;
 
 /**
  * Kann dieser Server ueberhaupt konvertieren - und wenn nicht, warum?
@@ -37,6 +39,12 @@ use OCP\IAppConfig;
  * Umgekehrt gilt: **Ein Inhaltsfehler ist kein Grund.** Wenn die Partitur
  * kaputt ist, scheitert der Browser mit derselben Engine genauso - nur 14 MB
  * spaeter. Deshalb loesen nur die beiden Infrastrukturcodes aus.
+ *
+ * **Where the verdict is kept.** In the distributed cache where the instance
+ * has one: every write to IAppConfig invalidates that config's cache for all
+ * processes of the instance, and this verdict is rewritten every five
+ * minutes. Without a distributed cache IAppConfig is the only store all PHP
+ * processes share, so it stays the fallback there.
  */
 class ClientFallback {
 	/**
@@ -58,6 +66,11 @@ class ClientFallback {
 	public const CONFIG_VERDICT = 'client_fallback_verdict';
 	public const CONFIG_VERDICT_AT = 'client_fallback_verdict_at';
 	private const VERDICT_OK = 'ok';
+	private const CACHE_PREFIX = 'scoreview-client-fallback';
+	private const CACHE_KEY = 'verdict';
+
+	/** Null where the instance has no distributed cache. */
+	private ?ICache $cache;
 
 	/**
 	 * Fehlercodes, die "der Server KONNTE nicht" bedeuten - im Unterschied zu
@@ -75,7 +88,9 @@ class ClientFallback {
 		private LocalConverter $localConverter,
 		private SidecarClient $sidecarClient,
 		private ITimeFactory $time,
+		ICacheFactory $cacheFactory,
 	) {
+		$this->cache = $cacheFactory->isAvailable() ? $cacheFactory->createDistributed(self::CACHE_PREFIX) : null;
 	}
 
 	/** Muss der Browser ran? */
@@ -115,13 +130,15 @@ class ClientFallback {
 	 * fuenf Minuten das alte Verhalten vor sich, ohne zu wissen, warum.
 	 */
 	public function forget(): void {
+		$this->cache?->remove(self::CACHE_KEY);
+		// Also with a cache: a verdict kept in IAppConfig before the instance
+		// got one would otherwise be read again should the cache go away.
 		$this->appConfig->deleteKey(Application::APP_ID, self::CONFIG_VERDICT);
 		$this->appConfig->deleteKey(Application::APP_ID, self::CONFIG_VERDICT_AT);
 	}
 
 	private function urteil(): string {
-		$gespeichert = $this->appConfig->getValueString(Application::APP_ID, self::CONFIG_VERDICT);
-		$erhobenAm = $this->appConfig->getValueInt(Application::APP_ID, self::CONFIG_VERDICT_AT);
+		[$gespeichert, $erhobenAm] = $this->lies();
 		if ($gespeichert !== '' && ($this->time->getTime() - $erhobenAm) < self::TTL_SECONDS) {
 			return $gespeichert;
 		}
@@ -150,7 +167,25 @@ class ClientFallback {
 			: ScoreConversion::ERROR_SIDECAR_UNREACHABLE;
 	}
 
+	/** @return array{0: string, 1: int} verdict ('' for none) and when it was reached */
+	private function lies(): array {
+		if ($this->cache !== null) {
+			$entry = $this->cache->get(self::CACHE_KEY);
+			return is_array($entry) && is_string($entry[0] ?? null) && is_int($entry[1] ?? null) ? [$entry[0], $entry[1]] : ['', 0];
+		}
+		return [
+			$this->appConfig->getValueString(Application::APP_ID, self::CONFIG_VERDICT),
+			$this->appConfig->getValueInt(Application::APP_ID, self::CONFIG_VERDICT_AT),
+		];
+	}
+
 	private function merke(string $urteil): void {
+		if ($this->cache !== null) {
+			// The age check in urteil() decides; the cache's own TTL only
+			// keeps a forgotten entry from staying for ever.
+			$this->cache->set(self::CACHE_KEY, [$urteil, $this->time->getTime()], self::TTL_SECONDS);
+			return;
+		}
 		$this->appConfig->setValueString(Application::APP_ID, self::CONFIG_VERDICT, $urteil);
 		$this->appConfig->setValueInt(Application::APP_ID, self::CONFIG_VERDICT_AT, $this->time->getTime());
 	}

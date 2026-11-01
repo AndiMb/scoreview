@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from . import config
+from . import config, errors
 
 # Same reasoning as in musescore.py: `timeout` kills its process group, and
 # subprocess reports that as -9.
@@ -76,12 +76,18 @@ def _run(read: list[Path], write: list[Path], args: list[str], workdir: Path) ->
             stdout=out, stderr=err, cwd=str(config.CONVERTER_DIR), env=_environment(),
         )
         if result.returncode == _KILLED_BY_SIGKILL:
-            raise RuntimeError(
+            raise errors.ConversionError(
+                errors.TIMEOUT,
                 "the engine exceeded the time limit "
-                f"(MSCORE_TIMEOUT_SECONDS={config.TIMEOUT_SECONDS}) and was killed"
+                f"(MSCORE_TIMEOUT_SECONDS={config.TIMEOUT_SECONDS}) and was killed",
             )
         if result.returncode != 0:
-            raise RuntimeError(f"engine conversion failed: {last_line(_read_tail(err, 4000))}")
+            # The exit code names the cause where the converter knows one
+            # (a score without pages), the message is for people.
+            raise errors.ConversionError(
+                errors.CONVERTER_EXIT_CODES.get(result.returncode, errors.CONVERSION_FAILED),
+                f"engine conversion failed: {last_line(_read_tail(err, 4000))}",
+            )
         out.seek(0)
         return out.read(1024 * 1024).decode("utf-8", "replace")
 
@@ -150,5 +156,5 @@ def _pages(out_dir: Path) -> list[Path]:
         pages.append(out_dir / f"page-{number}.svg")
         number += 1
     if not pages:
-        raise RuntimeError("the engine returned no SVG page")
+        raise errors.ConversionError(errors.NO_PAGES, "the engine returned no SVG page")
     return pages

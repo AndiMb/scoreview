@@ -38,6 +38,8 @@ use OCP\IRequest;
  * file in Files, so that check only keeps accidents out.
  */
 class PdfController extends Controller {
+	use JsonErrors;
+
 	public const EXTENSION = '.pdf';
 
 	public function __construct(
@@ -71,7 +73,7 @@ class PdfController extends Controller {
 		// Only next to a score: a folder as `fileId` would write next to the
 		// folder - for the user folder itself even outside `files/`.
 		if ($userId === null || !PracticeTrackService::isScore($score)) {
-			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+			return $this->notFound();
 		}
 		// S2: nothing new comes into being with a companion token.
 		if (!$this->access->resolved() || $this->access->mode() === DirectAccessContext::COMPANION) {
@@ -100,7 +102,7 @@ class PdfController extends Controller {
 			}
 			$saved = $this->files->save($score->getParent(), $userId, $pdf, $name, self::EXTENSION, $replace);
 		} catch (SiblingFileException $e) {
-			return $this->refused($e);
+			return $this->refusedToSave($e);
 		} finally {
 			if (is_resource($pdf)) {
 				fclose($pdf);
@@ -116,20 +118,6 @@ class PdfController extends Controller {
 		$head = (string)fread($stream, 5);
 		rewind($stream);
 		return $head === '%PDF-';
-	}
-
-	private function refused(SiblingFileException $e): JSONResponse {
-		return match ($e->getReason()) {
-			SiblingFileException::EXISTS => new JSONResponse([
-				'error' => $this->l->t('A file with this name already exists.'),
-				'reason' => 'exists',
-				'suggested' => $e->getSuggested(),
-			], Http::STATUS_CONFLICT),
-			SiblingFileException::FORBIDDEN => new JSONResponse(['error' => $this->l->t('You cannot save files in this folder.')], Http::STATUS_FORBIDDEN),
-			SiblingFileException::STORAGE_FULL => new JSONResponse(['error' => $this->l->t('Not enough storage space.')], Http::STATUS_INSUFFICIENT_STORAGE),
-			SiblingFileException::BUSY => new JSONResponse(['error' => $this->l->t('The file or folder is in use right now. Try again in a moment.')], Http::STATUS_SERVICE_UNAVAILABLE),
-			default => new JSONResponse(['error' => $this->l->t('Invalid file name or folder.')], Http::STATUS_BAD_REQUEST),
-		};
 	}
 
 	private function tooLarge(): JSONResponse {

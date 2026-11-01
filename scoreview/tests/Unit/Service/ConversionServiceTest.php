@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Tests\Unit\Service;
 
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreConversionMapper;
+use OCA\ScoreView\Service\ArtifactStore;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
@@ -49,7 +50,7 @@ class ConversionServiceTest extends TestCase {
 	}
 
 	private function service(): ConversionService {
-		return new ConversionService($this->mapper, $this->appData, $this->time, $this->createMock(VariantService::class), $this->backend, $this->localConverter);
+		return new ConversionService($this->mapper, new ArtifactStore($this->appData), $this->time, $this->createMock(VariantService::class), $this->backend, $this->localConverter);
 	}
 
 	// --- Allowlist der Artefakte ------------------------------------------
@@ -302,5 +303,107 @@ class ConversionServiceTest extends TestCase {
 
 		$this->assertSame('4.7.6-engine.3', $conversion->getEngineVersion());
 		$this->assertTrue($conversion->getFormatVersion() === ConversionService::CURRENT_FORMAT_VERSION);
+	}
+
+	// --- needsConversion: the job's guard and the set list's warm-up -------
+
+	/**
+	 * @return array<string, array{?string, bool, bool, bool}>
+	 */
+	public static function bedarfsFaelle(): array {
+		return [
+			'no row' => [null, true, true, true],
+			'pending' => [ScoreConversion::STATUS_PENDING, true, true, false],
+			'processing' => [ScoreConversion::STATUS_PROCESSING, true, true, false],
+			'ready and current' => [ScoreConversion::STATUS_READY, true, true, false],
+			'ready, newer engine' => [ScoreConversion::STATUS_READY, false, true, true],
+			'error, opened' => [ScoreConversion::STATUS_ERROR, true, true, true],
+			// The warm-up must not run a broken score on every opening.
+			'error, warm-up' => [ScoreConversion::STATUS_ERROR, true, false, false],
+		];
+	}
+
+	#[DataProvider('bedarfsFaelle')]
+	public function testNeedsConversion(?string $status, bool $current, bool $retryErrors, bool $needed): void {
+		$this->backend->method('isLocal')->willReturn(true);
+		$this->localConverter->method('engineVersion')->willReturn('4.7.6-engine.3');
+		$conversion = null;
+		if ($status !== null) {
+			$conversion = $this->fertig('local', $current ? '4.7.6-engine.3' : '4.7.6-engine.2');
+			$conversion->setStatus($status);
+		}
+
+		$this->assertSame($needed, $this->service()->needsConversion($conversion, $retryErrors));
+	}
+
+	// --- Page and measure count as columns ----------------------------------
+
+	public function testCountsFromMetaReadOnlyNumbers(): void {
+		$this->assertSame(['pageCount' => 3, 'measureCount' => 48], ConversionService::countsFromMeta('{"pages":3,"measures":"48"}'));
+		$this->assertSame(['pageCount' => null, 'measureCount' => null], ConversionService::countsFromMeta('{"pages":"x"}'));
+		$this->assertSame(['pageCount' => null, 'measureCount' => null], ConversionService::countsFromMeta('not json'));
+	}
+
+	public function testMarkReadyStoresTheWrittenPagesAndTheMeasures(): void {
+		$folder = $this->createMock(ISimpleFolder::class);
+		$folder->method('fileExists')->willReturn(false);
+		$root = $this->createMock(ISimpleFolder::class);
+		$root->method('getFolder')->willReturn($folder);
+		$this->appData->method('getFolder')->willReturn($root);
+		$this->mapper->method('findAllByFileId')->willReturn([]);
+		$conversion = new ScoreConversion();
+		$conversion->setFileId(7);
+		$conversion->setEtag('e');
+
+		// meta.json says 5 pages, two were written: the route serves two.
+		$this->service()->markReady($conversion, ['<svg/>', '<svg/>'], 'MThd', '{}', '{}', '{"pages":5,"measures":32}', 'local', '4.7.6-engine.3');
+
+		$this->assertSame(2, $conversion->getPageCount());
+		$this->assertSame(32, $conversion->getMeasureCount());
+	}
+
+	private function ordnerMitMeta(?string $metaJson): void {
+		$folder = $this->createMock(ISimpleFolder::class);
+		$folder->method('getFolder')->willReturnSelf();
+		$folder->method('fileExists')->willReturn($metaJson !== null);
+		$meta = $this->createMock(ISimpleFile::class);
+		$meta->method('getContent')->willReturn((string)$metaJson);
+		$folder->method('getFile')->willReturnCallback(fn () => $metaJson !== null ? $meta : throw new NotFoundException('meta.json'));
+		$root = $this->createMock(ISimpleFolder::class);
+		$root->method('getFolder')->willReturn($folder);
+		$this->appData->method('getFolder')->willReturn($root);
+	}
+
+	public function testGetPageCountReadsTheColumnWithoutDecodingMeta(): void {
+		$this->ordnerMitMeta('{"pages":9}');
+		$this->mapper->expects($this->never())->method('update');
+		$conversion = $this->fertig('local', null);
+		$conversion->setFileId(7);
+		$conversion->setEtag('e');
+		$conversion->setPageCount(4);
+
+		$this->assertSame(4, $this->service()->getPageCount($conversion));
+	}
+
+	public function testGetPageCountFillsAnOlderRowOnce(): void {
+		$this->ordnerMitMeta('{"pages":9,"measures":120}');
+		$this->mapper->expects($this->once())->method('update');
+		$conversion = $this->fertig('local', null);
+		$conversion->setFileId(7);
+		$conversion->setEtag('e');
+
+		$this->assertSame(9, $this->service()->getPageCount($conversion));
+		$this->assertSame(120, $conversion->getMeasureCount());
+	}
+
+	public function testGetPageCountStillNoticesAMissingCache(): void {
+		$this->ordnerMitMeta(null);
+		$conversion = $this->fertig('local', null);
+		$conversion->setFileId(7);
+		$conversion->setEtag('e');
+		$conversion->setPageCount(4);
+
+		$this->expectException(NotFoundException::class);
+		$this->service()->getPageCount($conversion);
 	}
 }

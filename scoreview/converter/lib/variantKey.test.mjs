@@ -1,42 +1,20 @@
+import { readFileSync } from 'fs'
 import { describe, expect, it } from 'vitest'
 import { BASE_KEY, engineViewOptions, parseVariantKey, variantKey } from './variantKey.mjs'
 
 /**
  * The cases Service\VariantKey (PHP) is tested against as well - the two
- * grammars must agree, or the viewer asks for keys the server refuses.
- * Keep tests/Unit/Service/VariantKeyTest.php in step with this list.
+ * grammars must agree, or the viewer asks for keys the server refuses. They
+ * live in one fixture both test suites read (tests/fixtures/, outside the
+ * shipped converter).
  */
-export const VALID = [
-	'full~phone~w~0',
-	'full~phonel~w~0',
-	'full~orig~c~0',
-	'full~orig~w~-12',
-	'full~orig~w~12',
-	'ex0~orig~w~0',
-	'ex12~phone~c~3',
-	'part3~phone~w~-2',
-	'partAb_-9~orig~w~1',
-]
-export const INVALID = [
-	BASE_KEY,
-	'',
-	'full~orig~w',
-	'full~orig~w~0~x',
-	'full~orig~w~+2',
-	'full~orig~w~02',
-	'full~orig~w~-0',
-	'full~orig~w~13',
-	'full~orig~x~0',
-	'full~A4~w~0',
-	'ex01~orig~w~0',
-	'ex1000~orig~w~0',
-	'ex~orig~w~0',
-	'part~orig~w~0',
-	'part3.5~orig~w~0',
-	'part../x~orig~w~0',
-	'whole~orig~w~0',
-	'FULL~orig~w~0',
-]
+const CASES = JSON.parse(readFileSync(new URL('../../tests/fixtures/variant-keys.json', import.meta.url), 'utf8'))
+export const VALID = CASES.valid
+export const INVALID = CASES.invalid
+
+it('keeps the base key among the refused ones', () => {
+	expect(INVALID).toContain(BASE_KEY)
+})
 
 describe('parseVariantKey', () => {
 	it.each(VALID)('reads %s and writes it back the same', (key) => {

@@ -22,7 +22,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from . import config
+from . import config, errors
 
 
 # Teile der `--score-media`-Ausgabe, die nie gebraucht werden (M2). Sie
@@ -105,9 +105,10 @@ def run_score_media(input_path: Path, display: int = config.FIRST_DISPLAY_NUMBER
             # auch an sich selbst - der Aufrufer sieht dann -9 statt 124/137
             # und kein stderr (xvfb-run legt MuseScores stderr ohnehin auf
             # stdout). Ohne diese Zeile stuende da nur "exited -9: ".
-            raise RuntimeError(
+            raise errors.ConversionError(
+                errors.TIMEOUT,
                 "mscore4portable --score-media exceeded the time limit "
-                f"(MSCORE_TIMEOUT_SECONDS={config.TIMEOUT_SECONDS}) and was killed"
+                f"(MSCORE_TIMEOUT_SECONDS={config.TIMEOUT_SECONDS}) and was killed",
             )
         if result.returncode != 0:
             raise RuntimeError(

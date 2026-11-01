@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\BackgroundJob;
 
-use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreVariant;
 use OCA\ScoreView\Service\ConversionBackend;
+use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\LocalConverter;
@@ -32,8 +32,8 @@ use Psr\Log\LoggerInterface;
  *
  * Hier faellt die Entscheidung zwischen den beiden Konvertierungswegen
  * (Service\ConversionBackend, siehe docs/architecture.md E3) - und zwar nur
- * hier: alles danach ist wieder gemeinsam, weil beide Wege dieselben
- * Artefakte in denselben Cache legen.
+ * hier, in path(): alles danach ist wieder gemeinsam, weil beide Wege
+ * dieselben Artefakte in denselben Cache legen.
  *
  * Auf dem Sidecar-Weg reicht dieser Job die Konvertierung nur ein und
  * übergibt das Pollen sofort an PollConversionJob (siehe dort) - er selbst
@@ -48,21 +48,6 @@ class ConvertScoreJob extends QueuedJob {
 	// Sidecar selbst nicht erreichbar ist/hängt, soll die Konvertierung
 	// trotzdem irgendwann in status=error münden statt endlos zu pollen.
 	private const MAX_TOTAL_SECONDS = 300;
-
-	/**
-	 * Obergrenze fuer die Dateigroesse, ueberschreibbar ueber die
-	 * App-Einstellung `max_score_bytes`.
-	 *
-	 * Ohne diese Grenze reicht die App jede Datei unveraendert weiter, egal
-	 * wie gross. Der Stream-Upload (SidecarClient) macht das selbst kein
-	 * Speicherproblem - aber eine absurd grosse Datei belegt weiterhin
-	 * einen MuseScore-Prozess, bis der Timeout greift. 100 MB liegen
-	 * weit ueber jeder echten Partitur (die groesste gemessene .mscz im
-	 * Testbestand ist unter 1 MB) und unter dem Upload-Limit des Sidecars
-	 * (200 MB), damit die Ablehnung hier passiert - mit eigenem Fehlercode
-	 * statt als undurchsichtiges 413 von dort.
-	 */
-	public const DEFAULT_MAX_BYTES = 100 * 1024 * 1024;
 
 	/**
 	 * Wie oft eine Partitur beim ausgelasteten Sidecar (volle Warteschlange,
@@ -121,17 +106,36 @@ class ConvertScoreJob extends QueuedJob {
 			$this->variantService->markError($variant, 'The configured conversion path engraves no display variants.', ScoreVariant::ERROR_UNSUPPORTED);
 			return;
 		}
-		$maxBytes = $this->appConfig->getValueInt(Application::APP_ID, 'max_score_bytes', self::DEFAULT_MAX_BYTES);
-		if ($maxBytes > 0 && $node->getSize() > $maxBytes) {
-			$this->variantService->markError($variant, sprintf('File is %d bytes, larger than the limit of %d bytes.', $node->getSize(), $maxBytes), ScoreConversion::ERROR_TOO_LARGE);
+		if (ConversionConfig::exceedsMaxScoreBytes($this->appConfig, $node->getSize())) {
+			$this->variantService->markError($variant, $this->tooLargeMessage($node), ScoreConversion::ERROR_TOO_LARGE);
 			return;
 		}
 
-		if (!$this->backend->isLocal()) {
-			$this->convertVariantInSidecar($node, $variant);
-			return;
-		}
+		$this->path()['variant']($node, $variant);
+	}
 
+	/**
+	 * The one place that picks the conversion path (E3) - for the base and
+	 * for a variant alike, so the two cannot disagree about which path an
+	 * instance is on. Everything before it (size limit, guards) and after it
+	 * (markReady, the cache) is the same for both paths.
+	 *
+	 * `base` gets the job's own argument as well: the sidecar path needs it
+	 * to schedule a retry when the sidecar is busy.
+	 *
+	 * @return array{base: \Closure(ScoreConversion, Node, array{userId: string, fileId: int, busyRetry: int}): void, variant: \Closure(Node, ScoreVariant): void}
+	 */
+	private function path(): array {
+		return $this->backend->isLocal()
+			? ['base' => $this->convertLocally(...), 'variant' => $this->convertVariantLocally(...)]
+			: ['base' => $this->submitToSidecar(...), 'variant' => $this->convertVariantInSidecar(...)];
+	}
+
+	/**
+	 * The local half of convertVariant(): the converter needs real paths,
+	 * for the score and for the base's timing and measures.
+	 */
+	private function convertVariantLocally(Node $node, ScoreVariant $variant): void {
 		$scorePath = null;
 		$baseDir = null;
 		try {
@@ -156,13 +160,7 @@ class ConvertScoreJob extends QueuedJob {
 				$this->localConverter->engineVersion(),
 			);
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: variant {variant} failed for fileId={fileId}: {message}', [
-				'variant' => $variant->getVariant(),
-				'fileId' => $variant->getFileId(),
-				'message' => $e->getMessage(),
-				'exception' => $e,
-			]);
-			$this->variantService->markError($variant, $e->getMessage(), $e instanceof ConverterException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
+			$this->failVariant($variant, 'ScoreView: variant {variant} failed for fileId={fileId}: {message}', $e);
 		} finally {
 			if ($scorePath !== null) {
 				@unlink($scorePath);
@@ -204,13 +202,7 @@ class ConvertScoreJob extends QueuedJob {
 				$artifacts['engine'],
 			);
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: variant {variant} failed in the sidecar for fileId={fileId}: {message}', [
-				'variant' => $variant->getVariant(),
-				'fileId' => $variant->getFileId(),
-				'message' => $e->getMessage(),
-				'exception' => $e,
-			]);
-			$this->variantService->markError($variant, $e->getMessage(), $e instanceof ConverterException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
+			$this->failVariant($variant, 'ScoreView: variant {variant} failed in the sidecar for fileId={fileId}: {message}', $e);
 		}
 	}
 
@@ -237,13 +229,6 @@ class ConvertScoreJob extends QueuedJob {
 		$etag = $node->getEtag();
 		$conversion = $this->conversionService->find($fileId, $etag);
 		if ($conversion !== null) {
-			$alreadyInProgress = in_array($conversion->getStatus(), [ScoreConversion::STATUS_PENDING, ScoreConversion::STATUS_PROCESSING], true);
-			// "ready" allein reicht nicht aus: ein Datensatz kann
-			// "ready" UND veraltet sein (aeltere format_version, siehe
-			// ConversionController::status() -> retryConversion()) - der reicht
-			// diesen Job gezielt fuer GENAU diesen Fall neu ein und braucht ihn
-			// nicht uebersprungen.
-			$alreadyReadyAndCurrent = $conversion->getStatus() === ScoreConversion::STATUS_READY && $this->conversionService->isCurrent($conversion);
 			// Der eigene Neuversuch findet den Datensatz absichtlich auf
 			// `pending` vor (markWaiting() unten) - der Guard gilt fuer ihn nur
 			// umgekehrt: Steht der Datensatz NICHT mehr auf pending, hat ihn
@@ -254,10 +239,13 @@ class ConvertScoreJob extends QueuedJob {
 				if ($conversion->getStatus() !== ScoreConversion::STATUS_PENDING) {
 					return;
 				}
-			} elseif ($alreadyInProgress || $alreadyReadyAndCurrent) {
+			} elseif (!$this->conversionService->needsConversion($conversion)) {
 				// Bereits angestoßen oder fertig (z.B. NodeCreatedEvent UND
 				// NodeWrittenEvent für denselben Upload, oder Status-Endpunkt hat
 				// zwischenzeitlich schon selbst nachgelegt) - nicht doppelt tun.
+				// "ready" allein reicht dafuer nicht: ein Datensatz kann ready
+				// UND veraltet sein (ConversionService::isCurrent()), und genau
+				// fuer diesen Fall reicht der Statusendpunkt den Job ein.
 				return;
 			}
 		}
@@ -271,23 +259,23 @@ class ConvertScoreJob extends QueuedJob {
 			$conversion = $this->conversionService->createPending($fileId, $etag);
 		}
 
-		$maxBytes = $this->appConfig->getValueInt(Application::APP_ID, 'max_score_bytes', self::DEFAULT_MAX_BYTES);
-		if ($maxBytes > 0 && $node->getSize() > $maxBytes) {
-			$this->conversionService->markError(
-				$conversion,
-				sprintf('File is %d bytes, larger than the limit of %d bytes.', $node->getSize(), $maxBytes),
-				ScoreConversion::ERROR_TOO_LARGE,
-			);
+		if (ConversionConfig::exceedsMaxScoreBytes($this->appConfig, $node->getSize())) {
+			$this->conversionService->markError($conversion, $this->tooLargeMessage($node), ScoreConversion::ERROR_TOO_LARGE);
 			return;
 		}
 
 		$this->conversionService->markProcessing($conversion);
+		$this->path()['base']($conversion, $node, ['userId' => $userId, 'fileId' => $fileId, 'busyRetry' => $busyRetry]);
+	}
 
-		if ($this->backend->isLocal()) {
-			$this->convertLocally($conversion, $node);
-			return;
-		}
-
+	/**
+	 * Der Sidecar-Weg: einreichen und das Pollen an PollConversionJob
+	 * uebergeben (siehe Klassenkommentar).
+	 *
+	 * @param array{userId: string, fileId: int, busyRetry: int} $job
+	 */
+	private function submitToSidecar(ScoreConversion $conversion, Node $node, array $job): void {
+		['userId' => $userId, 'fileId' => $fileId, 'busyRetry' => $busyRetry] = $job;
 		try {
 			// fopen() statt getContent(): der Inhalt geht als Stream an Guzzle,
 			// nicht als PHP-String (siehe SidecarClient::submitConversion()).
@@ -300,18 +288,13 @@ class ConvertScoreJob extends QueuedJob {
 			$this->retryWhenBusy($conversion, $userId, $fileId, $busyRetry, $e);
 			return;
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: submitting to the sidecar failed for fileId={fileId}: {message}', [
-				'fileId' => $fileId,
-				'message' => $e->getMessage(),
-				'exception' => $e,
-			]);
-			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof ConverterException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
+			$this->fail($conversion, 'ScoreView: submitting to the sidecar failed for fileId={fileId}: {message}', $e);
 			return;
 		}
 
 		$this->jobList->add(PollConversionJob::class, [
 			'fileId' => $fileId,
-			'etag' => $etag,
+			'etag' => $node->getEtag(),
 			'jobId' => $jobId,
 			'deadline' => $this->time->getTime() + self::MAX_TOTAL_SECONDS,
 		]);
@@ -366,8 +349,10 @@ class ConvertScoreJob extends QueuedJob {
 	 * eigenen Kindprozess mit gemessenen 0,7-2,9 s und harter Zeitgrenze
 	 * (Service\LocalConverter). Ein Poll-Umweg ueber die Job-Queue waere
 	 * dafuer mehr Wartezeit als Arbeit.
+	 *
+	 * @param array{userId: string, fileId: int, busyRetry: int} $job unused: nothing to retry or poll here
 	 */
-	private function convertLocally(ScoreConversion $conversion, Node $node): void {
+	private function convertLocally(ScoreConversion $conversion, Node $node, array $job): void {
 		$temporaryPath = null;
 		try {
 			$temporaryPath = $this->copyToTempFile($node);
@@ -383,17 +368,37 @@ class ConvertScoreJob extends QueuedJob {
 				$this->localConverter->engineVersion(),
 			);
 		} catch (\Throwable $e) {
-			$this->logger->error('ScoreView: local conversion failed for fileId={fileId}: {message}', [
-				'fileId' => $conversion->getFileId(),
-				'message' => $e->getMessage(),
-				'exception' => $e,
-			]);
-			$this->conversionService->markError($conversion, $e->getMessage(), $e instanceof ConverterException ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN);
+			$this->fail($conversion, 'ScoreView: local conversion failed for fileId={fileId}: {message}', $e);
 		} finally {
 			if ($temporaryPath !== null) {
 				@unlink($temporaryPath);
 			}
 		}
+	}
+
+	/** Logs a failed base run and ends its row with the thrown code. */
+	private function fail(ScoreConversion $conversion, string $logMessage, \Throwable $e): void {
+		$this->logger->error($logMessage, [
+			'fileId' => $conversion->getFileId(),
+			'message' => $e->getMessage(),
+			'exception' => $e,
+		]);
+		$this->conversionService->markError($conversion, $e->getMessage(), ConverterException::codeOf($e));
+	}
+
+	/** Logs a failed variant run and ends its row with the thrown code. */
+	private function failVariant(ScoreVariant $variant, string $logMessage, \Throwable $e): void {
+		$this->logger->error($logMessage, [
+			'variant' => $variant->getVariant(),
+			'fileId' => $variant->getFileId(),
+			'message' => $e->getMessage(),
+			'exception' => $e,
+		]);
+		$this->variantService->markError($variant, $e->getMessage(), ConverterException::codeOf($e));
+	}
+
+	private function tooLargeMessage(Node $node): string {
+		return sprintf('File is %d bytes, larger than the limit of %d bytes.', $node->getSize(), ConversionConfig::maxScoreBytes($this->appConfig));
 	}
 
 	/**

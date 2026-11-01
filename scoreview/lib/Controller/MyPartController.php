@@ -9,7 +9,6 @@ use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\ViewerPreferences;
 use OCP\AppFramework\Controller;
-use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
@@ -37,6 +36,8 @@ use OCP\IRequest;
  * fremde fileIds nicht abtasten lassen.
  */
 class MyPartController extends Controller {
+	use JsonErrors;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -108,9 +109,5 @@ class MyPartController extends Controller {
 			return null;
 		}
 		return $userId;
-	}
-
-	private function notFound(): JSONResponse {
-		return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 	}
 }

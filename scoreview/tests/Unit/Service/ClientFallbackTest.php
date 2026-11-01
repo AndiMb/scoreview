@@ -11,6 +11,8 @@ use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\SidecarClient;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
+use OCP\ICache;
+use OCP\ICacheFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -64,6 +66,7 @@ class ClientFallbackTest extends TestCase {
 		?LocalConverter $lokal = null,
 		?SidecarClient $sidecar = null,
 		int $jetzt = self::JETZT,
+		?ICache $cache = null,
 	): ClientFallback {
 		$conversionBackend = $this->createMock(ConversionBackend::class);
 		$conversionBackend->method('isLocal')->willReturn($backend === ConversionBackend::LOCAL);
@@ -80,7 +83,50 @@ class ClientFallbackTest extends TestCase {
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getTime')->willReturn($jetzt);
 
-		return new ClientFallback($this->appConfig(), $conversionBackend, $lokal, $sidecar, $time);
+		$cacheFactory = $this->createMock(ICacheFactory::class);
+		$cacheFactory->method('isAvailable')->willReturn($cache !== null);
+		$cacheFactory->method('createDistributed')->willReturn($cache ?? $this->createMock(ICache::class));
+
+		return new ClientFallback($this->appConfig(), $conversionBackend, $lokal, $sidecar, $time, $cacheFactory);
+	}
+
+	/** @param array<string, mixed> $eintraege */
+	private function cache(array &$eintraege): ICache {
+		$cache = $this->createMock(ICache::class);
+		$cache->method('get')->willReturnCallback(function (string $key) use (&$eintraege) {
+			return $eintraege[$key] ?? null;
+		});
+		$cache->method('set')->willReturnCallback(function (string $key, mixed $value) use (&$eintraege) {
+			$eintraege[$key] = $value;
+			return true;
+		});
+		$cache->method('remove')->willReturnCallback(function (string $key) use (&$eintraege) {
+			unset($eintraege[$key]);
+			return true;
+		});
+		return $cache;
+	}
+
+	public function testWithADistributedCacheTheVerdictLeavesTheAppConfigAlone(): void {
+		$eintraege = [];
+		$lokal = $this->createMock(LocalConverter::class);
+		$lokal->expects($this->once())->method('describe')->willReturn(['available' => false]);
+		$fallback = $this->fallback(lokal: $lokal, cache: $this->cache($eintraege));
+
+		$this->assertSame(ScoreConversion::ERROR_LOCAL_UNAVAILABLE, $fallback->reason());
+		// Asked again: from the cache, without a second process start.
+		$this->assertSame(ScoreConversion::ERROR_LOCAL_UNAVAILABLE, $fallback->reason());
+		$this->assertSame([], $this->gespeichert, 'no IAppConfig write, which would invalidate its cache instance-wide');
+		$this->assertSame([ScoreConversion::ERROR_LOCAL_UNAVAILABLE, self::JETZT], $eintraege['verdict']);
+	}
+
+	public function testForgetClearsTheCachedVerdict(): void {
+		$eintraege = ['verdict' => [ScoreConversion::ERROR_LOCAL_UNAVAILABLE, self::JETZT]];
+		$fallback = $this->fallback(lokalVerfuegbar: true, cache: $this->cache($eintraege));
+
+		$fallback->forget();
+
+		$this->assertNull($fallback->reason());
 	}
 
 	public function testLaesstDenServerArbeitenWennErKann(): void {

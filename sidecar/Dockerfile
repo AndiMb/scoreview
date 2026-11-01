@@ -45,8 +45,12 @@ COPY scoreview/converter/package.json scoreview/converter/package-lock.json ./
 # Chinese, Japanese and Korean lyrics come out as text, not boxes.
 RUN npm ci --omit=dev --no-audit --no-fund
 COPY scoreview/converter/convert.mjs ./
-COPY scoreview/converter/lib/artifacts.mjs scoreview/converter/lib/variantKey.mjs ./lib/
-# The five self-test scores of `convert.mjs --selftest`.
+# The whole directory, not file by file: a module added to converter/lib
+# would otherwise be missing from the image and only show at the first run.
+# The tests next to the modules stay out (Dockerfile.dockerignore).
+COPY scoreview/converter/lib ./lib/
+# The five self-test scores of `convert.mjs --selftest` - selftest-score.mscz
+# among them is also the MuseScore renderer's (config.SELFTEST_SCORE).
 COPY scoreview/converter/*.mscz ./
 
 # Basis-Image per Digest statt nur per Tag: `ubuntu:22.04` wird laufend neu
@@ -99,8 +103,8 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # /usr/local/bin/entrypoint.sh ...) but is no longer the container's
 # default command.
 #
-# scoreview_sidecar is a package of five modules - config / musescore /
-# engine / jobs / app (see scoreview_sidecar/__init__.py). wsgi.py is the entry
+# scoreview_sidecar is a package of six modules - config / errors /
+# musescore / engine / jobs / app (see scoreview_sidecar/__init__.py). wsgi.py is the entry
 # point for gunicorn.
 COPY sidecar/scoreview_sidecar /opt/scoreview-sidecar/scoreview_sidecar
 COPY sidecar/wsgi.py /opt/scoreview-sidecar/wsgi.py
@@ -119,14 +123,6 @@ COPY --from=converter /opt/scoreview-converter /opt/scoreview-converter
 ARG MUSESCORE_VERSION
 ARG MUSESCORE_BUILD
 ENV SCOREVIEW_MUSESCORE_VERSION="${MUSESCORE_VERSION} (${MUSESCORE_BUILD})"
-
-# Minipartitur fuer den Selbsttest (`GET /selftest`). Kopie von
-# sidecar/testdata/repeat-test.mscz - eine der selbst erstellten und
-# damit committbaren Testpartituren (siehe sidecar/testdata/README.md). Sie
-# deckt Wiederholung und Volta ab, also genau die Struktur, an der ein
-# Formatwechsel in `--score-media` zuerst auffiele (docs/architecture.md
-# M7).
-COPY sidecar/selftest-score.mscz /opt/scoreview-sidecar/selftest-score.mscz
 
 # Overridable per `docker run -e`; scoreview_sidecar/musescore.py enforces
 # this as a hard wall-clock guard so a hung MuseScore process cannot hang a

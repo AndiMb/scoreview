@@ -37,7 +37,7 @@ import time
 import uuid
 from pathlib import Path
 
-from . import config, engine
+from . import config, engine, errors
 from .musescore import parse_pos_xml, run_score_media
 
 _LOG = logging.getLogger(__name__)
@@ -152,6 +152,13 @@ def get(job_id: str):
     return JOBS.get(job_id)
 
 
+def renderer_of(job: dict) -> str:
+    """The renderer a job runs with. Every job records one (submit,
+    run_variant); the default only covers an entry without, and it is the
+    same default a request without a choice gets - one rule for both."""
+    return job.get("renderer", config.DEFAULT_RENDERER)
+
+
 def _update(job_id: str, **fields) -> bool:
     """Aktualisiert einen Auftrag; False, wenn der Reaper ihn inzwischen
     verworfen hat. Wer dann weiterarbeitet, arbeitet fuer niemanden."""
@@ -169,7 +176,7 @@ def run_conversion(job_id: str, input_path: Path, workdir: Path):
         # Schon verworfen, bevor er drankam - dann auch keinen Platz belegen.
         shutil.rmtree(workdir, ignore_errors=True)
         return
-    renderer = job.get("renderer", config.DEFAULT_RENDERER)
+    renderer = renderer_of(job)
     # Wait for a free slot BEFORE marking the job as processing: while it
     # waits it is honestly still "pending", which is exactly what the caller
     # should see.
@@ -204,9 +211,17 @@ def _convert_with_engine(job_id: str, input_path: Path, workdir: Path):
             },
         )
     except Exception as exc:  # noqa: BLE001 - reported via the status API, not re-raised
-        done = _update(job_id, status="error", error=str(exc), completedAt=time.monotonic())
+        done = _fail(job_id, exc)
     if not done:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _fail(job_id: str, exc: BaseException) -> bool:
+    """Marks a job failed, with the message and the code the app reads
+    (errors.py). False when the reaper has dropped it meanwhile."""
+    return _update(
+        job_id, status="error", error=str(exc), errorCode=errors.code_of(exc), completedAt=time.monotonic(),
+    )
 
 
 def run_variant(uploaded_file, key: str, base_timing, base_measures) -> str:
@@ -239,7 +254,7 @@ def run_variant(uploaded_file, key: str, base_timing, base_measures) -> str:
             try:
                 pages = engine.convert_variant(workdir / "input.mscz", key, base_dir, out_dir)
             except Exception as exc:  # noqa: BLE001 - a failed variant is a result, not a crash
-                _update(job_id, status="error", error=str(exc), completedAt=time.monotonic())
+                _fail(job_id, exc)
                 return job_id
         _update(
             job_id,
@@ -266,7 +281,7 @@ def _convert(job_id: str, input_path: Path, workdir: Path, display: int):
 
         svgs_b64 = media.get("svgs") or []
         if not svgs_b64:
-            raise RuntimeError("mscore4portable --score-media returned no SVG pages.")
+            raise errors.ConversionError(errors.NO_PAGES, "mscore4portable --score-media returned no SVG pages.")
 
         page_files = []
         for i, svg_b64 in enumerate(svgs_b64):
@@ -302,7 +317,7 @@ def _convert(job_id: str, input_path: Path, workdir: Path, display: int):
             },
         )
     except Exception as exc:  # noqa: BLE001 - reported via the status API, not re-raised
-        done = _update(job_id, status="error", error=str(exc), completedAt=time.monotonic())
+        done = _fail(job_id, exc)
     if not done:
         # Vom Reaper waehrend des Laufs verworfen: das Verzeichnis gehoert
         # niemandem mehr, und der Reaper sieht es nicht wieder.
@@ -340,6 +355,32 @@ def reap_once() -> list[str]:
     for job_id in expired:
         shutil.rmtree(config.JOBS_DIR / job_id, ignore_errors=True)
     return expired
+
+
+def clear_jobs_dir() -> int:
+    """Removes every job directory left in JOBS_DIR; returns how many.
+
+    For the start of the service, before the first job: the registry lives
+    in memory, so after a restart nothing knows the directories of the jobs
+    that were running or waiting - the reaper only walks the registry - and
+    each holds an upload of up to MAX_UPLOAD_BYTES. Their callers have
+    already given up on them (PollConversionJob sees an unknown job and the
+    app submits again), so nothing in there is still wanted.
+
+    Only directories: JOBS_DIR may be a mount an operator also keeps other
+    things in, and a stray file is not a job."""
+    removed = 0
+    try:
+        entries = list(config.JOBS_DIR.iterdir())
+    except OSError:
+        return 0
+    for entry in entries:
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry, ignore_errors=True)
+            removed += 1
+    if removed:
+        _LOG.info("removed %d job directories left from before the start", removed)
+    return removed
 
 
 def start_reaper() -> threading.Thread:

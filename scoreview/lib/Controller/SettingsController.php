@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Controller;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
+use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\HealthService;
 use OCA\ScoreView\Service\LocalConverter;
@@ -180,7 +181,7 @@ class SettingsController extends Controller {
 			$this->appConfig->setValueString(Application::APP_ID, ConversionBackend::SIDECAR_RENDERER_KEY, ConversionBackend::normalizeRenderer($sidecarRenderer));
 		}
 		if ($nodePath !== null) {
-			$this->appConfig->setValueString(Application::APP_ID, 'node_path', $nodePath);
+			$this->appConfig->setValueString(Application::APP_ID, ConversionConfig::NODE_PATH, $nodePath);
 		}
 		// Serverseitige SoundFont-Quelle - der Weg zu Ton ohne Sidecar
 		// (Service\SoundFontService). Nicht zu verwechseln mit
@@ -189,7 +190,7 @@ class SettingsController extends Controller {
 			$this->appConfig->setValueString(Application::APP_ID, SoundFontService::FETCH_URL_KEY, $soundFontFetchUrl);
 		}
 		if ($sidecarUrl !== null) {
-			$this->appConfig->setValueString(Application::APP_ID, 'sidecar_url', $sidecarUrl);
+			$this->appConfig->setValueString(Application::APP_ID, ConversionConfig::SIDECAR_URL, $sidecarUrl);
 		}
 		if ($sidecarSecret !== null) {
 			// `sensitive: true` blendet den Wert in `occ config:app:list`, im
@@ -199,7 +200,7 @@ class SettingsController extends Controller {
 			// (siehe IAppConfig::setValueString), deshalb zieht die Migration
 			// Version000100Date20260824100000 es fuer Bestandsinstallationen
 			// einmalig nach.
-			$this->appConfig->setValueString(Application::APP_ID, 'sidecar_secret', $sidecarSecret, sensitive: true);
+			$this->appConfig->setValueString(Application::APP_ID, ConversionConfig::SIDECAR_SECRET, $sidecarSecret, sensitive: true);
 		}
 		// Default 'aus' (siehe Listener\ScoreFileListener): jeder
 		// Upload sofort konvertieren ist die Ausnahme, kein Standardverhalten.
@@ -217,7 +218,7 @@ class SettingsController extends Controller {
 		// (und wird von Listener\AddCspListener in connect-src freigegeben).
 		// Fehlt das Feld, bleibt die Uebersteuerung - wie bei den Feldern oben.
 		if ($soundFontUrl !== null) {
-			$this->appConfig->setValueString(Application::APP_ID, 'soundfont_url', trim($soundFontUrl));
+			$this->appConfig->setValueString(Application::APP_ID, ConversionConfig::SOUNDFONT_URL, trim($soundFontUrl));
 		}
 		// Konvertierungsweg, node-Pfad, Sidecar-URL - jede dieser Zeilen kann
 		// aus "kann nicht" ein "kann" gemacht haben. Das gespeicherte Urteil
@@ -300,8 +301,8 @@ class SettingsController extends Controller {
 		}
 		$fields = [];
 		foreach ([
-			'nodePath' => [$nodePath, 'node_path'],
-			'sidecarUrl' => [$sidecarUrl, 'sidecar_url'],
+			'nodePath' => [$nodePath, ConversionConfig::NODE_PATH],
+			'sidecarUrl' => [$sidecarUrl, ConversionConfig::SIDECAR_URL],
 			'soundFontFetchUrl' => [$soundFontFetchUrl, SoundFontService::FETCH_URL_KEY],
 		] as $field => [$value, $key]) {
 			if ($value !== null && $value !== $this->stored($key)) {
@@ -333,7 +334,7 @@ class SettingsController extends Controller {
 	 * Formulars scheitern lassen.
 	 */
 	private function refuseInvalid(?string $nodePath, ?string $sidecarUrl, ?string $soundFontFetchUrl): ?JSONResponse {
-		if ($nodePath !== null && $nodePath !== $this->stored('node_path') && !self::isValidNodePath($nodePath)) {
+		if ($nodePath !== null && $nodePath !== $this->stored(ConversionConfig::NODE_PATH) && !self::isValidNodePath($nodePath)) {
 			return new JSONResponse([
 				'error' => $this->l->t('The path must be empty or an absolute path to a program named node, nodejs or deno.'),
 				'reason' => 'invalid_node_path',
@@ -342,7 +343,7 @@ class SettingsController extends Controller {
 		}
 		$fields = [];
 		foreach ([
-			'sidecarUrl' => [$sidecarUrl, 'sidecar_url'],
+			'sidecarUrl' => [$sidecarUrl, ConversionConfig::SIDECAR_URL],
 			'soundFontFetchUrl' => [$soundFontFetchUrl, SoundFontService::FETCH_URL_KEY],
 		] as $field => [$value, $key]) {
 			if ($value !== null && $value !== $this->stored($key) && !self::isValidServerUrl($value)) {

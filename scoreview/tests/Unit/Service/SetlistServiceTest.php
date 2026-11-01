@@ -60,7 +60,11 @@ class SetlistServiceTest extends TestCase {
 		$this->jobList->method('add')->willReturnCallback(function (string $klasse, array $argument) {
 			$this->auftraege[] = [$klasse, $argument];
 		});
-		$this->conversions = $this->createMock(ConversionService::class);
+		// Doubled except for needsConversion(): the warm-up asks that rule.
+		$this->conversions = $this->getMockBuilder(ConversionService::class)
+			->disableOriginalConstructor()
+			->onlyMethods(['find', 'isCurrent'])
+			->getMock();
 		$this->conversions->method('find')->willReturnCallback(fn () => $this->konvertierung);
 		$this->conversions->method('isCurrent')->willReturnCallback(fn () => $this->aktuellesFormat);
 	}

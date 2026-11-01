@@ -14,6 +14,10 @@ gleichzeitigen KONVERTIERUNGEN begrenzt stattdessen das Semaphor in
 HTTP-Threads.
 """
 
+from scoreview_sidecar import jobs
 from scoreview_sidecar.app import create_app
 
+# Here and not in create_app(): the tests build an app per test against a
+# shared JOBS_DIR, the service builds exactly one, once, before any job.
+jobs.clear_jobs_dir()
 app = create_app()

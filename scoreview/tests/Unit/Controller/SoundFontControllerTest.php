@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Tests\Unit\Controller;
 use OCA\ScoreView\Controller\SoundFontController;
 use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\SidecarException;
+use OCA\ScoreView\Service\SoundFontBusyException;
 use OCA\ScoreView\Service\SoundFontService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
@@ -84,6 +85,21 @@ class SoundFontControllerTest extends TestCase {
 		$this->assertSame([
 			'error' => 'The server could not provide the SoundFont. The ScoreView status in the administration settings shows why.',
 		], $response->getData());
+	}
+
+	public function testOnlyAFetchInProgressAsksForARetry(): void {
+		$this->soundFontService->method('getOrFetch')->willThrowException(new SoundFontBusyException('busy'));
+
+		$response = $this->controller()->get();
+
+		$this->assertSame(Http::STATUS_SERVICE_UNAVAILABLE, $response->getStatus());
+		$this->assertSame('10', $this->header($response, 'Retry-After'));
+	}
+
+	public function testAFailedSourceAsksForNoRetry(): void {
+		$this->soundFontService->method('getOrFetch')->willThrowException(new ConverterException('gone'));
+
+		$this->assertNull($this->header($this->controller()->get(), 'Retry-After'));
 	}
 
 	/** getHeaders() needs the server - the header is in the field. */

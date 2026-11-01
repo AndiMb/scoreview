@@ -1,0 +1,34 @@
+{
+	"_comment": "The cases both grammars of a display variant key (E19) are tested against: converter/lib/variantKey.test.mjs and tests/Unit/Service/VariantKeyTest.php. One list, so a key the viewer builds and the server refuses cannot slip in.",
+	"valid": [
+		"full~phone~w~0",
+		"full~phonel~w~0",
+		"full~orig~c~0",
+		"full~orig~w~-12",
+		"full~orig~w~12",
+		"ex0~orig~w~0",
+		"ex12~phone~c~3",
+		"part3~phone~w~-2",
+		"partAb_-9~orig~w~1"
+	],
+	"invalid": [
+		"full~orig~w~0",
+		"",
+		"full~orig~w",
+		"full~orig~w~0~x",
+		"full~orig~w~+2",
+		"full~orig~w~02",
+		"full~orig~w~-0",
+		"full~orig~w~13",
+		"full~orig~x~0",
+		"full~A4~w~0",
+		"ex01~orig~w~0",
+		"ex1000~orig~w~0",
+		"ex~orig~w~0",
+		"part~orig~w~0",
+		"part3.5~orig~w~0",
+		"part../x~orig~w~0",
+		"whole~orig~w~0",
+		"FULL~orig~w~0"
+	]
+}

@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Controller;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\ConverterException;
+use OCA\ScoreView\Service\SoundFontBusyException;
 use OCA\ScoreView\Service\SoundFontService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -43,6 +44,9 @@ use Psr\Log\LoggerInterface;
 class SoundFontController extends Controller {
 	/** Wie in ConversionController: der Inhalt ist fuer eine Version unveraenderlich. */
 	private const IMMUTABLE_CACHE_SECONDS = 31536000;
+
+	/** A fetch of the default SoundFont takes a few seconds on a usual line. */
+	private const BUSY_RETRY_AFTER_SECONDS = 10;
 
 	public function __construct(
 		IRequest $request,
@@ -82,9 +86,15 @@ class SoundFontController extends Controller {
 			// cause stays in the log above: it names the configured fetch URL
 			// (possibly with credentials) and internal hosts, and this route
 			// answers every reader, Direct-Editing tokens included.
-			return new JSONResponse([
+			$response = new JSONResponse([
 				'error' => $this->l->t('The server could not provide the SoundFont. The ScoreView status in the administration settings shows why.'),
 			], Http::STATUS_SERVICE_UNAVAILABLE);
+			if ($e instanceof SoundFontBusyException) {
+				// Another request is fetching it right now, with nothing
+				// cached yet: worth asking again soon, not a fault to look up.
+				$response->addHeader('Retry-After', (string)self::BUSY_RETRY_AFTER_SECONDS);
+			}
+			return $response;
 		}
 
 		$response = new StreamResponse($file->read());

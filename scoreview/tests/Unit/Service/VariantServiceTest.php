@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Tests\Unit\Service;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreVariant;
 use OCA\ScoreView\Db\ScoreVariantMapper;
+use OCA\ScoreView\Service\ArtifactStore;
 use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\Exception as DbException;
@@ -43,7 +44,7 @@ class VariantServiceTest extends TestCase {
 	}
 
 	private function service(): VariantService {
-		return new VariantService($this->mapper, $this->appData, $this->time);
+		return new VariantService($this->mapper, new ArtifactStore($this->appData), $this->time);
 	}
 
 	private function variant(string $status, int $ageSeconds, ?int $formatVersion = VariantService::FORMAT_VERSION, string $key = 'full~phone~w~0'): ScoreVariant {

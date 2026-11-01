@@ -156,6 +156,22 @@ class VariantControllerTest extends TestCase {
 		$this->assertSame('e1', $data['files']['etag']);
 	}
 
+	public function testAPollOfARunningVariantReadsNoMeta(): void {
+		$this->withFile();
+		$base = new ScoreConversion();
+		$base->setEtag('e1');
+		$base->setStatus(ScoreConversion::STATUS_READY);
+		$this->conversionService->method('find')->willReturn($base);
+		$this->conversionService->method('isCurrentFormat')->willReturn(true);
+		// meta.json is up to 250 KB; the row says the key fitted when claimed.
+		$this->conversionService->expects($this->never())->method('getMetaJsonFile');
+		$this->variantService->method('find')->willReturn($this->readyVariant('part3~phone~w~-2'));
+		$this->variantService->method('isCurrent')->willReturn(false);
+		$this->variantService->method('isRunning')->willReturn(true);
+
+		$this->assertSame('pending', $this->controller()->status(42, 'part3~phone~w~-2')->getData()['status']);
+	}
+
 	public function testAMissingVariantIsEngravedInTheRequest(): void {
 		$this->withFile();
 		$this->withReadyBase();

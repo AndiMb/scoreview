@@ -8,9 +8,9 @@ use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\FeatureConfig;
-use OCA\ScoreView\Service\PracticeTrackException;
 use OCA\ScoreView\Service\PracticeTrackService;
 use OCA\ScoreView\Service\RequestBodyReader;
+use OCA\ScoreView\Service\SiblingFileException;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -32,6 +32,8 @@ use OCP\IRequest;
  * Synthese-Engine mitbringen.
  */
 class PracticeTrackController extends Controller {
+	use JsonErrors;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -93,8 +95,8 @@ class PracticeTrackController extends Controller {
 				return new JSONResponse(['error' => $this->l->t('This is not an MP3 file.')], Http::STATUS_BAD_REQUEST);
 			}
 			$saved = $this->tracks->save($score, $userId, $mp3, $name, $target, $ownFolder, $replace);
-		} catch (PracticeTrackException $e) {
-			return $this->refused($e);
+		} catch (SiblingFileException $e) {
+			return $this->refusedToSave($e);
 		} finally {
 			if (is_resource($mp3)) {
 				fclose($mp3);
@@ -103,27 +105,9 @@ class PracticeTrackController extends Controller {
 		return new JSONResponse($saved, Http::STATUS_CREATED);
 	}
 
-	private function refused(PracticeTrackException $e): JSONResponse {
-		return match ($e->getReason()) {
-			PracticeTrackException::EXISTS => new JSONResponse([
-				'error' => $this->l->t('A file with this name already exists.'),
-				'reason' => 'exists',
-				'suggested' => $e->getSuggested(),
-			], Http::STATUS_CONFLICT),
-			PracticeTrackException::FORBIDDEN => new JSONResponse(['error' => $this->l->t('You cannot save files in this folder.')], Http::STATUS_FORBIDDEN),
-			PracticeTrackException::STORAGE_FULL => new JSONResponse(['error' => $this->l->t('Not enough storage space.')], Http::STATUS_INSUFFICIENT_STORAGE),
-			PracticeTrackException::BUSY => new JSONResponse(['error' => $this->l->t('The file or folder is in use right now. Try again in a moment.')], Http::STATUS_SERVICE_UNAVAILABLE),
-			default => new JSONResponse(['error' => $this->l->t('Invalid file name or folder.')], Http::STATUS_BAD_REQUEST),
-		};
-	}
-
 	private function tooLarge(): JSONResponse {
 		return new JSONResponse([
 			'error' => $this->l->t('The practice track is larger than allowed ({mb} MB).', ['mb' => (int)($this->features->practiceTrackMaxBytes() / 1048576)]),
 		], Http::STATUS_REQUEST_ENTITY_TOO_LARGE);
-	}
-
-	private function notFound(): JSONResponse {
-		return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 	}
 }

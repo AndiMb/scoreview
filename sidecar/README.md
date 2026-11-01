@@ -157,7 +157,12 @@ Asynchrone Job-API; ein Container läuft dauerhaft. Alle Endpunkte außer
   ```
 
   Bei `error` zusätzlich `error` (Freitext: die Ausgabe von
-  `mscore4portable` bzw. die Meldungszeile der Engine).
+  `mscore4portable` bzw. die Meldungszeile der Engine) und `errorCode` – auf
+  beiden Renderern dieselben Namen wie `ScoreConversion::ERROR_*` der App:
+  `no_pages` (keine Seite gesetzt; bei der Engine Exitcode 3 von
+  `convert.mjs`, siehe `converter/lib/errors.mjs`), `timeout` (über
+  `MSCORE_TIMEOUT_SECONDS`) oder `conversion_failed`. Die App übernimmt den
+  Code ohne Blick auf den Text.
 - **`POST /variant`** – eine Darstellungsvariante
   ([E19](../docs/architecture.md#e19-darstellungsvarianten-dieselbe-zeit-ein-anderes-bild)),
   **synchron** gesetzt, immer mit der Engine. Multipart: `file` (die
@@ -168,7 +173,8 @@ Asynchrone Job-API; ein Container läuft dauerhaft. Alle Endpunkte außer
   Release-Tag der Engine im Image); `files` hat **kein** `midi` – eine
   Variante spielt das der Grundkonvertierung. Eine Variante, die der
   Konverter nicht setzen kann oder die eine Invariante bricht, ist
-  `200` mit `status: "error"`: ein Ergebnis, kein Ausfall. Ist binnen 20 s kein
+  `200` mit `status: "error"` samt `error` und `errorCode` wie oben: ein
+  Ergebnis, kein Ausfall. Ist binnen 20 s kein
   Konvertierungsplatz frei, `503` mit `Retry-After`. Synchron, weil die App
   eine Variante in der Anfrage des Browsers setzt (3–4 s); eine Warteschlange
   brächte nur das Pollen dazu. Variantenaufträge belegen deshalb auch keinen
@@ -201,7 +207,9 @@ defekte `.mscz` landet sichtbar auf `status: error`, statt zu hängen.
   mitgelieferte Partituren, geprüft auf M2/M4/M7, M10, Partiturfakten,
   Liedtext, Taktarten und Darstellungsvarianten. Mit MuseScore konvertiert er
   die mitgelieferte Minipartitur
-  (`selftest-score.mscz`, Kopie von `testdata/repeat-test.mscz`) und prüft das
+  (`scoreview/converter/selftest-score.mscz`, Kopie von
+  `testdata/repeat-test.mscz` – dieselbe Datei, die auch der Engine-Selbsttest
+  nimmt) und prüft das
   Ergebnis auf die Zusagen, auf denen die App aufbaut: alle erwarteten
   `--score-media`-Schlüssel vorhanden, mindestens eine SVG-Seite, Timing-Events
   und Elementkoordinaten vorhanden, Event-Zeiten monoton steigend, **und
@@ -293,13 +301,13 @@ Zwei unabhängige Mechanismen:
   `SCOREVIEW_PENDING_MAX_AGE_SECONDS` warten (die App hat sie da längst
   aufgegeben), und Läufe, die länger dauern, als `MSCORE_TIMEOUT_SECONDS`
   überhaupt zulässt.
-- **Hängende Jobs** nach einem Container-Neustart mitten in einer Konvertierung.
-  Der Job-Status lebt nur im Prozessspeicher; nach einem Neustart ist die Job-ID
-  unbekannt, und `SCOREVIEW_JOBS_DIR` kann verwaiste Arbeitsverzeichnisse
-  enthalten. Bei Bedarf manuell:
-  `docker exec scoreview-sidecar sh -c 'rm -rf /tmp/scoreview-jobs/*'` – das
-  `sh -c` ist nötig, weil `docker exec` keine Shell startet und den `*` sonst
-  niemand im Container auflöst.
+- **Verwaiste Jobs** nach einem Container-Neustart mitten in einer
+  Konvertierung. Der Job-Status lebt nur im Prozessspeicher; nach einem
+  Neustart ist die Job-ID unbekannt, und der Reaper kennt ihr
+  Arbeitsverzeichnis nicht mehr. Deshalb leert der Dienst beim Start alle
+  Unterverzeichnisse von `SCOREVIEW_JOBS_DIR` (`jobs.clear_jobs_dir()`, aus
+  `wsgi.py`) – die App hat diese Aufträge ohnehin aufgegeben und reicht neu
+  ein. Lose Dateien dort bleiben unberührt.
 
 Ein neustartsicherer Job-Zustand ist bewusst nicht eingebaut: Nextcloud sieht
 einen fehlenden oder fehlgeschlagenen Job nach einem Sidecar-Neustart und

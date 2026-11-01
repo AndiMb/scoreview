@@ -174,8 +174,11 @@ SOUNDFONT_CANDIDATES = (
     "/usr/share/sounds/sf3/default-GM.sf3",
 )
 
-# Mini score for the self-test.
-SELFTEST_SCORE = Path("/opt/scoreview-sidecar/selftest-score.mscz")
+# Mini score for the MuseScore self-test: the converter's own
+# selftest-score.mscz (a copy of testdata/repeat-test.mscz), one file for
+# both renderers. It covers repeats and voltas - the structure a format
+# change in `--score-media` would break first (docs/architecture.md M7).
+SELFTEST_SCORE = CONVERTER_DIR / "selftest-score.mscz"
 
 
 def _resolve_soundfont():

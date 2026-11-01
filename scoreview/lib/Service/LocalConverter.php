@@ -83,6 +83,25 @@ class LocalConverter {
 		'/snap/bin/node',
 	];
 
+	/**
+	 * Exit codes of convert.mjs that name a cause (converter/lib/errors.mjs,
+	 * the one list - LocalConverterTest reads it to keep this copy in step).
+	 * Every other non-zero exit is ERROR_CONVERSION_FAILED. A code and not
+	 * the message, so that a score without pages reads the same on every
+	 * path (E3), whatever the engine release words it as.
+	 */
+	public const EXIT_CODES = [
+		3 => ScoreConversion::ERROR_NO_PAGES,
+	];
+
+	/**
+	 * The runtime found for this instance of the class, or false for "looked
+	 * and found none". Found once per process: every lookup is a child
+	 * process (`node --version`), and a cron run that converts several
+	 * scores would otherwise pay it for each.
+	 */
+	private ConverterRuntime|false|null $runtime = null;
+
 	public function __construct(
 		private IAppConfig $appConfig,
 		private ITempManager $tempManager,
@@ -104,9 +123,15 @@ class LocalConverter {
 			throw new LocalConverterException('No temporary directory available for the conversion.');
 		}
 
-		$this->run([$msczPath, $outDir], read: [$msczPath], write: [$outDir]);
-
-		return $this->readArtifacts($outDir);
+		try {
+			$this->run([$msczPath, $outDir], read: [$msczPath], write: [$outDir]);
+			return $this->readArtifacts($outDir);
+		} finally {
+			// The temp manager removes its folders only when the process
+			// ends - in a cron run that converts many scores, a few MB of
+			// pages per score would pile up until then.
+			self::removeTree($outDir);
+		}
 	}
 
 	/**
@@ -124,9 +149,12 @@ class LocalConverter {
 			throw new LocalConverterException('No temporary directory available for the conversion.');
 		}
 
-		$this->run(['--variant', $key, '--base', $baseDir, $msczPath, $outDir], read: [$msczPath, $baseDir], write: [$outDir]);
-
-		$artifacts = $this->readArtifacts($outDir, withMidi: false);
+		try {
+			$this->run(['--variant', $key, '--base', $baseDir, $msczPath, $outDir], read: [$msczPath, $baseDir], write: [$outDir]);
+			$artifacts = $this->readArtifacts($outDir, withMidi: false);
+		} finally {
+			self::removeTree($outDir);
+		}
 		unset($artifacts['midi']);
 		return $artifacts;
 	}
@@ -249,7 +277,14 @@ class LocalConverter {
 	 * (E18), not something to pick up because it happens to be installed.
 	 */
 	private function findRuntime(): ?ConverterRuntime {
-		$configured = trim($this->appConfig->getValueString(Application::APP_ID, 'node_path'));
+		if ($this->runtime === null) {
+			$this->runtime = $this->searchRuntime() ?? false;
+		}
+		return $this->runtime === false ? null : $this->runtime;
+	}
+
+	private function searchRuntime(): ?ConverterRuntime {
+		$configured = trim($this->appConfig->getValueString(Application::APP_ID, ConversionConfig::NODE_PATH));
 		if ($configured !== '') {
 			return $this->probeRuntime($configured);
 		}
@@ -368,7 +403,7 @@ class LocalConverter {
 			);
 		}
 
-		$timeout = $this->appConfig->getValueInt(Application::APP_ID, 'local_timeout', self::DEFAULT_TIMEOUT_SECONDS);
+		$timeout = $this->appConfig->getValueInt(Application::APP_ID, ConversionConfig::LOCAL_TIMEOUT, self::DEFAULT_TIMEOUT_SECONDS);
 		if ($timeout <= 0) {
 			$timeout = self::DEFAULT_TIMEOUT_SECONDS;
 		}
@@ -385,7 +420,7 @@ class LocalConverter {
 		// Verzeichnis AUSSERHALB der App: Das ausgelieferte App-Verzeichnis ist
 		// signiert, dort abgelegte Dateien liessen Nextclouds
 		// Integritaetspruefung dauerhaft Alarm schlagen.
-		$fontDir = trim($this->appConfig->getValueString(Application::APP_ID, 'cjk_font_dir'));
+		$fontDir = trim($this->appConfig->getValueString(Application::APP_ID, ConversionConfig::CJK_FONT_DIR));
 		if ($fontDir !== '') {
 			$options = ['--fonts', $fontDir];
 			$read[] = $fontDir;
@@ -420,7 +455,7 @@ class LocalConverter {
 			]);
 			throw new LocalConverterException(
 				'Local conversion failed: ' . $this->lastLine($result['stderr']),
-				errorCode: ScoreConversion::ERROR_CONVERSION_FAILED,
+				errorCode: self::errorCodeForExit($result['exitCode']),
 			);
 		}
 		if ($result['stdoutOverflow']) {
@@ -430,6 +465,35 @@ class LocalConverter {
 			);
 		}
 		return $result['stdout'];
+	}
+
+	/** The ScoreConversion::ERROR_* code for a failed run's exit code. */
+	public static function errorCodeForExit(int $exitCode): string {
+		return self::EXIT_CODES[$exitCode] ?? ScoreConversion::ERROR_CONVERSION_FAILED;
+	}
+
+	/**
+	 * Removes a run's output directory and whatever is in it. Recursive
+	 * although convert.mjs writes no subdirectory: what a run on an untrusted
+	 * score leaves inside its own directory is not something to rely on.
+	 */
+	private static function removeTree(string $dir): void {
+		$dir = rtrim($dir, '/' . DIRECTORY_SEPARATOR);
+		if ($dir === '' || !is_dir($dir) || is_link($dir)) {
+			return;
+		}
+		foreach (scandir($dir) ?: [] as $entry) {
+			if ($entry === '.' || $entry === '..') {
+				continue;
+			}
+			$path = $dir . DIRECTORY_SEPARATOR . $entry;
+			if (is_dir($path) && !is_link($path)) {
+				self::removeTree($path);
+			} else {
+				@unlink($path);
+			}
+		}
+		@rmdir($dir);
 	}
 
 	/**

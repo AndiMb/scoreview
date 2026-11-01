@@ -9,10 +9,8 @@ use OCA\ScoreView\Db\ScoreVariant;
 use OCA\ScoreView\Db\ScoreVariantMapper;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\Exception as DbException;
-use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
-use OCP\Files\SimpleFS\ISimpleFolder;
 
 /**
  * The cache of display variants (docs/architecture.md E19) and their status
@@ -25,7 +23,8 @@ use OCP\Files\SimpleFS\ISimpleFolder;
  * follow through deleteForVersion()/deleteForFile(), which ConversionService
  * calls at those same places.
  *
- * No MIDI: a variant plays the base conversion's.
+ * No MIDI: a variant plays the base conversion's. Folders, page names and
+ * the artifact allowlist go through ArtifactStore, as for the base.
  */
 class VariantService {
 	/** Raise with every change of the variant cache format, like ConversionService::CURRENT_FORMAT_VERSION. */
@@ -72,6 +71,9 @@ class VariantService {
 	private const MEASURES_FILE = 'measures.json';
 	private const META_FILE = 'meta.json';
 
+	/** The variant folders' parent inside a version's folder. */
+	private const VARIANTS_FOLDER = 'v';
+
 	/** Names the artifact route serves, as for the base (ConversionService::ARTIFACTS) - without midi. */
 	public const ARTIFACTS = [
 		'timing' => [self::TIMING_FILE, 'application/json'],
@@ -81,7 +83,7 @@ class VariantService {
 
 	public function __construct(
 		private ScoreVariantMapper $mapper,
-		private IAppData $appData,
+		private ArtifactStore $store,
 		private ITimeFactory $time,
 	) {
 	}
@@ -132,13 +134,14 @@ class VariantService {
 	 * @param string[] $pageSvgs
 	 */
 	public function markReady(ScoreVariant $variant, array $pageSvgs, string $timingJson, string $measuresJson, string $metaJson, string $engine): void {
-		$folder = $this->getOrCreateFolder($variant->getFileId(), $variant->getEtag(), $variant->getVariant());
-		foreach (array_values($pageSvgs) as $i => $svg) {
-			$this->writeFile($folder, 'page-' . ($i + 1) . '.svg', $svg);
-		}
-		$this->writeFile($folder, self::TIMING_FILE, $timingJson);
-		$this->writeFile($folder, self::MEASURES_FILE, $measuresJson);
-		$this->writeFile($folder, self::META_FILE, $metaJson);
+		// The version's folder must exist already - the base was written
+		// before any variant of it can be asked for (VariantController).
+		$this->store->folder((string)$variant->getFileId(), $variant->getEtag());
+		$folder = $this->store->folderOrCreate(...$this->path($variant->getFileId(), $variant->getEtag(), $variant->getVariant()));
+		$this->store->writePages($folder, $pageSvgs);
+		$this->store->writeFile($folder, self::TIMING_FILE, $timingJson);
+		$this->store->writeFile($folder, self::MEASURES_FILE, $measuresJson);
+		$this->store->writeFile($folder, self::META_FILE, $metaJson);
 		$variant->setPageCount(count($pageSvgs));
 		$variant->setEngine(substr($engine, 0, 64));
 		$variant->setFormatVersion(self::FORMAT_VERSION);
@@ -193,29 +196,14 @@ class VariantService {
 	 * @throws NotFoundException for an unknown name or a missing file
 	 */
 	public function getArtifact(ScoreVariant $variant, string $name): array {
-		$folder = $this->getFolder($variant->getFileId(), $variant->getEtag(), $variant->getVariant());
-		if (str_starts_with($name, 'page-')) {
-			$number = substr($name, strlen('page-'));
-			// Digits only and no leading zero - see ConversionService::getArtifact().
-			if ($number === '' || !ctype_digit($number) || (int)$number < 1 || $number !== (string)(int)$number) {
-				throw new NotFoundException("Unknown artifact: {$name}");
-			}
-			return [$folder->getFile('page-' . (int)$number . '.svg'), 'image/svg+xml'];
-		}
-		if (!isset(self::ARTIFACTS[$name])) {
-			throw new NotFoundException("Unknown artifact: {$name}");
-		}
-		[$fileName, $mimeType] = self::ARTIFACTS[$name];
-		return [$folder->getFile($fileName), $mimeType];
+		return $this->store->artifact($name, self::ARTIFACTS,
+			fn () => $this->store->folder(...$this->path($variant->getFileId(), $variant->getEtag(), $variant->getVariant())));
 	}
 
 	/** All variants of one score version, files and rows - when its base is written anew or goes. */
 	public function deleteForVersion(int $fileId, string $etag): void {
-		try {
-			$this->appData->getFolder('scoreview')->getFolder((string)$fileId)->getFolder($etag)->getFolder('v')->delete();
-		} catch (NotFoundException) {
-			// No variant was ever made of this version.
-		}
+		// A version of which no variant was ever made has no folder - fine.
+		$this->store->delete((string)$fileId, $etag, self::VARIANTS_FOLDER);
 		$this->mapper->deleteForVersion($fileId, $etag);
 	}
 
@@ -236,11 +224,8 @@ class VariantService {
 		$excess = count($done) - self::MAX_PER_VERSION;
 		for ($i = 0; $i < $excess; $i++) {
 			$old = $done[$i];
-			try {
-				$this->getFolder($fileId, $etag, $old->getVariant())->delete();
-			} catch (NotFoundException) {
-				// An error row has no folder.
-			}
+			// An error row has no folder - fine.
+			$this->store->delete(...$this->path($fileId, $etag, $old->getVariant()));
 			$this->mapper->delete($old);
 		}
 	}
@@ -253,31 +238,8 @@ class VariantService {
 		return (new \DateTime())->setTimestamp($this->time->getTime());
 	}
 
-	private function writeFile(ISimpleFolder $folder, string $name, string $content): void {
-		if ($folder->fileExists($name)) {
-			$folder->getFile($name)->putContent($content);
-			return;
-		}
-		$folder->newFile($name, $content);
-	}
-
-	private function getFolder(int $fileId, string $etag, string $key): ISimpleFolder {
-		return $this->appData->getFolder('scoreview')
-			->getFolder((string)$fileId)
-			->getFolder($etag)
-			->getFolder('v')
-			->getFolder($key);
-	}
-
-	private function getOrCreateFolder(int $fileId, string $etag, string $key): ISimpleFolder {
-		$folder = $this->appData->getFolder('scoreview')->getFolder((string)$fileId)->getFolder($etag);
-		foreach (['v', $key] as $name) {
-			try {
-				$folder = $folder->getFolder($name);
-			} catch (NotFoundException) {
-				$folder = $folder->newFolder($name);
-			}
-		}
-		return $folder;
+	/** @return list<string> the folder of one variant, below ArtifactStore::ROOT */
+	private function path(int $fileId, string $etag, string $key): array {
+		return [(string)$fileId, $etag, self::VARIANTS_FOLDER, $key];
 	}
 }

@@ -32,4 +32,13 @@ class ConverterException extends \RuntimeException {
 	public function getErrorCode(): string {
 		return $this->errorCode;
 	}
+
+	/**
+	 * The ScoreConversion::ERROR_* code for anything a conversion threw:
+	 * the carried code of a ConverterException, ERROR_UNKNOWN for the rest
+	 * (a programming error, an unexpected storage failure).
+	 */
+	public static function codeOf(\Throwable $e): string {
+		return $e instanceof self ? $e->getErrorCode() : ScoreConversion::ERROR_UNKNOWN;
+	}
 }

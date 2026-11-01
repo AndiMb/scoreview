@@ -21,7 +21,8 @@
  * directory, read only, to check the variant against it.
  *
  * Ergebnis geht als eine Zeile JSON nach stdout, Fehler als Klartext nach
- * stderr mit Exitcode != 0. Kein Lograuschen auf stdout: Engine- und
+ * stderr mit Exitcode != 0. A failure the viewer has to name (a score
+ * without pages) has its own exit code, see lib/errors.mjs. Kein Lograuschen auf stdout: Engine- und
  * Emscripten-Meldungen landen dort (M3 beim Sidecar, hier dasselbe Bild),
  * sie werden deshalb unten stillgelegt, bevor das Modul geladen wird.
  */
@@ -32,6 +33,7 @@ import { cpus } from 'os'
 import { dirname, join, resolve } from 'path'
 import { fileURLToPath } from 'url'
 import { checkLyrics, checkMeters, checkPromises, checkScoreFacts, checkVariant, toPositions, toVariantMeta } from './lib/artifacts.mjs'
+import { ConversionError, exitCodeOf } from './lib/errors.mjs'
 import { engineViewOptions, parseVariantKey } from './lib/variantKey.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -157,7 +159,7 @@ async function convert(msczPath, fontVerzeichnis) {
 
 	const pageCount = await score.npages()
 	if (pageCount < 1) {
-		throw new Error('The engine returned no SVG page.')
+		throw new ConversionError('no_pages', 'The engine returned no SVG page.')
 	}
 
 	const pages = []
@@ -221,7 +223,7 @@ async function convertVariant(msczPath, key, fontVerzeichnis) {
 
 	const pageCount = await score.npages()
 	if (pageCount < 1) {
-		throw new Error('The engine returned no SVG page.')
+		throw new ConversionError('no_pages', 'The engine returned no SVG page.')
 	}
 	const pages = []
 	for (let i = 0; i < pageCount; i++) {
@@ -426,5 +428,5 @@ try {
 	process.exit(0)
 } catch (error) {
 	process.stderr.write(String(error?.stack ?? error) + '\n')
-	process.exit(1)
+	process.exit(exitCodeOf(error))
 }

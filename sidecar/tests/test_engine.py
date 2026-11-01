@@ -13,7 +13,7 @@ import time
 import pytest
 
 from scoreview_sidecar import app as app_modul
-from scoreview_sidecar import config, engine, jobs
+from scoreview_sidecar import config, engine, errors, jobs
 from scoreview_sidecar.app import create_app
 
 SECRET = {"X-ScoreView-Secret": "test-secret"}
@@ -84,8 +84,9 @@ def test_seiten_werden_nach_nummer_gezaehlt(tmp_path):
 
 
 def test_ohne_seite_ist_es_ein_fehler(tmp_path):
-    with pytest.raises(RuntimeError, match="no SVG page"):
+    with pytest.raises(errors.ConversionError, match="no SVG page") as fehler:
         engine._pages(tmp_path)
+    assert fehler.value.code == errors.NO_PAGES
 
 
 def test_engine_version_aus_dem_package_json(monkeypatch, tmp_path):
@@ -149,7 +150,10 @@ def test_engine_fehler_landet_im_status(monkeypatch, tmp_path, client):
     jobs.run_conversion("e", tmp_path / "input.mscz", tmp_path)
 
     body = client.get("/convert/e", headers=SECRET).get_json()
-    assert body == {"status": "error", "renderer": "engine", "error": "engine conversion failed: Error: kaputt"}
+    assert body == {
+        "status": "error", "renderer": "engine",
+        "error": "engine conversion failed: Error: kaputt", "errorCode": "conversion_failed",
+    }
 
 
 def test_status_nennt_den_renderer(client, tmp_path):

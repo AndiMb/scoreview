@@ -34,6 +34,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setComposer(?string $composer)
  * @method ?string getSearchText()
  * @method void setSearchText(?string $searchText)
+ * @method ?int getPageCount()
+ * @method void setPageCount(?int $pageCount)
+ * @method ?int getMeasureCount()
+ * @method void setMeasureCount(?int $measureCount)
  * @method \DateTime getCreatedAt()
  * @method void setCreatedAt(\DateTime $createdAt)
  * @method \DateTime getUpdatedAt()
@@ -111,12 +115,22 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	protected $title;
 	protected $composer;
 	protected $searchText;
+	/**
+	 * From the conversion, so that a status poll does not decode meta.json
+	 * (up to 250 KB) for one number (ConversionService::getPageCount()).
+	 * NULL for rows from before the columns until BackfillScoreCounts or the
+	 * first read fills them.
+	 */
+	protected $pageCount;
+	protected $measureCount;
 	protected $createdAt;
 	protected $updatedAt;
 
 	public function __construct() {
 		$this->addType('fileId', 'integer');
 		$this->addType('formatVersion', 'integer');
+		$this->addType('pageCount', 'integer');
+		$this->addType('measureCount', 'integer');
 		$this->addType('createdAt', 'datetime');
 		$this->addType('updatedAt', 'datetime');
 	}

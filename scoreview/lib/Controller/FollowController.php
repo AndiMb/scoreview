@@ -52,6 +52,8 @@ use OCP\IRequest;
  * Folgen gehen mobil uneingeschraenkt, es sind gewoehnliche Anfragen.
  */
 class FollowController extends Controller {
+	use JsonErrors;
+
 	public const POLL_HEADER = 'X-ScoreView-Poll-Ms';
 
 	public function __construct(
@@ -297,10 +299,6 @@ class FollowController extends Controller {
 		$userId = $this->fileResolver->currentUserId();
 		$node = $userId === null ? null : $this->fileResolver->resolveOwnNode($fileId);
 		return $node === null ? [null, ''] : [$node, $userId];
-	}
-
-	private function notFound(): JSONResponse {
-		return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 	}
 
 	private function refused(FollowException $e): JSONResponse {

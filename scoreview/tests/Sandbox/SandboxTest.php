@@ -133,13 +133,19 @@ class SandboxTest extends TestCase {
 		$score = $converter->getConverterDir() . '/parts-test.mscz';
 
 		$base = $converter->convert($score);
-		$artifacts = $converter->convertVariant($score, 'part3~phone~w~-2', $baseOut);
+		// convert() removes its output directory; the base goes to its own
+		// one, as ConvertScoreJob hands it over.
+		$baseDir = $this->tempDir();
+		file_put_contents($baseDir . '/timing.json', $base['timing']);
+		file_put_contents($baseDir . '/measures.json', $base['measures']);
+		$artifacts = $converter->convertVariant($score, 'part3~phone~w~-2', $baseDir);
 
 		$this->assertNotEmpty($base['pages']);
 		$this->assertNotEmpty($artifacts['pages']);
 		$meta = json_decode($artifacts['meta'], true);
 		$this->assertSame([2], $meta['staffMap']);
-		$this->assertFileDoesNotExist($variantOut . DIRECTORY_SEPARATOR . 'score.mid', 'a variant has no MIDI of its own');
+		$this->assertSame('', $artifacts['midi'] ?? '', 'a variant has no MIDI of its own');
+		$this->assertDirectoryDoesNotExist($variantOut, 'the output directory is removed after the run');
 	}
 
 	/** @param array<string, string> $values */

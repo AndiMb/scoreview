@@ -47,6 +47,8 @@ use OCP\Util;
  * and is opened from the viewer - it carries no navigation of its own.
  */
 class PageController extends Controller {
+	use JsonErrors;
+
 	public function __construct(
 		IRequest $request,
 		private FeatureConfig $features,
@@ -72,7 +74,7 @@ class PageController extends Controller {
 	public function print(int $fileId): Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if (!$node instanceof File) {
-			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+			return $this->notFound();
 		}
 		$uid = $this->userSession->getUser()?->getUID();
 		$this->initialState->provideInitialState('print', [

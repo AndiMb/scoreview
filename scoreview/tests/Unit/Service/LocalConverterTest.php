@@ -70,7 +70,8 @@ class LocalConverterTest extends TestCase {
 		// die Ursache liegt in der Einrichtung, nicht in der Partitur, und die
 		// Oberflaeche uebersetzt den Code entsprechend.
 		$this->withConfig(['node_path' => '/pfad/den/es/nicht/gibt/node']);
-		$this->tempManager->method('getTemporaryFolder')->willReturn(sys_get_temp_dir());
+		$out = $this->freshDir();
+		$this->tempManager->method('getTemporaryFolder')->willReturn($out . '/');
 
 		try {
 			$this->converter()->convert(__DIR__ . '/egal.mscz');
@@ -78,6 +79,62 @@ class LocalConverterTest extends TestCase {
 		} catch (LocalConverterException $e) {
 			$this->assertSame(ScoreConversion::ERROR_LOCAL_UNAVAILABLE, $e->getErrorCode());
 		}
+	}
+
+	public function testRemovesTheOutputDirectoryEvenWhenTheRunFails(): void {
+		// The temp manager clears its folders only at the end of the
+		// process; a cron run converts many scores before that.
+		$this->withConfig(['node_path' => '/pfad/den/es/nicht/gibt/node']);
+		$out = $this->freshDir();
+		mkdir($out . '/nested');
+		file_put_contents($out . '/page-1.svg', '<svg/>');
+		file_put_contents($out . '/nested/x', 'x');
+		$this->tempManager->method('getTemporaryFolder')->willReturn($out . '/');
+
+		try {
+			$this->converter()->convert(__DIR__ . '/egal.mscz');
+		} catch (LocalConverterException) {
+		}
+
+		$this->assertDirectoryDoesNotExist($out);
+	}
+
+	public function testLooksForTheRuntimeOncePerInstance(): void {
+		// Every lookup is a child process; a cron run converting several
+		// scores paid it once per score.
+		$this->appConfig->expects($this->once())->method('getValueString')
+			->with($this->anything(), 'node_path')
+			->willReturn('/pfad/den/es/nicht/gibt/node');
+		$converter = $this->converter();
+
+		$converter->describe();
+		$converter->describe();
+	}
+
+	public function testAScoreWithoutPagesHasItsOwnExitCode(): void {
+		$this->assertSame(ScoreConversion::ERROR_NO_PAGES, LocalConverter::errorCodeForExit(3));
+		$this->assertSame(ScoreConversion::ERROR_CONVERSION_FAILED, LocalConverter::errorCodeForExit(1));
+		$this->assertSame(ScoreConversion::ERROR_CONVERSION_FAILED, LocalConverter::errorCodeForExit(-1));
+	}
+
+	public function testTheExitCodesAreThoseOfTheConverter(): void {
+		// converter/lib/errors.mjs is the one list; this copy must not drift.
+		$source = (string)file_get_contents(dirname(__DIR__, 3) . '/converter/lib/errors.mjs');
+		preg_match('/EXIT_CODES = Object\.freeze\(\{(.*?)\}\)/s', $source, $block);
+		preg_match_all('/(\w+):\s*(\d+)/', $block[1] ?? '', $pairs, PREG_SET_ORDER);
+		$fromConverter = [];
+		foreach ($pairs as [, $name, $code]) {
+			$fromConverter[(int)$code] = $name;
+		}
+
+		$this->assertNotSame([], $fromConverter);
+		$this->assertSame($fromConverter, LocalConverter::EXIT_CODES);
+	}
+
+	private function freshDir(): string {
+		$dir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'scoreview-lc-' . bin2hex(random_bytes(6));
+		mkdir($dir);
+		return $dir;
 	}
 
 	public function testNimmtDieMeldungAusDemStacktraceStattEinesFrames(): void {

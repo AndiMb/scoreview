@@ -10,6 +10,7 @@ use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
+use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\PracticeTrackService;
@@ -53,6 +54,8 @@ use OCP\IURLGenerator;
  * erst nach hartem Neuladen oder in einem frischen Profil.
  */
 class ConversionController extends Controller {
+	use JsonErrors;
+
 	private const IMMUTABLE_CACHE_SECONDS = 31536000;
 
 	/**
@@ -293,7 +296,7 @@ class ConversionController extends Controller {
 	public function source(int $fileId): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
-			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+			return $this->notFound();
 		}
 
 		try {
@@ -365,7 +368,7 @@ class ConversionController extends Controller {
 				Application::APP_ID . '.engine.get',
 				['version' => $this->localConverter->engineVersion(), 'name' => 'scoreview.mjs']),
 			'maxBytes' => $this->appConfig->getValueInt(
-				Application::APP_ID, 'client_max_score_bytes', self::DEFAULT_CLIENT_MAX_BYTES),
+				Application::APP_ID, ConversionConfig::CLIENT_MAX_SCORE_BYTES, self::DEFAULT_CLIENT_MAX_BYTES),
 			'soundFontUrl' => $this->soundFontUrl(),
 			'canWriteFolder' => PracticeTrackService::canWriteNextTo($node),
 			'etag' => $etag,
@@ -380,7 +383,7 @@ class ConversionController extends Controller {
 	private function serveCachedFile(int $fileId, string $name): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
-			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+			return $this->notFound();
 		}
 
 		$etag = $node->getEtag();
@@ -438,7 +441,7 @@ class ConversionController extends Controller {
 	 * browser keep what it delivers under a version that is not current.
 	 */
 	private function soundFontUrl(): string {
-		$configured = trim($this->appConfig->getValueString(Application::APP_ID, 'soundfont_url'));
+		$configured = ConversionConfig::browserSoundFontUrl($this->appConfig);
 		if ($configured !== '') {
 			return $configured;
 		}
@@ -465,7 +468,7 @@ class ConversionController extends Controller {
 
 	private function buildFileUrls(int $fileId, ScoreConversion $conversion): array {
 		$etag = $conversion->getEtag();
-		$pageCount = $this->conversionService->getPageCount($fileId, $etag);
+		$pageCount = $this->conversionService->getPageCount($conversion);
 		$version = $this->cacheBuster($conversion);
 		$artifact = fn (string $name) => $this->urlGenerator->linkToRoute(
 			Application::APP_ID . '.conversion.artifact', ['fileId' => $fileId, 'name' => $name, 'v' => $version]);

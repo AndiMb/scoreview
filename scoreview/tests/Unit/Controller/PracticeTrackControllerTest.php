@@ -9,9 +9,9 @@ use OCA\ScoreView\Controller\PracticeTrackController;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\FeatureConfig;
-use OCA\ScoreView\Service\PracticeTrackException;
 use OCA\ScoreView\Service\PracticeTrackService;
 use OCA\ScoreView\Service\RequestBodyReader;
+use OCA\ScoreView\Service\SiblingFileException;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
@@ -163,7 +163,7 @@ class PracticeTrackControllerTest extends TestCase {
 	public function testNamenskonfliktMitVorschlag(): void {
 		$this->angemeldet($this->partitur());
 		$this->body->method('readToStream')->willReturn($this->strom("\xFF\xFB\x90\x00"));
-		$this->tracks->method('save')->willThrowException(new PracticeTrackException(PracticeTrackException::EXISTS, 'x (2).mp3'));
+		$this->tracks->method('save')->willThrowException(new SiblingFileException(SiblingFileException::EXISTS, 'x (2).mp3'));
 		$antwort = $this->controller()->create(42, 'x');
 		$this->assertSame(Http::STATUS_CONFLICT, $antwort->getStatus());
 		$this->assertSame('x (2).mp3', $antwort->getData()['suggested']);
@@ -171,9 +171,9 @@ class PracticeTrackControllerTest extends TestCase {
 
 	public static function fehler(): array {
 		return [
-			'kein Schreibrecht' => [PracticeTrackException::FORBIDDEN, Http::STATUS_FORBIDDEN],
-			'Kontingent voll' => [PracticeTrackException::STORAGE_FULL, Http::STATUS_INSUFFICIENT_STORAGE],
-			'unbrauchbar' => [PracticeTrackException::INVALID, Http::STATUS_BAD_REQUEST],
+			'kein Schreibrecht' => [SiblingFileException::FORBIDDEN, Http::STATUS_FORBIDDEN],
+			'Kontingent voll' => [SiblingFileException::STORAGE_FULL, Http::STATUS_INSUFFICIENT_STORAGE],
+			'unbrauchbar' => [SiblingFileException::INVALID, Http::STATUS_BAD_REQUEST],
 		];
 	}
 
@@ -181,7 +181,7 @@ class PracticeTrackControllerTest extends TestCase {
 	public function testFehlerWerdenAbgebildet(string $grund, int $status): void {
 		$this->angemeldet($this->partitur());
 		$this->body->method('readToStream')->willReturn($this->strom('ID3x'));
-		$this->tracks->method('save')->willThrowException(new PracticeTrackException($grund));
+		$this->tracks->method('save')->willThrowException(new SiblingFileException($grund));
 		$this->assertSame($status, $this->controller()->create(42, 'x')->getStatus());
 	}
 

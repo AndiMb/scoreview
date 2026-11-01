@@ -42,6 +42,8 @@ use OCP\Security\RateLimiting\IRateLimitExceededException;
  * the same for both.
  */
 class VariantController extends Controller {
+	use JsonErrors;
+
 	private const IMMUTABLE_CACHE_SECONDS = 31536000;
 
 	/** Runs per person and hour (S4): each is a process of 130-250 MB. */
@@ -92,15 +94,10 @@ class VariantController extends Controller {
 		if (!$this->backend->supportsVariants()) {
 			return new JSONResponse(['status' => ScoreConversion::STATUS_ERROR, 'errorCode' => ScoreVariant::ERROR_UNSUPPORTED]);
 		}
-		try {
-			$meta = json_decode($this->conversionService->getMetaJsonFile($fileId, $etag)->getContent(), true);
-		} catch (NotFoundException) {
-			$meta = null;
-		}
-		if (!is_array($meta) || !VariantKey::fitsScore($parsed, $meta)) {
-			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('This score has no such part.')], Http::STATUS_NOT_FOUND);
-		}
-
+		// A row exists only for a key that fitted this version when it was
+		// claimed (below), so the answers from the cache need no meta.json -
+		// a poll of a running or ready variant would otherwise decode up to
+		// 250 KB on every request.
 		$variant = $this->variantService->find($fileId, $etag, $key);
 		if ($variant !== null && $this->variantService->isCurrent($variant)) {
 			$this->variantService->touch($variant);
@@ -111,6 +108,15 @@ class VariantController extends Controller {
 		}
 		if ($variant !== null && !$this->variantService->mayRetry($variant)) {
 			return new JSONResponse($this->errorBody($variant));
+		}
+
+		try {
+			$meta = json_decode($this->conversionService->getMetaJsonFile($fileId, $etag)->getContent(), true);
+		} catch (NotFoundException) {
+			$meta = null;
+		}
+		if (!is_array($meta) || !VariantKey::fitsScore($parsed, $meta)) {
+			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('This score has no such part.')], Http::STATUS_NOT_FOUND);
 		}
 
 		$user = $this->userSession->getUser();
@@ -151,7 +157,7 @@ class VariantController extends Controller {
 	public function artifact(int $fileId, string $key, string $name): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null || VariantKey::parse($key) === null) {
-			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+			return $this->notFound();
 		}
 		$etag = $node->getEtag();
 		$variant = $this->variantService->find($fileId, $etag, $key);

@@ -90,7 +90,7 @@ class HealthService {
 			'configured' => $configured,
 			'reachable' => $health['reachable'],
 			'error' => $health['error'] ?? null,
-			'url' => $this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'),
+			'url' => $this->appConfig->getValueString(Application::APP_ID, ConversionConfig::SIDECAR_URL),
 			'renderer' => $this->backend->sidecarRenderer(),
 		];
 	}
@@ -101,7 +101,7 @@ class HealthService {
 		// holt der Server es von einer URL (`soundfont_fetch_url`), liegt
 		// schon eine Kopie im IAppData-Cache (dann spielt es auch ohne
 		// erreichbare Quelle), und was meldet der Sidecar?
-		$override = $this->appConfig->getValueString(Application::APP_ID, 'soundfont_url');
+		$override = ConversionConfig::browserSoundFontUrl($this->appConfig);
 		$fetchUrl = $this->soundFontService->getFetchUrl();
 		$cachedVersion = $this->appConfig->getValueString(Application::APP_ID, 'soundfont_cache_version');
 		$sidecarInfo = null;

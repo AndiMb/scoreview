@@ -181,19 +181,34 @@ class PollConversionJobTest extends TestCase {
 	}
 
 	/**
-	 * Die einzige textbasierte Codeerkennung der App - sie haengt an der
-	 * genauen Meldung aus jobs.py. Bricht die, faellt es hier auf.
+	 * The sidecar names the cause as a code (sidecar/scoreview_sidecar/
+	 * errors.py), the same on both renderers and the same as the local
+	 * path's - the message is not read, whatever it says.
+	 *
+	 * @return array<string, array{array<string, string>, string}>
 	 */
-	public function testEinePartiturOhneSeitenBekommtIhrenEigenenCode(): void {
+	public static function sidecarFehler(): array {
+		return [
+			'no pages, engine' => [['error' => 'engine conversion failed: ConversionError: The engine returned no SVG page.', 'errorCode' => 'no_pages'], ScoreConversion::ERROR_NO_PAGES],
+			'no pages, MuseScore' => [['error' => 'mscore4portable --score-media returned no SVG pages.', 'errorCode' => 'no_pages'], ScoreConversion::ERROR_NO_PAGES],
+			'time limit' => [['error' => 'killed', 'errorCode' => 'timeout'], ScoreConversion::ERROR_TIMEOUT],
+			'other failure' => [['error' => 'kaputt', 'errorCode' => 'conversion_failed'], ScoreConversion::ERROR_CONVERSION_FAILED],
+			// An image from before the field: the message is not guessed at.
+			'no code' => [['error' => 'mscore4portable --score-media returned no SVG pages.'], ScoreConversion::ERROR_CONVERSION_FAILED],
+			// An infrastructure code would switch everyone to the browser.
+			'foreign code' => [['error' => 'x', 'errorCode' => ScoreConversion::ERROR_SIDECAR_UNREACHABLE], ScoreConversion::ERROR_CONVERSION_FAILED],
+		];
+	}
+
+	/** @param array<string, string> $antwort */
+	#[DataProvider('sidecarFehler')]
+	public function testNimmtDenCodeDesSidecarsOhneDieMeldungZuLesen(array $antwort, string $code): void {
 		$this->conversionService->method('find')->willReturn($this->datensatz());
-		$this->sidecarClient->method('pollStatus')->willReturn([
-			'status' => 'error',
-			'error' => 'mscore4portable --score-media returned no SVG pages.',
-		]);
+		$this->sidecarClient->method('pollStatus')->willReturn(['status' => 'error'] + $antwort);
 
 		$this->conversionService->expects($this->once())
 			->method('markError')
-			->with($this->anything(), $this->anything(), ScoreConversion::ERROR_NO_PAGES);
+			->with($this->anything(), $antwort['error'], $code);
 
 		$this->laufenLassen($this->argument());
 	}

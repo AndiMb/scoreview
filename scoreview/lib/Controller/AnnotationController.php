@@ -41,6 +41,8 @@ use OCP\IRequest;
  * etwas zu sagen.
  */
 class AnnotationController extends Controller {
+	use JsonErrors;
+
 	/**
 	 * Obergrenze fuer den Text einer Notiz. Die Spalte ist TEXT und haette
 	 * selbst keine, aber `content` ist das einzige frei formulierte Feld der
@@ -82,12 +84,12 @@ class AnnotationController extends Controller {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
 		if ($node === null || $userId === null) {
-			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+			return $this->notFound();
 		}
 
 		$currentMeasureCount = null;
 		try {
-			$currentMeasureCount = $this->currentMeasureCount($fileId, $node->getEtag());
+			$currentMeasureCount = $this->conversionService->getMeasureCount($fileId, $node->getEtag());
 		} catch (\Throwable) {
 			// Konvertierung (noch) nicht fertig/verfuegbar - orphaned-Markierung
 			// entfaellt dann einfach (null), die Notizen selbst bleiben trotzdem
@@ -117,7 +119,7 @@ class AnnotationController extends Controller {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
 		if ($node === null || $userId === null) {
-			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+			return $this->notFound();
 		}
 		// Ein unbekannter Typ wird zur Textnotiz - der engere Fall: Sie
 		// braucht Text, ein Tippfehler endet also als 400 statt als Stempel
@@ -214,7 +216,7 @@ class AnnotationController extends Controller {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
 		if ($node === null || $userId === null) {
-			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+			return $this->notFound();
 		}
 		// Nur die Laenge hier: Ob der Text leer sein darf, haengt an der Art
 		// der Notiz (ein Stempel darf), und die kennt erst der Service.
@@ -251,7 +253,7 @@ class AnnotationController extends Controller {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$userId = $this->fileResolver->currentUserId();
 		if ($node === null || $userId === null) {
-			return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
+			return $this->notFound();
 		}
 
 		try {
@@ -416,10 +418,5 @@ class AnnotationController extends Controller {
 	 */
 	private function canWriteShared(Node $node): bool {
 		return ($node->getPermissions() & Constants::PERMISSION_UPDATE) !== 0;
-	}
-
-	private function currentMeasureCount(int $fileId, string $etag): ?int {
-		$meta = json_decode($this->conversionService->getMetaJsonFile($fileId, $etag)->getContent(), true);
-		return isset($meta['measures']) ? (int)$meta['measures'] : null;
 	}
 }

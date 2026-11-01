@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Service;
 
-use OCA\ScoreView\AppInfo\Application;
 use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Http\EmptyContentSecurityPolicy;
 use OCP\IAppConfig;
@@ -65,7 +64,7 @@ class ViewerPolicy {
 	 * (Settings\AdminSettings), or null when the app serves its own.
 	 */
 	public function soundFontOrigin(): ?string {
-		return self::origin($this->appConfig->getValueString(Application::APP_ID, 'soundfont_url'));
+		return self::origin(ConversionConfig::browserSoundFontUrl($this->appConfig));
 	}
 
 	/**

@@ -12,6 +12,8 @@ use OCP\Files\SimpleFS\ISimpleFolder;
 use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;
 use OCP\ITempManager;
+use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 
 /**
  * Haelt das SoundFont fuer die Browser-Wiedergabe (siehe docs/architecture.md E1) vor.
@@ -75,6 +77,14 @@ class SoundFontService {
 	 */
 	public const DEFAULT_FETCH_URL = 'https://github.com/AndiMb/scoreview/releases/download/soundfont-1/FluidR3Mono_GM.sf3';
 
+	/**
+	 * One fetch at a time per instance. Without it, every device opening a
+	 * score before the first copy is cached starts its own 23-40 MB
+	 * download, and each deletes and rewrites the same appdata file under
+	 * the others.
+	 */
+	private const FETCH_LOCK = 'scoreview/soundfont-fetch';
+
 	public function __construct(
 		private IAppData $appData,
 		private SidecarClient $sidecarClient,
@@ -82,6 +92,7 @@ class SoundFontService {
 		private IAppConfig $appConfig,
 		private ITempManager $tempManager,
 		private IClientService $clientService,
+		private ILockingProvider $locking,
 	) {
 	}
 
@@ -126,7 +137,15 @@ class SoundFontService {
 		if ($cached !== null && $remoteVersion !== '' && $remoteVersion === $this->getVersion()) {
 			return $cached;
 		}
-		return $this->fetchIntoCache($remoteVersion);
+		try {
+			return $this->fetchIntoCache($remoteVersion);
+		} catch (SoundFontBusyException $e) {
+			// Another request is fetching the new one; the old one still plays.
+			if ($cached !== null) {
+				return $cached;
+			}
+			throw $e;
+		}
 	}
 
 	/** Content-Hash des zwischengespeicherten SoundFonts, als HTTP-ETag verwendbar. */
@@ -220,24 +239,71 @@ class SoundFontService {
 			if ($cached !== null) {
 				return $cached;
 			}
+			if ($e instanceof SoundFontBusyException) {
+				throw $e;
+			}
 			throw new ConverterException('SoundFont download from ' . $url . ' failed: ' . $e->getMessage(), 0, $e);
 		}
 	}
 
 	/**
+	 * Fetches under FETCH_LOCK. The lock is not waited for: a request that
+	 * finds it held gets SoundFontBusyException at once - its caller serves
+	 * the cached copy if there is one, else the browser retries (503 with
+	 * Retry-After, SoundFontController). Waiting instead would hold a PHP
+	 * worker per device for as long as the download takes.
+	 *
 	 * @param callable(string): void $downloadTo laedt die Datei an den uebergebenen Pfad
 	 * @throws SidecarException
+	 * @throws SoundFontBusyException while another request fetches
 	 */
 	private function fetchIntoCache(string $version, ?callable $downloadTo = null): ISimpleFile {
+		try {
+			$this->locking->acquireLock(self::FETCH_LOCK, ILockingProvider::LOCK_EXCLUSIVE);
+		} catch (LockedException $e) {
+			throw new SoundFontBusyException('Another request is fetching the SoundFont.', 0, $e);
+		}
+		try {
+			// The request that held the lock before may have fetched exactly
+			// this version - re-read the version past this process's config
+			// cache before downloading it a second time.
+			$this->appConfig->clearCache(true);
+			$cached = $this->findCached();
+			if ($cached !== null && $version !== '' && $version === $this->getVersion()) {
+				return $cached;
+			}
+			return $this->downloadIntoCache($version, $downloadTo);
+		} finally {
+			$this->locking->releaseLock(self::FETCH_LOCK, ILockingProvider::LOCK_EXCLUSIVE);
+		}
+	}
+
+	/**
+	 * @param callable(string): void|null $downloadTo
+	 * @throws SidecarException
+	 */
+	private function downloadIntoCache(string $version, ?callable $downloadTo): ISimpleFile {
 		$tempPath = $this->tempManager->getTemporaryFile('.sf3');
-		if ($downloadTo !== null) {
-			$downloadTo($tempPath);
-		} else {
-			$this->sidecarClient->downloadSoundFontTo($tempPath);
+		try {
+			if ($downloadTo !== null) {
+				$downloadTo($tempPath);
+			} else {
+				$this->sidecarClient->downloadSoundFontTo($tempPath);
+			}
+			if (!is_file($tempPath) || filesize($tempPath) === 0) {
+				throw new SidecarException('SoundFont download returned an empty file.');
+			}
+			return $this->storeDownload($version, $tempPath);
+		} finally {
+			// Also after a failed or partial download: a 40 MB leftover per
+			// failed attempt would otherwise wait for the temp cleanup.
+			if (is_file($tempPath)) {
+				unlink($tempPath);
+			}
 		}
-		if (!is_file($tempPath) || filesize($tempPath) === 0) {
-			throw new SidecarException('SoundFont download returned an empty file.');
-		}
+	}
+
+	private function storeDownload(string $version, string $tempPath): ISimpleFile {
 
 		$folder = $this->getOrCreateFolder();
 		// Neu anlegen statt ueberschreiben, und das ist keine Geschmacksfrage:
@@ -270,7 +336,6 @@ class SoundFontService {
 			if (is_resource($source)) {
 				fclose($source);
 			}
-			unlink($tempPath);
 		}
 
 		// Erst nach dem erfolgreichen Schreiben setzen: bricht der Download

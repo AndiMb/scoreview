@@ -49,7 +49,11 @@ class ConvertScoreJobTest extends TestCase {
 
 	protected function setUp(): void {
 		$this->rootFolder = $this->createMock(IRootFolder::class);
-		$this->conversionService = $this->createMock(ConversionService::class);
+		// Doubled except for needsConversion(): the job's guard is that rule.
+		$this->conversionService = $this->getMockBuilder(ConversionService::class)
+			->disableOriginalConstructor()
+			->onlyMethods(['find', 'createPending', 'markProcessing', 'markError', 'markWaiting', 'markReady', 'readArtifact', 'isCurrent'])
+			->getMock();
 		$this->sidecarClient = $this->createMock(SidecarClient::class);
 		$this->localConverter = $this->createMock(LocalConverter::class);
 		$this->jobList = $this->createMock(IJobList::class);

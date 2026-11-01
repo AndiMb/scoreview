@@ -8,6 +8,7 @@ use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SidecarException;
+use OCA\ScoreView\Service\SoundFontBusyException;
 use OCA\ScoreView\Service\SoundFontService;
 use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
@@ -17,6 +18,8 @@ use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\IAppConfig;
 use OCP\ITempManager;
+use OCP\Lock\ILockingProvider;
+use OCP\Lock\LockedException;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
@@ -29,6 +32,7 @@ use PHPUnit\Framework\TestCase;
  */
 class SoundFontServiceTest extends TestCase {
 	private IAppData&MockObject $appData;
+	private ILockingProvider&MockObject $locking;
 	private SidecarClient&MockObject $sidecar;
 	private ConversionBackend&MockObject $backend;
 	private IAppConfig&MockObject $appConfig;
@@ -46,17 +50,18 @@ class SoundFontServiceTest extends TestCase {
 		$this->appConfig = $this->createMock(IAppConfig::class);
 		$this->tempManager = $this->createMock(ITempManager::class);
 		$this->clientService = $this->createMock(IClientService::class);
+		$this->locking = $this->createMock(ILockingProvider::class);
 	}
 
 	private function service(): SoundFontService {
-		return new SoundFontService($this->appData, $this->sidecar, $this->backend, $this->appConfig, $this->tempManager, $this->clientService);
+		return new SoundFontService($this->appData, $this->sidecar, $this->backend, $this->appConfig, $this->tempManager, $this->clientService, $this->locking);
 	}
 
 	/** Dasselbe, aber auf dem lokalen Konvertierungsweg. */
 	private function lokalerDienst(): SoundFontService {
 		$backend = $this->createMock(ConversionBackend::class);
 		$backend->method('isLocal')->willReturn(true);
-		return new SoundFontService($this->appData, $this->sidecar, $backend, $this->appConfig, $this->tempManager, $this->clientService);
+		return new SoundFontService($this->appData, $this->sidecar, $backend, $this->appConfig, $this->tempManager, $this->clientService, $this->locking);
 	}
 
 	/** Legt einen IAppData-Ordner an, der die Cache-Datei mit der gegebenen Groesse enthaelt. */
@@ -267,5 +272,68 @@ class SoundFontServiceTest extends TestCase {
 	public function testOhneGeholtenStandIstDieErwarteteVersionLeer(): void {
 		$this->withConfig([]);
 		$this->assertSame('', $this->service()->expectedVersion());
+	}
+
+	// --- One fetch at a time (FETCH_LOCK) -----------------------------------
+
+	public function testAFetchInProgressLeavesTheCachedCopyPlaying(): void {
+		$cached = $this->withCachedFile(40_000_000);
+		$this->sidecar->method('fetchSoundFontInfo')->willReturn(['available' => true, 'version' => 'neu456']);
+		$this->withConfig(['soundfont_cache_version' => 'alt123']);
+		$this->locking->method('acquireLock')->willThrowException(new LockedException('scoreview/soundfont-fetch'));
+		$this->sidecar->expects($this->never())->method('downloadSoundFontTo');
+
+		$this->assertSame($cached, $this->service()->getOrFetch());
+	}
+
+	public function testAFetchInProgressWithNothingCachedSaysBusy(): void {
+		$this->withoutCache();
+		$this->withConfig(['soundfont_fetch_url' => 'https://example.invalid/sf3']);
+		$this->locking->method('acquireLock')->willThrowException(new LockedException('scoreview/soundfont-fetch'));
+		$this->clientService->expects($this->never())->method('newClient');
+
+		// Not wrapped into the download failure: the controller tells the
+		// browser to ask again.
+		$this->expectException(SoundFontBusyException::class);
+		$this->service()->getOrFetch();
+	}
+
+	public function testWhatTheRequestBeforeFetchedIsNotFetchedAgain(): void {
+		$cached = $this->withCachedFile(40_000_000);
+		$this->sidecar->method('fetchSoundFontInfo')->willReturn(['available' => true, 'version' => 'neu456']);
+		// The version this process read is stale until the cache is cleared.
+		$cleared = false;
+		$this->appConfig->method('clearCache')->willReturnCallback(function () use (&$cleared) {
+			$cleared = true;
+		});
+		$this->appConfig->method('getValueString')->willReturnCallback(
+			function (string $app, string $key, string $default = '') use (&$cleared) {
+				return $key === 'soundfont_cache_version' ? ($cleared ? 'neu456' : 'alt123') : $default;
+			});
+		$this->sidecar->expects($this->never())->method('downloadSoundFontTo');
+		$this->locking->expects($this->once())->method('releaseLock');
+
+		$this->assertSame($cached, $this->service()->getOrFetch());
+	}
+
+	public function testAFailedDownloadReleasesTheLockAndItsTempFile(): void {
+		$this->withoutCache();
+		$this->withConfig(['soundfont_fetch_url' => 'https://example.invalid/sf3']);
+		$temp = tempnam(sys_get_temp_dir(), 'sv-sf');
+		$this->tempManager->method('getTemporaryFile')->willReturn($temp);
+		$client = $this->createMock(IClient::class);
+		$client->method('get')->willReturnCallback(function () use ($temp) {
+			file_put_contents($temp, 'half a soundfont');
+			throw new \RuntimeException('Verbindung abgebrochen');
+		});
+		$this->clientService->method('newClient')->willReturn($client);
+		$this->locking->expects($this->once())->method('releaseLock');
+
+		try {
+			$this->service()->getOrFetch();
+			$this->fail('expected ConverterException');
+		} catch (ConverterException) {
+		}
+		$this->assertFileDoesNotExist($temp);
 	}
 }

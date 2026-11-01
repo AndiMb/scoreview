@@ -38,6 +38,8 @@ use OCP\IRequest;
  * too (E8).
  */
 class PracticeLogController extends Controller {
+	use JsonErrors;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -121,9 +123,5 @@ class PracticeLogController extends Controller {
 			return [null, ''];
 		}
 		return [$this->fileResolver->resolveOwnNode($fileId), $userId];
-	}
-
-	private function notFound(): JSONResponse {
-		return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 	}
 }

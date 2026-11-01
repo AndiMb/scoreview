@@ -18,6 +18,20 @@ use OCP\IAppConfig;
  * geparst, diese Klasse cached/proxy't nur Bytes.
  */
 class SidecarClient {
+	/**
+	 * The codes a failed sidecar job may report as `errorCode`
+	 * (sidecar/scoreview_sidecar/errors.py) - those that say something about
+	 * THIS score. Anything else, or none (an image from before the field),
+	 * is ERROR_CONVERSION_FAILED: an unexpected word from the sidecar must
+	 * not reach Service\ClientFallback as an infrastructure code and switch
+	 * every reader to the browser.
+	 */
+	private const JOB_ERROR_CODES = [
+		ScoreConversion::ERROR_NO_PAGES,
+		ScoreConversion::ERROR_TIMEOUT,
+		ScoreConversion::ERROR_CONVERSION_FAILED,
+	];
+
 	public function __construct(
 		private IClientService $clientService,
 		private IAppConfig $appConfig,
@@ -29,11 +43,11 @@ class SidecarClient {
 	}
 
 	private function getBaseUrl(): string {
-		return rtrim($this->appConfig->getValueString(Application::APP_ID, 'sidecar_url'), '/');
+		return rtrim($this->appConfig->getValueString(Application::APP_ID, ConversionConfig::SIDECAR_URL), '/');
 	}
 
 	private function getSecret(): string {
-		return $this->appConfig->getValueString(Application::APP_ID, 'sidecar_secret');
+		return $this->appConfig->getValueString(Application::APP_ID, ConversionConfig::SIDECAR_SECRET);
 	}
 
 	private function headers(): array {
@@ -113,6 +127,17 @@ class SidecarClient {
 	 * Wert, den der Sidecar selbst voreinstellt. Gedeckelt wird erst beim
 	 * Einplanen (BackgroundJob\ConvertScoreJob), hier wird nur gelesen.
 	 */
+	/**
+	 * The sidecar's own code for a failed job or variant, taken as it is -
+	 * no reading of the message, which is free text and differs per
+	 * renderer (E3).
+	 */
+	public static function jobErrorCode(mixed $reported): string {
+		return is_string($reported) && in_array($reported, self::JOB_ERROR_CODES, true)
+			? $reported
+			: ScoreConversion::ERROR_CONVERSION_FAILED;
+	}
+
 	public static function retryAfterSeconds(string $header): int {
 		$header = trim($header);
 		return ctype_digit($header) ? (int)$header : 30;
@@ -257,7 +282,7 @@ class SidecarClient {
 			throw new SidecarException('Sidecar response to /variant without status.');
 		}
 		if ($body['status'] !== ScoreConversion::STATUS_READY) {
-			throw new SidecarException('Variant failed in the sidecar: ' . (string)($body['error'] ?? 'unknown error'), errorCode: ScoreConversion::ERROR_CONVERSION_FAILED);
+			throw new SidecarException('Variant failed in the sidecar: ' . (string)($body['error'] ?? 'unknown error'), errorCode: self::jobErrorCode($body['errorCode'] ?? null));
 		}
 		$files = $body['files'] ?? null;
 		if (!is_array($files) || !is_array($files['pages'] ?? null) || $files['pages'] === []) {

@@ -33,6 +33,8 @@ use OCP\IRequest;
  * (E8).
  */
 class SingRunController extends Controller {
+	use JsonErrors;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -123,9 +125,5 @@ class SingRunController extends Controller {
 			return null;
 		}
 		return $userId;
-	}
-
-	private function notFound(): JSONResponse {
-		return new JSONResponse(['error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 	}
 }

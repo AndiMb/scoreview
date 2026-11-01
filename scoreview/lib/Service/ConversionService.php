@@ -7,10 +7,8 @@ namespace OCA\ScoreView\Service;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreConversionMapper;
 use OCP\AppFramework\Utility\ITimeFactory;
-use OCP\Files\IAppData;
 use OCP\Files\NotFoundException;
 use OCP\Files\SimpleFS\ISimpleFile;
-use OCP\Files\SimpleFS\ISimpleFolder;
 
 /**
  * Cached konvertierte Dateien nach fileId+etag in IAppData
@@ -20,7 +18,8 @@ use OCP\Files\SimpleFS\ISimpleFolder;
  * Unterordner statt den Cache einer älteren Version zu überschreiben; der
  * alte Unterordner (und sein DB-Datensatz) wird beim nächsten erfolgreichen
  * markReady() derselben fileId aufgeräumt (gcOldVersions) - ohne das wüchse
- * der Cache unbegrenzt.
+ * der Cache unbegrenzt. Folders and files go through ArtifactStore, which
+ * the variants under the same folders share.
  */
 class ConversionService {
 	private const MIDI_FILE = 'score.mid';
@@ -80,7 +79,7 @@ class ConversionService {
 
 	public function __construct(
 		private ScoreConversionMapper $mapper,
-		private IAppData $appData,
+		private ArtifactStore $store,
 		private ITimeFactory $time,
 		private VariantService $variants,
 		private ConversionBackend $backend,
@@ -141,18 +140,20 @@ class ConversionService {
 		// replaced; a new base (another engine, a reconversion) may number
 		// its segments differently, and their mappings would point astray.
 		$this->variants->deleteForVersion($conversion->getFileId(), $conversion->getEtag());
-		$folder = $this->getOrCreateFolder($conversion->getFileId(), $conversion->getEtag());
-		foreach (array_values($pageSvgs) as $i => $svg) {
-			$this->writeFile($folder, $this->pageFileName($i + 1), $svg);
-		}
-		$this->writeFile($folder, self::MIDI_FILE, $midi);
-		$this->writeFile($folder, self::TIMING_FILE, $timingJson);
-		$this->writeFile($folder, self::MEASURES_FILE, $measuresJson);
-		$this->writeFile($folder, self::META_FILE, $metaJson);
+		$folder = $this->store->folderOrCreate((string)$conversion->getFileId(), $conversion->getEtag());
+		$this->store->writePages($folder, $pageSvgs);
+		$this->store->writeFile($folder, self::MIDI_FILE, $midi);
+		$this->store->writeFile($folder, self::TIMING_FILE, $timingJson);
+		$this->store->writeFile($folder, self::MEASURES_FILE, $measuresJson);
+		$this->store->writeFile($folder, self::META_FILE, $metaJson);
 		$conversion->setBackend($backend);
 		$conversion->setEngineVersion($engineVersion === null ? null : substr($engineVersion, 0, 64));
 		$conversion->setFormatVersion(self::CURRENT_FORMAT_VERSION);
 		$this->applySearchFields($conversion, $metaJson);
+		// The pages actually written, not meta.json's own count: they are what
+		// the artifact route can serve.
+		$conversion->setPageCount(count($pageSvgs));
+		$conversion->setMeasureCount(self::countsFromMeta($metaJson)['measureCount']);
 		$this->updateStatus($conversion, ScoreConversion::STATUS_READY);
 		$this->gcOldVersions($conversion->getFileId(), $conversion->getEtag());
 	}
@@ -187,6 +188,40 @@ class ConversionService {
 			'composer' => $cut($text('composer'), 255),
 			'searchText' => $cut(mb_strtolower(implode(' ', $parts), 'UTF-8'), 1024),
 		];
+	}
+
+	/**
+	 * Page and measure count from a meta.json (`metadata.pages`/`measures`,
+	 * written by both renderers) - for the rows converted before the columns
+	 * (BackfillScoreCounts, and the fallback in getPageCount()).
+	 *
+	 * @return array{pageCount: ?int, measureCount: ?int}
+	 */
+	public static function countsFromMeta(string $metaJson): array {
+		try {
+			$meta = json_decode($metaJson, true, 512, JSON_THROW_ON_ERROR);
+		} catch (\JsonException) {
+			$meta = null;
+		}
+		$count = static fn (string $key): ?int => is_array($meta) && is_numeric($meta[$key] ?? null) ? (int)$meta[$key] : null;
+		return ['pageCount' => $count('pages'), 'measureCount' => $count('measures')];
+	}
+
+	/**
+	 * Fills page and measure count of a row from its meta.json and stores
+	 * them, unless meta.json names neither.
+	 *
+	 * @return bool whether the row changed
+	 */
+	public function applyCounts(ScoreConversion $conversion, string $metaJson): bool {
+		$counts = self::countsFromMeta($metaJson);
+		if ($counts['pageCount'] === null && $counts['measureCount'] === null) {
+			return false;
+		}
+		$conversion->setPageCount($counts['pageCount']);
+		$conversion->setMeasureCount($counts['measureCount']);
+		$this->mapper->update($conversion);
+		return true;
 	}
 
 	public function applySearchFields(ScoreConversion $conversion, string $metaJson): void {
@@ -232,6 +267,29 @@ class ConversionService {
 	}
 
 	/**
+	 * Whether this score version needs a (new) conversion run - the one rule
+	 * for ConvertScoreJob's guard and the set list's warm-up
+	 * (SetlistService::preconvert()).
+	 *
+	 * No row, or a ready one that is not current (isCurrent()): yes. A row
+	 * that is pending or processing: no, a run holds it (isStale() decides
+	 * when it no longer does). A failed one: yes for the job - opening the
+	 * score retries it (ConversionController::status()) - but not with
+	 * $retryErrors false, for a warm-up that would otherwise run a broken
+	 * score again every time its set list is opened.
+	 */
+	public function needsConversion(?ScoreConversion $conversion, bool $retryErrors = true): bool {
+		if ($conversion === null) {
+			return true;
+		}
+		return match ($conversion->getStatus()) {
+			ScoreConversion::STATUS_READY => !$this->isCurrent($conversion),
+			ScoreConversion::STATUS_ERROR => $retryErrors,
+			default => false,
+		};
+	}
+
+	/**
 	 * Haelt diesen Datensatz noch ein Lauf - oder ist der gestorben?
 	 *
 	 * `pending`/`processing` sagen "jemand arbeitet daran"; ein abgebrochener
@@ -258,10 +316,45 @@ class ConversionService {
 		$this->mapper->update($conversion);
 	}
 
-	/** Aus meta.json (`metadata.pages` von MuseScore) statt einer eigenen Spalte. */
-	public function getPageCount(int $fileId, string $etag): int {
-		$meta = json_decode($this->getMetaJsonFile($fileId, $etag)->getContent(), true);
-		return (int)($meta['pages'] ?? 0);
+	/**
+	 * How many pages a ready conversion has - from its column, read on every
+	 * status poll of a ready score. Decoding meta.json for it (up to 250 KB)
+	 * was the price before the column; a row from before it is filled once
+	 * here, the repair step BackfillScoreCounts does the rest.
+	 *
+	 * Still checks that the cached files are there: a cache folder removed
+	 * behind the app's back must keep ending as "not ready" rather than as
+	 * page URLs that all answer 404 (ConversionController::status()).
+	 *
+	 * @throws NotFoundException when the cache folder or its meta.json is missing
+	 */
+	public function getPageCount(ScoreConversion $conversion): int {
+		$folder = $this->store->folder((string)$conversion->getFileId(), $conversion->getEtag());
+		if ($conversion->getPageCount() === null) {
+			$this->applyCounts($conversion, $folder->getFile(self::META_FILE)->getContent());
+		} elseif (!$folder->fileExists(self::META_FILE)) {
+			throw new NotFoundException('meta.json is missing from the cache of file ' . $conversion->getFileId());
+		}
+		return (int)$conversion->getPageCount();
+	}
+
+	/**
+	 * How many measures the cached conversion of this version has - for the
+	 * notes, which mark those beyond it as orphaned. Null when the score
+	 * names none.
+	 *
+	 * @throws NotFoundException when nothing of this version is cached
+	 */
+	public function getMeasureCount(int $fileId, string $etag): ?int {
+		$conversion = $this->find($fileId, $etag);
+		if ($conversion !== null && $conversion->getMeasureCount() !== null) {
+			return $conversion->getMeasureCount();
+		}
+		$metaJson = $this->getMetaJsonFile($fileId, $etag)->getContent();
+		if ($conversion !== null && $conversion->getStatus() === ScoreConversion::STATUS_READY) {
+			$this->applyCounts($conversion, $metaJson);
+		}
+		return self::countsFromMeta($metaJson)['measureCount'];
 	}
 
 	/**
@@ -292,30 +385,9 @@ class ConversionService {
 	 * @throws NotFoundException wenn der Name unbekannt ist oder die Datei fehlt
 	 */
 	public function getArtifact(int $fileId, string $etag, string $name): array {
-		if (str_starts_with($name, 'page-')) {
-			$number = substr($name, strlen('page-'));
-			// Streng auf Ziffern pruefen: `page-1.5` oder `page-../x` duerfen
-			// nicht ueber eine (int)-Kastung durchrutschen.
-			//
-			// Der Vergleich mit der zurueckgewandelten Zahl haelt zusaetzlich
-			// `page-01` draussen. Das ist keine Sicherheitsfrage - es loest auf
-			// dieselbe Datei auf wie `page-1` -, sondern eine des Cachings:
-			// Jede Auslieferung traegt `immutable`, und dieselbe Seite unter
-			// zwei Namen waere zweimal derselbe halbe Megabyte im Browsercache.
-			// Erzeugt werden die Namen ohnehin serverseitig (buildFileUrls).
-			if ($number === '' || !ctype_digit($number) || (int)$number < 1 || $number !== (string)(int)$number) {
-				throw new NotFoundException("Unknown artifact: {$name}");
-			}
-			return [
-				$this->getFolder($fileId, $etag)->getFile($this->pageFileName((int)$number)),
-				'image/svg+xml',
-			];
-		}
-		if (!isset(self::ARTIFACTS[$name])) {
-			throw new NotFoundException("Unknown artifact: {$name}");
-		}
-		[$fileName, $mimeType] = self::ARTIFACTS[$name];
-		return [$this->getFolder($fileId, $etag)->getFile($fileName), $mimeType];
+		// Which names pass (`page-N` in one spelling only, ARTIFACTS) is
+		// ArtifactStore's to say, the same for base and variants.
+		return $this->store->artifact($name, self::ARTIFACTS, fn () => $this->store->folder((string)$fileId, $etag));
 	}
 
 	/**
@@ -328,50 +400,9 @@ class ConversionService {
 		return $this->getArtifact($fileId, $etag, $name)[0]->getContent();
 	}
 
-	/** Eigener Zugriff, weil auch getPageCount() und der AnnotationController ihn brauchen. */
+	/** The whole meta.json - for what its columns do not carry (variant choices, the search backfill). */
 	public function getMetaJsonFile(int $fileId, string $etag): ISimpleFile {
-		return $this->getFolder($fileId, $etag)->getFile(self::META_FILE);
-	}
-
-	private function pageFileName(int $pageNumber): string {
-		return "page-{$pageNumber}.svg";
-	}
-
-	private function writeFile(ISimpleFolder $folder, string $name, string $content): void {
-		if ($folder->fileExists($name)) {
-			$folder->getFile($name)->putContent($content);
-			return;
-		}
-		$folder->newFile($name, $content);
-	}
-
-	private function getFolder(int $fileId, string $etag): ISimpleFolder {
-		return $this->appData
-			->getFolder('scoreview')
-			->getFolder((string)$fileId)
-			->getFolder($etag);
-	}
-
-	private function getOrCreateFolder(int $fileId, string $etag): ISimpleFolder {
-		$root = $this->getOrCreateRootFolder();
-		$byFile = $this->getOrCreateSubfolder($root, (string)$fileId);
-		return $this->getOrCreateSubfolder($byFile, $etag);
-	}
-
-	private function getOrCreateRootFolder(): ISimpleFolder {
-		try {
-			return $this->appData->getFolder('scoreview');
-		} catch (NotFoundException) {
-			return $this->appData->newFolder('scoreview');
-		}
-	}
-
-	private function getOrCreateSubfolder(ISimpleFolder $parent, string $name): ISimpleFolder {
-		try {
-			return $parent->getFolder($name);
-		} catch (NotFoundException) {
-			return $parent->newFolder($name);
-		}
+		return $this->store->folder((string)$fileId, $etag)->getFile(self::META_FILE);
 	}
 
 	/**
@@ -382,11 +413,7 @@ class ConversionService {
 	 * als Netz für verpasste Ereignisse, aus BackgroundJob\CleanupOrphansJob.
 	 */
 	public function deleteAllForFile(int $fileId): void {
-		try {
-			$this->appData->getFolder('scoreview')->getFolder((string)$fileId)->delete();
-		} catch (NotFoundException) {
-			// Nie konvertiert worden - nichts aufzuraeumen.
-		}
+		$this->store->delete((string)$fileId);
 		foreach ($this->mapper->findAllByFileId($fileId) as $conversion) {
 			$this->mapper->delete($conversion);
 		}
@@ -407,12 +434,9 @@ class ConversionService {
 				continue;
 			}
 			$this->variants->deleteForVersion($fileId, $old->getEtag());
-			try {
-				$this->appData->getFolder('scoreview')->getFolder((string)$fileId)->getFolder($old->getEtag())->delete();
-			} catch (NotFoundException) {
-				// Ordner existierte nie (z.B. Konvertierung kam nie bis
-				// markReady()) - nichts aufzuraeumen.
-			}
+			// A folder that never existed (the run never reached markReady())
+			// is fine to the store.
+			$this->store->delete((string)$fileId, $old->getEtag());
 			$this->mapper->delete($old);
 		}
 	}
