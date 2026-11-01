@@ -1598,8 +1598,13 @@ export default {
  * The frame with the notation (scorePageFrame.js) covers the page. No
  * pointer events: clicks, taps, pinches and the wheel belong to the page
  * element behind it. `color-scheme` must equal the one inside the frame,
- * otherwise Chrome paints an opaque backdrop over the cursor and the page
- * colour.
+ * otherwise Chrome paints an opaque backdrop over the cursor, the own-part
+ * band and the page colour. Explicitly `light` on both sides, not `normal`:
+ * measured on a Galaxy S23 (Chrome, system night mode, Nextcloud's
+ * `<meta name="color-scheme" content="light dark">`), `normal` on both
+ * still got the backdrop - the screen showed neither cursor nor band, while
+ * a CDP screenshot showed both. The scheme only picks UA colours, which the
+ * notation never uses; its colours come from lib/noteTheme.js.
  */
 .score-page-svg :deep(.score-page-frame) {
 	position: absolute;
@@ -1609,7 +1614,7 @@ export default {
 	height: 100%;
 	border: 0;
 	background: transparent;
-	color-scheme: normal;
+	color-scheme: light;
 	pointer-events: none;
 }
 

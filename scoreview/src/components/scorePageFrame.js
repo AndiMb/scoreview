@@ -34,14 +34,15 @@ import { SCORE_SVG_STYLE } from './scorePageSvgStyle.js'
 
 // The frame's own document: no margin, transparent, so the page colour, the
 // cursor and the own-part band behind it show through. `color-scheme` must match the frame element's (set in
-// ScorePage.vue) - with a mismatch Chrome paints an opaque backdrop.
+// ScorePage.vue) - with a mismatch Chrome paints an opaque backdrop. Both
+// say `light` rather than `normal`; why is in ScorePage.vue.
 const FRAME_BASE_STYLE = `
 html, body {
 	margin: 0;
 	padding: 0;
 	overflow: hidden;
 	background: transparent;
-	color-scheme: normal;
+	color-scheme: light;
 }
 `
 
