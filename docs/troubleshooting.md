@@ -559,6 +559,10 @@ the browser console shows it as well. The usual causes:
   just from the server, and must allow CORS. For the **SoundFont download URL**,
   reachability from the server is enough; an empty field there means the default
   address, not “no SoundFont”.
+- **Several people open a score right after installation** – only one request
+  downloads the SoundFont into the server's cache; the others get HTTP 503 with
+  `Retry-After` and the viewer waits for that copy (“Loading sound” stays up a
+  little longer). Only if the download itself fails does the error appear.
 
 ## The sound lags behind the score cursor (or vice versa)
 
@@ -611,9 +615,9 @@ next to it. The error codes:
 | `sidecar_busy` | The sidecar was busy over many attempts (full queue) | it is resubmitted the next time the score is opened; under sustained load raise `SCOREVIEW_MAX_CONCURRENT`/`SCOREVIEW_MAX_QUEUED`, see [Sidecar](../sidecar/README.md) (German) |
 | `sidecar_rejected` | File rejected (e.g. secret, size) | check the secret and `SCOREVIEW_MAX_UPLOAD_BYTES` |
 | `too_large` | Score exceeds the limit | raise `max_score_bytes` (default 100 MB) or split the score |
-| `timeout` | Conversion not finished in time | Sidecar: from submission, the app waits a fixed maximum of 300 s – at about 6 s per page, roughly 50 pages, see [Limits](limits.md). Raising `MSCORE_TIMEOUT_SECONDS` (default 600 s) therefore does not help; if the sidecar itself aborts, that is `conversion_failed`. Local: `local_timeout` (default 120 s) |
+| `timeout` | Conversion not finished in time | Sidecar: from submission, the app waits a fixed maximum of 300 s – at about 6 s per page, roughly 50 pages, see [Limits](limits.md). Raising `MSCORE_TIMEOUT_SECONDS` (default 600 s) therefore does not help; the sidecar's own limit ends in `timeout` as well. Local: `local_timeout` (default 120 s) |
 | `conversion_failed` | MuseScore itself failed | open the file in MuseScore; often a broken `.mscz`. On the local path, the converter's output is in `nextcloud.log` |
-| `no_pages` | Conversion ran, but delivered no page | trigger the self-test; points to a problem in the image |
+| `no_pages` | Conversion ran, but delivered no page | the same code on every path (local, sidecar with the engine or with MuseScore); trigger the self-test – it points to a problem in the image or the engine package |
 | `local_unavailable` | Local path selected, but not runnable | see [above](#the-local-conversion-path-does-not-work) |
 | `stale` | A run was never finished | see [above](#the-conversion-does-not-make-progress) |
 | `client_too_large`, `client_engine_unavailable` | Only with the fallback in the browser | see [above](#the-viewer-reports-this-score-could-not-be-set-in-this-browser) |

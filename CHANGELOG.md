@@ -6,7 +6,43 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Note names are drawn as SVG text in page units instead of HTML labels:
+  they scale with the music, and their placement no longer grows with the
+  square of the notes on a page (about four times faster on a dense choir
+  page, and not recomputed at all within one zoom step).
+- Zooming with Ctrl + mouse wheel, a trackpad pinch or the zoom slider
+  previews the gesture and lays the pages out once at its end, instead of on
+  every wheel event.
+- Live intonation: the microphone's audio blocks go straight from the
+  capture worklet to the pitch worker, so a busy main thread no longer makes
+  the needle stutter; marks and targets are looked up by binary search, and
+  only the page under the cursor is updated.
+- Drawing on the score (E22) appends to the stroke instead of copying it on
+  every pointer move; the scored-singing lane and stage index the lyrics once
+  instead of every frame.
+- The player (spessasynth) and the panels opened on demand load as separate
+  chunks, in parallel with the first page, which makes the viewer bundle
+  smaller.
+- Page and measure count are stored with each conversion, so opening a score
+  no longer decodes its `meta.json` on every status request.
+
 ### Fixed
+
+- A conversion that yields no pages reports `no_pages` on every path; the
+  local converter and the sidecar's engine renderer used to report it as
+  `conversion_failed`. The sidecar's own time limit now reports `timeout`.
+- When several people open a score right after installation, only one
+  request downloads the SoundFont into the server's cache; the others wait
+  for it (HTTP 503 with `Retry-After`, which the viewer honours) instead of
+  each downloading 24–40 MB.
+- “Show only my part” no longer disappears when the page that loads last has
+  a system its staves cannot be matched to parts on (an interlude for fewer
+  voices, say): one page that can match them is enough, and a page that
+  cannot simply leaves the marking out.
+- A reconversion that yields fewer pages removes the extra old page files,
+  and the local converter cleans up its output directory after each run.
 
 - A note sung flat a semitone above the next one no longer makes the next
   note's onset “early”. The troughs of its vibrato came closer to the next

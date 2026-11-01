@@ -265,11 +265,19 @@ solchen Datensatz als Fehler `stale` und reiht ihn neu ein. Bewusst **kein**
 `timeout`: Das bedeutet „diese Partitur war zu langsam", also einen
 Inhaltsfehler, und `ClientFallback` entscheidet an diesen Codes.
 
+**Fehlercodes sind auf allen Wegen dieselben (E3).** Der Konverter meldet sie
+über seinen Exitcode (`converter/lib/errors.mjs`, z. B. 3 = `no_pages`), der
+Sidecar über das Feld `errorCode` seines Jobstatus (`scoreview_sidecar/errors.py`);
+PHP übernimmt nur bekannte Codes (`LocalConverter::errorCodeForExit()`,
+`SidecarClient::jobErrorCode()`) und liest nie den Meldungstext aus. Ein
+Textvergleich hätte dieselbe Partitur je nach Weg unter verschiedenen Codes
+gemeldet.
+
 ### Datenbank
 
 | Tabelle | Inhalt |
 |---|---|
-| `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version`, `backend`, `engine_version`, `title`, `composer`, `search_text` |
+| `scoreview_conversions` | `file_id`, `etag`, `status`, `error_code`, `error_message`, `format_version`, `backend`, `engine_version`, `title`, `composer`, `search_text`, `page_count`, `measure_count` |
 | `scoreview_annotations` | `file_id`, `user_id`, `content`, `visibility`, `measure_number`, `fraction`, `elid`, `anchor_etag`, `kind`, `stamp`, `target_parts`, `by_leader`, `end_measure` |
 | `scoreview_leaders` | `file_id`, `user_id`, `appointed_by`, `created_at` – ernannte Leitungen; die Eigentümerin steht nie darin ([E9](#e9-die-leitungsrolle-ergänzt-die-dateirechte)) |
 | `scoreview_follow` | `file_id` (Primärschlüssel: höchstens eine Sitzung je Datei), `leader_uid`, `started_at`, `heartbeat_at`, `version`, `state` ([E10](#e10-folgt-mir--ein-zustand-mit-zählern-abgefragt-oder-gepusht)) |
@@ -293,6 +301,20 @@ füllt sie aus `meta.json`, für Datensätze von vor den Spalten der
 Repair-Step `Migration\BackfillSearchText` beim Update. Gekürzt wird nach
 Bytes (255/1024), nicht nach Zeichen: Auf Oracle ist ein `VARCHAR(1024)`
 1024 Bytes lang.
+
+`page_count` und `measure_count` setzt ebenfalls `markReady()`, damit die
+Statusabfrage und das Laden der Notizen nicht bei jedem Öffnen ein `meta.json`
+von bis zu 250 KB dekodieren. Ältere Datensätze trägt der Repair-Step
+`Migration\BackfillScoreCounts` nach; was er nicht erreicht hat, liest
+`ConversionService` einmal aus `meta.json` und schreibt es zurück.
+
+Geschrieben werden die Artefakte von Basis und Variante über eine Klasse,
+`Service\ArtifactStore` (Ordner, Allowlist der Dateinamen, Seitennamen); sie
+räumt dabei auch Seiten einer früheren, längeren Fassung im selben Ordner weg.
+Die Schlüssel der Admin-Einstellungen zur Konvertierung stehen als Konstanten
+in `Service\ConversionConfig`, und ob eine Partitur (neu) konvertiert werden
+muss, beantwortet `ConversionService::needsConversion()` für den Job wie für
+das Vorkonvertieren einer Setliste.
 
 Notizen hängen an einer **musikalischen** Position (Takt + Anteil im Takt), nicht
 an Pixelkoordinaten. Nur deshalb überstehen sie ein Neurendern und einen
@@ -378,8 +400,10 @@ Aufbau:
 - `src/components/` – `ScoreViewer.vue` als Rahmen und Orchestrierung, dazu
   `ScorePage.vue`, `ScoreMixer.vue`, `ScoreAnnotations.vue`, `ScoreStamps.vue`,
   `ScoreModal.vue`, `StandaloneFrame.vue`, `AdminSettings.vue`, die Teile der
-  Oberfläche des Viewers (`ScoreBar.vue` für die Gestalt der Leiste,
-  `ToolGroup.vue`, `ToolRow.vue`, `ToolSwitch.vue` und `ToolPin.vue` für ihre
+  Oberfläche des Viewers (`ViewerBar.vue` für Inhalt und Bedienung der
+  Leiste – die Composables bekommt sie per `provide`/`inject` über den
+  Schlüssel in `viewerContext.js` statt als Dutzende Props –, `ScoreBar.vue`
+  für ihre Gestalt, `ToolGroup.vue`, `ToolRow.vue`, `ToolSwitch.vue` und `ToolPin.vue` für ihre
   Werkzeuggruppen und das Anheften,
   `ScoreStatus.vue`, `ScorePanel.vue` als Rahmen der Seitenkarten, die
   Bedienfelder für Tempo, Zoom, Farben und Info) und die Bedienteile der Probe- und
@@ -1612,8 +1636,12 @@ Tastaturbedienung, Fokusführung, Touch-Zielgrößen, Theming und Dark Mode einz
 nachzubauen kostet mehr als die Bibliothek – und die App soll aussehen wie der
 Rest von Nextcloud.
 
-Der Preis ist Bundle-Größe (Gegenmaßnahme: gezielte Einzelimporte statt
-Sammelimport) und eine stärkere Bindung an die Nextcloud-Version: `info.xml`
+Der Preis ist Bundle-Größe (Gegenmaßnahmen: gezielte Einzelimporte statt
+Sammelimport; der Player mit spessasynth und die Panels, die nur online
+angeboten werden, liegen in eigenen, nachgeladenen Teilen – der Player startet
+parallel zur ersten Seite. Was die Offline-Seite braucht, bleibt im Bundle
+oder wird dort vorab geladen, weil ihr Service Worker nur zwischenspeichert,
+was die Seite schon geladen hat) und eine stärkere Bindung an die Nextcloud-Version: `info.xml`
 deklariert 31–35, die Bibliotheksversion muss dazu passen. Für Regler
 (Lautstärke, Tempo, Zoom) gibt es keine Entsprechung; dort steht
 `<input type="range">` mit Nextcloud-CSS-Variablen.
@@ -1732,7 +1760,8 @@ allein in `ConvertScoreJob` fällt:
 | `local` | `LocalConverter::describe()` meldet „nicht verfügbar" | Fehlendes Node ist eine dauerhafte Eigenschaft der Instanz. Erst einen Job einzureihen, der sicher scheitert, hieße bis zu einen Cron-Takt warten, bevor überhaupt etwas passiert |
 | `sidecar` | die Lebendprüfung schlägt fehl – oder ein Lauf ist mit `sidecar_unreachable` gescheitert | Ein konfigurierter Sidecar *soll* laufen; sein Ausfall ist ein Betriebsproblem. Beide Auslöser zusammen fangen sowohl den Dauerzustand als auch den Ausfall zwischen zwei Prüfungen |
 
-Das Urteil ist gespeichert und gilt fünf Minuten – die ehrliche Antwort kostet
+Das Urteil ist gespeichert (im verteilten Cache, sonst in der AppConfig – dort
+hieße jedes Schreiben, den AppConfig-Cache der ganzen Instanz zu verwerfen) und gilt fünf Minuten – die ehrliche Antwort kostet
 einen Prozessstart oder eine HTTP-Anfrage, und der Viewer fragt den Status
 anfangs alle 2 s (später seltener, `conversionPoll.js`). Ein Selbsttest und jedes Speichern der Admin-Einstellungen
 verwerfen es sofort.
@@ -1992,7 +2021,9 @@ Werkzeug ist. Die Wahl des Anfangstons steht unter „Meine Stimme“ und nicht 
 Anfangston-Knopf: Dessen langer Druck heißt schon „Ton klingt“, und „mein Ton“
 ist der erste Ton der gewählten Stimme. Was wann sichtbar ist und in welcher
 Gruppe, steht allein in `lib/barGroups.js`: Leere Gruppen entfallen, die
-Reihenfolge ist für alle gleich. Ist in einer Gruppe etwas eingeschaltet
+Reihenfolge ist für alle gleich. Dieselbe Tabelle beantwortet, ob ein Werkzeug
+an ist (`toolOn`) und ob seine Gruppe deshalb einen Punkt trägt – Knopf und
+Punkt können nicht auseinanderlaufen. Ist in einer Gruppe etwas eingeschaltet
 (Metronom, Loop, Coach, eine Transposition, Tonnamen, ein offenes Panel), trägt
 ihr Knopf einen Punkt – eine vergessene Transposition hieße in der Probe falsch
 ansingen. Die Folgen-Anzeige steht nicht in der Leiste,
@@ -2725,7 +2756,8 @@ etwa `part3~phone~w~-2`:
 
 Die Grammatik steht einmal in `converter/lib/variantKey.mjs` (Konverter und
 Viewer) und gespiegelt in `Service\VariantKey` (die URL wird zum
-Ordnernamen); beide werden gegen dieselben Fälle getestet. Nur die kanonische
+Ordnernamen); beide werden gegen dieselben Fälle getestet – eine gemeinsame
+Fixture, `tests/fixtures/variant-keys.json`, lesen PHPUnit und Vitest. Nur die kanonische
 Schreibweise ist ein Schlüssel, und der Nullpunkt aller Achsen ist keine
 Variante, sondern die Grundkonvertierung – sonst gäbe es zwei Adressen für
 dieselben Bytes.

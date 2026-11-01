@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:dad351ee2561 -->
+<!-- translation-of: troubleshooting.md sha256:749fd9d59261 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -568,6 +568,11 @@ und die Browserkonsole zeigt sie ebenfalls. Die üblichen Ursachen:
   nur vom Server, und CORS erlauben. Bei der **SoundFont-Download-URL** genügt
   Erreichbarkeit vom Server; ein leeres Feld bedeutet dort die voreingestellte
   Adresse, nicht „kein SoundFont".
+- **Mehrere öffnen gleich nach der Installation eine Partitur** – nur eine
+  Anfrage lädt das SoundFont in den Cache des Servers; die anderen bekommen
+  HTTP 503 mit `Retry-After`, und der Viewer wartet auf diese Kopie („Ton
+  wird geladen“ steht etwas länger). Erst wenn der Download selbst scheitert,
+  erscheint der Fehler.
 
 ## Der Ton hinkt dem Notencursor hinterher (oder umgekehrt)
 
@@ -620,9 +625,9 @@ daneben. Die Fehlercodes:
 | `sidecar_busy` | Der Sidecar war über viele Versuche ausgelastet (volle Warteschlange) | beim nächsten Öffnen wird neu eingereicht; bei Dauerlast `SCOREVIEW_MAX_CONCURRENT`/`SCOREVIEW_MAX_QUEUED` anheben, siehe [Sidecar](../sidecar/README.md) |
 | `sidecar_rejected` | Datei abgelehnt (z. B. Secret, Größe) | Secret und `SCOREVIEW_MAX_UPLOAD_BYTES` prüfen |
 | `too_large` | Partitur überschreitet das Limit | `max_score_bytes` (Vorgabe 100 MB) anheben oder Partitur teilen |
-| `timeout` | Konvertierung nicht rechtzeitig fertig | Sidecar: Die App wartet ab dem Einreichen fest höchstens 300 s – bei rund 6 s pro Seite etwa 50 Seiten, siehe [Grenzwerte](limits.de.md). `MSCORE_TIMEOUT_SECONDS` (Vorgabe 600 s) anzuheben hilft deshalb nicht; bricht der Sidecar selbst ab, heißt das `conversion_failed`. Lokal: `local_timeout` (Vorgabe 120 s) |
+| `timeout` | Konvertierung nicht rechtzeitig fertig | Sidecar: Die App wartet ab dem Einreichen fest höchstens 300 s – bei rund 6 s pro Seite etwa 50 Seiten, siehe [Grenzwerte](limits.de.md). `MSCORE_TIMEOUT_SECONDS` (Vorgabe 600 s) anzuheben hilft deshalb nicht; auch die Grenze des Sidecars selbst endet in `timeout`. Lokal: `local_timeout` (Vorgabe 120 s) |
 | `conversion_failed` | MuseScore selbst ist gescheitert | Datei in MuseScore öffnen; oft eine defekte `.mscz`. Auf dem lokalen Weg steht die Ausgabe des Konverters im `nextcloud.log` |
-| `no_pages` | Konvertierung lief, lieferte aber keine Seite | Selbsttest auslösen; deutet auf ein Problem im Image hin |
+| `no_pages` | Konvertierung lief, lieferte aber keine Seite | derselbe Code auf jedem Weg (lokal, Sidecar mit Engine oder mit MuseScore); Selbsttest auslösen – deutet auf ein Problem im Image oder im Engine-Paket hin |
 | `local_unavailable` | Lokaler Weg gewählt, aber nicht lauffähig | siehe [oben](#der-lokale-konvertierungsweg-läuft-nicht) |
 | `stale` | Ein Lauf wurde nie abgeschlossen | siehe [oben](#die-konvertierung-kommt-nicht-voran) |
 | `client_too_large`, `client_engine_unavailable` | Nur beim Rückfall im Browser | siehe [oben](#der-viewer-meldet-diese-partitur-konnte-in-diesem-browser-nicht-gesetzt-werden) |

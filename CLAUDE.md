@@ -38,8 +38,8 @@ eine Referenz.
 
 Konvertiert wird über **einen von zwei Wegen** – Sidecar oder lokal –, die
 dieselben Artefakte erzeugen (E3). Welcher Weg konvertiert, entscheidet
-nur `ConvertScoreJob` (Diagnose, SoundFont-Herkunft und Rückfallprüfung fragen
-`ConversionBackend` nur ab); das Frontend kennt ausschließlich die HTTP-API
+nur `ConvertScoreJob` (Diagnose, SoundFont-Herkunft, Rückfallprüfung und
+`ConversionService::isCurrent()` fragen `ConversionBackend` nur ab); das Frontend kennt ausschließlich die HTTP-API
 der App und **verzweigt nie** danach, welcher Weg gelaufen ist. Kann der Server
 keinen von beiden ausführen, konvertiert der Browser (E7) – ein Rückfall, keine
 dritte Wahl; auch er wird an genau einer Stelle entschieden
