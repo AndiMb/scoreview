@@ -6,6 +6,15 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A note sung flat a semitone above the next one no longer makes the next
+  note's onset “early”. The troughs of its vibrato came closer to the next
+  pitch than to its own, and three of them in a row passed for an onset some
+  130 ms before the beat – red in scored singing and in the intonation
+  feedback, though the next note came exactly on time. An early onset now has
+  to stay on the new pitch until the note begins.
+
 ## [1.28.0] – 2026-10-31
 
 ### Added

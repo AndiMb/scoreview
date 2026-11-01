@@ -488,7 +488,10 @@ re-measured on real devices and with real input latency.
   onset is green up to **60 ms** early or late – never less than 55 ms, so
   that the offset against the cursor alone cannot make a note yellow – and
   yellow up to 120 ms. A long voiceless consonant placed well before the beat
-  counts as early.
+  counts as early. An early onset has to stay on the new pitch: a voice that
+  touches it and goes back is still on the previous note – sung 40 ct flat a
+  semitone above the next note, the troughs of its vibrato would otherwise
+  read as that note some 130 ms early.
 - **Measured with a real voice** (bass, desktop with headphones, accompaniment
   at full tempo, 79 s): 128 of 129 judged onsets were green, median +1 ms (10 %
   earlier than −26 ms, 10 % later than +27 ms); 38 notes had no onset to
