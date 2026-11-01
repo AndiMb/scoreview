@@ -135,6 +135,10 @@ length. A run sung through from the start of the piece or the loop is kept,
 with your best per level and tempo and the measures worth practising; again
 only you see it.
 
+![Scored singing: the lane under the score shows each note's verdict as you sing](docs/img/sing.png)
+
+![The result of a run: score, new best, measures to practise and your runs](docs/img/sing-result.png)
+
 This also works in the Nextcloud mobile apps, with a few limitations: the
 Android app does not grant access to the microphone; there, "Open in browser"
 gets you further. And on mobile a setlist opens through one of its scores

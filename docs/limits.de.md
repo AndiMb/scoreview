@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:0a4c3c47eaca -->
+<!-- translation-of: limits.md sha256:d8dac2ce08d2 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -494,7 +494,10 @@ Geräten und mit echter Eingangslatenz ist das nicht nachgemessen.
   3 und 10 ms. Ein Einsatz ist bis **60 ms** zu früh oder zu spät grün – nie
   unter 55 ms, damit der Versatz gegen den Cursor allein keine Note gelb
   macht – und bis 120 ms gelb. Ein langer stimmloser Konsonant deutlich vor
-  dem Schlag zählt als zu früh.
+  dem Schlag zählt als zu früh. Ein früher Einsatz muss auf dem neuen Ton
+  bleiben: Eine Stimme, die ihn streift und zurückgeht, ist noch auf der
+  vorigen Note – 40 ct zu tief einen Halbton über der nächsten Note gesungen,
+  läsen sich die Täler ihres Vibratos sonst als diese Note, etwa 130 ms zu früh.
 - **Gemessen mit einer echten Stimme** (Bass, Arbeitsplatz mit Kopfhörern,
   Begleitung in vollem Tempo, 79 s): 128 von 129 bewerteten Einsätzen waren
   grün, Median +1 ms (10 % früher als −26 ms, 10 % später als +27 ms); bei

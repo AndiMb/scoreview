@@ -21,7 +21,7 @@ const hzOf = (pitch, cents = 0) => 440 * 2 ** ((pitch - 69 + cents / 100) / 12)
  * in REAL time. Consecutive segments without a gap share the phase, so a
  * legato pitch change has no click that would read as an onset.
  *
- * @param {Array<{onMs:number, offMs:number, pitch:number}>} sung
+ * @param {Array<{onMs:number, offMs:number, pitch:number, cents?:number}>} sung
  * @param {number} lengthMs
  * @return {Float32Array}
  */
@@ -31,7 +31,7 @@ function voice(sung, lengthMs) {
 	for (const s of sung) {
 		for (let i = Math.round((s.onMs / 1000) * RATE); i < Math.round((s.offMs / 1000) * RATE) && i < out.length; i++) {
 			const vib = 30 * Math.sin(2 * Math.PI * 5.5 * (i / RATE))
-			phase += (2 * Math.PI * hzOf(s.pitch, vib)) / RATE
+			phase += (2 * Math.PI * hzOf(s.pitch, (s.cents ?? 0) + vib)) / RATE
 			for (let k = 1; k <= 5; k++) {
 				out[i] += (0.25 / k) * Math.sin(k * phase)
 			}
@@ -150,6 +150,23 @@ describe('C1 with synthetic voices', () => {
 		expect(rhythm[1].onset.class).toBe('green')
 		expect(Math.abs(rhythm[1].onset.devMs)).toBeLessThan(25)
 		expect(rhythm[2].onset).toMatchObject({ class: 'na', reason: 'samePitch' })
+	})
+
+	it('a flat note a semitone above the next does not pass for an early onset', () => {
+		// Sung 40 ct flat, the vibrato troughs of E flat lie closer to D than
+		// to E flat - three of them in a row read as D while E flat still sounds.
+		const notes = [
+			{ onMs: 500, offMs: 1700, pitch: 63, channel: 1 },
+			{ onMs: 1700, offMs: 2900, pitch: 62, channel: 1 },
+		]
+		for (const cents of [-40, -45]) {
+			const { rhythm } = rhythmOf([
+				{ onMs: 500, offMs: 1700, pitch: 63, cents },
+				{ onMs: 1700, offMs: 2900, pitch: 62 },
+			], notes)
+			expect(rhythm[1].onset.class, `${cents} ct`).toBe('green')
+			expect(Math.abs(rhythm[1].onset.devMs), `${cents} ct`).toBeLessThan(30)
+		}
 	})
 
 	it('at half tempo the deviation is reported in real milliseconds', () => {

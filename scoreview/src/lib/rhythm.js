@@ -254,6 +254,29 @@ function followsNote(frames, i, previous, tempoFactor, clarityThreshold) {
 }
 
 /**
+ * Whether the voice goes back to another pitch before the note begins: then
+ * a run ahead of the note was not an early onset but the previous note
+ * wobbling. Sung some 40 ct flat a semitone above the target, the troughs of
+ * an ordinary vibrato lie closer to the target than to the note being sung,
+ * and three frames of one trough read as the new note ~130 ms early. An
+ * early onset stays on the new pitch; silence in between does not count.
+ *
+ * @param {Array} frames
+ * @param {number} k first frame after the run
+ * @param {number} onMs score time of the note
+ * @param {function(object): string} state frameState for the note
+ * @return {boolean}
+ */
+function returnsBefore(frames, k, onMs, state) {
+	for (; k < frames.length && frames[k].scoreMs < onMs; k++) {
+		if (state(frames[k]) === 'other') {
+			return true
+		}
+	}
+	return false
+}
+
+/**
  * Three-level class for an onset deviation.
  *
  * @param {?number} devMs
@@ -344,7 +367,7 @@ export function findOnset(frames, note, prev, options = {}) {
 				break
 			}
 		}
-		if (!run) {
+		if (!run || returnsBefore(frames, i + RUN_FRAMES, note.onMs, state)) {
 			continue
 		}
 		const before = state(frames[i - 1])

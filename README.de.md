@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:5fdb60c9f081 -->
+<!-- translation-of: README.md sha256:b5226ecc3f1e -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -139,6 +139,10 @@ Linie, und jede Note bekommt ihre Farbe und ein Stichwort zu Ton, Einsatz und
 Länge. Ein vom Anfang des Stücks oder des Loops durchgesungener Durchgang wird
 behalten, mit dem eigenen Bestwert je Stufe und Tempo und den Takten, die das
 Üben lohnen; auch das sieht nur man selbst.
+
+![Singen mit Wertung: Die Spur unter der Partitur zeigt beim Singen das Urteil je Note](docs/img/sing.de.png)
+
+![Das Ergebnis eines Durchgangs: Punkte, neuer Bestwert, Takte zum Üben und die eigenen Durchgänge](docs/img/sing-result.de.png)
 
 Das geht auch in den mobilen Nextcloud-Apps, mit wenigen Einschränkungen: Das
 Mikrofon gibt die Android-App nicht frei, dort führt „Im Browser öffnen“ weiter.
