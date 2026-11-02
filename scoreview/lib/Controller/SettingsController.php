@@ -17,13 +17,13 @@ use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Settings\AdminSettings;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\AuthorizedAdminSetting;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IAppConfig;
 use OCP\IGroupManager;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IUserSession;
-use OCP\Settings\Attribute\AuthorizedAdminSetting;
 
 class SettingsController extends Controller {
 	/**
