@@ -265,7 +265,7 @@ import { nameOf } from '../lib/noteNames.js'
 import { hitNotehead, matchNoteheads } from '../lib/noteSpellingIndex.js'
 import { bandStyle, cursorBands, percentStyle, percentX, percentY, stackNoteTexts } from '../lib/pageGeometry.js'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
-import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, stavesOfPart } from '../lib/staffBands.js'
+import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, partOfStaff, staffOfPart, stavesOfPart } from '../lib/staffBands.js'
 import { systemOf } from '../lib/stampLayout.js'
 import { buildNoteIndex, buildSegmentIndex, pickNoteheads, setHighlight } from '../lib/svgIndex.js'
 import { sanitizeSvgPage } from '../lib/svgSanitizer.js'
@@ -641,7 +641,7 @@ export default {
 			}
 			let top = rect.y
 			if (this.partsMappable) {
-				const band = systemOf(this.staffSystems, rect)?.staves[this.myPartIndex]
+				const band = staffOfPart(systemOf(this.staffSystems, rect), this.myPartIndex)
 				if (band) {
 					top = band.top - (band.bottom - band.top) * 1.6
 				}
@@ -731,7 +731,7 @@ export default {
 				return []
 			}
 			return this.staffSystems
-				.flatMap((system) => system.staves.filter((_, i) => i !== this.myPartIndex))
+				.flatMap((system) => system.staves.filter((_, i) => partOfStaff(system, i) !== this.myPartIndex))
 				.map((band) => bandStyle(band, this.viewBox, 1.2))
 		},
 

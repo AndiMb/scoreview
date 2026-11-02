@@ -12,6 +12,11 @@ All notable changes to ScoreView. The format follows
   now use the settings page: its diagnostics, self-test and save requests
   were refused with 403, because the permission attribute was imported from
   a namespace that does not exist and Nextcloud therefore never saw it.
+- "My part" is marked again on pages where MuseScore hides an empty staff
+  in a system. Staves were matched to parts by their place in the system,
+  so one missing staff switched the marking off for the whole page and put
+  part stamps and drawings above the system instead; where the picture names its staves (local engine,
+  sidecar with the engine), they are now matched by that number.
 
 ### Changed
 

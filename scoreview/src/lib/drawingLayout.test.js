@@ -60,6 +60,16 @@ describe('encodeDrawing / layoutDrawings', () => {
 		expect(placed.d.startsWith('M450.0 492.0')).toBe(true)
 	})
 
+	it('remembers the part, not the place, where an empty staff is left out', () => {
+		// Three parts, the middle one hidden here: the second staff is part 2.
+		const gap = { ...system, staves: [{ ...system.staves[0], staff: 0 }, { ...system.staves[1], staff: 2 }] }
+		const three = [...parts.slice(0, 1), { id: '9', name: 'Alt' }, parts[1]]
+		const out = encodeDrawing({ strokes: [stroke], measureElements: measures, page: 0, systems: [gap], mappable: true, pictureParts: three })
+		expect(decodeDrawing(out.content).part).toEqual({ id: '2', name: 'Bass' })
+		const [placed] = layoutDrawings([{ id: 1, fraction: out.fraction, measureRect: measures[1], staffIndex: 2, strokes: decodeDrawing(out.content).strokes }], [gap], true)
+		expect(placed.d).toBe('M3500.0 1290.0L3550.0 1250.0L3600.0 1290.0')
+	})
+
 	it('falls back to the top of the system where staves do not map to parts', () => {
 		const out = encodeDrawing({ strokes: [stroke], measureElements: measures, page: 0, systems: [system], mappable: false, pictureParts: parts })
 		expect(decodeDrawing(out.content).part).toBeNull()

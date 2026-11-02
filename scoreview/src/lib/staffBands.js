@@ -21,13 +21,21 @@
 // lokalen Weg gar keine Notenzeile (gemessen an einer SATB-Partitur: 0 statt
 // 10 Zeilen je Seite).
 //
+// The engine form also names the staff (`st-N`, M10). Where it does, a staff
+// is matched to its part by that number, not by its place in the system: a
+// system with an empty staff left out (MuseScore's "hide empty staves") then
+// still maps, instead of switching the marking off for the whole page.
+//
 // Aus ihnen lassen sich System- und Zeilengrenzen zurückrechnen, und damit
 // alles, was „meine Stimme" heißt: sie hervorheben, die anderen zurücknehmen,
 // und den Wiedergabecursor auf die Zeilen aufteilen, statt einen Balken über
 // das ganze System zu ziehen.
 
 /**
- * @typedef {{top:number,bottom:number,left:number,right:number}} Band
+ * `staff` is the staff number from the SVG (`st-N`), present only where the
+ * picture names it (engine form, M10).
+ *
+ * @typedef {{top:number,bottom:number,left:number,right:number,staff?:number}} Band
  * @typedef {{top:number,bottom:number,left:number,right:number,staves:Band[]}} System
  */
 
@@ -56,7 +64,7 @@ const IDENTITAET = [1, 0, 0, 1, 0, 0]
  * wäre pro Seite unnötig.
  *
  * @param {string} svgText
- * @return {Array<{y:number,left:number,right:number}>}
+ * @return {Array<{y:number,left:number,right:number,staff?:number}>}
  */
 export function extractStaffLines(svgText) {
 	const linien = []
@@ -72,7 +80,10 @@ export function extractStaffLines(svgText) {
 	// Engine-Form: die Klasse an einer Gruppe, darin transformierte Polylines.
 	const gruppe = /<g\b([^>]*\bclass="StaffLines(?:\s[^"]*)?"[^>]*)>/g
 	while ((treffer = gruppe.exec(svgText)) !== null) {
-		linien.push(...linesInGroup(svgText, gruppe.lastIndex, parseTransform(treffer[1])))
+		const staff = /\bclass="[^"]*\bst-(\d+)\b/.exec(treffer[1])?.[1]
+		for (const linie of linesInGroup(svgText, gruppe.lastIndex, parseTransform(treffer[1]))) {
+			linien.push(staff === undefined ? linie : { ...linie, staff: Number(staff) })
+		}
 	}
 	return linien
 }
@@ -304,12 +315,18 @@ function gruppeInZeilen(linien) {
 		// StaffLines-Polyline und blieben damit außen vor - das ist der
 		// bewusste Preis dafür, Zufallsfunde nicht als Stimme auszugeben.
 		.filter((zeile) => zeile.length >= 2)
-		.map((zeile) => ({
-			top: zeile[0].y,
-			bottom: zeile[zeile.length - 1].y,
-			left: zeile[0].left,
-			right: zeile[0].right,
-		}))
+		.map((zeile) => {
+			const band = {
+				top: zeile[0].y,
+				bottom: zeile[zeile.length - 1].y,
+				left: zeile[0].left,
+				right: zeile[0].right,
+			}
+			// A number only when all five lines agree - lines of two staves
+			// run together by the gap rule must not borrow one's number.
+			const staff = zeile[0].staff
+			return Number.isInteger(staff) && zeile.every((l) => l.staff === staff) ? { ...band, staff } : band
+		})
 }
 
 /**
@@ -349,6 +366,13 @@ function median(werte) {
  * verglichen und im Zweifel `null` geliefert. Die Oberfläche blendet die
  * Funktion dann aus, statt etwas Falsches anzubieten.
  *
+ * Where the picture names its staves (`st-N`), a system may lack staves: each
+ * remaining one carries its number, so nothing shifts. It must still be one
+ * staff per part - every number below `partCount` and none twice. A score
+ * with more staves than parts (piano) shows a number at or past `partCount`
+ * on any page that draws all its staves; a page that hides exactly those is
+ * the same blind spot the count comparison has always had.
+ *
  * @param {System[]} systems
  * @param {number} partCount Anzahl der Stimmen aus meta.json
  * @return {boolean} ob eine Zuordnung Zeile->Stimme zulässig ist
@@ -357,7 +381,57 @@ export function canMapStavesToParts(systems, partCount) {
 	if (systems.length === 0 || partCount < 1) {
 		return false
 	}
-	return systems.every((system) => system.staves.length === partCount)
+	return systems.every((system) => {
+		if (isNumbered(system)) {
+			const numbers = system.staves.map((band) => band.staff)
+			return numbers.every((n) => n < partCount) && new Set(numbers).size === numbers.length
+		}
+		return system.staves.length === partCount
+	})
+}
+
+/**
+ * Whether every staff of the system carries its number (`st-N`).
+ *
+ * @param {System} system
+ * @return {boolean}
+ */
+function isNumbered(system) {
+	return system.staves.length > 0 && system.staves.every((band) => Number.isInteger(band.staff))
+}
+
+/**
+ * The staff of one part in one system - by number where the picture names
+ * its staves, by place otherwise. Only meaningful where
+ * canMapStavesToParts() allowed the mapping.
+ *
+ * @param {?System} system
+ * @param {?number} partIndex 0-indiziert, in der Reihenfolge von meta.json
+ * @return {?Band}
+ */
+export function staffOfPart(system, partIndex) {
+	if (!system || partIndex === null || partIndex === undefined) {
+		return null
+	}
+	if (isNumbered(system)) {
+		return system.staves.find((band) => band.staff === partIndex) ?? null
+	}
+	return system.staves[partIndex] ?? null
+}
+
+/**
+ * The part a staff of the system belongs to - the inverse of staffOfPart().
+ *
+ * @param {?System} system
+ * @param {?number} position place of the staff in `system.staves`
+ * @return {?number}
+ */
+export function partOfStaff(system, position) {
+	const band = position === null || position === undefined ? undefined : system?.staves?.[position]
+	if (!band) {
+		return null
+	}
+	return isNumbered(system) ? band.staff : position
 }
 
 /**
@@ -369,6 +443,6 @@ export function canMapStavesToParts(systems, partCount) {
  */
 export function stavesOfPart(systems, partIndex) {
 	return systems
-		.map((system) => system.staves[partIndex])
-		.filter((band) => band !== undefined)
+		.map((system) => staffOfPart(system, partIndex))
+		.filter((band) => band !== null)
 }

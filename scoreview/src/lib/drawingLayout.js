@@ -16,6 +16,7 @@
 // of the system; such a drawing stays where it was drawn, but would land
 // above the wrong staff in a picture with other staves.
 
+import { partOfStaff, staffOfPart } from './staffBands.js'
 import { anchorFromTap, DEFAULT_SPACE, systemOf } from './stampLayout.js'
 
 /** Format of the stored content - a change gets a new number, never a reinterpretation. */
@@ -96,12 +97,12 @@ function distanceToSegment(p, a, b) {
  *
  * @param {?{staves:Array<{top:number, bottom:number}>}} system
  * @param {{h:number}} measure
- * @param {?number} staffIndex
+ * @param {?number} staffIndex the part, counted in this picture
  * @return {number}
  */
 export function spaceAt(system, measure, staffIndex = null) {
 	const staves = system?.staves ?? []
-	const band = (staffIndex !== null ? staves[staffIndex] : null) ?? staves[0]
+	const band = (staffIndex !== null ? staffOfPart(system, staffIndex) : null) ?? staves[0]
 	return band ? (band.bottom - band.top) / 4 : Math.min(measure.h / 4, DEFAULT_SPACE)
 }
 
@@ -133,12 +134,12 @@ export function staffAt(system, y) {
  * @param {{x:number, y:number, w:number, h:number}} measure
  * @param {number} fraction
  * @param {?object} system
- * @param {?number} staffIndex
+ * @param {?number} staffIndex the part, counted in this picture
  * @return {{x:number, y:number, space:number}}
  */
 export function originOf(measure, fraction, system, staffIndex) {
 	const f = Number.isFinite(fraction) ? Math.min(1, Math.max(0, fraction)) : 0
-	const band = staffIndex !== null && staffIndex !== undefined ? system?.staves?.[staffIndex] : null
+	const band = staffIndex !== null && staffIndex !== undefined ? staffOfPart(system, staffIndex) : null
 	return {
 		x: measure.x + f * measure.w,
 		y: band ? band.top : (system ? system.top : measure.y),
@@ -173,7 +174,9 @@ export function encodeDrawing({ strokes, measureElements, page, systems, mappabl
 	}
 	const measure = measureElements[String(anchor.measureNumber - 1)]
 	const system = systemOf(systems, measure)
-	const staffIndex = mappable && system ? staffAt(system, start.y) : null
+	// The part of the staff the stroke starts on - not its place in the
+	// system, which differs where an empty staff is left out.
+	const staffIndex = mappable && system ? partOfStaff(system, staffAt(system, start.y)) : null
 	const part = staffIndex !== null ? (pictureParts?.[staffIndex] ?? null) : null
 	const origin = originOf(measure, anchor.fraction, system, part ? staffIndex : null)
 	const round = (v) => Math.round(v * 10) / 10

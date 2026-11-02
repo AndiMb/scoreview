@@ -7,6 +7,7 @@
 // Zoomfaktor vorkaeme.
 
 import { findElementAtPoint } from './scoreLayout.js'
+import { staffOfPart } from './staffBands.js'
 
 /**
  * Die Stempel, die es gibt - gespiegelt aus Annotation::STAMPS. Durchgesetzt
@@ -132,7 +133,7 @@ export function layoutStamps(stamps, systems, mappable) {
 			: Math.min(measure.h / 4, DEFAULT_SPACE)
 
 		const targets = mappable && system
-			? (stamp.targetIndices ?? []).map((i) => staves[i]).filter(Boolean)
+			? (stamp.targetIndices ?? []).map((i) => staffOfPart(system, i)).filter(Boolean)
 			: []
 		const tops = targets.length > 0
 			? targets.map((band) => band.top)

@@ -10,6 +10,8 @@
 // over whatever stands above the staff - dynamics, slurs - which is where a
 // pencilled count sits too.
 
+import { staffOfPart } from './staffBands.js'
+
 /** Distance of the row above the top staff line, in staff spaces. */
 const ROW_ABOVE_SPACES = 2.5
 
@@ -85,7 +87,7 @@ function staffBandOf(systems, staff, box) {
 	if (!system || !system.staves?.length) {
 		return null
 	}
-	const byIndex = system.staves[staff]
+	const byIndex = staffOfPart(system, staff)
 	if (byIndex && centre >= byIndex.top - 4 * (byIndex.bottom - byIndex.top) && centre <= byIndex.bottom + 4 * (byIndex.bottom - byIndex.top)) {
 		return byIndex
 	}

@@ -3302,6 +3302,16 @@ liegen, liest `staffBands.js` aus den `StaffLines` – die Grundlage für
 Beide Formen werden gelesen. Nur die erste zu kennen hieß gemessen: auf dem
 lokalen Weg 0 statt 10 Notenzeilen je Seite einer SATB-Partitur.
 
+Die Engine-Form nennt außerdem die Nummer der Zeile (`st-N`), und die
+Zuordnung Zeile → Stimme geht dann über diese Nummer statt über die Lage im
+System (`staffOfPart`/`partOfStaff` in `staffBands.js`). Das trägt dort, wo
+MuseScore eine leere Zeile ausblendet: Nach Lage verschöben sich alle Zeilen
+darunter, und `canMapStavesToParts` müsste die Markierung für die ganze Seite
+abschalten (gemessen an Duckwerk, Seite 1: erstes System `st-0, 2, 3, 4`).
+Zulässig bleibt sie nur bei einer Zeile je Stimme – jede Nummer kleiner als
+die Zahl der Stimmen und keine doppelt. Die Sidecar-Form trägt keine Nummer
+und bleibt beim Abzählen.
+
 ### M11: Was MIDI und SVG über Studierbuchstaben und Tonarten tragen
 
 Gemessen an `keys-marks-test.mscz` (c-Moll, Wechsel nach D-Dur in Takt 4,

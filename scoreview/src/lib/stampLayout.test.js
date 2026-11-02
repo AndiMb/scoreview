@@ -48,6 +48,15 @@ describe('layoutStamps', () => {
 		expect(placed.map((p) => p.y)).toEqual([1200 - 6, 1300 - 6])
 	})
 
+	it('findet die Zielstimme ueber die Zeilennummer, wo eine Zeile ausgeblendet ist', () => {
+		// Alt (st-1) leer und ausgeblendet: Tenor ist die zweite Zeile.
+		const luecke = [{ ...systems[0], staves: [0, 2, 3].map((st, i) => ({ ...staves[i], staff: st })) }]
+		const placed = layoutStamps([{ ...atem, targetIndices: [2] }], luecke, true)
+		expect(placed.map((p) => p.y)).toEqual([1100 - 6])
+		// Fuer den Alt steht der Stempel ueber dem System, nicht ueber der Nachbarzeile.
+		expect(layoutStamps([{ ...atem, targetIndices: [1] }], luecke, true)[0].y).toBeCloseTo(994)
+	})
+
 	it('faellt ohne zulaessige Zuordnung auf das System zurueck', () => {
 		const [s] = layoutStamps([{ ...atem, targetIndices: [2] }], systems, false)
 		expect(s.y).toBeCloseTo(994)
