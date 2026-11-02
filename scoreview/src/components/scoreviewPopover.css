@@ -1,9 +1,12 @@
 /*
  * Die Aufklapper der Bedienleiste (Werkzeuggruppen, Studierbuchstaben) und
- * die Bedienfelder darin (Loop, Tempo/Metronom, Zoom, Darstellung). Eine
- * Datei statt einer Kopie je Komponente: Jede bindet sie mit `<style scoped src>` ein und bekommt sie
- * damit unter ihrer eigenen Scope-ID - der Popover-Inhalt steht im Template
- * der jeweiligen Komponente, nicht in dem des Viewers.
+ * die Bedienfelder darin (Loop, Tempo/Metronom, Zoom, Darstellung).
+ *
+ * Global, loaded once by ScoreViewer.vue. Included `scoped` by each of the
+ * fourteen components that use it, every bundle carried fourteen copies
+ * under fourteen scope ids. Scoped once in the viewer would not do: the
+ * popover content sits in each component's own template. The classes carry
+ * the app prefix, and no component overrides them.
  *
  * Eine Spalte, breit genug für die längste Beschriftung, aber schmal genug,
  * um nicht das halbe Notenbild zu verdecken.

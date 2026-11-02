@@ -90,8 +90,13 @@
 				'score-page-marker--dimmed': marker.dimmed,
 			}"
 			:style="marker.style"
-			:title="marker.voices.length ? t('Note for {voices}', { voices: marker.voices.join(', ') }) : t('Note')"
-			@click.stop="$emit('markerClick', marker.id)" />
+			role="button"
+			tabindex="0"
+			:title="markerLabel(marker)"
+			:aria-label="markerLabel(marker)"
+			@click.stop="$emit('markerClick', marker.id)"
+			@keydown.enter.stop.prevent="$emit('markerClick', marker.id)"
+			@keydown.space.stop.prevent="$emit('markerClick', marker.id)" />
 		<!--
 			Der Notiztext im Notenbild: „In Takt 10 bitte forte" muss beim
 			Singen lesbar sein, ohne ein Panel zu oeffnen - so, wie es sonst
@@ -107,7 +112,11 @@
 				'score-page-note--dimmed': label.dimmed,
 			}"
 			:style="label.style"
-			@click.stop="$emit('markerClick', label.id)">
+			role="button"
+			tabindex="0"
+			@click.stop="$emit('markerClick', label.id)"
+			@keydown.enter.stop.prevent="$emit('markerClick', label.id)"
+			@keydown.space.stop.prevent="$emit('markerClick', label.id)">
 			<!-- Die Zielstimme vorneweg - eine Stimmnotiz ohne sie liest sich
 				wie eine Anweisung an alle. -->
 			<strong v-if="label.voices.length">{{ label.voices.join(', ') }}:</strong>
@@ -1130,6 +1139,11 @@ export default {
 			}, 1500)
 		},
 
+		/** @param {{voices: string[]}} marker */
+		markerLabel(marker) {
+			return marker.voices.length ? this.t('Note for {voices}', { voices: marker.voices.join(', ') }) : this.t('Note')
+		},
+
 		t(text, vars) {
 			return translate('scoreview', text, vars)
 		},
@@ -1539,7 +1553,7 @@ export default {
 	margin: 0 auto 16px auto;
 	/* Das Papier - im Dunkelmodus der dunkle Grund (lib/noteTheme.js). */
 	background: var(--scoreview-page, #fff);
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+	box-shadow: 0 1px 4px var(--color-box-shadow, rgba(0, 0, 0, 0.2));
 	cursor: pointer;
 }
 
@@ -1708,12 +1722,12 @@ export default {
 	transform: translate(-50%, calc(-100% - 6px));
 	pointer-events: none;
 	padding: 2px 8px;
-	border-radius: var(--border-radius-large, 10px);
+	border-radius: var(--border-radius-element, 8px);
 	background: var(--color-primary-element, #00679e);
 	color: var(--color-primary-element-text, #fff);
 	font-weight: 600;
 	font-size: 16px;
-	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+	box-shadow: 0 2px 6px var(--color-box-shadow, rgba(0, 0, 0, 0.25));
 }
 
 .score-page-needle {
@@ -1724,7 +1738,7 @@ export default {
 	align-items: center;
 	inline-size: 64px;
 	padding: 2px 4px;
-	border-radius: var(--border-radius, 4px);
+	border-radius: var(--border-radius-small, 4px);
 	background: var(--color-main-background);
 	box-shadow: 0 0 4px var(--color-box-shadow, rgba(0, 0, 0, 0.3));
 	font-size: 12px;
@@ -1738,7 +1752,7 @@ export default {
 	inline-size: 100%;
 	block-size: 6px;
 	border-radius: 3px;
-	background: linear-gradient(to right, #d32f2f 0 25%, #2e7d32 25% 75%, #d32f2f 75% 100%);
+	background: linear-gradient(to right, var(--color-error, #d32f2f) 0 25%, var(--color-success, #2e7d32) 25% 75%, var(--color-error, #d32f2f) 75% 100%);
 }
 
 .score-page-needle-pointer {
@@ -1749,16 +1763,18 @@ export default {
 	transform: translateX(-50%);
 }
 
+/* The theme's text variants: legible on the needle's main background in
+   the dark theme too, where the plain status colours are not. */
 .score-page-needle--green .score-page-needle-text {
-	color: #2e7d32;
+	color: var(--color-success-text, #2e7d32);
 }
 
 .score-page-needle--yellow .score-page-needle-text {
-	color: #b26a00;
+	color: var(--color-warning-text, #b26a00);
 }
 
 .score-page-needle--red .score-page-needle-text {
-	color: #d32f2f;
+	color: var(--color-error-text, #d32f2f);
 }
 
 .score-page-needle--na .score-page-needle-text,
@@ -1914,7 +1930,7 @@ export default {
 	   Grund waere ein weisser Ring heller als die Noten selbst. */
 	border: 2px solid var(--scoreview-page, #fff);
 	border-radius: 50%;
-	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+	box-shadow: 0 1px 3px var(--color-box-shadow, rgba(0, 0, 0, 0.4));
 	cursor: pointer;
 	z-index: 2;
 }

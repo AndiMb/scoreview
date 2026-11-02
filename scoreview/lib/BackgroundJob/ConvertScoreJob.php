@@ -18,8 +18,8 @@ use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\QueuedJob;
+use OCP\Files\File;
 use OCP\Files\IRootFolder;
-use OCP\Files\Node;
 use OCP\IAppConfig;
 use OCP\ITempManager;
 use Psr\Log\LoggerInterface;
@@ -82,6 +82,13 @@ class ConvertScoreJob extends QueuedJob {
 		private VariantService $variantService,
 	) {
 		parent::__construct($time);
+		// One conversion at a time across all cron processes. A local run
+		// takes 130-250 MB, and webcron or overlapping system cron runs would
+		// otherwise start as many at once as there are processes - on a small
+		// server, the opened setlist that queues all its pieces is exactly
+		// that case. Variants (convertVariant) run inside their own request
+		// and are not affected; on the sidecar path a run only hands over.
+		$this->setAllowParallelRuns(false);
 	}
 
 	/**
@@ -101,7 +108,7 @@ class ConvertScoreJob extends QueuedJob {
 	 *
 	 * The outcome is written to the row; nothing is thrown.
 	 */
-	public function convertVariant(Node $node, ScoreVariant $variant): void {
+	public function convertVariant(File $node, ScoreVariant $variant): void {
 		if (!$this->backend->supportsVariants()) {
 			$this->variantService->markError($variant, 'The configured conversion path engraves no display variants.', ScoreVariant::ERROR_UNSUPPORTED);
 			return;
@@ -123,7 +130,7 @@ class ConvertScoreJob extends QueuedJob {
 	 * `base` gets the job's own argument as well: the sidecar path needs it
 	 * to schedule a retry when the sidecar is busy.
 	 *
-	 * @return array{base: \Closure(ScoreConversion, Node, array{userId: string, fileId: int, busyRetry: int}): void, variant: \Closure(Node, ScoreVariant): void}
+	 * @return array{base: \Closure(ScoreConversion, File, array{userId: string, fileId: int, busyRetry: int}): void, variant: \Closure(File, ScoreVariant): void}
 	 */
 	private function path(): array {
 		return $this->backend->isLocal()
@@ -135,7 +142,7 @@ class ConvertScoreJob extends QueuedJob {
 	 * The local half of convertVariant(): the converter needs real paths,
 	 * for the score and for the base's timing and measures.
 	 */
-	private function convertVariantLocally(Node $node, ScoreVariant $variant): void {
+	private function convertVariantLocally(File $node, ScoreVariant $variant): void {
 		$scorePath = null;
 		$baseDir = null;
 		try {
@@ -178,7 +185,7 @@ class ConvertScoreJob extends QueuedJob {
 	 * base's timing and measures as strings - no temporary files here, the
 	 * sidecar has its own working directory.
 	 */
-	private function convertVariantInSidecar(Node $node, ScoreVariant $variant): void {
+	private function convertVariantInSidecar(File $node, ScoreVariant $variant): void {
 		try {
 			$timing = $this->conversionService->readArtifact($variant->getFileId(), $variant->getEtag(), 'timing');
 			$measures = $this->conversionService->readArtifact($variant->getFileId(), $variant->getEtag(), 'measures');
@@ -274,7 +281,7 @@ class ConvertScoreJob extends QueuedJob {
 	 *
 	 * @param array{userId: string, fileId: int, busyRetry: int} $job
 	 */
-	private function submitToSidecar(ScoreConversion $conversion, Node $node, array $job): void {
+	private function submitToSidecar(ScoreConversion $conversion, File $node, array $job): void {
 		['userId' => $userId, 'fileId' => $fileId, 'busyRetry' => $busyRetry] = $job;
 		try {
 			// fopen() statt getContent(): der Inhalt geht als Stream an Guzzle,
@@ -352,7 +359,7 @@ class ConvertScoreJob extends QueuedJob {
 	 *
 	 * @param array{userId: string, fileId: int, busyRetry: int} $job unused: nothing to retry or poll here
 	 */
-	private function convertLocally(ScoreConversion $conversion, Node $node, array $job): void {
+	private function convertLocally(ScoreConversion $conversion, File $node, array $job): void {
 		$temporaryPath = null;
 		try {
 			$temporaryPath = $this->copyToTempFile($node);
@@ -397,7 +404,7 @@ class ConvertScoreJob extends QueuedJob {
 		$this->variantService->markError($variant, $e->getMessage(), ConverterException::codeOf($e));
 	}
 
-	private function tooLargeMessage(Node $node): string {
+	private function tooLargeMessage(File $node): string {
 		return sprintf('File is %d bytes, larger than the limit of %d bytes.', $node->getSize(), ConversionConfig::maxScoreBytes($this->appConfig));
 	}
 
@@ -409,7 +416,7 @@ class ConvertScoreJob extends QueuedJob {
 	 *
 	 * @throws \RuntimeException
 	 */
-	private function copyToTempFile(Node $node): string {
+	private function copyToTempFile(File $node): string {
 		$target = $this->tempManager->getTemporaryFile('.mscz');
 		if ($target === false) {
 			throw new \RuntimeException('No temporary file name available for the score.');
@@ -432,13 +439,13 @@ class ConvertScoreJob extends QueuedJob {
 		return $target;
 	}
 
-	private function resolveNode(string $userId, int $fileId): ?Node {
+	private function resolveNode(string $userId, int $fileId): ?File {
 		try {
-			$userFolder = $this->rootFolder->getUserFolder($userId);
-			$nodes = $userFolder->getById($fileId);
+			$node = $this->rootFolder->getUserFolder($userId)->getFirstNodeById($fileId);
 		} catch (\Throwable) {
 			return null;
 		}
-		return $nodes[0] ?? null;
+		// A folder id has no score to convert; treated like a missing file.
+		return $node instanceof File ? $node : null;
 	}
 }

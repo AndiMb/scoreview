@@ -160,8 +160,6 @@ export default {
 }
 </script>
 
-<style scoped src="./scoreviewPopover.css"></style>
-
 <style scoped>
 /*
  * Die Herkunftsangabe. Kleiner und zurueckgenommen: Sie wird einmal gelesen,

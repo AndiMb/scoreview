@@ -96,7 +96,7 @@ class SingRunService {
 	}
 
 	/**
-	 * @return array{runs: list<array<string, mixed>>, best: array<string, int>}
+	 * @return array{runs: list<array<string, mixed>>, best: array<int, int>}
 	 */
 	public function list(int $fileId, string $userId, ?int $from, ?int $to, string $level): array {
 		if ($from === null || $to === null) {
@@ -106,12 +106,12 @@ class SingRunService {
 			return ['runs' => [], 'best' => []];
 		}
 		$rows = $this->runs->findForUnit($userId, $fileId, $from, $to, $level, self::LIST_LIMIT);
-		$best = [];
-		foreach ($this->runs->bestByTempo($userId, $fileId, $from, $to, $level) as $tempo => $value) {
-			// String keys: PHP would send a list for 0..n, an object is what the browser looks up.
-			$best[(string)$tempo] = $value;
-		}
-		return ['runs' => array_map([self::class, 'present'], $rows), 'best' => $best];
+		// Keyed by tempo in percent. json_encode sends an object, which is
+		// what the browser looks up, because those keys are never 0..n-1;
+		// a (string) cast would not help - PHP turns numeric string keys
+		// back into ints.
+		$best = $this->runs->bestByTempo($userId, $fileId, $from, $to, $level);
+		return ['runs' => array_map(self::present(...), $rows), 'best' => $best];
 	}
 
 	public function clear(int $fileId, string $userId): int {

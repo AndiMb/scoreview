@@ -73,6 +73,18 @@ Sekunden ohne Container. `composer.json` hängt die OCP-Stubs dafür in
 Psalm gedacht. **Im Release muss `composer install --no-dev` laufen**, sonst
 würden die Stubs mit ausgeliefert; die Release-Action prüft das eigens nach.
 
+**Psalm** (`psalm.xml`) prüft `lib/` statisch gegen dieselben Stubs, in CI
+gegen OCP 31 und 35. Es fängt, was die Mocks durchlassen: veraltete oder
+entfernte OCP-Methoden (Deprecations sind Fehler) und Attribute oder Klassen
+unter falschem Namespace – ein `#[AuthorizedAdminSetting]` aus dem falschen
+Paket wirkt nicht und fällt sonst niemandem auf. Psalm steht bewusst nicht in
+`composer.json`; lokal genügt das Phar aus den Releases von `vimeo/psalm` in
+der Version, die `ci.yml` pinnt (`php psalm.phar` aus `scoreview/`, braucht
+PHP ≥ 8.2). Was der Server mitbringt, aber nicht in `vendor/` liegt (Guzzle,
+das Ereignis der Files-App), beschreiben Stubs unter `tests/psalm-stubs/`.
+Unterdrückt sind nur Deprecations ohne Ersatz im unterstützten Bereich, jede
+mit Grund in `psalm.xml`.
+
 Was echte Nextcloud-Integration braucht (Routen, Migrationen, IAppData), bleibt
 Sache eines Durchlaufs gegen eine Testinstanz.
 
@@ -293,6 +305,14 @@ Worker.
   bitte in dieser Dichte weiterführen statt sie zu verwässern.
 - Commit-Messages beschreiben Ursache und Wirkung, nicht nur den Fix. Kurze
   Betreffzeile, dann ein Fließtext-Body.
+- **Neue Migrationen** tragen Nextclouds Migrations-Attribute
+  (`#[CreateTable]`, `#[AddColumn]`, … aus `OCP\Migration\Attributes`, ab 30
+  verfügbar): Sie beschreiben dem Administrator vor dem Update, was sich am
+  Schema ändert. Der Bestand bleibt, wie er ist – ausgeführte Migrationen
+  werden nicht mehr angefasst.
+- **Routen** stehen weiter gesammelt in `appinfo/routes.php`, nicht als
+  `#[FrontpageRoute]` an den Controllern: eine Tabelle aller URLs an einer
+  Stelle, und ein Mischbestand wäre schlechter als jede der beiden Formen.
 - Nach Änderungen an Routen oder ausgelieferten Assets die Version in
   `appinfo/info.xml` erhöhen (daran hängt das Cache-Busting) und `occ upgrade`
   laufen lassen. Der Grund steht unter

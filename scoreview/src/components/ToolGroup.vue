@@ -170,8 +170,6 @@ export default {
 }
 </script>
 
-<style scoped src="./scoreviewPopover.css"></style>
-
 <style src="./boundedPopover.css"></style>
 
 <style scoped>

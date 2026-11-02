@@ -175,8 +175,6 @@ export default {
 }
 </script>
 
-<style scoped src="./scoreviewPopover.css"></style>
-
 <style scoped>
 /*
  * Die Farbvorschlaege als Kacheln. Gross genug fuer einen Finger auf Glas

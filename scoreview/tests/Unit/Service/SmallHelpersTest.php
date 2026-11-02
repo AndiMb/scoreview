@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Tests\Unit\Service;
 
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\FileNames;
 use OCA\ScoreView\Service\TargetParts;
 use OCA\ScoreView\Service\UserFileResolver;
@@ -94,7 +95,7 @@ class SmallHelpersTest extends TestCase {
 
 	// --- UserFileResolver -----------------------------------------------------
 
-	private function resolver(?string $uid, ?Folder $folder = null, ?\Throwable $failure = null): UserFileResolver {
+	private function resolver(?string $uid, ?Folder $folder = null, ?\Throwable $failure = null, ?DirectAccessContext $context = null): UserFileResolver {
 		$session = $this->createMock(IUserSession::class);
 		$user = null;
 		if ($uid !== null) {
@@ -108,13 +109,37 @@ class SmallHelpersTest extends TestCase {
 		} else {
 			$root->method('getUserFolder')->with($uid)->willReturn($folder ?? $this->createMock(Folder::class));
 		}
-		return new UserFileResolver($root, $session);
+		return new UserFileResolver($root, $session, $context ?? new DirectAccessContext());
+	}
+
+	public function testTakesTheNodeTheMiddlewareAlreadyResolved(): void {
+		$node = $this->createMock(Node::class);
+		$node->method('getId')->willReturn(42);
+		$context = new DirectAccessContext();
+		$context->rememberNode('anna', $node);
+		$folder = $this->createMock(Folder::class);
+		$folder->expects($this->never())->method('getFirstNodeById');
+
+		$this->assertSame($node, $this->resolver('anna', $folder, null, $context)->resolveOwnNode(42));
+	}
+
+	public function testResolvesAgainForAnotherFileOrAnotherUser(): void {
+		$node = $this->createMock(Node::class);
+		$node->method('getId')->willReturn(42);
+		$context = new DirectAccessContext();
+		$context->rememberNode('anna', $node);
+		$other = $this->createMock(Node::class);
+		$folder = $this->createMock(Folder::class);
+		$folder->method('getFirstNodeById')->willReturn($other);
+
+		$this->assertSame($other, $this->resolver('anna', $folder, null, $context)->resolveOwnNode(43));
+		$this->assertSame($other, $this->resolver('bert', $folder, null, $context)->resolveOwnNode(42));
 	}
 
 	public function testResolvesThroughTheUsersOwnTree(): void {
 		$node = $this->createMock(Node::class);
 		$folder = $this->createMock(Folder::class);
-		$folder->method('getById')->with(42)->willReturn([$node]);
+		$folder->method('getFirstNodeById')->with(42)->willReturn($node);
 
 		$this->assertSame($node, $this->resolver('anna', $folder)->resolveOwnNode(42));
 	}
@@ -126,7 +151,7 @@ class SmallHelpersTest extends TestCase {
 
 	public function testAFileOutsideTheUsersTreeIsNull(): void {
 		$folder = $this->createMock(Folder::class);
-		$folder->method('getById')->willReturn([]);
+		$folder->method('getFirstNodeById')->willReturn(null);
 
 		$this->assertNull($this->resolver('anna', $folder)->resolveOwnNode(42));
 	}

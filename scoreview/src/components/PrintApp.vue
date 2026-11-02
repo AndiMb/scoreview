@@ -552,7 +552,7 @@ export default {
 .scoreview-print-sheet {
 	overflow: hidden;
 	background: #fff;
-	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+	box-shadow: 0 1px 4px var(--color-box-shadow, rgba(0, 0, 0, 0.2));
 }
 
 @media print {

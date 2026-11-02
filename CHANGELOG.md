@@ -6,6 +6,38 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A delegated administrator (Administration privileges for ScoreView) can
+  now use the settings page: its diagnostics, self-test and save requests
+  were refused with 403, because the permission attribute was imported from
+  a namespace that does not exist and Nextcloud therefore never saw it.
+
+### Changed
+
+- Score conversions in the background run one at a time, also when several
+  cron processes overlap; a local conversion takes 130-250 MB of memory.
+- The PHP code is checked with Psalm against Nextcloud 31 and 35 in CI;
+  deprecated Nextcloud APIs fail the build.
+
+- Score pages and their timing and metadata go out gzip-compressed when the
+  browser accepts it: a page of 174 kB arrives as 22 kB. The stock Apache
+  configuration compresses neither SVG nor JSON.
+- Status polls queue a pending conversion at most once a minute instead of
+  writing to the job table on every poll.
+- Requests from the mobile page resolve the score once instead of twice.
+- The daily cleanup asks the file cache for all known scores in one query
+  and checks only the missing ones one by one.
+- Suggestions for a new leader take everyone who already has the score
+  mounted without setting up their file system.
+- Opening a setlist checks the conversions of all its pieces in one query.
+- The Files page loads the HTTP client only when a setlist is opened.
+- The practice log starts the week on the first day of the user's locale
+  instead of always on Monday, and dates follow the Nextcloud locale.
+- Note markers and note texts in the score can be reached and opened with
+  the keyboard; panels are named for screen readers.
+- Status colours of the tuner needle and shadows follow the theme.
+
 ## [1.29.1] – 2026-11-01
 
 ### Fixed

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Service;
 
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\IUserSession;
@@ -19,6 +20,7 @@ class UserFileResolver {
 	public function __construct(
 		private IRootFolder $rootFolder,
 		private IUserSession $userSession,
+		private DirectAccessContext $directAccess,
 	) {
 	}
 
@@ -27,13 +29,15 @@ class UserFileResolver {
 		if ($user === null) {
 			return null;
 		}
+		$known = $this->directAccess->knownNode($user->getUID(), $fileId);
+		if ($known !== null) {
+			return $known;
+		}
 		try {
-			$userFolder = $this->rootFolder->getUserFolder($user->getUID());
-			$nodes = $userFolder->getById($fileId);
+			return $this->rootFolder->getUserFolder($user->getUID())->getFirstNodeById($fileId);
 		} catch (\Throwable) {
 			return null;
 		}
-		return $nodes[0] ?? null;
 	}
 
 	public function currentUserId(): ?string {

@@ -69,7 +69,7 @@ class ConvertScoreJobTest extends TestCase {
 		$file->method('getName')->willReturn('probe.mscz');
 		$file->method('fopen')->willReturn(fopen('php://memory', 'rb+'));
 		$folder = $this->createMock(Folder::class);
-		$folder->method('getById')->willReturn([$file]);
+		$folder->method('getFirstNodeById')->willReturn($file);
 		$this->rootFolder->method('getUserFolder')->willReturn($folder);
 
 		$this->conversionService->method('find')->willReturnCallback(fn () => $this->gefunden);
@@ -105,6 +105,10 @@ class ConvertScoreJobTest extends TestCase {
 		$method = new \ReflectionMethod($job, 'run');
 		$method->setAccessible(true);
 		$method->invoke($job, ['userId' => 'andreas', 'fileId' => 42] + $zusatz);
+	}
+
+	public function testRunsOneConversionAtATime(): void {
+		$this->assertFalse($this->job()->getAllowParallelRuns());
 	}
 
 	public function testReichtDiePartiturBeimSidecarEinUndLaesstPollen(): void {
@@ -168,7 +172,7 @@ class ConvertScoreJobTest extends TestCase {
 		$file->method('getEtag')->willReturn('etag1');
 		$file->method('getSize')->willReturn(500 * 1024 * 1024);
 		$folder = $this->createMock(Folder::class);
-		$folder->method('getById')->willReturn([$file]);
+		$folder->method('getFirstNodeById')->willReturn($file);
 		$rootFolder = $this->createMock(IRootFolder::class);
 		$rootFolder->method('getUserFolder')->willReturn($folder);
 		$this->rootFolder = $rootFolder;

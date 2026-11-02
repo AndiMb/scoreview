@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Db;
 
 use OCP\AppFramework\Db\Entity;
+use OCP\DB\Types;
 
 /**
  * One display variant of a score version (docs/architecture.md E19): a part,
@@ -70,11 +71,11 @@ class ScoreVariant extends Entity {
 	protected $accessedAt;
 
 	public function __construct() {
-		$this->addType('fileId', 'integer');
-		$this->addType('formatVersion', 'integer');
-		$this->addType('pageCount', 'integer');
-		$this->addType('createdAt', 'datetime');
-		$this->addType('updatedAt', 'datetime');
-		$this->addType('accessedAt', 'datetime');
+		$this->addType('fileId', Types::INTEGER);
+		$this->addType('formatVersion', Types::INTEGER);
+		$this->addType('pageCount', Types::INTEGER);
+		$this->addType('createdAt', Types::DATETIME);
+		$this->addType('updatedAt', Types::DATETIME);
+		$this->addType('accessedAt', Types::DATETIME);
 	}
 }

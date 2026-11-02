@@ -101,6 +101,7 @@ class LocalConverter {
 	 * scores would otherwise pay it for each.
 	 */
 	private ConverterRuntime|false|null $runtime = null;
+	private ?string $engineVersion = null;
 
 	public function __construct(
 		private IAppConfig $appConfig,
@@ -166,6 +167,9 @@ class LocalConverter {
 	 * Wege denselben Bericht anzeigen kann.
 	 *
 	 * @return array{ok: bool, error?: string, problems?: string[], details?: array}
+	 * @psalm-suppress InvalidReturnType, InvalidReturnStatement decoded JSON
+	 *   from our own sidecar/converter, checked for the key that decides;
+	 *   the rest of the shape is the contract, not something PHP can prove.
 	 */
 	public function runSelfTest(): array {
 		try {
@@ -250,11 +254,15 @@ class LocalConverter {
 	 * (Controller\EngineController, Controller\ConversionController).
 	 */
 	public function engineVersion(): string {
-		$manifest = @file_get_contents($this->getConverterDir() . '/package.json');
-		if (is_string($manifest) && preg_match('#/download/v?([^/]+)/#', $manifest, $treffer) === 1) {
-			return $treffer[1];
+		// Read once per request: the status endpoint, isCurrent() and the
+		// engine URL each ask, and the file only changes with an app update.
+		if ($this->engineVersion === null) {
+			$manifest = @file_get_contents($this->getConverterDir() . '/package.json');
+			$this->engineVersion = is_string($manifest) && preg_match('#/download/v?([^/]+)/#', $manifest, $treffer) === 1
+				? $treffer[1]
+				: 'unknown';
 		}
-		return 'unknown';
+		return $this->engineVersion;
 	}
 
 	private function isConverterInstalled(): bool {
@@ -531,7 +539,7 @@ class LocalConverter {
 		$stdout = '';
 		$stderr = '';
 		$stdoutOverflow = false;
-		$deadline = microtime(true) + $timeoutSeconds;
+		$deadline = microtime(true) + (float)$timeoutSeconds;
 		$timedOut = false;
 		$exitCode = null;
 

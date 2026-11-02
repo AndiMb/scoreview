@@ -25,6 +25,12 @@ use OCP\IConfig;
  * garantiert eine `#rrggbb`-Farbe und einer der beiden bekannten Modi - ein
  * beliebiger String aus einem POST kann so gar nicht erst bis in ein
  * `style`-Attribut durchreichen.
+ *
+ * **Still IConfig, on purpose.** Its user-value methods are deprecated since
+ * Nextcloud 33 in favour of IUserConfig, which is public only from 32 on -
+ * the app supports 31. All access sits in this class (and in
+ * CompanionTokenService for its epoch), so the switch is one change here
+ * once the minimum is 32; with it can come a config lexicon for the keys.
  */
 class ViewerPreferences {
 	public const KEY_HIGHLIGHT_COLOR = 'highlight_color';
@@ -452,7 +458,7 @@ class ViewerPreferences {
 	}
 
 	/**
-	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string}
+	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string, doublePage: string, referencePitch: int, barPins: ?list<string>}
 	 */
 	public function defaults(): array {
 		return [

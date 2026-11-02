@@ -54,7 +54,7 @@ final class VariantKey {
 	 * stores, a part id it has. Read from the base conversion's meta.json, so
 	 * an unknown source is a 404 before any process starts.
 	 *
-	 * @param array{source: string, excerpt: ?int, partId: ?string} $parsed
+	 * @param array{source: string, excerpt: ?int, partId: ?string, ...} $parsed
 	 * @param array<string, mixed> $meta
 	 */
 	public static function fitsScore(array $parsed, array $meta): bool {

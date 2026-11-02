@@ -258,8 +258,6 @@ export default {
 }
 </script>
 
-<style scoped src="./scoreviewPopover.css"></style>
-
 <style scoped>
 .scoreview-export-progress {
 	display: flex;

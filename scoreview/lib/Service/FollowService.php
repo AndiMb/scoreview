@@ -525,7 +525,7 @@ class FollowService {
 	 * Der Zustand einer frischen Sitzung: alle Zaehler auf 0, also „noch nichts
 	 * gesendet". Ein Geraet springt erst bei `seq > 0`.
 	 *
-	 * @return array{session: int, position: array, loop: array, tone: array}
+	 * @return array{session: int, position: array, loop: array, tone: array, ...}
 	 */
 	public static function initialState(int $session): array {
 		return [
@@ -579,13 +579,14 @@ class FollowService {
 	 */
 	private function cached(string $key): ?array {
 		$entry = $this->cache->get($key);
-		if (!is_array($entry) || !isset($entry['at'], $entry['snapshot']['version'])) {
+		$snapshot = is_array($entry) ? ($entry['snapshot'] ?? null) : null;
+		if (!is_array($snapshot) || !isset($entry['at'], $snapshot['version'])) {
 			return null;
 		}
 		if ($this->localOnly && $this->nowMs() - (int)$entry['at'] > self::LOCAL_MAX_AGE_MS) {
 			return null;
 		}
-		return $entry['snapshot'];
+		return $snapshot;
 	}
 
 	/**
@@ -779,7 +780,7 @@ class FollowService {
 
 	private function nodeFor(string $uid, int $fileId): ?Node {
 		try {
-			return $this->rootFolder->getUserFolder($uid)->getById($fileId)[0] ?? null;
+			return $this->rootFolder->getUserFolder($uid)->getFirstNodeById($fileId);
 		} catch (\Throwable) {
 			return null;
 		}

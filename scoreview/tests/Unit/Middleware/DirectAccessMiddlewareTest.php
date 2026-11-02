@@ -87,8 +87,15 @@ class DirectAccessMiddlewareTest extends TestCase {
 		$this->rootFolder = $this->createMock(IRootFolder::class);
 		$this->rootFolder->method('getUserFolder')->willReturnCallback(function () {
 			$ordner = $this->createMock(Folder::class);
-			$ordner->method('getById')->willReturnCallback(
-				fn (int $id) => in_array($id, $this->sichtbar, true) ? [$this->createMock(File::class)] : []);
+			$ordner->method('getFirstNodeById')->willReturnCallback(
+				function (int $id) {
+					if (!in_array($id, $this->sichtbar, true)) {
+						return null;
+					}
+					$datei = $this->createMock(File::class);
+					$datei->method('getId')->willReturn($id);
+					return $datei;
+				});
 			return $ordner;
 		});
 		$this->context = new DirectAccessContext();
@@ -237,6 +244,7 @@ class DirectAccessMiddlewareTest extends TestCase {
 		$this->assertSame(DirectAccessContext::DIRECT, $this->context->mode());
 		$this->assertSame(42, $this->context->originFileId());
 		$this->assertSame(CompanionTokenService::digest(self::DE_TOKEN), $this->context->directDigest());
+		$this->assertNotNull($this->context->knownNode('anna', 42), 'the controller takes the file core already resolved');
 	}
 
 	/**
@@ -349,6 +357,8 @@ class DirectAccessMiddlewareTest extends TestCase {
 		$this->middleware->beforeController($controller, 'mitCsrf');
 		$this->assertSame(DirectAccessContext::COMPANION, $this->context->mode());
 		$this->assertSame(42, $this->context->originFileId(), 'Ursprung bleibt die Datei des Direct-Editing-Tokens');
+		$this->assertNotNull($this->context->knownNode('anna', 43), 'the companion file, resolved once in the middleware');
+		$this->assertNull($this->context->knownNode('anna', 42));
 		$this->middleware->afterController($controller, 'mitCsrf', new JSONResponse([]));
 	}
 

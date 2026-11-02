@@ -49,15 +49,17 @@ export function shiftDay(day, days) {
 }
 
 /**
- * Weekday of a day, 0 = Monday … 6 = Sunday (ISO week, as a choir week runs
- * from Monday rehearsal to Monday rehearsal more often than from Sunday).
+ * Position of a day in its week, 0 … 6, counted from `firstDay` - the first
+ * day of the week in the user's Nextcloud locale (getFirstDay(), 0 = Sunday).
+ * Monday when nothing says otherwise, as in the ISO week.
  *
  * @param {string} day
+ * @param {number} [firstDay] 0 = Sunday … 6 = Saturday
  * @return {number}
  */
-export function weekdayOf(day) {
+export function weekdayOf(day, firstDay = 1) {
 	const [y, m, d] = day.split('-').map(Number)
-	return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7
+	return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() - firstDay + 7) % 7
 }
 
 /**
@@ -113,14 +115,15 @@ export function createPracticeMeter() {
  * @param {string[]} input.activeDays days with practice on any score
  * @param {string} input.today local day
  * @param {?number} input.goalMinutes the leader's weekly goal
+ * @param {number} [input.firstDay] first day of the week, 0 = Sunday (weekdayOf)
  * @return {{week: Array<{day: string, seconds: number, today: boolean, future: boolean}>, weekSeconds: number, lastWeekSeconds: number, streak: number, goalPercent: ?number, goalReached: boolean}}
  */
-export function summarize({ days, activeDays, today, goalMinutes }) {
-	const monday = shiftDay(today, weekdayOf(today))
+export function summarize({ days, activeDays, today, goalMinutes, firstDay = 1 }) {
+	const weekStart = shiftDay(today, weekdayOf(today, firstDay))
 	const week = []
 	let weekSeconds = 0
 	for (let i = 0; i < 7; i++) {
-		const day = shiftDay(monday, -i)
+		const day = shiftDay(weekStart, -i)
 		const seconds = days?.[day] ?? 0
 		const future = day > today
 		week.push({ day, seconds, today: day === today, future })
@@ -130,7 +133,7 @@ export function summarize({ days, activeDays, today, goalMinutes }) {
 	}
 	let lastWeekSeconds = 0
 	for (let i = 1; i <= 7; i++) {
-		lastWeekSeconds += days?.[shiftDay(monday, i)] ?? 0
+		lastWeekSeconds += days?.[shiftDay(weekStart, i)] ?? 0
 	}
 	const goalSeconds = goalMinutes > 0 ? goalMinutes * 60 : null
 	return {

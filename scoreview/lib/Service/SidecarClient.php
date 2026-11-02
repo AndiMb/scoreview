@@ -147,7 +147,10 @@ class SidecarClient {
 	 * Die `files`-Pfade sind sidecar-relativ und werden unveraendert an
 	 * fetchFile() zurueckgereicht (siehe BackgroundJob\PollConversionJob).
 	 *
-	 * @return array{status: string, error?: string, files?: array{pages: string[], midi: string, timingJson: string, measuresJson: string, metaJson: string}}
+	 * @return array{status: string, error?: string, errorCode?: string, files?: array{pages: string[], midi: string, timingJson: string, measuresJson: string, metaJson: string}}
+	 * @psalm-suppress InvalidReturnType, InvalidReturnStatement decoded JSON
+	 *   from our own sidecar/converter, checked for the key that decides;
+	 *   the rest of the shape is the contract, not something PHP can prove.
 	 * @throws SidecarException
 	 */
 	public function pollStatus(string $jobId): array {
@@ -203,6 +206,9 @@ class SidecarClient {
 	 * that is reported as what it is - an image too old for the setting.
 	 *
 	 * @return array{ok: bool, error?: string, details?: array, renderer?: string}
+	 * @psalm-suppress InvalidReturnType, InvalidReturnStatement decoded JSON
+	 *   from our own sidecar/converter, checked for the key that decides;
+	 *   the rest of the shape is the contract, not something PHP can prove.
 	 */
 	public function runSelfTest(string $renderer = ConversionBackend::RENDERER_ENGINE): array {
 		if (!$this->isConfigured()) {
@@ -307,6 +313,9 @@ class SidecarClient {
 	 *
 	 * @return array{available: bool, name?: string, size?: int, version?: string}
 	 * @throws SidecarException
+	 * @psalm-suppress InvalidReturnType, InvalidReturnStatement decoded JSON
+	 *   from our own sidecar/converter, checked for the key that decides;
+	 *   the rest of the shape is the contract, not something PHP can prove.
 	 */
 	public function fetchSoundFontInfo(): array {
 		if (!$this->isConfigured()) {
@@ -403,6 +412,8 @@ class SidecarClient {
 		} catch (\Exception $e) {
 			throw new SidecarException('Sidecar file download failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
-		return $response->getBody();
+		$body = $response->getBody();
+		// A resource only comes back for a request with 'stream' => true.
+		return is_string($body) ? $body : (string)stream_get_contents($body);
 	}
 }

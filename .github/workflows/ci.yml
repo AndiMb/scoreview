@@ -159,6 +159,44 @@ jobs:
       - name: Unit-Tests (PHPUnit)
         run: composer run test:unit
 
+  # Static analysis against the OCP stubs of both ends (psalm.xml says why:
+  # the unit tests run against mocks, which accept a deprecated or removed
+  # method without a word). Its own job because Psalm 7 itself needs PHP
+  # 8.2+; the analysis still targets 8.1 (phpVersion in psalm.xml). The
+  # version is pinned to the one the config was checked with - a new Psalm
+  # brings new checks, and that should be a change here, not a red CI.
+  psalm:
+    name: Psalm (OCP ${{ matrix.ocp }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ocp: ['^31.0', '^35.0']
+    defaults:
+      run:
+        working-directory: scoreview
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2, psalm:7.0.0
+
+      - name: OCP-Stand dieser Achse
+        if: matrix.ocp != '^31.0'
+        run: |
+          composer config --unset platform.php
+          composer require --dev --no-update --no-interaction "nextcloud/ocp:${{ matrix.ocp }}"
+          composer update --no-interaction --no-progress
+
+      - if: matrix.ocp == '^31.0'
+        run: composer install --no-interaction --no-progress
+
+      - name: Psalm
+        run: psalm --no-cache --threads=2 --output-format=github
+
   # Der lokale Konvertierungsweg (docs/architecture.md E3). Die reine
   # Umformungslogik deckt schon `npm test` im Frontend-Job ab; hier laeuft
   # der Weg EINMAL vollstaendig - mit echtem Engine-Wasm (scoreview-engine),

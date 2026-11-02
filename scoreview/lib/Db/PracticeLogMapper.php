@@ -27,56 +27,60 @@ class PracticeLogMapper {
 	/**
 	 * Adds seconds to a day, capped at `$maxPerDay`. Update first, insert
 	 * when there was nothing to update: the usual call adds to a row that
-	 * exists. Two first reports of a day at once meet at the unique index -
-	 * the loser of the insert updates instead of failing.
+	 * exists - one read and one write. Two first reports of a day at once
+	 * meet at the unique index - the loser of the insert updates instead of
+	 * failing.
 	 *
-	 * @return int the day's total after adding
+	 * @return int the day's total after adding, as written by this call
 	 */
 	public function addSeconds(string $userId, int $fileId, string $day, int $seconds, int $maxPerDay): int {
-		if ($this->increment($userId, $fileId, $day, $seconds, $maxPerDay) === 0) {
-			try {
-				$qb = $this->db->getQueryBuilder();
-				$qb->insert(self::TABLE)
-					->values([
-						'user_id' => $qb->createNamedParameter($userId),
-						'file_id' => $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT),
-						'day' => $qb->createNamedParameter($day),
-						'seconds' => $qb->createNamedParameter(min($seconds, $maxPerDay), IQueryBuilder::PARAM_INT),
-					]);
-				$qb->executeStatement();
-			} catch (DbException $e) {
-				if ($e->getReason() !== DbException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
-					throw $e;
-				}
-				$this->increment($userId, $fileId, $day, $seconds, $maxPerDay);
-			}
+		$total = $this->increment($userId, $fileId, $day, $seconds, $maxPerDay);
+		if ($total !== null) {
+			return $total;
 		}
-		return $this->secondsOn($userId, $fileId, $day);
+		$total = min($seconds, $maxPerDay);
+		try {
+			$qb = $this->db->getQueryBuilder();
+			$qb->insert(self::TABLE)
+				->values([
+					'user_id' => $qb->createNamedParameter($userId),
+					'file_id' => $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT),
+					'day' => $qb->createNamedParameter($day),
+					'seconds' => $qb->createNamedParameter($total, IQueryBuilder::PARAM_INT),
+				]);
+			$qb->executeStatement();
+			return $total;
+		} catch (DbException $e) {
+			if ($e->getReason() !== DbException::REASON_UNIQUE_CONSTRAINT_VIOLATION) {
+				throw $e;
+			}
+			return $this->increment($userId, $fileId, $day, $seconds, $maxPerDay) ?? $total;
+		}
 	}
 
 	/**
 	 * The cap is applied in PHP after reading, not in SQL: LEAST() is spelled
 	 * differently across the supported databases. A race between the read and
 	 * the write can push one day past the cap by one report - harmless for a
-	 * number that only the singer sees.
+	 * number that only the singer sees; the total returned is the one this
+	 * call wrote, without a second read.
+	 *
+	 * @return ?int the new total, null when the day has no row yet
 	 */
-	private function increment(string $userId, int $fileId, string $day, int $seconds, int $maxPerDay): int {
+	private function increment(string $userId, int $fileId, string $day, int $seconds, int $maxPerDay): ?int {
 		$current = $this->secondsOrNull($userId, $fileId, $day);
 		if ($current === null) {
-			return 0;
+			return null;
 		}
+		$total = min($maxPerDay, $current + $seconds);
 		$qb = $this->db->getQueryBuilder();
 		$qb->update(self::TABLE)
-			->set('seconds', $qb->createNamedParameter(min($maxPerDay, $current + $seconds), IQueryBuilder::PARAM_INT))
+			->set('seconds', $qb->createNamedParameter($total, IQueryBuilder::PARAM_INT))
 			->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
 			->andWhere($qb->expr()->eq('file_id', $qb->createNamedParameter($fileId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->eq('day', $qb->createNamedParameter($day)));
 		$qb->executeStatement();
-		return 1;
-	}
-
-	private function secondsOn(string $userId, int $fileId, string $day): int {
-		return $this->secondsOrNull($userId, $fileId, $day) ?? 0;
+		return $total;
 	}
 
 	private function secondsOrNull(string $userId, int $fileId, string $day): ?int {

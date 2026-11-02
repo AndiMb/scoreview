@@ -351,7 +351,7 @@ export default {
 	align-items: center;
 	gap: 4px;
 	padding: 2px 4px;
-	border-radius: var(--border-radius);
+	border-radius: var(--border-radius-element, 8px);
 	cursor: grab;
 }
 
@@ -416,7 +416,7 @@ export default {
 	margin: 0;
 	padding: 4px 8px;
 	border: none;
-	border-radius: var(--border-radius);
+	border-radius: var(--border-radius-element, 8px);
 	background: transparent;
 	text-align: start;
 	cursor: pointer;

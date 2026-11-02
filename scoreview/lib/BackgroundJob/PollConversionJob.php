@@ -9,6 +9,7 @@ use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\SidecarClient;
+use OCA\ScoreView\Service\SidecarException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\IJobList;
 use OCP\BackgroundJob\QueuedJob;
@@ -81,11 +82,11 @@ class PollConversionJob extends QueuedJob {
 	}
 
 	/**
-	 * @param array{files: array{pages: string[], midi: string, timingJson: string, measuresJson: string, metaJson: string}} $result
+	 * @param array{status: string, error?: string, errorCode?: string, files?: array{pages: string[], midi: string, timingJson: string, measuresJson: string, metaJson: string}} $result
 	 */
 	private function fetchAndStore(ScoreConversion $conversion, array $result): void {
 		try {
-			$files = $result['files'];
+			$files = $result['files'] ?? throw new SidecarException('Sidecar reported ready without files.', 0, null, ScoreConversion::ERROR_SIDECAR_REJECTED);
 			$pageSvgs = array_map(fn (string $url) => $this->sidecarClient->fetchFile($url), $files['pages']);
 			$midi = $this->sidecarClient->fetchFile($files['midi']);
 			$timingJson = $this->sidecarClient->fetchFile($files['timingJson']);

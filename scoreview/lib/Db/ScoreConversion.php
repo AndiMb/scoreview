@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Db;
 
 use OCP\AppFramework\Db\Entity;
+use OCP\DB\Types;
 
 /**
  * Konvertierungsstatus einer .mscz-Datei für einen bestimmten etag. Ein
@@ -127,12 +128,12 @@ class ScoreConversion extends Entity implements \JsonSerializable {
 	protected $updatedAt;
 
 	public function __construct() {
-		$this->addType('fileId', 'integer');
-		$this->addType('formatVersion', 'integer');
-		$this->addType('pageCount', 'integer');
-		$this->addType('measureCount', 'integer');
-		$this->addType('createdAt', 'datetime');
-		$this->addType('updatedAt', 'datetime');
+		$this->addType('fileId', Types::INTEGER);
+		$this->addType('formatVersion', Types::INTEGER);
+		$this->addType('pageCount', Types::INTEGER);
+		$this->addType('measureCount', Types::INTEGER);
+		$this->addType('createdAt', Types::DATETIME);
+		$this->addType('updatedAt', Types::DATETIME);
 	}
 
 	public function jsonSerialize(): array {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Db;
 
 use OCP\AppFramework\Db\Entity;
+use OCP\DB\Types;
 
 /**
  * Die laufende "Folgt mir"-Sitzung einer Partitur - hoechstens eine je Datei
@@ -45,9 +46,9 @@ class FollowSession extends Entity {
 	protected $state;
 
 	public function __construct() {
-		$this->addType('fileId', 'integer');
-		$this->addType('startedAt', 'datetime');
-		$this->addType('heartbeatAt', 'datetime');
-		$this->addType('version', 'integer');
+		$this->addType('fileId', Types::INTEGER);
+		$this->addType('startedAt', Types::DATETIME);
+		$this->addType('heartbeatAt', Types::DATETIME);
+		$this->addType('version', Types::INTEGER);
 	}
 }

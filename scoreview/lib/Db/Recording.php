@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Db;
 
 use OCP\AppFramework\Db\Entity;
+use OCP\DB\Types;
 
 /**
  * Die Metadaten einer eigenen Aufnahme. Die WAV selbst liegt in IAppData
@@ -54,13 +55,13 @@ class Recording extends Entity {
 	protected $sharedParts;
 
 	public function __construct() {
-		$this->addType('fileId', 'integer');
-		$this->addType('createdAt', 'datetime');
-		$this->addType('durationMs', 'integer');
-		$this->addType('sizeBytes', 'integer');
-		$this->addType('scoreStartMs', 'integer');
-		$this->addType('tempoFactor', 'float');
-		$this->addType('withAccompaniment', 'boolean');
-		$this->addType('referenceHz', 'integer');
+		$this->addType('fileId', Types::INTEGER);
+		$this->addType('createdAt', Types::DATETIME);
+		$this->addType('durationMs', Types::INTEGER);
+		$this->addType('sizeBytes', Types::INTEGER);
+		$this->addType('scoreStartMs', Types::INTEGER);
+		$this->addType('tempoFactor', Types::FLOAT);
+		$this->addType('withAccompaniment', Types::BOOLEAN);
+		$this->addType('referenceHz', Types::INTEGER);
 	}
 }

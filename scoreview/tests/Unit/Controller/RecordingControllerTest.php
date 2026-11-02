@@ -22,7 +22,6 @@ use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IAppConfig;
 use OCP\IL10N;
 use OCP\IRequest;
-use OCP\IUser;
 use OCP\IUserManager;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -247,9 +246,7 @@ class RecordingControllerTest extends TestCase {
 		$shared->setUserId('lea');
 		$shared->setSharedParts('[{"id":"2","name":"Alt"}]');
 		$this->recordings->expects($this->once())->method('listShared')->with(42, 'anna')->willReturn([$shared]);
-		$user = $this->createMock(IUser::class);
-		$user->method('getDisplayName')->willReturn('Lea');
-		$this->userManager->method('get')->with('lea')->willReturn($user);
+		$this->userManager->method('getDisplayName')->with('lea')->willReturn('Lea');
 
 		$daten = $this->controller()->index(42)->getData();
 

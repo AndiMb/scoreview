@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\BackgroundJob;
 
 use OCA\ScoreView\Db\AnnotationMapper;
+use OCA\ScoreView\Db\FileCacheLookup;
 use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\FollowSession;
 use OCA\ScoreView\Db\LeaderMapper;
@@ -44,8 +45,13 @@ use Psr\Log\LoggerInterface;
  * (FollowSession::TIMEOUT_SECONDS). Beim Lesen gelten sie ohnehin als
  * beendet; hier verschwindet nur die Zeile.
  *
- * Läuft einmal täglich; das reicht für Aufräumarbeiten und hält die
- * `getById()`-Abfragen selten. Anders als ConvertScoreJob ist das ein
+ * Läuft einmal täglich; das reicht für Aufräumarbeiten.
+ *
+ * Which fileIds still exist is settled first by one batched query on
+ * `filecache` (Db\FileCacheLookup); only the rest, the real candidates, go
+ * through `getById()` one by one. Without that pre-filter the job paid one
+ * `getById()` - a mount lookup across all users - per fileId the app has
+ * ever seen, every day. Anders als ConvertScoreJob ist das ein
  * periodischer Job ohne Argument und deshalb korrekt über
  * `<background-jobs>` in `appinfo/info.xml` registriert.
  */
@@ -55,6 +61,7 @@ class CleanupOrphansJob extends TimedJob {
 	public function __construct(
 		ITimeFactory $time,
 		private IRootFolder $rootFolder,
+		private FileCacheLookup $fileCache,
 		private ConversionService $conversionService,
 		private ScoreConversionMapper $conversionMapper,
 		private AnnotationMapper $annotationMapper,
@@ -94,7 +101,7 @@ class CleanupOrphansJob extends TimedJob {
 		$caches = 0;
 		$annotations = 0;
 		$others = 0;
-		foreach ($fileIds as $fileId) {
+		foreach ($this->candidates($fileIds) as $fileId) {
 			if ($this->stillExists($fileId)) {
 				continue;
 			}
@@ -159,6 +166,32 @@ class CleanupOrphansJob extends TimedJob {
 				'exception' => $e,
 			]);
 		}
+	}
+
+	/**
+	 * The fileIds without a filecache row - the only ones that can be gone.
+	 * A row that survives while `getById()` no longer resolves it (a storage
+	 * removed underneath Nextcloud) keeps its data until `occ files:cleanup`
+	 * drops the row; that errs on the side of keeping, like stillExists().
+	 *
+	 * @param int[] $fileIds
+	 * @return int[]
+	 */
+	private function candidates(array $fileIds): array {
+		if ($fileIds === []) {
+			return [];
+		}
+		try {
+			$existing = array_flip($this->fileCache->existingIds($fileIds));
+		} catch (\Throwable $e) {
+			// Without the answer nothing may be treated as gone.
+			$this->logger->warning('ScoreView: cleanup skipped, the file cache could not be queried: {message}', [
+				'message' => $e->getMessage(),
+				'exception' => $e,
+			]);
+			return [];
+		}
+		return array_values(array_filter($fileIds, fn (int $id) => !isset($existing[$id])));
 	}
 
 	/**

@@ -12,6 +12,8 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Collaboration\Collaborators\ISearch;
 use OCP\Constants;
 use OCP\DB\Exception as DbException;
+use OCP\Files\Config\ICachedMountFileInfo;
+use OCP\Files\Config\IUserMountCache;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
@@ -43,6 +45,8 @@ class LeaderServiceTest extends TestCase {
 	private IRootFolder&MockObject $rootFolder;
 	private IUserManager&MockObject $userManager;
 	private ISearch&MockObject $search;
+	/** @var list<string> whose cached mounts contain the file (none by default) */
+	private array $mitMount = [];
 	/** @var array<string, Leader> uid => Eintrag */
 	private array $eintraege = [];
 	/** @var list<string> wer die Datei im eigenen Dateibaum findet */
@@ -65,7 +69,7 @@ class LeaderServiceTest extends TestCase {
 				throw new NoUserException();
 			}
 			$folder = $this->createMock(Folder::class);
-			$folder->method('getById')->willReturn(in_array($uid, $this->mitZugriff, true) ? [$this->createMock(Node::class)] : []);
+			$folder->method('getFirstNodeById')->willReturn(in_array($uid, $this->mitZugriff, true) ? $this->createMock(Node::class) : null);
 			return $folder;
 		});
 		$this->userManager->method('getDisplayName')->willReturnCallback(fn (string $uid) => ucfirst($uid));
@@ -74,7 +78,15 @@ class LeaderServiceTest extends TestCase {
 	private function service(): LeaderService {
 		$time = $this->createMock(ITimeFactory::class);
 		$time->method('getDateTime')->willReturn(new \DateTime('2026-09-23 12:00:00'));
-		return new LeaderService($this->mapper, $this->rootFolder, $this->userManager, $this->search, $time);
+		$mountCache = $this->createMock(IUserMountCache::class);
+		$mountCache->method('getMountsForFileId')->willReturnCallback(fn () => array_map(function (string $uid) {
+			$user = $this->createMock(IUser::class);
+			$user->method('getUID')->willReturn($uid);
+			$mount = $this->createMock(ICachedMountFileInfo::class);
+			$mount->method('getUser')->willReturn($user);
+			return $mount;
+		}, $this->mitMount));
+		return new LeaderService($this->mapper, $this->rootFolder, $this->userManager, $this->search, $time, $mountCache);
 	}
 
 	private function eintrag(string $uid): Leader {
@@ -294,7 +306,7 @@ class LeaderServiceTest extends TestCase {
 		$this->rootFolder->method('getUserFolder')->willReturnCallback(function () use (&$aufgeloest) {
 			$aufgeloest++;
 			$folder = $this->createMock(Folder::class);
-			$folder->method('getById')->willReturn([]);
+			$folder->method('getFirstNodeById')->willReturn(null);
 			return $folder;
 		});
 
@@ -311,12 +323,28 @@ class LeaderServiceTest extends TestCase {
 		$this->rootFolder->method('getUserFolder')->willReturnCallback(function (string $uid) use (&$aufgeloest) {
 			$aufgeloest[] = $uid;
 			$folder = $this->createMock(Folder::class);
-			$folder->method('getById')->willReturn([$this->createMock(Node::class)]);
+			$folder->method('getFirstNodeById')->willReturn($this->createMock(Node::class));
 			return $folder;
 		});
 
 		$this->assertSame(['carla'], array_column($this->service()->candidates($this->datei(), 'anna', 'ar'), 'userId'));
 		$this->assertSame(['carla'], $aufgeloest);
+	}
+
+	public function testAHitInTheMountCacheNeedsNoFilesystemSetup(): void {
+		$this->mitMount = ['anna', 'carla'];
+		$this->search->method('search')->willReturn($this->suchergebnis([], ['carla', 'dora']));
+		$aufgeloest = [];
+		$this->rootFolder = $this->createMock(IRootFolder::class);
+		$this->rootFolder->method('getUserFolder')->willReturnCallback(function (string $uid) use (&$aufgeloest) {
+			$aufgeloest[] = $uid;
+			$folder = $this->createMock(Folder::class);
+			$folder->method('getFirstNodeById')->willReturn(null);
+			return $folder;
+		});
+
+		$this->assertSame(['carla'], array_column($this->service()->candidates($this->datei(), 'anna', 'ar'), 'userId'));
+		$this->assertSame(['dora'], $aufgeloest, 'only the hit missing from the mount cache is checked in full');
 	}
 
 	public function testVorschlaegeNurFuerLeitungen(): void {

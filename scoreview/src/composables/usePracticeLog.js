@@ -1,4 +1,5 @@
 import axios from '@nextcloud/axios'
+import { getFirstDay } from '@nextcloud/l10n'
 import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue'
 import { translate } from '../l10n.js'
@@ -52,6 +53,7 @@ export function usePracticeLog({ fileId, enabled, active, now = () => new Date()
 		activeDays: activeDays.value,
 		today: localDay(now()),
 		goalMinutes: goal.value?.minutesPerWeek ?? null,
+		firstDay: getFirstDay(),
 	}))
 
 	async function load() {

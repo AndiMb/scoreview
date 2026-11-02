@@ -1,4 +1,3 @@
-import axios from '@nextcloud/axios'
 import { DefaultType, registerFileAction } from '@nextcloud/files'
 import { generateUrl } from '@nextcloud/router'
 import { createApp, h, nextTick } from 'vue'
@@ -330,6 +329,10 @@ async function setlistAusfuehren(node) {
 	}
 	let data
 	try {
+		// Loaded on demand: this file is the Files entry and runs on every
+		// Files page, and the setlist action is the only part of it that
+		// talks to the server - axios cost about a fifth of the entry.
+		const { default: axios } = await import(/* webpackChunkName: "viewer-ui" */ '@nextcloud/axios')
 		data = (await axios.get(generateUrl('/apps/scoreview/api/setlists/{id}', { id: node.fileid }))).data
 	} catch (err) {
 		// eslint-disable-next-line no-console

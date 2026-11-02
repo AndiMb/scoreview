@@ -10,6 +10,7 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Collaboration\Collaborators\ISearch;
 use OCP\Constants;
 use OCP\DB\Exception as DbException;
+use OCP\Files\Config\IUserMountCache;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\IUserManager;
@@ -71,6 +72,7 @@ class LeaderService {
 		private IUserManager $userManager,
 		private ISearch $search,
 		private ITimeFactory $time,
+		private IUserMountCache $mountCache,
 	) {
 	}
 
@@ -220,21 +222,31 @@ class LeaderService {
 		foreach ($this->mapper->findByFileId($node->getId()) as $leader) {
 			$gesehen[$leader->getUserId()] = true;
 		}
+		// Everyone whose cached mounts already contain the file - one query
+		// instead of setting up a foreign filesystem per hit. The mount cache
+		// only knows users whose filesystem was set up since the share was
+		// made, so a hit missing from it still gets the full canSee() check
+		// below; being in it is proof, being absent is not.
+		$mounted = $this->usersWithMount($node->getId());
 		$pruefungen = 0;
 		$result = [];
 		// Exakte Treffer zuerst - wer den vollen Namen tippt, soll die Person
 		// oben sehen und nicht nach zwanzig Teiltreffern suchen muessen.
-		foreach ([...($treffer['exact']['users'] ?? []), ...($treffer['users'] ?? [])] as $eintrag) {
+		$exact = $treffer['exact']['users'] ?? [];
+		$partial = $treffer['users'] ?? [];
+		foreach ([...(is_array($exact) ? $exact : []), ...(is_array($partial) ? $partial : [])] as $eintrag) {
 			$uid = $eintrag['value']['shareWith'] ?? null;
 			if (!is_string($uid) || isset($gesehen[$uid])) {
 				continue;
 			}
 			$gesehen[$uid] = true;
-			if (++$pruefungen > self::MAX_ACCESS_CHECKS) {
-				break;
-			}
-			if (!$this->canSee($uid, $node->getId())) {
-				continue;
+			if (!isset($mounted[$uid])) {
+				if (++$pruefungen > self::MAX_ACCESS_CHECKS) {
+					break;
+				}
+				if (!$this->canSee($uid, $node->getId())) {
+					continue;
+				}
 			}
 			$result[] = ['userId' => $uid, 'displayName' => (string)($eintrag['label'] ?? $uid)];
 			if (count($result) >= self::MAX_CANDIDATES) {
@@ -252,13 +264,28 @@ class LeaderService {
 	}
 
 	/**
+	 * @return array<string, true> the users whose cached mounts contain $fileId
+	 */
+	private function usersWithMount(int $fileId): array {
+		$users = [];
+		try {
+			foreach ($this->mountCache->getMountsForFileId($fileId) as $mount) {
+				$users[$mount->getUser()->getUID()] = true;
+			}
+		} catch (\Throwable) {
+			// Without the shortcut every hit takes the full check.
+		}
+		return $users;
+	}
+
+	/**
 	 * Ob $uid die Datei in ihrem eigenen Dateibaum findet - dieselbe Frage,
 	 * die UserFileResolver fuer die angemeldete Person stellt. Ein
 	 * unbekanntes Konto wirft beim Aufloesen und zaehlt als "sieht sie nicht".
 	 */
 	private function canSee(string $uid, int $fileId): bool {
 		try {
-			return $this->rootFolder->getUserFolder($uid)->getById($fileId) !== [];
+			return $this->rootFolder->getUserFolder($uid)->getFirstNodeById($fileId) !== null;
 		} catch (\Throwable) {
 			return false;
 		}

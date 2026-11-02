@@ -16,6 +16,8 @@ use OCP\AppFramework\Http;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\Node;
 use OCP\IAppConfig;
+use OCP\ICache;
+use OCP\ICacheFactory;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
@@ -68,7 +70,32 @@ class ConversionControllerTest extends TestCase {
 			$l,
 			$this->createMock(SoundFontService::class),
 			$this->createMock(ConversionBackend::class),
+			$this->cacheFactory ?? $this->noCache(),
 		);
+	}
+
+	private ?ICacheFactory $cacheFactory = null;
+
+	private function noCache(): ICacheFactory {
+		$factory = $this->createMock(ICacheFactory::class);
+		$factory->method('isAvailable')->willReturn(false);
+		return $factory;
+	}
+
+	/** A memory cache that behaves like one - for the requeue throttle. */
+	private function withCache(): void {
+		$store = [];
+		$cache = $this->createMock(ICache::class);
+		$cache->method('get')->willReturnCallback(function (string $key) use (&$store) {
+			return $store[$key] ?? null;
+		});
+		$cache->method('set')->willReturnCallback(function (string $key, $value) use (&$store) {
+			$store[$key] = $value;
+			return true;
+		});
+		$this->cacheFactory = $this->createMock(ICacheFactory::class);
+		$this->cacheFactory->method('isAvailable')->willReturn(true);
+		$this->cacheFactory->method('createDistributed')->willReturn($cache);
 	}
 
 	/** @return Node&MockObject */
@@ -201,6 +228,33 @@ class ConversionControllerTest extends TestCase {
 		$response = $this->controller()->status(42);
 
 		$this->assertSame($status, $response->getData()['status']);
+	}
+
+	public function testRepeatedPollsQueueTheConversionOncePerInterval(): void {
+		$this->withCache();
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->fileResolver->method('currentUserId')->willReturn('anna');
+		$this->conversionService->method('find')->willReturn(null);
+		$this->clientFallback->method('reason')->willReturn(null);
+		$this->jobList->expects($this->once())->method('add');
+
+		$controller = $this->controller();
+		for ($i = 0; $i < 5; $i++) {
+			$this->assertSame(ScoreConversion::STATUS_PENDING, $controller->status(42)->getData()['status']);
+		}
+	}
+
+	public function testReconvertQueuesEvenRightAfterAPoll(): void {
+		$this->withCache();
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->fileResolver->method('currentUserId')->willReturn('anna');
+		$this->conversionService->method('find')->willReturn(null);
+		$this->clientFallback->method('reason')->willReturn(null);
+		$this->jobList->expects($this->exactly(2))->method('add');
+
+		$controller = $this->controller();
+		$controller->status(42);
+		$controller->reconvert(42);
 	}
 
 	public function testNeuKonvertierenVerwirftEinenTotenLauf(): void {

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Db;
 
 use OCP\AppFramework\Db\Entity;
+use OCP\DB\Types;
 
 /**
  * Eine ernannte Leitung einer Partitur (Migration
@@ -31,7 +32,7 @@ class Leader extends Entity {
 	protected $createdAt;
 
 	public function __construct() {
-		$this->addType('fileId', 'integer');
-		$this->addType('createdAt', 'datetime');
+		$this->addType('fileId', Types::INTEGER);
+		$this->addType('createdAt', Types::DATETIME);
 	}
 }

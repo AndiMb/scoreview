@@ -177,8 +177,6 @@ export default {
 }
 </script>
 
-<style scoped src="./scoreviewPopover.css"></style>
-
 <style scoped>
 .scoreview-loop-save {
 	display: flex;

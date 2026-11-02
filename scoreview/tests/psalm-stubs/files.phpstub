@@ -1,0 +1,10 @@
+<?php
+
+// The Files app ships with the server; its event is not part of OCP.
+
+namespace OCA\Files\Event;
+
+use OCP\EventDispatcher\Event;
+
+class LoadAdditionalScriptsEvent extends Event {
+}

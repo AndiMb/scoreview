@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Tests\Unit\BackgroundJob;
 
 use OCA\ScoreView\BackgroundJob\CleanupOrphansJob;
 use OCA\ScoreView\Db\AnnotationMapper;
+use OCA\ScoreView\Db\FileCacheLookup;
 use OCA\ScoreView\Db\FollowMapper;
 use OCA\ScoreView\Db\FollowSession;
 use OCA\ScoreView\Db\LeaderMapper;
@@ -37,6 +38,7 @@ use Psr\Log\LoggerInterface;
  */
 class CleanupOrphansJobTest extends TestCase {
 	private IRootFolder&MockObject $rootFolder;
+	private FileCacheLookup&MockObject $fileCache;
 	private ConversionService&MockObject $conversionService;
 	private ScoreConversionMapper&MockObject $conversionMapper;
 	private AnnotationMapper&MockObject $annotationMapper;
@@ -49,9 +51,15 @@ class CleanupOrphansJobTest extends TestCase {
 	private PracticeLogService&MockObject $practiceLogService;
 	private SingRunMapper&MockObject $singRuns;
 	private ITimeFactory&MockObject $time;
+	/** @var int[] */
+	private array $inFileCache = [];
 
 	protected function setUp(): void {
 		$this->rootFolder = $this->createMock(IRootFolder::class);
+		// By default no fileId has a filecache row, so every one reaches the
+		// getById() check the tests below are about.
+		$this->fileCache = $this->createMock(FileCacheLookup::class);
+		$this->fileCache->method('existingIds')->willReturnCallback(fn () => $this->inFileCache);
 		$this->conversionService = $this->createMock(ConversionService::class);
 		$this->conversionMapper = $this->createMock(ScoreConversionMapper::class);
 		$this->annotationMapper = $this->createMock(AnnotationMapper::class);
@@ -72,6 +80,7 @@ class CleanupOrphansJobTest extends TestCase {
 		$job = new CleanupOrphansJob(
 			$this->time,
 			$this->rootFolder,
+			$this->fileCache,
 			$this->conversionService,
 			$this->conversionMapper,
 			$this->annotationMapper,
@@ -267,6 +276,35 @@ class CleanupOrphansJobTest extends TestCase {
 		$this->dateienBestand([]);
 
 		$this->conversionService->expects($this->once())->method('deleteAllForFile')->with(42);
+
+		$this->jobLaufenLassen();
+	}
+
+	// --- Batched pre-filter (filecache) ----------------------------------
+
+	public function testAFileIdWithAFileCacheRowIsNeverResolvedOneByOne(): void {
+		$this->conversionMapper->method('findAllFileIds')->willReturn([1, 2, 3]);
+		$this->inFileCache = [1, 3];
+
+		$resolved = [];
+		$this->rootFolder->method('getById')->willReturnCallback(function (int $id) use (&$resolved): array {
+			$resolved[] = $id;
+			return [];
+		});
+		$this->conversionService->expects($this->once())->method('deleteAllForFile')->with(2);
+
+		$this->jobLaufenLassen();
+
+		$this->assertSame([2], $resolved, 'only the fileId missing from filecache goes through getById()');
+	}
+
+	public function testDeletesNothingWhenTheFileCacheQueryFails(): void {
+		$this->conversionMapper->method('findAllFileIds')->willReturn([42]);
+		$this->fileCache = $this->createMock(FileCacheLookup::class);
+		$this->fileCache->method('existingIds')->willThrowException(new \RuntimeException('DB weg'));
+
+		$this->conversionService->expects($this->never())->method('deleteAllForFile');
+		$this->rootFolder->expects($this->never())->method('getById');
 
 		$this->jobLaufenLassen();
 	}

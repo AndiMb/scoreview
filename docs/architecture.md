@@ -1718,6 +1718,17 @@ Files-App des Servers das Objekt je ansieht. Eine Abfrage darauf ist immer
 wahr. Zwei Einträge stören nicht, weil kein Stand beide Listen liest – der
 jeweils andere bleibt unbeachtet, es gibt weiterhin genau einen Menüeintrag.
 
+**Nur in Files, nicht überall, wo Nextclouds Viewer öffnet.** Eingehängt wird
+`viewer.js` über `OCA\Files\Event\LoadAdditionalScriptsEvent`, nicht über
+`OCA\Viewer\Event\LoadViewer`, das auch Talk, Deck oder die Aktivitäten
+auslösen. Das ist Absicht: Der Viewer braucht eine gelockerte CSP
+(`wasm-unsafe-eval` für die Wiedergabe, `blob:` für den Rückfall E7), und die
+gewährt `Listener\AddCspListener` nur für Anfragen unter `/apps/files` – das
+Ereignis lockert sonst jede Seite der Instanz. Eine Partitur, die in Talk
+geteilt wird, öffnet deshalb über Files. Wer den Einstieg auf `LoadViewer`
+ausdehnt, muss die CSP-Eingrenzung im selben Zug mitziehen, sonst bleibt der
+Viewer dort stumm.
+
 Der **dritte Einstieg** ist eine zweite Dateiaktion derselben Bauart, auf
 Namen, die auf `.setlist.md` enden: „Als Setliste öffnen“ öffnet dieselbe
 Komponente im selben `NcModal`, nur mit einer Setliste

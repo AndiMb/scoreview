@@ -8,7 +8,6 @@ use OCA\ScoreView\Db\Annotation;
 use OCA\ScoreView\Db\AnnotationMapper;
 use OCA\ScoreView\Service\AnnotationLimitException;
 use OCA\ScoreView\Service\AnnotationService;
-use OCP\IUser;
 use OCP\IUserManager;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -166,9 +165,7 @@ class AnnotationServiceTest extends TestCase {
 	}
 
 	public function testSerializeLiefertAutornamenNurFuerGeteilteNotizen(): void {
-		$user = $this->createMock(IUser::class);
-		$user->method('getDisplayName')->willReturn('Bob Beispiel');
-		$this->userManager->method('get')->with('bob')->willReturn($user);
+		$this->userManager->method('getDisplayName')->with('bob')->willReturn('Bob Beispiel');
 
 		$geteilt = $this->service->serialize($this->annotation('bob', Annotation::VISIBILITY_SHARED), 'alice');
 		$privat = $this->service->serialize($this->annotation('bob', Annotation::VISIBILITY_PRIVATE), 'alice');
@@ -178,7 +175,7 @@ class AnnotationServiceTest extends TestCase {
 	}
 
 	public function testSerializeFaelltAufUserIdZurueckWennKontoGeloescht(): void {
-		$this->userManager->method('get')->willReturn(null);
+		$this->userManager->method('getDisplayName')->willReturn(null);
 
 		$data = $this->service->serialize($this->annotation('bob', Annotation::VISIBILITY_SHARED), 'alice');
 
@@ -368,9 +365,7 @@ class AnnotationServiceTest extends TestCase {
 	}
 
 	public function testSerializeNenntDieLeitungEinerStimmnotiz(): void {
-		$user = $this->createMock(IUser::class);
-		$user->method('getDisplayName')->willReturn('Chorleitung');
-		$this->userManager->method('get')->willReturn($user);
+		$this->userManager->method('getDisplayName')->willReturn('Chorleitung');
 
 		$data = $this->service->serialize($this->annotation('bob', Annotation::VISIBILITY_PARTS), 'alice');
 

@@ -162,7 +162,7 @@ class HealthService {
 		try {
 			$qb = $this->db->getQueryBuilder();
 			$qb->select('status')
-				->selectAlias($qb->createFunction('COUNT(*)'), 'cnt')
+				->selectAlias($qb->func()->count(), 'cnt')
 				->from('scoreview_conversions')
 				->groupBy('status');
 			$result = $qb->executeQuery();

@@ -12,7 +12,7 @@ use OCP\Files\IRootFolder;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUser;
-use OCP\Search\IProvider;
+use OCP\Search\IFilteringProvider;
 use OCP\Search\ISearchQuery;
 use OCP\Search\SearchResult;
 use OCP\Search\SearchResultEntry;
@@ -30,7 +30,7 @@ use OCP\Search\SearchResultEntry;
  * Because dropped rows leave gaps, it reads on in up to three rounds until
  * the page is full; the cursor is the row offset behind the last row read.
  */
-class ScoreSearchProvider implements IProvider {
+class ScoreSearchProvider implements IFilteringProvider {
 	/** Files has order 5 on its own pages; scores come soon after there. */
 	private const ORDER_FILES = 25;
 	/** Everywhere else after files, contacts and calendar. */
@@ -57,6 +57,24 @@ class ScoreSearchProvider implements IProvider {
 
 	public function getOrder(string $route, array $routeParameters): ?int {
 		return str_starts_with($route, 'files.') ? self::ORDER_FILES : self::ORDER_ELSEWHERE;
+	}
+
+	/**
+	 * Only the search term: person, date or type are not something a score's
+	 * printed title can be narrowed by. Core assumes the same for a plain
+	 * IProvider; IFilteringProvider says it explicitly and is the interface
+	 * core builds on since 28.
+	 */
+	public function getSupportedFilters(): array {
+		return ['term'];
+	}
+
+	public function getAlternateIds(): array {
+		return [];
+	}
+
+	public function getCustomFilters(): array {
+		return [];
 	}
 
 	public function search(IUser $user, ISearchQuery $query): SearchResult {
@@ -86,14 +104,8 @@ class ScoreSearchProvider implements IProvider {
 					continue;
 				}
 				$seen[$fileId] = true;
-				$file = null;
-				foreach ($userFolder->getById($fileId) as $node) {
-					if ($node instanceof File) {
-						$file = $node;
-						break;
-					}
-				}
-				if ($file === null) {
+				$file = $userFolder->getFirstNodeById($fileId);
+				if (!$file instanceof File) {
 					continue;
 				}
 				$entries[] = $this->entry($file, $row->getTitle(), $row->getComposer(), $userFolder->getRelativePath($file->getPath()) ?? $file->getName());

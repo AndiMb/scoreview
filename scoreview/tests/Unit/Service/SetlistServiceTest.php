@@ -26,7 +26,7 @@ use Psr\Log\LoggerInterface;
  *
  * Der Dateibaum ist ein Array von Pfaden (relativ zum Nutzerordner) auf
  * Inhalte; daraus baut der Test Datei- und Ordner-Attrappen, die sich wie
- * Nextclouds Knoten verhalten - `get()` mit Pfad, `getById()`,
+ * Nextclouds Knoten verhalten - `get()` mit Pfad, `getFirstNodeById()`,
  * `getRelativePath()`. So laesst sich dieselbe Liste aus der Sicht zweier
  * Konten mit verschiedenen Freigaben lesen.
  */
@@ -49,7 +49,7 @@ class SetlistServiceTest extends TestCase {
 	private bool $rueckfall = false;
 	private int $maxBytes = 0;
 	private int $listings = 0;
-	/** @var ?callable Laeuft bei jedem getById() - fuer eine Aenderung mitten im Speichern. */
+	/** @var ?callable Laeuft bei jedem getFirstNodeById() - fuer eine Aenderung mitten im Speichern. */
 	private $beiGetById = null;
 
 	private IJobList&MockObject $jobList;
@@ -63,9 +63,10 @@ class SetlistServiceTest extends TestCase {
 		// Doubled except for needsConversion(): the warm-up asks that rule.
 		$this->conversions = $this->getMockBuilder(ConversionService::class)
 			->disableOriginalConstructor()
-			->onlyMethods(['find', 'isCurrent'])
+			->onlyMethods(['findMany', 'isCurrent'])
 			->getMock();
-		$this->conversions->method('find')->willReturnCallback(fn () => $this->konvertierung);
+		$this->conversions->method('findMany')->willReturnCallback(
+			fn (array $etags) => $this->konvertierung === null ? [] : array_map(fn () => $this->konvertierung, $etags));
 		$this->conversions->method('isCurrent')->willReturnCallback(fn () => $this->aktuellesFormat);
 	}
 
@@ -131,16 +132,16 @@ class SetlistServiceTest extends TestCase {
 		});
 		$ordner->method('get')->willReturnCallback(fn (string $relativ) => $this->finde($pfad . '/' . ltrim($relativ, '/')));
 		$ordner->method('nodeExists')->willReturnCallback(fn (string $name) => isset($this->baum[$pfad . '/' . $name]));
-		$ordner->method('getById')->willReturnCallback(function (int $id) {
+		$ordner->method('getFirstNodeById')->willReturnCallback(function (int $id) {
 			if ($this->beiGetById !== null) {
 				($this->beiGetById)();
 			}
 			foreach (array_keys($this->baum) as $p) {
 				if (self::id($p) === $id) {
-					return [$this->datei($p)];
+					return $this->datei($p);
 				}
 			}
-			return [];
+			return null;
 		});
 		$ordner->method('getDirectoryListing')->willReturnCallback(function () use ($pfad) {
 			$this->listings++;
@@ -287,7 +288,7 @@ class SetlistServiceTest extends TestCase {
 	public function testFehlerBeimAnstossenVerhindertDasOeffnenNicht(): void {
 		$this->chorBaum();
 		$this->conversions = $this->createMock(ConversionService::class);
-		$this->conversions->method('find')->willThrowException(new \RuntimeException('DB weg'));
+		$this->conversions->method('findMany')->willThrowException(new \RuntimeException('DB weg'));
 
 		$liste = $this->service()->load($this->liste(), 'anna');
 

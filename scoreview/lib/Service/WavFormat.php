@@ -28,7 +28,7 @@ class WavFormat {
 	public const CHANNELS = 1;
 	public const BITS = 16;
 	/** Bytes je Sekunde Audio: 16000 Samples zu 2 Byte. */
-	public const BYTES_PER_SECOND = self::SAMPLE_RATE * self::CHANNELS * (self::BITS / 8);
+	public const BYTES_PER_SECOND = self::SAMPLE_RATE * self::CHANNELS * (self::BITS >> 3);
 	/** Mehr als RIFF-, fmt- und data-Kopf braucht die eigene Datei nicht. */
 	public const MAX_HEADER_BYTES = 1024;
 	/** So viel liest inspectHead() hoechstens: der Kopf samt dem Kopf des data-Blocks. */

@@ -161,6 +161,7 @@ jobs:
             --exclude='scoreview/tools' \
             --exclude='scoreview/translationfiles' \
             --exclude='scoreview/.php-cs-fixer*' \
+            --exclude='scoreview/psalm.xml' \
             --exclude='scoreview/.stylelintrc.json' \
             --exclude='scoreview/eslint.config.mjs' \
             --exclude='scoreview/package.json' \

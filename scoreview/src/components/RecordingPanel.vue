@@ -365,6 +365,7 @@
 </template>
 
 <script>
+import { getCanonicalLocale } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
@@ -547,7 +548,7 @@ export default {
 		formatDuration,
 
 		formatDate(seconds) {
-			return new Date(seconds * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })
+			return new Date(seconds * 1000).toLocaleString(getCanonicalLocale(), { dateStyle: 'short', timeStyle: 'short' })
 		},
 
 		problemText(problem) {

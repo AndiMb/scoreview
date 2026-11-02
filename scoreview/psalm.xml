@@ -1,0 +1,77 @@
+<?xml version="1.0"?>
+<!--
+	Static analysis against the OCP stubs (nextcloud/ocp in vendor/), run in
+	CI against the lower and the upper Nextcloud version of info.xml.
+
+	Its main job here is what the unit tests cannot see: the tests run against
+	interface mocks, and a mock happily accepts a deprecated or removed
+	method. Deprecations are therefore errors - against OCP 35 they show what
+	the next minimum version will cost. The few that are suppressed below have
+	no replacement within the supported range.
+
+	Psalm is not in composer.json (it would pin the whole dev tree); run the
+	phar from vimeo/psalm's releases from scoreview/: php psalm.phar
+-->
+<psalm
+	errorLevel="4"
+	phpVersion="8.1"
+	resolveFromConfigFile="true"
+	findUnusedCode="false"
+	findUnusedBaselineEntry="true"
+	findUnusedIssueHandlerSuppression="false"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns="https://getpsalm.org/schema/config"
+	xsi:schemaLocation="https://getpsalm.org/schema/config vendor/vimeo/psalm/config.xsd"
+>
+	<projectFiles>
+		<directory name="lib" />
+		<ignoreFiles>
+			<directory name="vendor" />
+		</ignoreFiles>
+	</projectFiles>
+	<extraFiles>
+		<directory name="vendor/nextcloud/ocp" />
+		<directory name="vendor/psr" />
+	</extraFiles>
+	<stubs>
+		<file name="tests/psalm-stubs/guzzle.phpstub" preloadClasses="true" />
+		<file name="tests/psalm-stubs/files.phpstub" preloadClasses="true" />
+	</stubs>
+	<issueHandlers>
+		<!-- The OCP stubs name Doctrine's schema classes in docblocks
+			(ISchemaWrapper), but Doctrine ships with the server. -->
+		<UndefinedDocblockClass>
+			<errorLevel type="suppress">
+				<referencedClass name="Doctrine\DBAL\Schema\Table" />
+			</errorLevel>
+		</UndefinedDocblockClass>
+		<!-- Template mismatches inside the stubs themselves are not ours. -->
+		<InvalidTemplateParam>
+			<errorLevel type="suppress">
+				<directory name="vendor/nextcloud/ocp" />
+			</errorLevel>
+		</InvalidTemplateParam>
+		<!-- #[\Override] exists from PHP 8.3; the app supports 8.1. -->
+		<MissingOverrideAttribute errorLevel="suppress" />
+		<!-- Casts on values from fstat(), the database or a request stay on
+			purpose: the stubs promise a type the runtime does not always keep. -->
+		<RedundantCast errorLevel="info" />
+		<RedundantFunctionCall errorLevel="info" />
+		<DeprecatedMethod errorLevel="error">
+			<errorLevel type="suppress">
+				<!-- Deprecated in 33 for IUserConfig, which exists from 32;
+					the minimum is 31 (see the class comment of
+					Service\ViewerPreferences). -->
+				<referencedMethod name="OCP\IConfig::getUserValue" />
+				<referencedMethod name="OCP\IConfig::setUserValue" />
+				<referencedMethod name="OCP\IConfig::deleteUserValue" />
+				<!-- Deprecated in 35 for filteredSearch(), which is new in 35. -->
+				<referencedMethod name="OCP\Collaboration\Collaborators\ISearch::search" />
+			</errorLevel>
+		</DeprecatedMethod>
+		<DeprecatedClass errorLevel="error" />
+		<DeprecatedInterface errorLevel="error" />
+		<DeprecatedConstant errorLevel="error" />
+		<DeprecatedProperty errorLevel="error" />
+	</issueHandlers>
+</psalm>

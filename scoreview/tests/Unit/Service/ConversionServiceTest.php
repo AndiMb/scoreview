@@ -53,6 +53,22 @@ class ConversionServiceTest extends TestCase {
 		return new ConversionService($this->mapper, new ArtifactStore($this->appData), $this->time, $this->createMock(VariantService::class), $this->backend, $this->localConverter);
 	}
 
+	public function testFindManyKeepsOnlyTheRowOfTheCurrentEtag(): void {
+		$row = function (int $fileId, string $etag): ScoreConversion {
+			$c = new ScoreConversion();
+			$c->setFileId($fileId);
+			$c->setEtag($etag);
+			return $c;
+		};
+		$this->mapper->expects($this->once())->method('findByFileIds')->with([1, 2, 3])
+			->willReturn([$row(1, 'alt'), $row(1, 'neu'), $row(2, 'x')]);
+
+		$found = $this->service()->findMany([1 => 'neu', 2 => 'y', 3 => 'z']);
+
+		$this->assertSame([1], array_keys($found));
+		$this->assertSame('neu', $found[1]->getEtag());
+	}
+
 	// --- Allowlist der Artefakte ------------------------------------------
 
 	/**

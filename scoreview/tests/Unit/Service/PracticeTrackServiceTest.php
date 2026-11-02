@@ -200,7 +200,7 @@ class PracticeTrackServiceTest extends TestCase {
 	}
 
 	public function testEigenerOrdnerNurImNutzerordner(): void {
-		$this->userFolder->method('getById')->willReturn([]);
+		$this->userFolder->method('getFirstNodeById')->willReturn(null);
 		$this->expectExceptionObject(new SiblingFileException(SiblingFileException::INVALID));
 		$this->service()->save($this->score, 'anna', $this->mp3(), 'x', 'own', 77, false);
 	}

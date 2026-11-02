@@ -33,7 +33,7 @@ class ScoreSearchProviderTest extends TestCase {
 	protected function setUp(): void {
 		$this->mapper = $this->createMock(ScoreConversionMapper::class);
 		$this->userFolder = $this->createMock(Folder::class);
-		$this->userFolder->method('getById')->willReturnCallback(fn (int $id) => isset($this->files[$id]) ? [$this->files[$id]] : []);
+		$this->userFolder->method('getFirstNodeById')->willReturnCallback(fn (int $id) => $this->files[$id] ?? null);
 		$this->userFolder->method('getRelativePath')->willReturnCallback(fn (string $p) => substr($p, strlen('/anna/files')));
 	}
 

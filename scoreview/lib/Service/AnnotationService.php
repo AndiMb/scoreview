@@ -77,7 +77,7 @@ class AnnotationService {
 		// Auch bei Stimmnotizen: Wer die Leitung ist, soll man sehen,
 		// und in einem Chor mit mehreren Leitungen auch, welche.
 		$data['authorName'] = in_array($a->getVisibility(), [Annotation::VISIBILITY_SHARED, Annotation::VISIBILITY_PARTS], true)
-			? ($this->userManager->get($a->getUserId())?->getDisplayName() ?? $a->getUserId())
+			? ($this->userManager->getDisplayName($a->getUserId()) ?? $a->getUserId())
 			: null;
 		if ($currentMeasureCount !== null) {
 			// "Verwaist" (nicht aufloesbare Notizen sichtbar als verwaist

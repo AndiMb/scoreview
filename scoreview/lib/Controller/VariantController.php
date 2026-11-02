@@ -8,6 +8,7 @@ use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreVariant;
+use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
@@ -20,7 +21,7 @@ use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
-use OCP\AppFramework\Http\StreamResponse;
+use OCP\Files\File;
 use OCP\Files\NotFoundException;
 use OCP\IL10N;
 use OCP\IRequest;
@@ -80,7 +81,7 @@ class VariantController extends Controller {
 	public function status(int $fileId, string $key): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$parsed = VariantKey::parse($key);
-		if ($node === null || $parsed === null) {
+		if (!$node instanceof File || $parsed === null) {
 			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 
@@ -169,8 +170,7 @@ class VariantController extends Controller {
 		} catch (NotFoundException) {
 			return new JSONResponse(['error' => $this->l->t('Requested file does not exist.')], Http::STATUS_NOT_FOUND);
 		}
-		$response = new StreamResponse($file->read());
-		$response->addHeader('Content-Type', $mimeType);
+		$response = new ArtifactResponse($file->read(), $mimeType, $this->request, $file->getSize());
 		$response->addHeader('Content-Disposition', 'attachment');
 		$response->setETag($etag);
 		$response->setLastModified($variant->getUpdatedAt());

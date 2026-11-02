@@ -2480,7 +2480,8 @@ export default {
 }
 </script>
 
-<style scoped src="./scoreviewPopover.css"></style>
+<!-- Unscoped and only here - see the head of scoreviewPopover.css. -->
+<style src="./scoreviewPopover.css"></style>
 
 <style src="./boundedPopover.css"></style>
 

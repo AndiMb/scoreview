@@ -18,6 +18,14 @@ describe('days', () => {
 		expect(weekdayOf('2026-10-26')).toBe(0)
 		expect(weekdayOf('2026-11-01')).toBe(6)
 	})
+
+	it('counts the week from the first day of the locale', () => {
+		// Sunday first, as in en_US.
+		expect(weekdayOf('2026-11-01', 0)).toBe(0)
+		expect(weekdayOf('2026-10-31', 0)).toBe(6)
+		// Saturday first.
+		expect(weekdayOf('2026-10-31', 6)).toBe(0)
+	})
 })
 
 describe('createPracticeMeter', () => {

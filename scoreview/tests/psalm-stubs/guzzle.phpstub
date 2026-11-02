@@ -1,0 +1,37 @@
+<?php
+
+// Guzzle ships with the Nextcloud server, not with this package - only what
+// SidecarClient touches, with the signatures of Guzzle 7.
+
+namespace GuzzleHttp\Exception;
+
+interface GuzzleException extends \Throwable {
+}
+
+class TransferException extends \RuntimeException implements GuzzleException {
+}
+
+class RequestException extends TransferException {
+	public function getResponse(): ?\GuzzleHttp\Psr7\StubResponse {
+	}
+}
+
+class BadResponseException extends RequestException {
+	public function getResponse(): \GuzzleHttp\Psr7\StubResponse {
+	}
+}
+
+class ClientException extends BadResponseException {
+}
+
+class ServerException extends BadResponseException {
+}
+
+namespace GuzzleHttp\Psr7;
+
+/** Stands for Psr\Http\Message\ResponseInterface, which is not in vendor/ either. */
+interface StubResponse {
+	public function getStatusCode(): int;
+
+	public function getHeaderLine(string $name): string;
+}

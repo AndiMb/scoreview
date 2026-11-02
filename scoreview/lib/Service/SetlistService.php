@@ -101,7 +101,7 @@ class SetlistService {
 				'fileId' => $resolved['node']?->getId(),
 				'status' => $resolved['status'],
 			];
-			if ($resolved['status'] === self::STATUS_OK) {
+			if ($resolved['status'] === self::STATUS_OK && $resolved['node'] !== null) {
 				$toConvert[$resolved['node']->getId()] = $resolved['node'];
 			}
 		}
@@ -437,7 +437,7 @@ class SetlistService {
 				}
 				$items[] = ['content' => $existing[$origin]['content'], 'tail' => $existing[$origin]['tail']];
 			} elseif (isset($entry['fileId'])) {
-				$node = $userFolder->getById((int)$entry['fileId'])[0] ?? null;
+				$node = $userFolder->getFirstNodeById((int)$entry['fileId']);
 				if (!$node instanceof File) {
 					throw new SetlistException(SetlistException::INVALID);
 				}
@@ -489,11 +489,17 @@ class SetlistService {
 				// Wo der Server nicht konvertiert, gibt es vorab nichts zu waermen.
 				return;
 			}
+			$wanted = [];
 			foreach ($nodes as $node) {
-				if (ConversionConfig::exceedsMaxScoreBytes($this->appConfig, $node->getSize())) {
-					continue;
+				if (!ConversionConfig::exceedsMaxScoreBytes($this->appConfig, $node->getSize())) {
+					$wanted[$node->getId()] = $node;
 				}
-				$conversion = $this->conversionService->find($node->getId(), $node->getEtag());
+			}
+			// One query for the whole list - up to MAX_ENTRIES pieces.
+			$conversions = $this->conversionService->findMany(
+				array_map(static fn (Node $node) => $node->getEtag(), $wanted));
+			foreach ($wanted as $fileId => $node) {
+				$conversion = $conversions[$fileId] ?? null;
 				if ($this->conversionService->needsConversion($conversion, retryErrors: false)) {
 					$this->jobList->add(ConvertScoreJob::class, ['userId' => $uid, 'fileId' => $node->getId()]);
 				}
@@ -559,7 +565,7 @@ class SetlistService {
 	 */
 	private function assertUnchanged(Folder $userFolder, File $setlist, string $etagBefore, string $textBefore): void {
 		try {
-			$fresh = $userFolder->getById($setlist->getId())[0] ?? null;
+			$fresh = $userFolder->getFirstNodeById($setlist->getId());
 			$unchanged = $fresh instanceof File
 				&& $fresh->getEtag() === $etagBefore
 				&& $this->read($fresh) === $textBefore;

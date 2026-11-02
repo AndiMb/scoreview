@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Middleware;
 
+use OCP\Files\Node;
+
 /**
  * Womit sich die laufende Anfrage ausgewiesen hat - gesetzt von
  * DirectAccessMiddleware, gelesen von den Controllern, die danach
@@ -35,6 +37,8 @@ class DirectAccessContext {
 	private ?int $originFileId = null;
 	private ?string $directDigest = null;
 	private bool $resolved = false;
+	private ?string $nodeUid = null;
+	private ?Node $node = null;
 
 	/** Die Middleware hat eine angemeldete Sitzung festgestellt. */
 	public function setSession(): void {
@@ -80,5 +84,29 @@ class DirectAccessContext {
 
 	public function directDigest(): ?string {
 		return $this->directDigest;
+	}
+
+	/**
+	 * The file the middleware already resolved for this request, from the
+	 * token user's own tree. Service\UserFileResolver hands it out instead
+	 * of resolving the same fileId a second time - on the token path that
+	 * is the dominant cost of every request, and the "Follow me" poll of a
+	 * phone makes one every 800 ms.
+	 */
+	public function rememberNode(string $uid, Node $node): void {
+		$this->nodeUid = $uid;
+		$this->node = $node;
+	}
+
+	/** The remembered node, only for the same user and the same fileId. */
+	public function knownNode(string $uid, int $fileId): ?Node {
+		if ($this->node === null || $this->nodeUid !== $uid) {
+			return null;
+		}
+		try {
+			return $this->node->getId() === $fileId ? $this->node : null;
+		} catch (\Throwable) {
+			return null;
+		}
 	}
 }

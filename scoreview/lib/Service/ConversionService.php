@@ -94,6 +94,27 @@ class ConversionService {
 		return $this->mapper->findByFileIdAndEtag($fileId, $etag);
 	}
 
+	/**
+	 * find() for many files in one query.
+	 *
+	 * @param array<int, string> $etags fileId => etag
+	 * @return array<int, ScoreConversion> fileId => the row for that etag;
+	 *                                     files without one are left out
+	 */
+	public function findMany(array $etags): array {
+		if ($etags === []) {
+			return [];
+		}
+		$found = [];
+		foreach ($this->mapper->findByFileIds(array_keys($etags)) as $conversion) {
+			$fileId = $conversion->getFileId();
+			if (($etags[$fileId] ?? null) === $conversion->getEtag()) {
+				$found[$fileId] = $conversion;
+			}
+		}
+		return $found;
+	}
+
 	public function createPending(int $fileId, string $etag): ScoreConversion {
 		$now = new \DateTime();
 		$conversion = new ScoreConversion();

@@ -16,6 +16,7 @@ use OCP\AppFramework\Middleware;
 use OCP\DirectEditing\IManager;
 use OCP\DirectEditing\IToken;
 use OCP\Files\IRootFolder;
+use OCP\Files\Node;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IRequest;
@@ -153,7 +154,7 @@ class DirectAccessMiddleware extends Middleware {
 		$digest = CompanionTokenService::digest($header);
 		$companion = $this->request->getHeader(self::COMPANION_HEADER);
 		if ($companion !== '') {
-			$this->companion($attribute, $companion, $uid, $digest);
+			$this->context->rememberNode($uid, $this->companion($attribute, $companion, $uid, $digest));
 			$this->userSession->setVolatileActiveUser($user);
 			$this->volatileSetHere = true;
 			$this->context->setToken(DirectAccessContext::COMPANION, $file->getId(), $digest);
@@ -187,6 +188,10 @@ class DirectAccessMiddleware extends Middleware {
 		}
 
 		$this->context->setToken(DirectAccessContext::DIRECT, $file->getId(), $digest);
+		// Core resolved the token's file from the user's own tree
+		// (Manager::getFileForToken) - the same answer the controller would
+		// get, so it need not ask again.
+		$this->context->rememberNode($uid, $file);
 	}
 
 	/**
@@ -196,9 +201,10 @@ class DirectAccessMiddleware extends Middleware {
 	 * (Route, Signatur, Bindung), dann die Nutzereinstellung, zuletzt der
 	 * Dateibaum.
 	 *
+	 * @return Node the requested file, resolved from the user's own tree
 	 * @throws DirectAccessException
 	 */
-	private function companion(DirectTokenOrSession $attribute, string $companion, string $uid, string $digest): void {
+	private function companion(DirectTokenOrSession $attribute, string $companion, string $uid, string $digest): Node {
 		// Welche Routen ueberhaupt einen Begleiter nehmen, steht am Attribut:
 		// weder die Ausgabe (keine Kette) noch das Anlegen einer Liste
 		// noch Routen ohne Datei.
@@ -207,6 +213,14 @@ class DirectAccessMiddleware extends Middleware {
 			throw new DirectAccessException(Http::STATUS_FORBIDDEN, 'companion_not_allowed');
 		}
 
+		// Deliberately without IThrottler, for both kinds of token. Neither
+		// can be guessed - core draws 64 random alphanumerics for a Direct
+		// Editing token, a companion carries an HMAC-SHA256 - so counting
+		// failures adds no protection. But it would hurt: a rehearsal room shares one address behind NAT, core answers
+		// 429 after a handful of failures per address, and failures come in
+		// crowds there for legitimate reasons - pages left open past their
+		// expiry, or every phone at once after the companion secret was
+		// renewed to revoke all tokens.
 		try {
 			$claims = $this->companions->verify($companion);
 		} catch (CompanionTokenException $e) {
@@ -236,13 +250,14 @@ class DirectAccessMiddleware extends Middleware {
 		// ueberlebt keinen Freigabeentzug. 404 wie in den Controllern, damit
 		// sich auch hier keine fileIds abtasten lassen.
 		try {
-			$nodes = $this->rootFolder->getUserFolder($uid)->getById($claims['fid']);
+			$node = $this->rootFolder->getUserFolder($uid)->getFirstNodeById($claims['fid']);
 		} catch (Throwable) {
-			$nodes = [];
+			$node = null;
 		}
-		if ($nodes === []) {
+		if ($node === null) {
 			throw new DirectAccessException(Http::STATUS_NOT_FOUND, 'not_found');
 		}
+		return $node;
 	}
 
 	public function afterController(Controller $controller, string $methodName, Response $response): Response {

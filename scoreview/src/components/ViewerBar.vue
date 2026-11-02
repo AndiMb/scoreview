@@ -978,8 +978,6 @@ export default {
 }
 </script>
 
-<style scoped src="./scoreviewPopover.css"></style>
-
 <style scoped>
 .scoreview-play {
 	flex: 0 0 auto;
@@ -1140,7 +1138,7 @@ export default {
 	margin: 0 0 4px 0;
 	padding: 6px 8px;
 	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius-large, 8px);
+	border-radius: var(--border-radius-element, 8px);
 	background: var(--color-main-background);
 	color: var(--color-main-text);
 	text-align: start;

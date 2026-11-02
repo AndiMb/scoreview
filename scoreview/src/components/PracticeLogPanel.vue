@@ -79,7 +79,7 @@
 </template>
 
 <script>
-import { getLanguage } from '@nextcloud/l10n'
+import { getCanonicalLocale } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { translate } from '../l10n.js'
@@ -161,11 +161,11 @@ export default {
 		},
 
 		dayName(day) {
-			return this.dateOf(day).toLocaleDateString(getLanguage(), { weekday: 'long' })
+			return this.dateOf(day).toLocaleDateString(getCanonicalLocale(), { weekday: 'long' })
 		},
 
 		dayLetter(day) {
-			return this.dateOf(day).toLocaleDateString(getLanguage(), { weekday: 'narrow' })
+			return this.dateOf(day).toLocaleDateString(getCanonicalLocale(), { weekday: 'narrow' })
 		},
 
 		saveGoal() {

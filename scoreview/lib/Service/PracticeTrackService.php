@@ -133,7 +133,7 @@ class PracticeTrackService {
 		if ($folderId === null) {
 			throw new SiblingFileException(SiblingFileException::INVALID);
 		}
-		$node = $this->rootFolder->getUserFolder($userId)->getById($folderId)[0] ?? null;
+		$node = $this->rootFolder->getUserFolder($userId)->getFirstNodeById($folderId);
 		if (!$node instanceof Folder) {
 			throw new SiblingFileException(SiblingFileException::INVALID);
 		}

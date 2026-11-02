@@ -82,7 +82,7 @@ class RecordingController extends Controller {
 			// viewer, like part annotations: "for the altos" is a matter of
 			// display, not of access.
 			'shared' => array_map(fn (Recording $r) => $this->serialize($r) + [
-				'authorName' => $this->userManager->get($r->getUserId())?->getDisplayName(),
+				'authorName' => $this->userManager->getDisplayName($r->getUserId()),
 			], $this->recordings->listShared($fileId, $userId)),
 			'maxPerScore' => $this->features->maxRecordingsPerScore(),
 			'maxSeconds' => $this->features->maxRecordingSeconds(),

@@ -75,5 +75,3 @@ export default {
 	},
 }
 </script>
-
-<style scoped src="./scoreviewPopover.css"></style>

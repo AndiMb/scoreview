@@ -323,7 +323,7 @@ export default {
 	padding: 6px 8px;
 	margin: 0;
 	border: none;
-	border-radius: var(--border-radius);
+	border-radius: var(--border-radius-element, 8px);
 	background: transparent;
 	text-align: start;
 	cursor: pointer;

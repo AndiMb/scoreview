@@ -31,6 +31,25 @@ class ScoreConversionMapper extends QBMapper {
 	}
 
 	/**
+	 * The rows of many files at once, whatever their etag - one query per
+	 * 1000 fileIds (Oracle's IN limit) instead of one per file.
+	 *
+	 * @param int[] $fileIds
+	 * @return ScoreConversion[]
+	 */
+	public function findByFileIds(array $fileIds): array {
+		$found = [];
+		foreach (array_chunk(array_values(array_unique($fileIds)), 1000) as $chunk) {
+			$qb = $this->db->getQueryBuilder();
+			$qb->select('*')
+				->from($this->getTableName())
+				->where($qb->expr()->in('file_id', $qb->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)));
+			array_push($found, ...$this->findEntities($qb));
+		}
+		return $found;
+	}
+
+	/**
 	 * Alle fileIds mit einem Cache-Eintrag - fuer den Aufraeum-Job.
 	 *
 	 * @return int[]

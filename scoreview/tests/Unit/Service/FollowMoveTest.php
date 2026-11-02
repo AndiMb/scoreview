@@ -113,7 +113,7 @@ class FollowMoveTest extends TestCase {
 
 		// Der Nutzerordner liefert die Herkunft als Knoten (getragene Leitung).
 		$folder = $this->createMock(Folder::class);
-		$folder->method('getById')->willReturnCallback(fn (int $id) => [$this->node($id)]);
+		$folder->method('getFirstNodeById')->willReturnCallback(fn (int $id) => $this->node($id));
 		$root = $this->createMock(IRootFolder::class);
 		$root->method('getUserFolder')->willReturn($folder);
 

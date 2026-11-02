@@ -13,7 +13,7 @@ use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Http;
-use OCP\Files\Node;
+use OCP\Files\File;
 use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IL10N;
 use OCP\IRequest;
@@ -77,7 +77,7 @@ class VariantControllerTest extends TestCase {
 	}
 
 	private function withFile(): void {
-		$node = $this->createMock(Node::class);
+		$node = $this->createMock(File::class);
 		$node->method('getEtag')->willReturn('e1');
 		$this->fileResolver->method('resolveOwnNode')->willReturn($node);
 	}

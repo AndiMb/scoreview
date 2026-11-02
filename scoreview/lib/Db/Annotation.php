@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Db;
 
 use OCP\AppFramework\Db\Entity;
+use OCP\DB\Types;
 
 /**
  * Private Notiz einer Nutzerin zu einer musikalischen Position (siehe
@@ -109,14 +110,14 @@ class Annotation extends Entity implements \JsonSerializable {
 	protected $endMeasure;
 
 	public function __construct() {
-		$this->addType('fileId', 'integer');
-		$this->addType('measureNumber', 'integer');
-		$this->addType('endMeasure', 'integer');
-		$this->addType('fraction', 'float');
-		$this->addType('elid', 'integer');
-		$this->addType('createdAt', 'datetime');
-		$this->addType('updatedAt', 'datetime');
-		$this->addType('byLeader', 'boolean');
+		$this->addType('fileId', Types::INTEGER);
+		$this->addType('measureNumber', Types::INTEGER);
+		$this->addType('endMeasure', Types::INTEGER);
+		$this->addType('fraction', Types::FLOAT);
+		$this->addType('elid', Types::INTEGER);
+		$this->addType('createdAt', Types::DATETIME);
+		$this->addType('updatedAt', Types::DATETIME);
+		$this->addType('byLeader', Types::BOOLEAN);
 	}
 
 	public function jsonSerialize(): array {

@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Controller;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
@@ -25,9 +26,12 @@ use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\StreamResponse;
 use OCP\BackgroundJob\IJobList;
+use OCP\Files\File;
 use OCP\Files\Node;
 use OCP\Files\NotFoundException;
 use OCP\IAppConfig;
+use OCP\ICache;
+use OCP\ICacheFactory;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
@@ -68,6 +72,19 @@ class ConversionController extends Controller {
 	 */
 	private const DEFAULT_CLIENT_MAX_BYTES = 10485760;
 
+	/**
+	 * How often a status poll queues the conversion again at most. Core's
+	 * IJobList::add() is an UPDATE when the job already exists (it resets
+	 * the reservation and pushes `last_checked`), and the viewer polls every
+	 * few seconds while it waits - on SQLite such writes collide with the
+	 * job that is converting. The UPDATE is still wanted now and then: it is
+	 * what frees a job whose cron run died while holding it.
+	 */
+	public const REQUEUE_INTERVAL_SECONDS = 60;
+
+	/** Null without a memory cache - then every poll queues, as before. */
+	private ?ICache $requeueCache;
+
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -80,8 +97,10 @@ class ConversionController extends Controller {
 		private IL10N $l,
 		private SoundFontService $soundFontService,
 		private ConversionBackend $backend,
+		ICacheFactory $cacheFactory,
 	) {
 		parent::__construct(Application::APP_ID, $request);
+		$this->requeueCache = $cacheFactory->isAvailable() ? $cacheFactory->createDistributed('scoreview-requeue') : null;
 	}
 
 	/**
@@ -256,16 +275,33 @@ class ConversionController extends Controller {
 		}
 
 		$this->conversionService->deleteAllForFile($fileId);
-		$this->retryConversion($fileId);
+		$this->queueConversion($fileId);
 		return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 	}
 
 	/** Reiht eine (Neu-)Konvertierung ein - Idempotenz/Ueberspringen bereits laufender Jobs regelt ConvertScoreJob selbst. */
-	private function retryConversion(int $fileId): void {
+	private function queueConversion(int $fileId): void {
 		$this->jobList->add(ConvertScoreJob::class, [
 			'userId' => $this->fileResolver->currentUserId(),
 			'fileId' => $fileId,
 		]);
+	}
+
+	/**
+	 * queueConversion() from a status poll - at most once per
+	 * REQUEUE_INTERVAL_SECONDS for the same file and user.
+	 */
+	private function retryConversion(int $fileId): void {
+		if ($this->requeueCache === null) {
+			$this->queueConversion($fileId);
+			return;
+		}
+		$key = $fileId . ':' . ($this->fileResolver->currentUserId() ?? '');
+		if ($this->requeueCache->get($key) !== null) {
+			return;
+		}
+		$this->queueConversion($fileId);
+		$this->requeueCache->set($key, 1, self::REQUEUE_INTERVAL_SECONDS);
 	}
 
 	/**
@@ -301,7 +337,7 @@ class ConversionController extends Controller {
 	#[DirectTokenOrSession(csrfInSession: false)]
 	public function source(int $fileId): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
-		if ($node === null) {
+		if (!$node instanceof File) {
 			return $this->notFound();
 		}
 
@@ -404,12 +440,12 @@ class ConversionController extends Controller {
 			return new JSONResponse(['error' => $this->l->t('Requested file does not exist.')], Http::STATUS_NOT_FOUND);
 		}
 
-		// StreamResponse akzeptiert auch ein resource-Handle (ISimpleFile::read())
-		// statt eines Pfads - IAppData kann auf Objektspeicher liegen, ein lokaler
-		// Dateipfad ist nicht garantiert. So landet der Dateiinhalt nie komplett
-		// als PHP-String im Speicher (vorher: getContent()/DataDisplayResponse).
-		$response = new StreamResponse($file->read());
-		$response->addHeader('Content-Type', $mimeType);
+		// Ein resource-Handle (ISimpleFile::read()) statt eines Pfads - IAppData
+		// kann auf Objektspeicher liegen, ein lokaler Dateipfad ist nicht
+		// garantiert. So landet der Dateiinhalt nie komplett als PHP-String im
+		// Speicher. ArtifactResponse streams it and gzips SVG and JSON on the
+		// way out, which the stock web server config does not.
+		$response = new ArtifactResponse($file->read(), $mimeType, $this->request, $file->getSize());
 		// Die Bereinigung des SVG sitzt im Browser (ScorePage.vue ->
 		// lib/svgSanitizer.js) und greift nur, wo der Viewer es holt. Wer
 		// diese URL direkt aufruft, bekaeme das SVG als DOKUMENT auf der

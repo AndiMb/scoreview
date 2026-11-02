@@ -580,7 +580,7 @@ export default {
 
 .scoreview-annotation {
 	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius, 4px);
+	border-radius: var(--border-radius-small, 4px);
 	padding: 8px;
 }
 
@@ -668,7 +668,7 @@ export default {
 	margin: 0;
 	padding: 4px;
 	border: 1px solid var(--color-border);
-	border-radius: var(--border-radius, 4px);
+	border-radius: var(--border-radius-element, 8px);
 	background: var(--color-main-background);
 	/* Palette und Liste stehen in der Leiste: die Stempelfarbe des Themes,
 	   nicht des Papiers (lib/noteTheme.js). */

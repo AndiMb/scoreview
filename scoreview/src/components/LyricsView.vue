@@ -8,6 +8,11 @@
 		eine Vue-Eigenschaft: Die Zeit aendert sich in jedem Rahmen, und ein
 		Neurendern aller Silben je Rahmen kostete auf dem Handy die Fluessigkeit
 		(dasselbe Muster wie die Hervorhebung im Notenbild).
+
+		Tapping a word to jump there is a pointer shortcut on purpose, not a
+		control: as buttons, the words of a song would be hundreds of tab stops
+		in front of the bar. From the keyboard the bar's own seeking and the
+		loop marks do the same.
 	-->
 	<div ref="root" class="scoreview-lyrics" @pointerup="onPointerUp">
 		<!--
@@ -296,7 +301,7 @@ export default {
 		// So catch up here.
 		follow(on) {
 			if (on && this.activeNode) {
-				this.keepInView(this.activeNode)
+				this.keepInView(this.activeNode, this.measure(this.activeNode))
 			}
 		},
 	},
@@ -366,6 +371,11 @@ export default {
 			if (lit.length === 0 || key === this.activeId) {
 				return
 			}
+			// Scroll along with the own part where it sings, else the first.
+			const mine = lit.find((l) => this.myStaffSet.has(l.staff))
+			const node = this.nodes.get((mine ?? lit[0]).id) ?? null
+			// Measured before the class writes below, see keepInView().
+			const rects = node ? this.measure(node) : null
 			this.clearLit()
 			for (const { id } of lit) {
 				const node = this.nodes.get(id)
@@ -381,12 +391,9 @@ export default {
 				}
 			}
 			this.activeId = key
-			// Scroll along with the own part where it sings, else the first.
-			const mine = lit.find((l) => this.myStaffSet.has(l.staff))
-			const node = this.nodes.get((mine ?? lit[0]).id) ?? null
 			this.activeNode = node
 			if (node) {
-				this.keepInView(node)
+				this.keepInView(node, rects)
 			}
 		},
 
@@ -408,13 +415,15 @@ export default {
 			if (id === null || id === this.activeId) {
 				return
 			}
-			this.activeNode?.classList.remove(ACTIVE)
 			const node = this.nodes.get(id) ?? null
+			// Measured before the class writes below, see keepInView().
+			const rects = node ? this.measure(node) : null
+			this.activeNode?.classList.remove(ACTIVE)
 			node?.classList.add(ACTIVE)
 			this.activeId = id
 			this.activeNode = node
 			if (node) {
-				this.keepInView(node)
+				this.keepInView(node, rects)
 			}
 		},
 
@@ -422,16 +431,19 @@ export default {
 		 * Mitscrollen, aber nur, wenn die Silbe den mittleren Bereich verlaesst
 		 * - ein staendig ruckelnder Text liesse sich nicht lesen.
 		 *
+		 * The callers measure before they switch the highlight classes: read
+		 * after the write, getBoundingClientRect() forced a layout in the
+		 * middle of the frame at every syllable. The highlight only paints
+		 * (colour, background), so the earlier geometry is the same.
+		 *
 		 * @param {Element} node
+		 * @param {?{r: DOMRect, b: DOMRect}} rects from measure()
 		 */
-		keepInView(node) {
-			// Gescrollt wird der Viewer, nicht diese Ansicht.
-			const box = this.$el.closest?.('.scoreview-scroll') ?? this.$refs.root
-			if (!box) {
+		keepInView(node, rects) {
+			if (!rects) {
 				return
 			}
-			const r = node.getBoundingClientRect()
-			const b = box.getBoundingClientRect()
+			const { r, b } = rects
 			if (!this.follow) {
 				this.report(spanInView({ start: r.top, size: r.height, viewStart: b.top, viewSize: b.height }))
 				return
@@ -440,6 +452,16 @@ export default {
 				node.scrollIntoView({ block: 'center', behavior: 'smooth' })
 			}
 			this.report(true)
+		},
+
+		/**
+		 * @param {Element} node
+		 * @return {?{r: DOMRect, b: DOMRect}} the syllable and the box that scrolls
+		 */
+		measure(node) {
+			// Gescrollt wird der Viewer, nicht diese Ansicht.
+			const box = this.$el.closest?.('.scoreview-scroll') ?? this.$refs.root
+			return box ? { r: node.getBoundingClientRect(), b: box.getBoundingClientRect() } : null
 		},
 
 		/** To the sung syllable - the button back to it, and switching autoscroll on again. */

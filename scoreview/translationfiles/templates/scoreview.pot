@@ -1569,19 +1569,19 @@ msgid "Try again"
 msgstr ""
 
 #: src/components/ScorePage.vue
-msgid "Note for {voices}"
-msgstr ""
-
-#: src/components/ScorePage.vue
-msgid "Note"
-msgstr ""
-
-#: src/components/ScorePage.vue
 msgid "Rest"
 msgstr ""
 
 #: src/components/ScorePage.vue
 msgid "Not evaluable"
+msgstr ""
+
+#: src/components/ScorePage.vue
+msgid "Note for {voices}"
+msgstr ""
+
+#: src/components/ScorePage.vue
+msgid "Note"
 msgstr ""
 
 #: src/components/ScorePage.vue
