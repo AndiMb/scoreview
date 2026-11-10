@@ -6,6 +6,22 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.29.2] – 2026-11-10
+
+### Security
+
+- scoreview-engine `v4.7.6-engine.4` on the local path, in the sidecar's
+  engine renderer and in the browser fallback. The engine now checks a score
+  before MuseScore reads it - nesting depth, staff and segment numbers,
+  repeat counts, the version string and the zip structure, with every
+  compressed entry unpacked once against its declared size - and refuses a
+  file that fails, with the reason in the conversion error. A crafted
+  `.mscz` could before crash the converter or keep it busy until the
+  timeout. A score can also no longer pick up pictures or text styles from a
+  score converted before it in the same process. The pictures of valid
+  scores are unchanged (570 scores compared against `v4.7.6-engine.3`), so
+  existing conversions are simply redone once with the new engine.
+
 ### Fixed
 
 - A delegated administrator (Administration privileges for ScoreView) can
