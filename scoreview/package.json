@@ -36,10 +36,10 @@
 		"@nextcloud/router": "^3.1.0",
 		"@nextcloud/vue": "^9.13.1",
 		"dompurify": "^3.4.17",
-		"spessasynth_core": "^4.4.4",
-		"spessasynth_lib": "^4.4.2",
+		"spessasynth_core": "^4.4.9",
+		"spessasynth_lib": "^4.4.7",
 		"stb-vorbis": "^0.0.7",
-		"vue": "^3.5.44",
+		"vue": "^3.5.45",
 		"vue-material-design-icons": "^5.4.0"
 	},
 	"devDependencies": {
@@ -50,7 +50,7 @@
 		"@vitest/coverage-v8": "^5.1.0",
 		"copy-webpack-plugin": "^14.0.0",
 		"eslint": "^10.14.0",
-		"jsdom": "^30.1.3",
+		"jsdom": "^31.0.0",
 		"stylelint": "^17.15.0",
 		"vitest": "^5.0.5",
 		"vue-loader": "^17.4.2"
