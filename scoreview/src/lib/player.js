@@ -415,7 +415,8 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	 * Latenz, gleiche Lautstaerke - und aendert weder Position noch
 	 * Wiedergabezustand.
 	 *
-	 * @param {number} pitch MIDI-Tonhoehe, klingend
+	 * @param {number|number[]} pitch MIDI-Tonhoehe, klingend - or several at
+	 *   once: a step through the score (lib/noteStep.js) sounds the chord
 	 * @return {Promise<boolean>} false, wenn kein Kanal frei ist
 	 */
 	async function startTone(pitch) {
@@ -432,9 +433,12 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 		// (siehe setController), und ein spaeter geladenes Stueck koennte ihn
 		// benutzen.
 		synth.programChange(channel, TONE_PROGRAM)
-		synth.noteOn(channel, pitch, TONE_VELOCITY)
+		const pitches = Array.isArray(pitch) ? pitch : [pitch]
+		for (const p of pitches) {
+			synth.noteOn(channel, p, TONE_VELOCITY)
+		}
 		const timer = setTimeout(stopTone, TONE_MAX_MS)
-		tone = { channel, pitch, timer }
+		tone = { channel, pitches, timer }
 		return true
 	}
 
@@ -443,7 +447,9 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 			return
 		}
 		clearTimeout(tone.timer)
-		synth.noteOff(tone.channel, tone.pitch)
+		for (const p of tone.pitches) {
+			synth.noteOff(tone.channel, p)
+		}
 		tone = null
 	}
 

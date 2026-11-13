@@ -620,13 +620,14 @@ import { readInitialState } from '../initialState.js'
 import { translate } from '../l10n.js'
 import { capabilitiesOf } from '../lib/capabilities.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
-import { resolveKey } from '../lib/keyMap.js'
+import { keyBelongsToTarget, resolveKey } from '../lib/keyMap.js'
 import { loopDimRects, loopMeasureRects, loopSystemKeys } from '../lib/loopFocus.js'
 import { staffPartNames } from '../lib/lyricsLayout.js'
 import { browserFileUrl } from '../lib/micAccess.js'
 import { nameOf } from '../lib/noteNames.js'
 import { noteNameSystem } from '../lib/noteNameSystem.js'
 import { spellingMap } from '../lib/noteSpellingIndex.js'
+import { stepTarget } from '../lib/noteStep.js'
 import { channelsOfPart } from '../lib/panLayout.js'
 import { keyAt, keyByElid } from '../lib/scoreFacts.js'
 import {
@@ -928,20 +929,16 @@ export default {
 		})
 		onLoopWrap.to(speedTrainer.onLoopWrap)
 
-		// Aufführungsmodus: die Tasten laufen ueber denselben Handler wie am
-		// Viewer (onKeydown), nur zusaetzlich am document - siehe dort.
-		// `following` kommt aus „Folgt mir", das erst weiter unten entsteht,
+		// Aufführungsmodus. `following` kommt aus „Folgt mir", das erst weiter unten entsteht,
 		// weil es selbst die Policy von hier braucht - der Rueckruf wird deshalb
 		// nachgereicht.
-		// Die beiden Rueckrufe in den Options-Teil sind die letzten Wege ueber
-		// die Instanz: Tastaturkuerzel und das Schliessen beim Einschalten
-		// greifen auf fast jeden Bereich des Viewers zu - sie gehoeren in die
-		// Orchestrierung, nicht in ein eigenes Composable.
+		// Der Rueckruf in den Options-Teil ist ein Weg ueber die Instanz: Das
+		// Schliessen beim Einschalten greift auf fast jeden Bereich des
+		// Viewers zu - es gehoert in die Orchestrierung, nicht in ein eigenes
+		// Composable.
 		const vm = getCurrentInstance()
 		const isFollowing = forward(() => false)
 		const performance = usePerformanceMode({
-			rootEl: rootElement,
-			onKeydown: (event) => vm?.proxy?.onKeydown(event),
 			onEnter: () => vm?.proxy?.onPerformanceEnter(),
 			following: isFollowing.call,
 			offline: () => props.offline,
@@ -1903,7 +1900,12 @@ export default {
 		// nicht zusätzlich scrollen (siehe onKeydown - preventDefault nur für
 		// die tatsächlich behandelten Tasten, alles andere bleibt unangetastet,
 		// insbesondere Nextclouds eigene Kürzel).
-		this.$el.addEventListener('keydown', this.onKeydown)
+		// On the document, not on the viewer: the score takes no focus (its
+		// frame has pointer-events: none), so after a click into the music
+		// the focus sits on Nextcloud's modal around the viewer, and a
+		// listener here never heard a key (measured, issue #34). A pedal
+		// sends to the document as well.
+		document.addEventListener('keydown', this.onKeydown)
 		this.bar.observe()
 		this.viewerWidth = window.innerWidth
 		this.mediaSession.setHandlers({
@@ -1932,7 +1934,8 @@ export default {
 		this.microphone.turnOff()
 		document.removeEventListener('fullscreenchange', this.zoom.onFullscreenChange)
 		this.zoom.disposeFullscreen()
-		this.$el.removeEventListener('keydown', this.onKeydown)
+		document.removeEventListener('keydown', this.onKeydown)
+		clearTimeout(this.stepToneTimer)
 		this.bar.stop()
 		this.mediaSession.dispose()
 	},
@@ -2261,18 +2264,17 @@ export default {
 			this.annotations.jumpTo(annotation)
 		},
 
-		// Tastaturkürzel für die Probe - greifen, wenn der Viewer den Fokus
-		// hat (Listener auf this.$el, siehe mounted()) oder, im
-		// Aufführungsmodus, von überall (usePerformanceMode.js). Nie, wenn der
-		// Fokus in einem Eingabefeld liegt - sonst würde z.B. das
-		// Pfeiltasten-Navigieren im Takt-Eingabefeld gestohlen.
+		// Keyboard shortcuts, from anywhere on the page while the viewer is
+		// open (listener on the document, see mounted()). Never where the key
+		// belongs to its target - a field, a menu moving its focus, a control
+		// reached by keyboard (keyBelongsToTarget); otherwise e.g. the arrows
+		// in the measure field would be stolen.
 		//
 		// Welche Taste was tut, steht in EINER Tabelle (lib/keyMap.js), ob es
 		// gerade wirken darf, in lib/interactionPolicy.js - hier nur die
 		// Ausführung.
 		onKeydown(event) {
-			const tag = event.target?.tagName
-			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || event.target?.isContentEditable) {
+			if (keyBelongsToTarget(event)) {
 				return
 			}
 			const binding = resolveKey(event, { performance: this.performance.active })
@@ -2289,6 +2291,8 @@ export default {
 				togglePlay: () => this.playback.toggle(),
 				nextMeasure: () => this.navigation.jumpRelative(1),
 				previousMeasure: () => this.navigation.jumpRelative(-1),
+				nextNote: () => this.stepNote(1),
+				previousNote: () => this.stepNote(-1),
 				toggleLoop: () => this.toggleLoopByUser(),
 				zoomIn: () => this.display.activeZoom.zoomIn(),
 				zoomOut: () => this.display.activeZoom.zoomOut(),
@@ -2389,6 +2393,40 @@ export default {
 			showName?.(nameOf({ tpc: note.tpc, system, concertKey: this.keyOfElid(note.elid) }))
 			await this.session.clock.startTone(note.pitch)
 			setTimeout(() => this.session.clock?.stopTone?.(), 700)
+		},
+
+		/**
+		 * One note on or back (Shift+arrow, issue #34): to the next onset of
+		 * my part - of every part but the drums when none is chosen - and,
+		 * while stopped, sound what starts there, as a tap on a note does.
+		 * During playback only the position moves; a tone on top of the music
+		 * would be noise.
+		 *
+		 * @param {1|-1} direction
+		 */
+		async stepNote(direction) {
+			const clock = this.session.clock
+			if (!clock) {
+				return
+			}
+			const target = stepTarget(this.scoreFacts.parsed?.notes, {
+				fromMs: this.playback.displayTimeMs,
+				direction,
+				channels: channelsOfPart(this.playback.mixerChannels, this.myPart.myPartId),
+			})
+			if (!target) {
+				return
+			}
+			this.followNavigation('seek')
+			clock.seek(target.timeMs)
+			if (this.playback.isPlaying || !this.performance.can('tone') || !clock.startTone || target.pitches.length === 0) {
+				return
+			}
+			// A quick run of steps: each tone is cut by the next, and an
+			// earlier timer must not cut the later tone short.
+			clearTimeout(this.stepToneTimer)
+			await clock.startTone(target.pitches)
+			this.stepToneTimer = setTimeout(() => this.session.clock?.stopTone?.(), 700)
 		},
 
 		onNoteClick({ page, x, y, note, showName }) {

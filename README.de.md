@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:b5226ecc3f1e -->
+<!-- translation-of: README.md sha256:6a61504aa061 -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -155,7 +155,8 @@ enden, steht in docs/limits.de.md unter
 [Probe- und Konzertfunktionen](docs/limits.de.md#probe--und-konzertfunktionen)
 und [Üben und Lesen auf dem Handy](docs/limits.de.md#üben-und-lesen-auf-dem-handy).
 
-Tastatur im Viewer: `Leertaste` Start/Stopp · `←` `→` Takt zurück/vor · `L` Loop
+Tastatur im Viewer: `Leertaste` Start/Stopp · `←` `→` Takt zurück/vor ·
+`Umschalt+←` `Umschalt+→` Note zurück/vor (im Stand klingt sie an) · `L` Loop
 · `+` `−` Zoom · `0` Seitenbreite · `Bild↓` `Bild↑` blättern · `Strg+P` drucken.
 
 Oberfläche auf Deutsch und Englisch; weitere Sprachen sind willkommen (siehe

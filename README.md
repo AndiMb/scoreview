@@ -150,7 +150,8 @@ the features cost and where they end is described in docs/limits.md under
 [Rehearsal and concert features](docs/limits.md#rehearsal-and-concert-features)
 and [Practising and reading on a phone](docs/limits.md#practising-and-reading-on-a-phone).
 
-Keyboard in the viewer: `Space` play/stop · `←` `→` previous/next measure · `L` loop
+Keyboard in the viewer: `Space` play/stop · `←` `→` previous/next measure ·
+`Shift+←` `Shift+→` previous/next note (sounds it while stopped) · `L` loop
 · `+` `−` zoom · `0` page width · `PgDn` `PgUp` turn pages · `Ctrl+P` print.
 
 Interface in English and German; more languages are welcome (see

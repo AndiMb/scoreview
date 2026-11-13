@@ -6,6 +6,23 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.30.0] – 2026-11-13
+
+### Added
+
+- Step through the score note by note with `Shift+←`/`Shift+→` (#34). A
+  step goes to the next or previous onset of your part - of every part but
+  the drums when none is chosen - and, while stopped, sounds what starts
+  there. During playback it only moves the position.
+
+### Fixed
+
+- The viewer's keyboard shortcuts work without first clicking a button
+  (#34). After a click into the music the focus stayed on Nextcloud's
+  viewer around the score, and Space or the arrows did nothing. Space on a
+  control reached by keyboard still activates the control; after a mouse
+  click it means playback.
+
 ## [1.29.2] – 2026-11-10
 
 ### Security

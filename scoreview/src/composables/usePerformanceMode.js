@@ -1,4 +1,4 @@
-import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { allowed } from '../lib/interactionPolicy.js'
 
 /**
@@ -20,21 +20,17 @@ export const EXIT_HOLD_MS = 1000
  * er es, ist sie im Aufführungsmodus trotzdem gesperrt, weil die Policy
  * Unbekanntes sperrt.
  *
- * **Tasten ohne Fokus:** Ein Bluetooth-Pedal sendet an das Dokument, und im
- * Aufführungsmodus tippt niemand erst in den Viewer, um ihm den Fokus zu
- * geben. Solange der Modus an ist, haengt deshalb ein zweiter Listener am
- * `document` - Ereignisse, die ohnehin aus dem Viewer kommen, laesst er
- * durch, die behandelt der Listener am Viewer selbst.
+ * Keys need nothing from here: the viewer listens on the whole document in
+ * every mode (ScoreViewer.vue, mounted), a pedal's keys included, and asks
+ * `can()` like every other control.
  *
  * @param {object} deps
- * @param {() => HTMLElement|null} deps.rootEl Wurzel des Viewers
- * @param {(event: KeyboardEvent) => void} deps.onKeydown derselbe Handler wie am Viewer
  * @param {() => void} [deps.onEnter] beim Einschalten (Panels schliessen, Ton aus)
  * @param {() => boolean} [deps.following] ob gerade einer Leitung gefolgt wird (spaeter)
  * @param {() => boolean} [deps.offline] ob der Viewer auf der Offline-Seite laeuft (E14)
  * @return {object}
  */
-export function usePerformanceMode({ rootEl, onKeydown, onEnter = () => {}, following = () => false, offline = () => false }) {
+export function usePerformanceMode({ onEnter = () => {}, following = () => false, offline = () => false }) {
 	const active = ref(false)
 	// Whether the lock is being held. The ring fills by a CSS animation of
 	// EXIT_HOLD_MS (ScoreLockButton.vue), not by a value written per frame:
@@ -114,27 +110,8 @@ export function usePerformanceMode({ rootEl, onKeydown, onEnter = () => {}, foll
 		}
 	}
 
-	function onDocumentKeydown(event) {
-		const root = rootEl()
-		if (root && event.target instanceof Node && root.contains(event.target)) {
-			return
-		}
-		onKeydown(event)
-	}
-
-	watch(active, (an) => {
-		if (an) {
-			document.addEventListener('keydown', onDocumentKeydown)
-		} else {
-			document.removeEventListener('keydown', onDocumentKeydown)
-		}
-	})
-
 	if (getCurrentScope()) {
-		onScopeDispose(() => {
-			cancelHold()
-			document.removeEventListener('keydown', onDocumentKeydown)
-		})
+		onScopeDispose(cancelHold)
 	}
 
 	function reset() {
