@@ -16,6 +16,13 @@ updates:
     groups:
       npm-abhaengigkeiten:
         patterns: ['*']
+    # stylelint is held on its major because @nextcloud/stylelint-config
+    # declares a peer range on it (^17.9.1 as of 3.2.2); a major jump breaks
+    # `npm ci` with ERESOLVE before any test runs (PR #35). Lift this once a
+    # release of @nextcloud/stylelint-config accepts the next major.
+    ignore:
+      - dependency-name: stylelint
+        update-types: ['version-update:semver-major']
 
   # Der lokale Konvertierungsweg (docs/architecture.md E3). Hier kann
   # Dependabot nur @librescore/fonts anfassen: scoreview-engine haengt an einer
