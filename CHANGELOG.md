@@ -10,13 +10,20 @@ All notable changes to ScoreView. The format follows
 
 ### Added
 
-- Experimental: turn pages by listening. With the administration switch
-  in the administration settings (off by default), the bar offers
+- Experimental: turn pages by listening. Once an administrator switches it
+  on in the administration settings (off by default), the bar offers
   "Turn pages by listening": the microphone follows the singing and the
   score turns with it. Tap a note or enter a bar where the singing starts -
   measured on rehearsal recordings, that keeps the score within one bar
   about nine times in ten; without a tap the place is searched for and
   found later. The analysis runs in a worker and keeps no sound.
+
+### Changed
+
+- Conversion uses MuseScore 4.7.7 on both paths: scoreview-engine
+  `v4.7.7-engine.1` on the local path and in the browser fallback, the
+  MuseScore 4.7.7 AppImage in the sidecar. A sidecar has to be rebuilt to
+  get it.
 
 ## [1.30.0] – 2026-11-13
 
