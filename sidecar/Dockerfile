@@ -15,8 +15,8 @@
 # Die beiden Zeilen MUSESCORE_VERSION/MUSESCORE_BUILD liest CI per
 # `grep '^ARG MUSESCORE_VERSION='` (Abgleich mit der Engine-Version) und
 # hebt der Engine-Release-Bot per sed - Form "ARG NAME=wert" beibehalten.
-ARG MUSESCORE_VERSION=4.7.6
-ARG MUSESCORE_BUILD=4.7.6.261022093
+ARG MUSESCORE_VERSION=4.7.7
+ARG MUSESCORE_BUILD=4.7.7.261109195
 ARG MUSESCORE_APPIMAGE_URL=https://github.com/musescore/MuseScore/releases/download/v${MUSESCORE_VERSION}/MuseScore-Studio-${MUSESCORE_BUILD}-x86_64.AppImage
 # SHA256 genau dieses AppImages. Ohne ihn lieferte ein ausgetauschtes
 # Release-Asset (oder ein Umweg ueber einen manipulierten Spiegel) fremden
@@ -27,7 +27,7 @@ ARG MUSESCORE_APPIMAGE_URL=https://github.com/musescore/MuseScore/releases/downl
 #   gh api repos/musescore/MuseScore/releases/tags/v<VERSION> \
 #     --jq '.assets[] | select(.name|endswith("x86_64.AppImage")) | .digest'
 #   curl -fsSL -o ms.AppImage "<MUSESCORE_APPIMAGE_URL>" && sha256sum ms.AppImage
-ARG MUSESCORE_APPIMAGE_SHA256=5fcbd1f292270eca5c3867d56b767c31a173a155216a415f5caee22553f8e7a6
+ARG MUSESCORE_APPIMAGE_SHA256=8597105814359676483807ce4c4051eaf439bd723ebccaa9160632f56c05a02d
 
 # The converter stage: Node and `npm ci` against the converter's lockfile, so
 # the engine in the image is byte for byte the one the app's release ships
