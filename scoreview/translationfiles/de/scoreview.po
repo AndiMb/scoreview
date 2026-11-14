@@ -373,6 +373,10 @@ msgid "Scored singing (points per run, own best scores; needs intonation)"
 msgstr "Singen mit Wertung (Punkte je Durchgang, eigene Bestwerte; braucht die Intonation)"
 
 #: src/components/AdminSettings.vue
+msgid "Turn pages by listening (experimental: follows the singing through the microphone)"
+msgstr "Mitblättern nach Gehör (experimentell: folgt dem Gesang über das Mikrofon)"
+
+#: src/components/AdminSettings.vue
 msgid "Practising on the go"
 msgstr "Üben unterwegs"
 

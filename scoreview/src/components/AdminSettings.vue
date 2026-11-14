@@ -180,6 +180,10 @@
 					class="scoreview-field">
 					{{ t('Scored singing (points per run, own best scores; needs intonation)') }}
 				</NcCheckboxRadioSwitch>
+				<!-- Experimental, so off by default: it may still turn a page wrongly. -->
+				<NcCheckboxRadioSwitch v-model="form.featureScoreFollower" type="switch" class="scoreview-field">
+					{{ t('Turn pages by listening (experimental: follows the singing through the microphone)') }}
+				</NcCheckboxRadioSwitch>
 
 				<!--
 					Ueben unterwegs (E13/E14): Uebe-Tracks landen als Dateien in
@@ -352,6 +356,7 @@ export default {
 				featureOffline: initial.featureOffline ?? true,
 				featurePracticeLog: initial.featurePracticeLog ?? true,
 				featureSingScore: initial.featureSingScore ?? true,
+				featureScoreFollower: initial.featureScoreFollower ?? false,
 				practiceTrackMaxMb: initial.practiceTrackMaxMb?.value ?? 60,
 				pdfMaxMb: initial.pdfMaxMb?.value ?? 50,
 				followPollMs: initial.followPollMs ?? 800,

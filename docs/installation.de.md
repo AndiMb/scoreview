@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:79af5663df8c -->
+<!-- translation-of: installation.md sha256:98b6f6974c14 -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -565,7 +565,7 @@ Offline-Seite gibt dessen Herkunft in ihrer CSP selbst frei.
 | `feature_follow_session` | Verwaltung | Leitung und „Folgt mir“ (Vorgabe an) |
 | `feature_recording` | Verwaltung | Eigene Aufnahmen (Vorgabe an) |
 | `feature_intonation` | Verwaltung | Rückmeldung zur Intonation (Vorgabe an) |
-| `feature_score_follower` | nur `occ` | Experimentell: Mitblättern nach Gehör über das Mikrofon – ein Schalter „Mitblättern nach Gehör“ in der Leiste; ein Tipp auf eine Note setzt, wo der Gesang einsetzt (Vorgabe aus; `occ config:app:set scoreview feature_score_follower --value=true --type=boolean`) |
+| `feature_score_follower` | Verwaltung | Experimentell: Mitblättern nach Gehör über das Mikrofon – ein Schalter „Mitblättern nach Gehör“ in der Leiste; ein Tipp auf eine Note setzt, wo der Gesang einsetzt (Vorgabe aus) |
 | `feature_practice_export` | Verwaltung | Übe-Tracks als MP3 in Files (Vorgabe an) |
 | `feature_practice_log` | Verwaltung | Übetagebuch: eigene Übezeit je Stück, Wochenziel der Leitungen (Vorgabe an) |
 | `practice_track_max_mb` | Verwaltung | Höchstgröße eines Übe-Tracks in MB (Vorgabe 60, 5–500) |
