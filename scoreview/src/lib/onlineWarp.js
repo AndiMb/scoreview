@@ -40,6 +40,9 @@ import { similarity } from './chroma.js'
  * @param {number} [options.skipPenalty] cost of the reference moving two frames
  * @param {number} [options.restPenalty] cost of moving through a rest in a pause
  * @param {number} [options.minMatch] best similarity in the band below which a frame counts as a pause
+ *   (measured on real rehearsal recordings: at the true place only 50-72 % of sung
+ *   50 ms frames reach 0.8, 75-92 % reach 0.7; at 0.8 the path stood still for a
+ *   third of the singing and fell behind for good)
  * @param {number} [options.tempoWindowFrames] frames of path used for the tempo
  * @return {object}
  */
@@ -49,7 +52,7 @@ export function createOnlineWarp(reference, options = {}) {
 		stayPenalty = 0.1,
 		skipPenalty = 0.1,
 		restPenalty = 0.02,
-		minMatch = 0.8,
+		minMatch = 0.7,
 		tempoWindowFrames = 60,
 	} = options
 	const n = reference.frames

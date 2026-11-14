@@ -81,6 +81,8 @@ export function buildQuery(frames, frameMs, censMs, { minShare = 0.5 } = {}) {
  * @param {number[]} [options.rotations] semitone rotations to try (R8: ±1 at a cold start)
  * @param {number} [options.priorWeight] weight of the entry prior at the start of the query
  * @param {number} [options.neighbourMs] distance that counts as "elsewhere"
+ * @param {?Float32Array} [options.bonus] per end position, added to the score (0..1, times bonusWeight)
+ * @param {number} [options.bonusWeight]
  * @return {?{best: SearchCandidate, second: ?SearchCandidate, margin: number, scoreAt: (endMs: number) => number}}
  */
 export function searchReference(reference, query, options = {}) {
@@ -89,6 +91,8 @@ export function searchReference(reference, query, options = {}) {
 		rotations = [0],
 		priorWeight = 0,
 		neighbourMs = 1500,
+		bonus = null,
+		bonusWeight = 0,
 	} = options
 	if (!query || query.length < 3) {
 		return null
@@ -114,6 +118,7 @@ export function searchReference(reference, query, options = {}) {
 					}
 					const raw = sum / q
 					const score = raw + priorWeight * reference.entryPrior[end - span]
+						+ (bonus ? bonusWeight * bonus[end] : 0)
 					if (score > bestAt[end]) {
 						bestAt[end] = score
 						rawAt[end] = raw
@@ -133,9 +138,15 @@ export function searchReference(reference, query, options = {}) {
 		return null
 	}
 	const neighbour = Math.round(neighbourMs / censMs)
+	// The same bar in another verse or pass is not "elsewhere": it is the
+	// same place on the page, and both candidates turn to the same notes.
+	// Only music that is printed twice stays a tie (F10).
+	const printed = reference.printedFrame
+	const samePlace = (i) => Math.abs(i - best) <= neighbour
+		|| (printed && Math.abs(printed[i] - printed[best]) <= neighbour)
 	let second = -1
 	for (let i = 0; i < positions; i++) {
-		if (Math.abs(i - best) > neighbour && (second < 0 || bestAt[i] > bestAt[second])) {
+		if (!samePlace(i) && (second < 0 || bestAt[i] > bestAt[second])) {
 			second = i
 		}
 	}

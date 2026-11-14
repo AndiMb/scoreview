@@ -103,7 +103,7 @@ export function systemSlices(measuresTimeline, durationMs) {
  * Everything the follower and the metrics need from a converted score.
  *
  * @param {string} dir holds score.mid, meta.json and measures.json
- * @return {{notes: object[], parts: object[], measures: object, bars: object[], measureStartsMs: number[], markersMs: number[], systemStartsMs: number[], slices: object[], durationMs: number}}
+ * @return {{notes: object[], parts: object[], measures: object, bars: object[], measureStartsMs: number[], measureIds: number[], markersMs: number[], systemStartsMs: number[], slices: object[], durationMs: number}}
  */
 export function loadScore(dir) {
 	const read = (name) => readFileSync(path.join(dir, name))
@@ -131,6 +131,7 @@ export function loadScore(dir) {
 		measures,
 		bars,
 		measureStartsMs: bars.map((b) => b.timeMs),
+		measureIds: bars.map((b) => b.measure),
 		markersMs: midi.markers.map((m) => m.timeMs),
 		systemStartsMs: slices.map((s) => s.fromMs),
 		slices,

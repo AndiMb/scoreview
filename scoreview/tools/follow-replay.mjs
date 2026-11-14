@@ -2,7 +2,7 @@
 // Measuring rig of the microphone follower (follower plan, phase 1).
 //
 //   node tools/follow-replay.mjs [--case <name>|all] [--follow] [--csv <file>] [--wav <dir>]
-//   node tools/follow-replay.mjs --recording <audio> --score <dir> [--marks <json>] [--anchored] [--csv <file>]
+//   node tools/follow-replay.mjs --recording <audio> --score <dir> [--marks <json>] [--anchored] [--view start|first|none] [--csv <file>]
 //
 // Renders the synthetic cases of tools/follow/replay.mjs, runs them through
 // the same feature chain as the viewer and prints the feature diagnosis:
@@ -99,12 +99,17 @@ function followRecording(audioFile) {
 		durationMs: score.durationMs,
 		markersMs: score.markersMs,
 		measureStartsMs: score.measureStartsMs,
+		measureIds: score.measureIds,
 		systemStartsMs: score.systemStartsMs,
 	})
 	const { metrics, replay } = followFrames(frames, reference, truth, {
 		measureStartsMs: score.measureStartsMs,
+		measureIds: score.measureIds,
 		rows: score.slices,
 		anchored: args.includes('--anchored'),
+		// What the viewer shows at the cold start: the page where the singing
+		// starts (default), the first page, or nothing.
+		view: option('--view') === 'none' ? null : option('--view') ?? 'start',
 		windowMs: (fftSize / sampleRate) * 1000,
 	})
 	report(path.basename(audioFile), metrics, replay, started)

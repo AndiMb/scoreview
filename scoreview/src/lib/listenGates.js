@@ -89,3 +89,53 @@ export function createLevelGate({ dropDb = 30, decayDbPerSec = 1.5, minDb = -80,
 
 	return { accept, noteMusic, peakDb: () => peak }
 }
+
+/**
+ * Is the choir singing, or is someone talking, giving a tone, waiting?
+ * Decided on the level over about a second against the level the music
+ * reached recently - not frame by frame: a breath or a consonant inside a
+ * phrase must not stop the follower.
+ *
+ * Measured on rehearsal recordings (device on the singer's stand): over one
+ * second, talk sat 11 dB (median) below the loud singing, singing 4 dB;
+ * the level told them apart better than any chroma feature (AUC 0.93
+ * against 0.77 for the best match near the place). The conductor talks
+ * from farther away than the choir sings around the device.
+ *
+ * @param {object} [options]
+ * @param {number} [options.windowMs] length of the level average
+ * @param {number} [options.dropDb] below the remembered music level by more than this = not singing
+ * @param {number} [options.decayDbPerSec] how fast the remembered music level sinks
+ * @param {number} [options.minDb] never music below this level
+ * @return {{accept: (levelDb: number, atMs: number) => boolean, levelDb: () => ?number, musicDb: () => ?number}}
+ */
+export function createMusicGate({ windowMs = 1000, dropDb = 8, decayDbPerSec = 0.3, minDb = -80 } = {}) {
+	const window = []
+	let sum = 0
+	let music = null
+	let lastAt = null
+	let smoothed = null
+
+	function accept(levelDb, atMs) {
+		const level = Number.isFinite(levelDb) ? Math.max(levelDb, minDb - 20) : minDb - 20
+		window.push({ atMs, level })
+		sum += level
+		while (window.length > 1 && window[0].atMs <= atMs - windowMs) {
+			sum -= window.shift().level
+		}
+		smoothed = sum / window.length
+		if (lastAt !== null && music !== null) {
+			music -= (decayDbPerSec * Math.max(0, atMs - lastAt)) / 1000
+		}
+		lastAt = atMs
+		if (smoothed < minDb) {
+			return false
+		}
+		if (music === null || smoothed > music) {
+			music = smoothed
+		}
+		return smoothed >= music - dropDb
+	}
+
+	return { accept, levelDb: () => smoothed, musicDb: () => music }
+}

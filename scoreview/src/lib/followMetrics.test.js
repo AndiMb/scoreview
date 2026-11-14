@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { followMetrics, measureAt, summary } from './followMetrics.js'
+import { followMetrics, measureAt, printedMs, summary } from './followMetrics.js'
 
 // Bars of 2 s; a replay at 10 frames per second.
 const measureStartsMs = Array.from({ length: 20 }, (_, i) => i * 2000)
@@ -92,6 +92,55 @@ describe('followMetrics', () => {
 			...frames(1000, 2000, () => ({ truthMs: null, shownMs: 1000, slice: 1 })),
 		], { measureStartsMs, slices })
 		expect(silent.a6TurnsWhileSilent).toBe(1)
+	})
+})
+
+describe('printedMs', () => {
+	// Bars 1 2 3, then 2 3 again (a repeat), then 4.
+	const starts = [0, 2000, 4000, 6000, 8000, 10000]
+	const ids = [1, 2, 3, 2, 3, 4]
+
+	it('maps a repeated bar onto its first occurrence', () => {
+		expect(printedMs(starts, ids, 6500)).toBe(2500)
+		expect(printedMs(starts, ids, 9999)).toBe(5999)
+	})
+
+	it('leaves first occurrences and unknown layouts alone', () => {
+		expect(printedMs(starts, ids, 2500)).toBe(2500)
+		expect(printedMs(starts, ids, 10500)).toBe(10500)
+		expect(printedMs(starts, null, 6500)).toBe(6500)
+	})
+})
+
+describe('followMetrics on paper', () => {
+	const starts = [0, 2000, 4000, 6000, 8000, 10000]
+	const ids = [1, 2, 3, 2, 3, 4]
+	// Sung: the repeat (bars 2-3 second time); shown: the first time through.
+	const replay = frames(6000, 10000, (at) => ({ truthMs: at, shownMs: at - 4000 }))
+
+	it('counts the same printed bar in another pass as right', () => {
+		const metrics = followMetrics(replay, { measureStartsMs: starts, measureIds: ids })
+		expect(metrics.a1WithinOneBar).toBe(1)
+		expect(metrics.errorMs.median).toBe(0)
+	})
+
+	it('without the printed bars it is four seconds off', () => {
+		const metrics = followMetrics(replay, { measureStartsMs: starts })
+		expect(metrics.a1WithinOneBar).toBe(0)
+	})
+
+	it('a section that repeats a system is on screen with it', () => {
+		const slices = [
+			{ fromMs: 0, toMs: 4000, page: 1, system: 1 },
+			{ fromMs: 4000, toMs: 6000, page: 1, system: 2 },
+			{ fromMs: 6000, toMs: 10000, page: 1, system: 1 },
+			{ fromMs: 10000, toMs: 12000, page: 1, system: 2 },
+		]
+		// Truth enters the repeat (slice 2) while slice 0 - the same system - is shown.
+		const shown = frames(3000, 8000, (at) => ({ truthMs: at, shownMs: at, slice: at < 4000 ? 0 : at < 5000 ? 1 : 0 }))
+		const metrics = followMetrics(shown, { measureStartsMs: starts, measureIds: ids, slices, visibleRows: 1 })
+		expect(metrics.a9Punctual).toBe(1)
+		expect(metrics.a2WrongTurns).toBe(0)
 	})
 })
 

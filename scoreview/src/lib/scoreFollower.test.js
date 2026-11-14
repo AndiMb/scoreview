@@ -73,4 +73,40 @@ describe('createScoreFollower', () => {
 		}
 		expect(state.phase).toBe('following')
 	})
+
+	// A B C A B, the repeats note for note the same and printed twice: by
+	// sound alone the second A B cannot be told from the first (F10).
+	function coldStart(view) {
+		const phrases = [[60, 64, 67, 72, 67, 64, 60, 64], [62, 65, 69, 74, 69, 65, 62, 65], [57, 60, 64, 69, 71, 72, 74, 76]]
+		const abcab = [0, 1, 2, 0, 1].flatMap((phrase, n) => phrases[phrase].map((pitch, i) => ({
+			onMs: n * 4000 + i * 500,
+			offMs: n * 4000 + i * 500 + 480,
+			pitch,
+			channel: 0,
+		})))
+		const song = buildFollowReference(abcab, [{ id: 'v', label: 'Voice', channels: [0], vocal: true }], { durationMs: 20000 })
+		const e = song.ensembles[0]
+		const follower = createScoreFollower(song, { windowMs: 0 })
+		follower.setView(view)
+		let state
+		for (let at = 0; at < 7900; at += 50) {
+			const f = Math.floor((12000 + at) / song.frameMs)
+			const c36 = new Float32Array(36)
+			for (let pc = 0; pc < 12; pc++) {
+				c36[pc * 3 + 1] = e.chroma[f * 12 + pc]
+			}
+			state = follower.step(e.silent[f] ? { c36: null, levelDb: -Infinity } : { c36, levelDb: -10 }, at)
+		}
+		return state
+	}
+
+	it('a repeated phrase at a cold start: no place without a hint', () => {
+		expect(coldStart(null).phase).toBe('searching')
+	})
+
+	it('the page on screen settles it', () => {
+		const state = coldStart([{ fromMs: 12000, toMs: 20000 }])
+		expect(state.phase).toBe('following')
+		expect(Math.abs(state.confirmedMs - 19900)).toBeLessThan(600)
+	})
 })

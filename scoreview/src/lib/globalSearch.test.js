@@ -60,6 +60,31 @@ describe('searchReference', () => {
 		expect(result.margin).toBeLessThan(0.01)
 	})
 
+	it('the same printed bar in another pass is no rival: a repeat sign settles the tie', () => {
+		// A B C A where the last A is the first one played again (a repeat or
+		// a second verse): the same notes on paper, so either place is right.
+		const repeated = buildFollowReference(notes, [{ id: 'v', label: 'V', channels: [0], vocal: true }], {
+			durationMs: 16000,
+			measureStartsMs: [0, 4000, 8000, 12000],
+			measureIds: [1, 2, 3, 1],
+		})
+		const result = searchReference(repeated, buildQuery(taps(1000, 3500), 50, repeated.censMs))
+		expect([3500, 15500].some((ms) => Math.abs(result.best.endMs - ms) < 600)).toBe(true)
+		expect(result.margin).toBeGreaterThan(0.05)
+		expect(Math.abs(result.second.endMs - 3500)).toBeGreaterThan(1500)
+		expect(Math.abs(result.second.endMs - 15500)).toBeGreaterThan(1500)
+	})
+
+	it('a bonus where the score is on screen breaks a tie', () => {
+		const query = buildQuery(taps(1000, 3500), 50, reference.censMs)
+		const bonus = new Float32Array(reference.cens[0].length)
+		bonus.fill(1, Math.floor(12000 / reference.censMs))
+		const result = searchReference(reference, query, { bonus, bonusWeight: 0.03 })
+		expect(Math.abs(result.best.endMs - 15500)).toBeLessThan(600)
+		expect(result.margin).toBeGreaterThan(0.02)
+		expect(Math.abs(result.best.raw - searchReference(reference, query).best.raw)).toBeLessThan(0.01)
+	})
+
 	it('finds a phrase sung a semitone low only when rotations are allowed (R8)', () => {
 		const query = buildQuery(taps(9000, 12000, -1), 50, reference.censMs)
 		const plain = searchReference(reference, query)

@@ -285,6 +285,23 @@ export function followCase(kase, options = {}) {
 }
 
 /**
+ * Score time ranges on screen when row `first` is the first one shown: the
+ * whole page where rows name one, else `visible` rows from `first`.
+ *
+ * @param {Array<{fromMs:number, toMs:number, page?:number}>} rows
+ * @param {?number} first
+ * @param {number} visible
+ * @return {Array<{fromMs:number, toMs:number}>}
+ */
+export function viewRanges(rows, first, visible) {
+	if (!rows?.length || first === null || first < 0) {
+		return []
+	}
+	const page = rows[first].page
+	return page === undefined ? rows.slice(first, first + visible) : rows.filter((r) => r.page === page)
+}
+
+/**
  * Run the score follower over feature frames - a synthetic case or a real
  * recording (tools/follow/recording.mjs) - with the turn policy on `rows`.
  *
@@ -293,20 +310,42 @@ export function followCase(kase, options = {}) {
  * @param {Array<{atMs:number, scoreMs:?number}>} truth
  * @param {object} options options of lib/scoreFollower.js, plus:
  * @param {number[]} options.measureStartsMs
+ * @param {Array<number|string>} [options.measureIds] printed bar per entry of measureStartsMs
+ * @param {?string} [options.view] what the viewer shows at the start: 'start' (where the
+ *   singing starts), 'first' (the first page) or null (nothing known)
  * @param {Array<{fromMs:number, toMs:number}>} options.rows sections the turn policy shows
  * @param {boolean} [options.anchored] start at an anchor where the truth begins
+ * @param {boolean} [options.anchorRuns] anchor at the start of every sung run, as a singer tapping the bar would
+ * @param {number} [options.anchorLeadMs] how long before the first sung note that tap comes
  *   (a bar entered by hand) instead of searching from cold
  * @param {number} [options.visibleRows]
  * @return {{replay: import('../../src/lib/followMetrics.js').ReplayFrame[], metrics: object}}
  */
-export function followFrames(frames, reference, truth, { measureStartsMs, rows, anchored = false, visibleRows = 2, ...options }) {
+export function followFrames(frames, reference, truth, { measureStartsMs, measureIds = null, rows, anchored = false, anchorRuns = false, anchorLeadMs = 0, visibleRows = 2, view = 'start', ...options }) {
 	const follower = createScoreFollower(reference, options)
 	const start = truth.find((t) => t.scoreMs !== null) ?? { atMs: 0, scoreMs: 0 }
 	if (anchored) {
 		follower.anchor(start.scoreMs, start.atMs)
 	}
 	let first = rowAt(rows, start.scoreMs)
+	// The singer has the page open where the singing starts (view 'start'),
+	// or the first page ('first' - a worse case: the piece opened, the
+	// rehearsal begins somewhere else), or the follower is told nothing.
+	if (view) {
+		follower.setView(viewRanges(rows, view === 'first' ? 0 : first, visibleRows))
+	}
+	// A singer who taps the starting bar before every run (anchorRuns):
+	// anchorLeadMs before the first sung note, while the conductor still talks.
+	const runStarts = anchorRuns
+		? truth.filter((t, i) => t.scoreMs !== null && (i === 0 || truth[i - 1].scoreMs === null))
+				.map((t) => ({ atMs: Math.max(0, t.atMs - anchorLeadMs), scoreMs: t.scoreMs }))
+		: []
+	let nextRun = 0
 	const replay = frames.map((frame) => {
+		while (nextRun < runStarts.length && runStarts[nextRun].atMs <= frame.atMs) {
+			follower.anchor(runStarts[nextRun].scoreMs, frame.atMs)
+			nextRun++
+		}
 		const state = follower.step(frame, frame.atMs)
 		const next = decideTurn({ first, visible: visibleRows, rows, state })
 		if (next !== null) {
@@ -318,11 +357,12 @@ export function followFrames(frames, reference, truth, { measureStartsMs, rows, 
 			shownMs: follower.shownMs(frame.atMs),
 			confirmedMs: state.confirmedMs,
 			jumped: state.jumped,
+			matched: state.matched,
 			phase: state.phase,
 			ensemble: state.ensemble,
 			tuningCents: state.tuningCents,
 			slice: first,
 		}
 	})
-	return { replay, metrics: followMetrics(replay, { measureStartsMs, slices: rows, visibleRows }) }
+	return { replay, metrics: followMetrics(replay, { measureStartsMs, measureIds, slices: rows, visibleRows }) }
 }

@@ -318,3 +318,33 @@ function binRange(sampleRate, fftSize) {
 function mod(n, m) {
 	return ((n % m) + m) % m
 }
+
+/**
+ * Where the sound just grew: the rise of each pitch class in dB since the
+ * previous tap, positive part only - the live side of the onset feature
+ * (lib/followRef.js onsetChromaOf). In dB, so a quiet entry counts like a
+ * loud one.
+ *
+ * @param {?Float32Array} previousDb from the last call, null at the start or after silence
+ * @param {Float32Array} chroma 12 bins, normalised (fold12)
+ * @param {number} levelDb spectrumLevelDb of the same tap
+ * @return {{db: Float32Array, flux: ?Float32Array, strength: number}} flux normalised, null without a previous tap
+ */
+export function onsetFlux(previousDb, chroma, levelDb) {
+	const db = new Float32Array(12)
+	for (let pc = 0; pc < 12; pc++) {
+		db[pc] = levelDb + 20 * Math.log10(chroma[pc] + 1e-4)
+	}
+	if (!previousDb) {
+		return { db, flux: null, strength: 0 }
+	}
+	const flux = new Float32Array(12)
+	let sum = 0
+	for (let pc = 0; pc < 12; pc++) {
+		flux[pc] = Math.max(0, db[pc] - previousDb[pc])
+		sum += flux[pc] * flux[pc]
+	}
+	const strength = Math.sqrt(sum)
+	normalize(flux)
+	return { db, flux, strength }
+}

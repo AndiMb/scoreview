@@ -37,11 +37,13 @@
 // wrong jump is the most expensive failure (A2), a late one only costs a
 // few seconds.
 
-import { createTuningState, fold12 } from './chroma.js'
+import { createTuningState, fold12, onsetFlux } from './chroma.js'
 import { createFollowerTime } from './followerTime.js'
+import { nearestOccurrenceMs, printedPlaceMs } from './followRef.js'
 import { buildQuery, rotateChroma, searchReference } from './globalSearch.js'
 import { createLevelGate } from './listenGates.js'
 import { createOnlineWarp } from './onlineWarp.js'
+import { createTempoTracker } from './tempoTracker.js'
 
 /**
  * @typedef {object} FollowerState
@@ -80,6 +82,19 @@ const DEFAULTS = Object.freeze({
 	// After a pause this long, entry points get a bonus in the search.
 	reentryPauseMs: 1500,
 	priorWeight: 0.03,
+	// Cold start: the music most likely begins on the page the singer has
+	// open (setView). A bonus, not an anchor - singing elsewhere still wins
+	// if it fits clearly better. Not used once lost: then the page on
+	// screen is the one the follower got wrong. Measured on rehearsal
+	// recordings: 0.03 settles a hymn opened at its first page (a3: 28 % →
+	// 87 % within a bar); at 0.04 a page opened at the wrong place drew the
+	// search onto a look-alike phrase there.
+	viewWeight: 0.03,
+	// The same bar in another verse: how much going back to it costs
+	// compared with going ahead (followRef nearestOccurrenceMs). Below 1
+	// because rehearsals restart ("again from bar 5") more often than
+	// they skip a verse; measured 0.1-0.5 alike, 1 and 2 clearly worse.
+	verseBackCost: 0.5,
 	// Semitone rotations tried where no place is known (R8).
 	coldRotations: [-1, 0, 1],
 })
@@ -91,7 +106,11 @@ const DEFAULTS = Object.freeze({
  */
 export function createScoreFollower(reference, options = {}) {
 	const o = { ...DEFAULTS, ...options }
-	const warp = createOnlineWarp(reference, options.warp)
+	// 'tempo' is the tempo-model tracker (lib/tempoTracker.js), still on trial
+	// against the warp on the rehearsal recordings.
+	const warp = o.tracker === 'tempo'
+		? createTempoTracker(reference, options.tempo)
+		: createOnlineWarp(reference, options.warp)
 	const gate = createLevelGate(options.gate)
 	const time = createFollowerTime(options.time)
 	const tuning = createTuningState()
@@ -99,6 +118,8 @@ export function createScoreFollower(reference, options = {}) {
 	const history = []
 	const recent = []
 	let phase = 'searching'
+	// Per CENS frame: 1 where the score is on screen (setView), else 0.
+	let view = null
 	let confidence = 0
 	let ensemble = null
 	let unmatchedSince = null
@@ -110,6 +131,8 @@ export function createScoreFollower(reference, options = {}) {
 	let lastPauseMs = 0
 	let offer = null
 	let last = null
+	// Per-pitch-class level of the last audible tap, for the onset feature.
+	let previousDb = null
 
 	/**
 	 * Start following at a place (bar entered by hand, note tapped, offer
@@ -153,12 +176,20 @@ export function createScoreFollower(reference, options = {}) {
 	function step(frame, atMs) {
 		const audible = !!frame.c36 && gate.accept(frame.levelDb, atMs)
 		const chroma = audible ? fold12(frame.c36, tuning, { learn: false }).chroma : null
+		let onset = null
+		if (chroma) {
+			const flux = onsetFlux(previousDb, chroma, frame.levelDb)
+			previousDb = flux.db
+			onset = flux.flux ? { flux: flux.flux, strength: flux.strength } : null
+		} else {
+			previousDb = null
+		}
 		remember(history, chroma, historyLength)
 		trackPause(audible, atMs)
 		let jumped = false
 		let matched = false
 		if (phase !== 'searching') {
-			const result = warp.step(chroma)
+			const result = warp.step(chroma, onset)
 			matched = result.matched
 			if (matched) {
 				onMatch(frame, result, atMs)
@@ -236,6 +267,8 @@ export function createScoreFollower(reference, options = {}) {
 		const result = searchReference(reference, query, {
 			rotations: coldStart ? o.coldRotations : [0],
 			priorWeight: lastPauseMs >= o.reentryPauseMs ? o.priorWeight : 0,
+			bonus: phase === 'searching' ? view : null,
+			bonusWeight: o.viewWeight,
 		})
 		if (!result) {
 			return false
@@ -248,7 +281,11 @@ export function createScoreFollower(reference, options = {}) {
 		// Diagnostics for the measuring rig (tools/follow-replay.mjs).
 		o.onSearch?.({ atMs, phase, best, second: result.second, margin: result.margin, clear, agrees })
 
-		const near = here !== null && Math.abs(best.endMs - here) < o.jumpDistanceMs
+		// Near also on paper: the same bar in another verse needs no jump -
+		// the page is the same, and where the verses part the warp loses
+		// the music and the search finds the right one.
+		const near = here !== null && (Math.abs(best.endMs - here) < o.jumpDistanceMs
+			|| Math.abs(printedPlaceMs(reference, best.endMs) - printedPlaceMs(reference, here)) < o.jumpDistanceMs)
 		const local = here === null ? -Infinity : result.scoreAt(here)
 		if (phase === 'searching' || phase === 'lost') {
 			if (phase === 'lost' && near && local >= best.raw - o.acceptMargin) {
@@ -297,7 +334,13 @@ export function createScoreFollower(reference, options = {}) {
 	 * @return {boolean}
 	 */
 	function settled() {
-		const same = (a, b) => Math.abs(b.endMs - (a.endMs + (b.atMs - a.atMs) * b.rate)) <= o.agreeMs
+		// Two searches agree if they name the same place on paper: with equal
+		// verses the best match may land in either.
+		const same = (a, b) => {
+			const expected = a.endMs + (b.atMs - a.atMs) * b.rate
+			return Math.abs(b.endMs - expected) <= o.agreeMs
+				|| Math.abs(printedPlaceMs(reference, b.endMs) - printedPlaceMs(reference, expected)) <= o.agreeMs
+		}
 		const n = trail.length
 		const ok = (t) => t.raw >= o.acceptScore
 		if (n >= 2) {
@@ -326,12 +369,36 @@ export function createScoreFollower(reference, options = {}) {
 				}
 			}
 		}
-		anchor(best.endMs + (o.windowMs / 2) * best.rate, atMs)
+		// The same bar in another verse sounds the same: take the
+		// occurrence that continues from where the follower was.
+		const endMs = nearestOccurrenceMs(reference, best.endMs, time.confirmedMs(), { backCost: o.verseBackCost })
+		anchor(endMs + (o.windowMs / 2) * best.rate, atMs)
+	}
+
+	/**
+	 * What the viewer shows, as score time ranges - every pass of the
+	 * systems on screen, since a repeat shows the same notes. Null: unknown.
+	 *
+	 * @param {?Array<{fromMs:number, toMs:number}>} ranges
+	 */
+	function setView(ranges) {
+		if (!ranges || ranges.length === 0) {
+			view = null
+			return
+		}
+		const censMs = reference.censMs
+		view = new Float32Array(reference.cens[0].length)
+		for (const { fromMs, toMs } of ranges) {
+			for (let i = Math.max(0, Math.floor(fromMs / censMs)); i < Math.min(view.length, Math.ceil(toMs / censMs)); i++) {
+				view[i] = 1
+			}
+		}
 	}
 
 	return {
 		anchor,
 		acceptOffer,
+		setView,
 		step,
 		shownMs: (nowMs) => time.shownMs(nowMs),
 		state: () => last,

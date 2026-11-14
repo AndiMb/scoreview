@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { ambiguityOf, buildFollowReference, followParts, isVocal, notesToChroma, planEnsembles } from './followRef.js'
+import { ambiguityOf, buildFollowReference, followParts, isVocal, nearestOccurrenceMs, notesToChroma, planEnsembles } from './followRef.js'
 import { parseMidiNotes } from './midiNotes.js'
 import { resolveMixerChannels } from './mixerLayout.js'
 
@@ -113,5 +113,38 @@ describe('ambiguityOf', () => {
 		expect(result[0]).toBeCloseTo(1)
 		expect(result[4]).toBeCloseTo(1)
 		expect(result[2]).toBeLessThan(0.5)
+	})
+
+	it('does not count the same bar in another verse as a twin', () => {
+		const a = new Float32Array(12)
+		a[0] = 1
+		// Frames 4-5 are a repeat of frames 0-1 on paper.
+		const printed = Int32Array.from([0, 1, 2, 3, 0, 1])
+		const b = new Float32Array(12)
+		b[5] = 1
+		const result = ambiguityOf([a, a, b, b, a, a], 2, 3, printed)
+		expect(result[0]).toBeLessThan(0.5)
+		expect(result[4]).toBeLessThan(0.5)
+	})
+})
+
+describe('nearestOccurrenceMs', () => {
+	// Three verses of two frames (100 ms each): frames 0-1, 2-3, 4-5 print alike.
+	const reference = { censMs: 100, printedFrame: Int32Array.from([0, 1, 0, 1, 0, 1]) }
+
+	it('keeps the place without a known position', () => {
+		expect(nearestOccurrenceMs(reference, 30, null)).toBe(30)
+	})
+
+	it('goes on into the next verse rather than back into the current one', () => {
+		// At the end of verse 2, bar 1 means verse 3.
+		expect(nearestOccurrenceMs(reference, 0, 380, { backCost: 0.5 })).toBe(400)
+	})
+
+	it('prefers a restart in the current verse over skipping ahead', () => {
+		// In the middle of verse 3 (frame 5), the search names bar 1 of verse 1.
+		expect(nearestOccurrenceMs(reference, 0, 550, { backCost: 0.5 })).toBe(400)
+		// With going back made expensive, the next verse wins instead.
+		expect(nearestOccurrenceMs(reference, 0, 350, { backCost: 2 })).toBe(400)
 	})
 })

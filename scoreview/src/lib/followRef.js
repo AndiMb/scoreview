@@ -22,6 +22,7 @@
 // there: otherwise "tenor alone" would match every tenor rest.
 
 import { normalize, similarity, toCens } from './chroma.js'
+import { printedMs } from './followMetrics.js'
 
 /** Spacing of the reference frames (ms), the same as the live tapping. */
 export const FRAME_MS = 50
@@ -181,8 +182,14 @@ export function notesToChroma(notes, channels, frames, frameMs, harmonics = DEFA
  * @property {Array<{id:string, label:string, chroma:Float32Array, silent:Uint8Array}>} ensembles chroma (frames*12) and silence per ensemble
  * @property {number} censMs spacing of the CENS frames
  * @property {Array<Float32Array[]>} cens per ensemble, one 12-vector per CENS frame
- * @property {Float32Array} ambiguity per CENS frame: best similarity elsewhere in the piece (0..1)
+ * @property {Float32Array} ambiguity per CENS frame: best similarity elsewhere in the piece (0..1);
+ *   the same bar in another verse or pass does not count as elsewhere
  * @property {Float32Array} entryPrior per CENS frame: how plausible a fresh start is here (0..1)
+ * @property {Int32Array} printedFrame per CENS frame: the CENS frame of the same
+ *   place on paper (first occurrence of its printed bar); itself without measureIds
+ * @property {Uint8Array} onset per frame: 1 where some note of the score begins
+ * @property {Float32Array} onsetChroma frames*12: pitch classes of the notes beginning here,
+ *   fading over a few frames, L2-normalised (zeros where nothing begins)
  */
 
 /**
@@ -200,6 +207,7 @@ export function notesToChroma(notes, channels, frames, frameMs, harmonics = DEFA
  * @param {number} [options.ambiguityNeighbourMs] what counts as "elsewhere"
  * @param {number[]} [options.markersMs] rehearsal marks
  * @param {number[]} [options.measureStartsMs]
+ * @param {Array<number|string>} [options.measureIds] printed bar per entry of measureStartsMs
  * @param {number[]} [options.systemStartsMs]
  * @return {FollowReference}
  */
@@ -225,6 +233,7 @@ export function buildFollowReference(notes, parts, options = {}) {
 		{ targetMs: censMs, smoothMs: censSmoothMs },
 	))
 	const censFrames = cens[0].length
+	const printedFrame = printedFramesOf(censFrames, censMs, options.measureStartsMs, options.measureIds)
 	return {
 		frameMs,
 		frames,
@@ -232,9 +241,150 @@ export function buildFollowReference(notes, parts, options = {}) {
 		ensembles,
 		censMs,
 		cens,
-		ambiguity: ambiguityOf(cens[0], Math.round(ambiguityWindowMs / censMs), Math.round(ambiguityNeighbourMs / censMs)),
+		ambiguity: ambiguityOf(cens[0], Math.round(ambiguityWindowMs / censMs), Math.round(ambiguityNeighbourMs / censMs), printedFrame),
 		entryPrior: entryPriorOf(notes, censFrames, censMs, options),
+		printedFrame,
+		onset: onsetsOf(notes, frames, frameMs),
+		onsetChroma: onsetChromaOf(notes, frames, frameMs, harmonics),
 	}
+}
+
+/**
+ * Frames where a note of the score begins - where a tempo model may learn
+ * (lib/tempoTracker.js): between onsets the music gives no new timing.
+ *
+ * @param {Array<{onMs:number}>} notes
+ * @param {number} frames
+ * @param {number} frameMs
+ * @return {Uint8Array}
+ */
+export function onsetsOf(notes, frames, frameMs) {
+	const onset = new Uint8Array(frames)
+	for (const note of notes) {
+		const f = Math.floor(note.onMs / frameMs)
+		if (f >= 0 && f < frames) {
+			onset[f] = 1
+		}
+	}
+	return onset
+}
+
+/**
+ * Which pitch classes begin at each frame - the score side of the onset
+ * feature (lib/chroma.js onsetFlux). Chroma alone cannot tell a held chord
+ * from the music moving on: measured on rehearsal recordings, a held tonic
+ * fitted the singing as well as the true place. Onsets are sharp in time:
+ * at the true place the match was 0.19-0.30, half a second off 0.12-0.15.
+ * An onset fades over `fade` frames, since the live analysis window (170 ms)
+ * spreads it over several taps.
+ *
+ * @param {Array<{onMs:number, pitch:number}>} notes
+ * @param {number} frames
+ * @param {number} frameMs
+ * @param {readonly number[]} harmonics
+ * @param {number} [fade]
+ * @return {Float32Array}
+ */
+export function onsetChromaOf(notes, frames, frameMs, harmonics = DEFAULT_HARMONICS, fade = 2) {
+	const out = new Float32Array(frames * 12)
+	const classes = harmonics.map((_, h) => Math.round(12 * Math.log2(h + 1)))
+	for (const note of notes) {
+		const first = Math.floor(note.onMs / frameMs)
+		for (let d = 0; d <= fade; d++) {
+			const f = first + d
+			if (f < 0 || f >= frames) {
+				continue
+			}
+			for (let h = 0; h < harmonics.length; h++) {
+				out[f * 12 + (((note.pitch + classes[h]) % 12) + 12) % 12] += harmonics[h] * 0.6 ** d
+			}
+		}
+	}
+	for (let f = 0; f < frames; f++) {
+		normalize(out.subarray(f * 12, f * 12 + 12))
+	}
+	return out
+}
+
+/**
+ * The place on paper of every CENS frame (lib/followMetrics.js printedMs).
+ * Repeats and verses are unrolled in score time; verse 2 of bar 5 is bar 5
+ * all the same, and the search must not count it as a rival "elsewhere".
+ *
+ * @param {number} censFrames
+ * @param {number} censMs
+ * @param {number[]} [measureStartsMs]
+ * @param {Array<number|string>} [measureIds]
+ * @return {Int32Array}
+ */
+/**
+ * Score time on paper (printedMs) read from the reference's table.
+ *
+ * @param {FollowReference} reference
+ * @param {number} ms
+ * @return {number}
+ */
+export function printedPlaceMs(reference, ms) {
+	const table = reference.printedFrame
+	if (!table || table.length === 0) {
+		return ms
+	}
+	const i = Math.max(0, Math.min(table.length - 1, Math.round(ms / reference.censMs)))
+	return table[i] * reference.censMs + (ms - i * reference.censMs)
+}
+
+/**
+ * Of all places in score time that show the same notes on paper (the same
+ * bar in another verse or pass), the one the music most plausibly is at,
+ * seen from where the follower was: the nearest one, going back weighted by
+ * backCost. Without a known place: the given one.
+ *
+ * Why: the search compares sound, and the same bar in verse 2 and verse 3
+ * sounds the same - it returns either. Measured on a rehearsal: after bar
+ * 15 of verse 2 the search named bar 1 of verse 2 instead of verse 3, and
+ * at the next volta the follower waited for bar 14 while the choir sang 16.
+ *
+ * @param {FollowReference} reference
+ * @param {number} ms a place in score time
+ * @param {?number} hereMs where the follower was
+ * @param {object} [options]
+ * @param {number} [options.backCost] how much more going back costs than going ahead, per ms
+ * @return {number}
+ */
+export function nearestOccurrenceMs(reference, ms, hereMs, { backCost = 0.5 } = {}) {
+	const table = reference.printedFrame
+	if (hereMs === null || hereMs === undefined || !table || table.length === 0) {
+		return ms
+	}
+	const censMs = reference.censMs
+	const i = Math.max(0, Math.min(table.length - 1, Math.round(ms / censMs)))
+	const offset = ms - i * censMs
+	let best = ms
+	let bestCost = Infinity
+	for (let k = 0; k < table.length; k++) {
+		if (table[k] !== table[i]) {
+			continue
+		}
+		// One candidate per run of frames: the frame aligned with i inside it.
+		const t = k * censMs + offset
+		const d = t - hereMs
+		const cost = d >= 0 ? d : -d * backCost
+		if (cost < bestCost) {
+			bestCost = cost
+			best = t
+		}
+	}
+	return best
+}
+
+export function printedFramesOf(censFrames, censMs, measureStartsMs, measureIds) {
+	const out = new Int32Array(censFrames)
+	for (let i = 0; i < censFrames; i++) {
+		out[i] = measureIds && measureStartsMs
+			? Math.min(censFrames - 1, Math.round(printedMs(measureStartsMs, measureIds, i * censMs) / censMs))
+			: i
+	}
+	return out
 }
 
 /**
@@ -264,9 +414,10 @@ export function framesOf(chroma, silent) {
  * @param {Float32Array[]} cens
  * @param {number} window
  * @param {number} neighbour minimum distance in frames
+ * @param {?Int32Array} [printed] printedFrame table: pairs on the same place on paper are skipped
  * @return {Float32Array}
  */
-export function ambiguityOf(cens, window, neighbour) {
+export function ambiguityOf(cens, window, neighbour, printed = null) {
 	const n = cens.length
 	const result = new Float32Array(n)
 	const w = Math.max(1, Math.min(window, n))
@@ -275,7 +426,9 @@ export function ambiguityOf(cens, window, neighbour) {
 		let sum = 0
 		const sims = new Float32Array(n - d)
 		for (let i = 0; i + d < n; i++) {
-			sims[i] = similarity(cens[i], cens[i + d])
+			// The same bar in another verse is the same place on paper -
+			// in a strophic song every place would otherwise be ambiguous.
+			sims[i] = printed && Math.abs(printed[i] - printed[i + d]) < neighbour ? 0 : similarity(cens[i], cens[i + d])
 		}
 		for (let i = 0; i < sims.length; i++) {
 			sum += sims[i]

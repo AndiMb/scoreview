@@ -49,33 +49,64 @@ export function measureAt(measureStartsMs, ms) {
 }
 
 /**
+ * The same place on paper: score time mapped onto the first occurrence of
+ * the printed bar it lies in. Repeats and verses are unrolled in score time
+ * (M7), so verse 2 of a song lies a whole verse after verse 1 - but it is
+ * the same bar on the same page, and showing verse 1 while verse 2 is sung
+ * shows the right notes.
+ *
+ * @param {number[]} measureStartsMs sorted, one per occurrence
+ * @param {?Array<number|string>} measureIds printed bar per occurrence; null = every occurrence its own
+ * @param {number} ms
+ * @return {number}
+ */
+export function printedMs(measureStartsMs, measureIds, ms) {
+	if (!measureIds || measureStartsMs.length === 0 || ms < measureStartsMs[0]) {
+		return ms
+	}
+	const k = measureAt(measureStartsMs, ms)
+	const first = measureIds.indexOf(measureIds[k])
+	return first >= 0 && first < k ? measureStartsMs[first] + (ms - measureStartsMs[k]) : ms
+}
+
+/**
  * @param {ReplayFrame[]} frames in time order
  * @param {object} context
  * @param {number[]} context.measureStartsMs
+ * @param {Array<number|string>} [context.measureIds] printed bar per occurrence -
+ *   then a place counts as right where the printed bar is right (printedMs)
  * @param {Array<{fromMs:number, toMs:number}>} [context.slices] score time covered by each section
  * @param {number} [context.leadMs] required lead for a turn (A4)
  * @param {number} [context.visibleRows] sections on screen at once; `slice`
  *   of a frame is the first of them
  * @return {object}
  */
-export function followMetrics(frames, { measureStartsMs, slices = null, leadMs = 1000, visibleRows = 1 }) {
-	const bar = (ms) => measureAt(measureStartsMs, ms)
+export function followMetrics(frames, { measureStartsMs, measureIds = null, slices = null, leadMs = 1000, visibleRows = 1 }) {
+	const occurrence = (ms) => measureAt(measureStartsMs, ms)
+	const printed = (ms) => printedMs(measureStartsMs, measureIds, ms)
+	// Bars apart along the performance or on paper, whichever is closer.
+	const apart = (a, b) => Math.min(
+		Math.abs(occurrence(a) - occurrence(b)),
+		Math.abs(occurrence(printed(a)) - occurrence(printed(b))),
+	)
 	const sung = frames.filter((f) => f.truthMs !== null)
 	const errors = []
 	let within = 0
 	for (const f of sung) {
-		if (f.shownMs !== null && Math.abs(bar(f.shownMs) - bar(f.truthMs)) <= 1) {
+		if (f.shownMs !== null && apart(f.shownMs, f.truthMs) <= 1) {
 			within++
 		}
-		errors.push(f.shownMs === null ? Infinity : Math.abs(f.shownMs - f.truthMs))
+		errors.push(f.shownMs === null
+			? Infinity
+			: Math.min(Math.abs(f.shownMs - f.truthMs), Math.abs(printed(f.shownMs) - printed(f.truthMs))))
 	}
 	const result = {
 		frames: frames.length,
 		sungFrames: sung.length,
 		a1WithinOneBar: sung.length ? within / sung.length : null,
 		errorMs: summary(errors),
-		a2WrongJumps: wrongJumps(frames, bar),
-		a3Refind: refindTimes(frames, bar),
+		a2WrongJumps: wrongJumps(frames, apart),
+		a3Refind: refindTimes(frames, apart, occurrence),
 	}
 	// Turn figures only if the replay says which section was shown -
 	// without a turn policy there is nothing to judge.
@@ -91,10 +122,10 @@ export function followMetrics(frames, { measureStartsMs, slices = null, leadMs =
  * restart counts as right. A jump while nobody sings is always wrong.
  *
  * @param {ReplayFrame[]} frames
- * @param {(ms: number) => number} bar
+ * @param {(a: number, b: number) => number} apart bars between two score times
  * @return {number}
  */
-function wrongJumps(frames, bar) {
+function wrongJumps(frames, apart) {
 	let wrong = 0
 	for (let i = 0; i < frames.length; i++) {
 		const f = frames[i]
@@ -103,7 +134,7 @@ function wrongJumps(frames, bar) {
 		}
 		const later = frames.find((g) => g.atMs >= f.atMs + 1000) ?? frames[frames.length - 1]
 		if (later.truthMs === null || later.confirmedMs === null || later.confirmedMs === undefined
-			|| Math.abs(bar(later.confirmedMs) - bar(later.truthMs)) > 1) {
+			|| apart(later.confirmedMs, later.truthMs) > 1) {
 			wrong++
 		}
 	}
@@ -116,10 +147,11 @@ function wrongJumps(frames, bar) {
  * second, in seconds and in bars sung meanwhile.
  *
  * @param {ReplayFrame[]} frames
- * @param {(ms: number) => number} bar
+ * @param {(a: number, b: number) => number} apart bars between two score times, on paper
+ * @param {(ms: number) => number} bar occurrence index - a jump is one in the performance
  * @return {Array<{seconds:number, bars:number}>}
  */
-function refindTimes(frames, bar) {
+function refindTimes(frames, apart, bar) {
 	const results = []
 	let previous = null
 	for (let i = 0; i < frames.length; i++) {
@@ -128,14 +160,14 @@ function refindTimes(frames, bar) {
 			continue
 		}
 		if (previous !== null && Math.abs(bar(f.truthMs) - bar(previous)) > 1) {
-			results.push(refindFrom(frames, i, bar))
+			results.push(refindFrom(frames, i, apart, bar))
 		}
 		previous = f.truthMs
 	}
 	return results
 }
 
-function refindFrom(frames, start, bar) {
+function refindFrom(frames, start, apart, bar) {
 	const startMs = frames[start].atMs
 	const startBar = bar(frames[start].truthMs)
 	let okSince = null
@@ -144,7 +176,7 @@ function refindFrom(frames, start, bar) {
 		if (f.truthMs === null) {
 			continue
 		}
-		const ok = f.shownMs !== null && Math.abs(bar(f.shownMs) - bar(f.truthMs)) <= 1
+		const ok = f.shownMs !== null && apart(f.shownMs, f.truthMs) <= 1
 		if (ok && okSince === null) {
 			okSince = i
 		} else if (!ok) {
@@ -171,7 +203,21 @@ function refindFrom(frames, start, bar) {
  */
 function turnFigures(frames, slices, leadMs, visible) {
 	const sliceOf = (ms) => slices.findIndex((s) => ms >= s.fromMs && ms < s.toMs)
-	const shows = (first, s) => first !== null && first !== undefined && s >= first && s < first + visible
+	// Sections that name their place on paper (page, system) are on screen
+	// when that place is - a repeat shows the system it repeats.
+	const placeOf = (s) => (slices[s]?.page !== undefined ? `${slices[s].page}/${slices[s].system}` : `#${s}`)
+	const shows = (first, s) => {
+		if (first === null || first === undefined || s < 0) {
+			return false
+		}
+		const place = placeOf(s)
+		for (let k = first; k < first + visible && k < slices.length; k++) {
+			if (placeOf(k) === place) {
+				return true
+			}
+		}
+		return false
+	}
 	let turnsWhileSilent = 0
 	let wrongTurns = 0
 	let turns = 0
