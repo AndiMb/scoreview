@@ -85,3 +85,27 @@ export function createFollowerTime({ coastMs = 1500, jumpMs = 400, pullPerSecond
 
 	return { confirm, reset, shownMs, confirmedMs: () => confirmedMs, target }
 }
+
+/**
+ * The shown time between two reports of the follower worker: the last shown
+ * place, run on at the measured tempo while the follower follows - the
+ * worker reports every 50 ms, the display draws at 60 Hz. Never further
+ * than `maxAheadMs` past the report: a worker that stopped answering must
+ * not carry the cursor on by itself. NaN while nothing is known, which
+ * leaves the display on its own clock (usePlayback.followTime).
+ *
+ * @param {?{atMs:number, shownMs:?number, tempoRatio:number, phase:string}} report
+ * @param {number} nowMs on the same clock as report.atMs
+ * @param {number} [maxAheadMs]
+ * @return {number}
+ */
+export function shownBetweenReports(report, nowMs, maxAheadMs = 250) {
+	if (!report || !Number.isFinite(report.shownMs)) {
+		return NaN
+	}
+	if (report.phase !== 'following') {
+		return report.shownMs
+	}
+	const since = Math.min(Math.max(0, nowMs - report.atMs), maxAheadMs)
+	return report.shownMs + since * (report.tempoRatio || 1)
+}

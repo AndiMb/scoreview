@@ -87,6 +87,18 @@
 					Die Leitung ist zum naechsten Stueck weiter, dieses Geraet folgt
 					gerade nicht (D5): nur ein Hinweis, mitgehen per Tipp.
 				-->
+				<!--
+					Automatic page turning: whether it waits for a tap, follows
+					or lost the place - readable from the music stand.
+				-->
+				<div
+					v-if="followerStatus"
+					class="scoreview-follower-status"
+					:class="{ 'scoreview-follower-status--quiet': scoreFollower.phase === 'following' && !scoreFollower.error }"
+					role="status"
+					@click="scoreFollower.error = ''">
+					{{ followerStatus }}
+				</div>
 				<NcNoteCard v-if="leaderMovedTo" type="info" class="scoreview-follow-moved">
 					{{ t('The leader has moved on to another piece.') }}
 					<NcButton variant="primary" @click="follow.resume">
@@ -602,6 +614,7 @@ import { usePracticeLog } from '../composables/usePracticeLog.js'
 import { useRecorder } from '../composables/useRecorder.js'
 import { useScoreDisplay } from '../composables/useScoreDisplay.js'
 import { useScoreFacts } from '../composables/useScoreFacts.js'
+import { useScoreFollower } from '../composables/useScoreFollower.js'
 import { NO_RECTS, useScoreSession } from '../composables/useScoreSession.js'
 import { useScoreVariant } from '../composables/useScoreVariant.js'
 import { useSetlist } from '../composables/useSetlist.js'
@@ -620,6 +633,7 @@ import { readInitialState } from '../initialState.js'
 import { translate } from '../l10n.js'
 import { capabilitiesOf } from '../lib/capabilities.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
+import { followReferenceInput } from '../lib/followInput.js'
 import { keyBelongsToTarget, resolveKey } from '../lib/keyMap.js'
 import { loopDimRects, loopMeasureRects, loopSystemKeys } from '../lib/loopFocus.js'
 import { staffPartNames } from '../lib/lyricsLayout.js'
@@ -648,6 +662,9 @@ const DEFAULT_TEMPO_BPM = 120
 // The live intonation marks of every page off the cursor: one empty list, so
 // that those pages see no changed prop while someone sings (B3).
 const NO_MARKS = Object.freeze([])
+// Navigations that set where the singing starts while the microphone
+// follower listens: the singer's own choice of a place.
+const FOLLOWER_ANCHORS = new Set(['noteClick', 'measure', 'mark', 'seek', 'annotationJump'])
 
 /*
  * Panels that only open online and on request load as chunks of their own
@@ -959,6 +976,77 @@ export default {
 			},
 		}))
 
+		// Die Mikrofonstrecke (docs/architecture.md, Abschnitt Mikrofon) - eine fuer Aufnahme, Intonation und
+		// spaeter das Mitverfolgen, am AudioContext der Wiedergabe.
+		const microphone = useMicrophone({ audioContext: playback.getAudioContext, holdAudio: playback.holdAudio })
+		// Automatic page turning from the microphone, behind the
+		// administration's switch. Needs the parsed MIDI and the measures;
+		// the display hangs on it like on a leader's time ("Follow me").
+		const scoreFollower = useScoreFollower({
+			microphone,
+			input: async () => {
+				// Without sound nobody has loaded the MIDI yet.
+				if (!scoreFacts.parsed.value && session.midiUrl.value) {
+					await scoreFacts.ensureMidi(session.midiUrl.value, true)
+				}
+				const parsed = scoreFacts.parsed.value
+				if (!parsed || !measuresTimeline.value) {
+					return null
+				}
+				return followReferenceInput({
+					notes: parsed.notes,
+					markers: parsed.markers,
+					mixerChannels: playback.mixerChannels.value.map((c) => ({ ...c })),
+					metaParts: scoreMeta.value?.parts ?? [],
+					measuresTimeline: measuresTimeline.value,
+					durationMs: durationMs.value,
+				})
+			},
+			followTime: (getter) => {
+				playback.followTime(getter)
+				if (getter) {
+					session.wakeTimeDisplay()
+				}
+			},
+		})
+		// Another piece is another reference - the singer switches on again there.
+		watch(activeFileId, () => scoreFollower.stop())
+		function anchorFollowerAfterSeek() {
+			const source = clock.value
+			if (!source) {
+				return
+			}
+			let timer = null
+			const take = () => {
+				clearTimeout(timer)
+				source.removeEventListener?.('timechange', take)
+				const ms = source.getCurrentTimeMs()
+				if (Number.isFinite(ms)) {
+					scoreFollower.anchor(ms)
+				}
+			}
+			source.addEventListener?.('timechange', take)
+			timer = setTimeout(take, 300)
+		}
+		const followerStatus = computed(() => {
+			const t = (text) => translate('scoreview', text)
+			if (scoreFollower.error.value) {
+				return scoreFollower.error.value
+			}
+			if (!scoreFollower.active.value) {
+				return ''
+			}
+			switch (scoreFollower.phase.value) {
+				case 'following':
+				case 'unsure':
+					return t('Following')
+				case 'lost':
+					return t('Lost the place - tap the note where you are')
+				default:
+					return t('Listening - tap the note where the singing starts')
+			}
+		})
+
 		// The switches of the bar by tool id (lib/barGroups.js PINNABLE,
 		// kind 'switch'). Welche Stimme "meine" ist, setzt die Stimmwahl
 		// (useMyPart); `focusMyPart` only says whether the score dims the
@@ -977,6 +1065,14 @@ export default {
 		 * @param {boolean} on
 		 */
 		function setSwitch(id, on) {
+			if (id === 'follower') {
+				if (on) {
+					scoreFollower.start()
+				} else {
+					scoreFollower.stop()
+				}
+				return
+			}
 			if (switches[id]) {
 				switches[id].value = on
 			}
@@ -1100,6 +1196,14 @@ export default {
 			if (revealsCursor(kind)) {
 				revealJump()
 			}
+			// While listening, a tapped note or an entered bar is where the
+			// singing starts. The navigation reports before it seeks, and
+			// the player reports the old place until its worklet confirms
+			// the seek (timechange, lib/player.js) - the place is read then;
+			// the silent clock has no such event and is read after a moment.
+			if (scoreFollower.active.value && FOLLOWER_ANCHORS.has(kind)) {
+				anchorFollowerAfterSeek()
+			}
 			follow.noteNavigation(kind)
 		})
 		// The leader reports start and stop at once; its watch beat only
@@ -1182,9 +1286,6 @@ export default {
 			setProgram: playback.setProgram,
 		})
 
-		// Die Mikrofonstrecke (docs/architecture.md, Abschnitt Mikrofon) - eine fuer Aufnahme, Intonation und
-		// spaeter das Mitverfolgen, am AudioContext der Wiedergabe.
-		const microphone = useMicrophone({ audioContext: playback.getAudioContext, holdAudio: playback.holdAudio })
 		// The tuner (B3) on the same chain - it needs no score, only the
 		// microphone; the key of the score only spells its note.
 		const tuner = useTuner({ microphone, referenceHz: () => preferences.referencePitch.value })
@@ -1622,6 +1723,7 @@ export default {
 				focusMyPart,
 				showNoteText,
 				singActive: singScore.active,
+				followerActive: scoreFollower.active,
 				loopFocus,
 				setlistTitle,
 				followNavigation: noteNavigation.call,
@@ -1638,6 +1740,8 @@ export default {
 			waitMode: reactive(waitMode),
 			practiceLog: reactive(practiceLog),
 			tuner: reactive(tuner),
+			scoreFollower: reactive(scoreFollower),
+			followerStatus,
 			mix: reactive(mix),
 			recorder: reactive(recorder),
 			intonation: reactive(intonation),
@@ -2729,6 +2833,27 @@ export default {
 }
 
 /* Der Hinweis „Leitung ist weiter" unter der Anzeige von „Folgt mir". */
+.scoreview-follower-status {
+	position: absolute;
+	bottom: 12px;
+	inset-inline-start: 50%;
+	transform: translateX(-50%);
+	z-index: 15;
+	max-width: min(90%, 28em);
+	padding: 6px 14px;
+	border-radius: var(--border-radius-element, 16px);
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	box-shadow: 0 0 6px var(--color-box-shadow);
+	font-size: 1.1em;
+	text-align: center;
+}
+
+.scoreview-follower-status--quiet {
+	font-size: 0.9em;
+	opacity: 0.7;
+}
+
 .scoreview-follow-moved {
 	position: absolute;
 	top: 48px;

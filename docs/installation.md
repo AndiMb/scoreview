@@ -556,7 +556,7 @@ allows its origin in its own CSP.
 | `feature_follow_session` | Administration | Leaders and "Follow me" (default on) |
 | `feature_recording` | Administration | Own recordings (default on) |
 | `feature_intonation` | Administration | Intonation feedback (default on) |
-| `feature_score_follower` | `occ` only | Intended for score following via microphone, not functional yet (default off) |
+| `feature_score_follower` | `occ` only | Experimental: turning pages by listening through the microphone - a switch "Turn pages by listening" in the bar; tapping a note sets where the singing starts (default off; `occ config:app:set scoreview feature_score_follower --value=true --type=boolean`) |
 | `feature_practice_export` | Administration | Practice tracks as MP3 in Files (default on) |
 | `feature_practice_log` | Administration | Practice log: own practice time per score, weekly goal from the leaders (default on) |
 | `practice_track_max_mb` | Administration | Maximum size of a practice track in MB (default 60, 5–500) |

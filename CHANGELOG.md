@@ -6,6 +6,18 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.31.0] – 2026-11-14
+
+### Added
+
+- Experimental: turn pages by listening. With the administration switch
+  `feature_score_follower` (off by default, `occ` only), the bar offers
+  "Turn pages by listening": the microphone follows the singing and the
+  score turns with it. Tap a note or enter a bar where the singing starts -
+  measured on rehearsal recordings, that keeps the score within one bar
+  about nine times in ten; without a tap the place is searched for and
+  found later. The analysis runs in a worker and keeps no sound.
+
 ## [1.30.0] – 2026-11-13
 
 ### Added

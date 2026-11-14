@@ -4,7 +4,7 @@
 // follower. Nothing here touches a browser - which is what makes the
 // acceptance figures (lib/followMetrics.js) repeatable.
 
-import { analyserSpectrum, chroma36, createTuningState, fold12, similarity, spectrumLevelDb } from '../../src/lib/chroma.js'
+import { analyserSpectrum, chroma36, createTuningState, fftSizeFor, fold12, similarity, spectrumLevelDb } from '../../src/lib/chroma.js'
 import { followMetrics } from '../../src/lib/followMetrics.js'
 import { buildFollowReference } from '../../src/lib/followRef.js'
 import { decideTurn, rowAt } from '../../src/lib/followTurn.js'
@@ -15,16 +15,7 @@ import { renderPerformance, truthAt } from './synth.mjs'
 /** Tapping interval, as in the viewer. */
 export const HOP_MS = 50
 
-/**
- * FFT size giving about the live window (8192 at 48 kHz = 170 ms) at any
- * sample rate - a power of two, as the AnalyserNode demands.
- *
- * @param {number} sampleRate
- * @return {number}
- */
-export function fftSizeFor(sampleRate) {
-	return 2 ** Math.round(Math.log2(0.17 * sampleRate))
-}
+export { fftSizeFor }
 
 /**
  * Feature frames of a recording, every HOP_MS: what the viewer would have

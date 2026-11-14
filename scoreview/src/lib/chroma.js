@@ -34,6 +34,17 @@ const CENTS_PER_BIN = 100 / SUB_BINS
 export const CHROMA_MIN_HZ = 55
 export const CHROMA_MAX_HZ = 2000
 
+/**
+ * FFT size giving about the live window (8192 at 48 kHz = 170 ms) at any
+ * sample rate - a power of two, as the AnalyserNode demands.
+ *
+ * @param {number} sampleRate
+ * @return {number}
+ */
+export function fftSizeFor(sampleRate) {
+	return 2 ** Math.round(Math.log2(0.17 * sampleRate))
+}
+
 /** AnalyserNode's default dB floor - values below carry no information. */
 const ANALYSER_MIN_DB = -100
 

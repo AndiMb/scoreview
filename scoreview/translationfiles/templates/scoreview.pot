@@ -1832,6 +1832,18 @@ msgstr ""
 msgid "Rehearsal"
 msgstr ""
 
+#: src/components/ScoreViewer.vue
+msgid "Following"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Lost the place - tap the note where you are"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Listening - tap the note where the singing starts"
+msgstr ""
+
 #: src/components/SetlistBar.vue src/components/SetlistEditor.vue
 msgid "Setlist"
 msgstr ""
@@ -2333,6 +2345,10 @@ msgid "Coach"
 msgstr ""
 
 #: src/components/barTools.js
+msgid "Turn pages by listening"
+msgstr ""
+
+#: src/components/barTools.js
 msgid "Scroll along with playback"
 msgstr ""
 
@@ -2558,6 +2574,14 @@ msgstr ""
 
 #: src/composables/useScoreDisplay.js
 msgid "Needs a page area at least {px} px wide - this one is narrower."
+msgstr ""
+
+#: src/composables/useScoreFollower.js
+msgid "Automatic page turning stopped unexpectedly."
+msgstr ""
+
+#: src/composables/useScoreFollower.js
+msgid "The score is not loaded yet."
 msgstr ""
 
 #: src/composables/useScoreVariant.js

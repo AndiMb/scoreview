@@ -10,6 +10,7 @@ import BookOpenPageVariantOutline from 'vue-material-design-icons/BookOpenPageVa
 import ChartBar from 'vue-material-design-icons/ChartBar.vue'
 import ChevronDoubleDown from 'vue-material-design-icons/ChevronDoubleDown.vue'
 import CloudDownloadOutline from 'vue-material-design-icons/CloudDownloadOutline.vue'
+import EarHearing from 'vue-material-design-icons/EarHearing.vue'
 import EyeOutline from 'vue-material-design-icons/EyeOutline.vue'
 import FileMusicOutline from 'vue-material-design-icons/FileMusicOutline.vue'
 import FocusFieldHorizontal from 'vue-material-design-icons/FocusFieldHorizontal.vue'
@@ -43,6 +44,7 @@ export const TOOL_ICONS = Object.freeze({
 	coach: Piano,
 	recording: Microphone,
 	tuner: SineWave,
+	follower: EarHearing,
 	practiceLog: ChartBar,
 	sing: MicrophoneVariant,
 	autoScroll: ChevronDoubleDown,
@@ -70,6 +72,7 @@ const TOOL_LABELS = Object.freeze({
 	coach: () => t('Coach'),
 	recording: () => t('Recording and intonation'),
 	tuner: () => t('Tuner'),
+	follower: () => t('Turn pages by listening'),
 	practiceLog: () => t('Practice log'),
 	sing: () => t('Scored singing'),
 	autoScroll: () => t('Scroll along with playback'),

@@ -26,78 +26,16 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
+import { barOccurrences, systemSlices } from '../../src/lib/followInput.js'
 import { followParts } from '../../src/lib/followRef.js'
 import { parseMidiNotes } from '../../src/lib/midiNotes.js'
 import { resolveMixerChannels } from '../../src/lib/mixerLayout.js'
-import { groupSystems } from '../../src/lib/pagingPlan.js'
 import { decodeWav } from '../../src/lib/wavCodec.js'
+
+export { barOccurrences, systemSlices }
 
 /** Spacing of the truth table: finer than a tap, coarse enough for an hour. */
 const TRUTH_STEP_MS = 20
-
-/**
- * Bar starts of the played-through score, one per occurrence (repeats are
- * unrolled, M7), in score time order.
- *
- * @param {{events: Array<{elid:number, timeMs:number}>}} measuresTimeline measures.json
- * @return {Array<{measure:number, pass:number, timeMs:number}>}
- */
-export function barOccurrences(measuresTimeline) {
-	const seen = new Map()
-	return [...(measuresTimeline?.events ?? [])]
-		.sort((a, b) => a.timeMs - b.timeMs)
-		.map((e) => {
-			const measure = e.elid + 1
-			const pass = (seen.get(measure) ?? 0) + 1
-			seen.set(measure, pass)
-			return { measure, pass, timeMs: e.timeMs }
-		})
-}
-
-/**
- * Rows of the score as the turn policy sees them: one per system and pass,
- * in score time. Systems come from the bar rectangles the same way the
- * viewer's paging finds them (lib/pagingPlan.js).
- *
- * @param {{events: Array<{elid:number, timeMs:number}>, elements: Object<string, {page:number, y:number, h:number}>}} measuresTimeline
- * @param {number} durationMs
- * @return {Array<{fromMs:number, toMs:number, page:number, system:number}>}
- */
-export function systemSlices(measuresTimeline, durationMs) {
-	const elements = measuresTimeline?.elements ?? {}
-	const byPage = new Map()
-	for (const el of Object.values(elements)) {
-		if (!byPage.has(el.page)) {
-			byPage.set(el.page, [])
-		}
-		byPage.get(el.page).push(el)
-	}
-	const systemsByPage = new Map([...byPage].map(([page, rects]) => [page, groupSystems(rects)]))
-	const systemOf = (elid) => {
-		const el = elements[String(elid)]
-		if (!el) {
-			return null
-		}
-		const index = (systemsByPage.get(el.page) ?? []).findIndex((s) => el.y < s.bottom && el.y + el.h > s.top)
-		return { page: el.page, system: index }
-	}
-	const slices = []
-	for (const e of [...(measuresTimeline?.events ?? [])].sort((a, b) => a.timeMs - b.timeMs)) {
-		const where = systemOf(e.elid)
-		if (!where) {
-			continue
-		}
-		const last = slices[slices.length - 1]
-		if (last && last.page === where.page && last.system === where.system) {
-			continue
-		}
-		if (last) {
-			last.toMs = e.timeMs
-		}
-		slices.push({ fromMs: e.timeMs, toMs: durationMs, ...where })
-	}
-	return slices
-}
 
 /**
  * Everything the follower and the metrics need from a converted score.

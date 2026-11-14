@@ -659,6 +659,7 @@ export default {
 				offlineEnabled: features.offline,
 				practiceLogEnabled: features.practiceLog,
 				singScoreEnabled: features.singScore,
+				followerEnabled: features.scoreFollower,
 				offline: view.offline,
 				standalone: view.standalonePage,
 			})
@@ -682,6 +683,7 @@ export default {
 				loopActive: this.loop.active,
 				trainerActive: this.trainer.active,
 				singActive: view.singActive,
+				followerActive: view.followerActive,
 				coachActive: this.myPart.practice.coach,
 				transpose: view.effectiveTranspose,
 				focusMyPart: view.focusMyPart,

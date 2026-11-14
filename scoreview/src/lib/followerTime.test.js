@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createFollowerTime } from './followerTime.js'
+import { createFollowerTime, shownBetweenReports } from './followerTime.js'
 
 describe('createFollowerTime', () => {
 	it('shows nothing before the first confirmation', () => {
@@ -38,5 +38,26 @@ describe('createFollowerTime', () => {
 		expect(smooth).toBeLessThan(1350)
 		time.confirm(9000, 200, 1)
 		expect(time.shownMs(200)).toBe(9000)
+	})
+})
+
+describe('shownBetweenReports', () => {
+	const report = { atMs: 1000, shownMs: 5000, tempoRatio: 1.2, phase: 'following' }
+
+	it('is NaN while nothing is known, so the display keeps its own clock', () => {
+		expect(shownBetweenReports(null, 1000)).toBeNaN()
+		expect(shownBetweenReports({ ...report, shownMs: null }, 1000)).toBeNaN()
+	})
+
+	it('runs on at the tempo while following', () => {
+		expect(shownBetweenReports(report, 1100)).toBeCloseTo(5120)
+	})
+
+	it('stops after maxAheadMs when no report comes', () => {
+		expect(shownBetweenReports(report, 5000, 250)).toBeCloseTo(5300)
+	})
+
+	it('stands while not following', () => {
+		expect(shownBetweenReports({ ...report, phase: 'lost' }, 1200)).toBe(5000)
 	})
 })

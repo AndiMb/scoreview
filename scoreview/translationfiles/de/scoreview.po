@@ -1832,6 +1832,18 @@ msgstr "Singen mit Wertung"
 msgid "Rehearsal"
 msgstr "Probe"
 
+#: src/components/ScoreViewer.vue
+msgid "Following"
+msgstr "Folgt"
+
+#: src/components/ScoreViewer.vue
+msgid "Lost the place - tap the note where you are"
+msgstr "Stelle verloren – tippe auf die Note, an der ihr seid"
+
+#: src/components/ScoreViewer.vue
+msgid "Listening - tap the note where the singing starts"
+msgstr "Hört zu – tippe auf die Note, an der ihr einsetzt"
+
 #: src/components/SetlistBar.vue src/components/SetlistEditor.vue
 msgid "Setlist"
 msgstr "Setliste"
@@ -2333,6 +2345,10 @@ msgid "Coach"
 msgstr "Coach"
 
 #: src/components/barTools.js
+msgid "Turn pages by listening"
+msgstr "Mitblättern nach Gehör"
+
+#: src/components/barTools.js
 msgid "Scroll along with playback"
 msgstr "Beim Abspielen mitscrollen"
 
@@ -2559,6 +2575,14 @@ msgstr "Nur in der Seitenansicht."
 #: src/composables/useScoreDisplay.js
 msgid "Needs a page area at least {px} px wide - this one is narrower."
 msgstr "Braucht eine Notenfläche von mindestens {px} px Breite – diese ist schmaler."
+
+#: src/composables/useScoreFollower.js
+msgid "Automatic page turning stopped unexpectedly."
+msgstr "Das Mitblättern wurde unerwartet beendet."
+
+#: src/composables/useScoreFollower.js
+msgid "The score is not loaded yet."
+msgstr "Die Partitur ist noch nicht geladen."
 
 #: src/composables/useScoreVariant.js
 msgid "This server engraves no parts or phone pages; the score is shown as the file has it."

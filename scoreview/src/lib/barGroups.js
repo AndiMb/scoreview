@@ -31,6 +31,8 @@
  * @property {boolean} [offlineEnabled] Offline-Seite von der Administration an (E14)
  * @property {boolean} [practiceLogEnabled] practice log switched on by the
  *   administration (E20)
+ * @property {boolean} [followerEnabled] automatic page turning switched on by the
+ *   administration (feature `scoreFollower`)
  * @property {boolean} [singScoreEnabled] scored singing switched on by the
  *   administration (E24); it needs the intonation as well
  * @property {boolean} [offline] der Viewer laeuft auf der Offline-Seite: Was
@@ -69,6 +71,7 @@ export const PINNABLE = Object.freeze({
 	coach: 'page',
 	recording: 'panel',
 	tuner: 'panel',
+	follower: 'switch',
 	practiceLog: 'panel',
 	sing: 'panel',
 	autoScroll: 'switch',
@@ -115,6 +118,9 @@ const SECTIONS = Object.freeze({
 			// The tuner (B3) hangs on the intonation switch: same analysis,
 			// same microphone question. It needs no server, so it stays offline.
 			tuner: (c) => c.intonationEnabled === true && c.settings,
+			// Automatic page turning from the microphone - its own switch,
+			// off unless the administration turns it on.
+			follower: (c) => c.followerEnabled === true && c.settings,
 			// Scored singing (E24) stores its runs on the server.
 			sing: (c) => c.intonationEnabled === true && c.singScoreEnabled === true && c.settings && c.online,
 		},
@@ -287,6 +293,7 @@ function normalizePins(pins) {
  * @property {boolean} [autoScroll] the score scrolls along with playback
  * @property {boolean} [loopActive] a loop is set
  * @property {boolean} [trainerActive] the speed trainer - it runs on the loop
+ * @property {boolean} [followerActive] the microphone follower listens
  * @property {boolean} [singActive] a run of scored singing (E24) is going on
  * @property {boolean} [coachActive] the coach plays my part on its own instrument
  * @property {number} [transpose] semitones that sound now
@@ -316,6 +323,7 @@ export function toolOn(id, s) {
 		case 'autoScroll': return s.autoScroll === true
 		case 'myPart': return s.focusMyPart === true
 		case 'noteText': return s.showNoteText === true
+		case 'follower': return s.followerActive === true
 		case 'loop': return s.loopActive === true || s.trainerActive === true
 		case 'transpose': return (s.transpose ?? 0) !== 0
 		case 'coach': return s.coachActive === true

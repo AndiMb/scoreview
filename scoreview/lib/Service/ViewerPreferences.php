@@ -82,7 +82,7 @@ class ViewerPreferences {
 	public const KEY_BAR_PINS = 'bar_pins';
 	/** As PINNABLE in src/lib/barGroups.js. */
 	public const BAR_PIN_IDS = [
-		'loop', 'metronome', 'tempo', 'mixer', 'transpose', 'coach', 'recording', 'tuner', 'sing', 'practiceLog',
+		'loop', 'metronome', 'tempo', 'mixer', 'transpose', 'coach', 'recording', 'tuner', 'follower', 'sing', 'practiceLog',
 		'autoScroll', 'myPart', 'noteNames', 'annotations', 'noteText', 'layout', 'appearance',
 		'partChoice', 'rehearsal', 'newSetlist', 'print', 'export', 'offline', 'info',
 	];

@@ -1,7 +1,7 @@
-// PARKED - part of the microphone score follower (automatic page turning),
-// which is paused; no viewer code imports it. Kept and tested because
-// tools/follow/replay.mjs measures it against recorded rehearsals, and the
-// work resumes from here.
+// Not used by the viewer: with a tapped starting place the online warp
+// measured better (91 % against 85 % of bars within one bar). Kept and
+// tested because tools/follow/replay.mjs compares both, and without a tap
+// this tracker turned fewer wrong pages.
 //
 // Local following with a tempo model - the alternative to lib/onlineWarp.js
 // behind the same interface (anchor, step, tempoRatio, position), chosen by

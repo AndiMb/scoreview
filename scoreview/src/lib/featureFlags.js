@@ -14,10 +14,8 @@ const NUMBERS = {
 	maxRecordingSeconds: [600, 10, 3600],
 }
 
-// `scoreFollower` is read by nobody in the viewer: the microphone follower
-// is parked (see the PARKED note in lib/scoreFollower.js). The switch stays
-// so the server's announcement and this list keep agreeing, and turning the
-// work back on needs no change here.
+// `scoreFollower`: automatic page turning from the microphone - experimental,
+// off unless an administrator turns it on with occ.
 const SWITCHES = ['followSession', 'recording', 'intonation', 'scoreFollower', 'practiceExport', 'offline', 'practiceLog', 'singScore']
 
 /**
