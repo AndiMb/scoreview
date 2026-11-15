@@ -1604,7 +1604,7 @@ msgstr ""
 msgid "Score page {n}"
 msgstr ""
 
-#: src/components/ScorePanel.vue src/components/ScoreViewer.vue src/components/ViewerBar.vue
+#: src/components/ScorePanel.vue src/components/ScoreViewer.vue src/components/ViewerBar.vue src/public.js
 msgid "Close"
 msgstr ""
 
@@ -2852,7 +2852,7 @@ msgstr ""
 msgid "Page {n} of {total}"
 msgstr ""
 
-#: src/viewer.js
+#: src/public.js src/viewer.js
 msgid "Open in ScoreView"
 msgstr ""
 

@@ -16,6 +16,7 @@ const appVersion = fs.readFileSync(path.join(__dirname, 'appinfo', 'info.xml'), 
 //   js/scoreview-settings.js -> addScript('scoreview', 'scoreview-settings')  (Settings\AdminSettings)
 //   js/scoreview-viewer.js   -> addScript('scoreview', 'scoreview-viewer')    (Listener\FilesLoadAdditionalScriptsListener)
 //   js/scoreview-standalone.js -> addScript('scoreview', 'scoreview-standalone') (DirectEditing\ScoreDirectEditor)
+//   js/scoreview-public.js   -> addScript('scoreview', 'scoreview-public')    (Listener\PublicShareScriptsListener)
 webpackConfig.entry = {
 	'scoreview-settings': path.join(__dirname, 'src', 'settings.js'),
 	'scoreview-viewer': path.join(__dirname, 'src', 'viewer.js'),
@@ -42,6 +43,9 @@ webpackConfig.entry = {
 	'scoreview-offline-sw': path.join(__dirname, 'src', 'offline-sw.js'),
 	// The print page (E16, Controller\PageController::print).
 	'scoreview-print': path.join(__dirname, 'src', 'print.js'),
+	// The public link page /s/{token}: only registers a Viewer handler that
+	// frames the app's own page (PublicShareScriptsListener, src/public.js).
+	'scoreview-public': path.join(__dirname, 'src', 'public.js'),
 }
 
 // Ausgabedateiname explizit festlegen (kein Content-Hash im Dateinamen),

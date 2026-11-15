@@ -10,6 +10,7 @@ use OCA\ScoreView\Listener\AddFeaturePolicyListener;
 use OCA\ScoreView\Listener\CompanionRevocationListener;
 use OCA\ScoreView\Listener\FilesLoadAdditionalScriptsListener;
 use OCA\ScoreView\Listener\NodeDeletedListener;
+use OCA\ScoreView\Listener\PublicShareScriptsListener;
 use OCA\ScoreView\Listener\RegisterDirectEditorListener;
 use OCA\ScoreView\Listener\ScoreFileListener;
 use OCA\ScoreView\Listener\ScoreMimetypeListener;
@@ -102,6 +103,14 @@ class Application extends App implements IBootstrap {
 		// Das Mikrofon auf der Files-Seite, nur wenn eine Funktion es braucht
 		// (Listener\AddFeaturePolicyListener, S3 in docs/architecture.md).
 		$context->registerEventListener(AddFeaturePolicyEvent::class, AddFeaturePolicyListener::class);
+
+		// The public link page (/s/{token}): the framing handler, behind the
+		// admin switch. The event class belongs to files_sharing, which is not
+		// part of nextcloud/ocp, so it is named as a string: registering a
+		// listener for a class that does not exist is harmless - the event
+		// simply never fires when files_sharing is off - whereas a ::class
+		// reference would make static analysis fail.
+		$context->registerEventListener('OCA\\Files_Sharing\\Event\\BeforeTemplateRenderedEvent', PublicShareScriptsListener::class);
 
 		// Widerruf der Begleit-Token der mobilen Seite ueber die Epoche der
 		// Nutzerin (Service\CompanionTokenService).

@@ -1604,7 +1604,7 @@ msgstr "Notiz"
 msgid "Score page {n}"
 msgstr "Notenseite {n}"
 
-#: src/components/ScorePanel.vue src/components/ScoreViewer.vue src/components/ViewerBar.vue
+#: src/components/ScorePanel.vue src/components/ScoreViewer.vue src/components/ViewerBar.vue src/public.js
 msgid "Close"
 msgstr "Schließen"
 
@@ -2852,7 +2852,7 @@ msgstr "Partitur wird gesetzt …"
 msgid "Page {n} of {total}"
 msgstr "Seite {n} von {total}"
 
-#: src/viewer.js
+#: src/public.js src/viewer.js
 msgid "Open in ScoreView"
 msgstr "In ScoreView öffnen"
 
