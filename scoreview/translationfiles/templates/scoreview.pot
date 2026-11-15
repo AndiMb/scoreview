@@ -124,7 +124,7 @@ msgstr ""
 msgid "This person is not a leader of this score."
 msgstr ""
 
-#: lib/Controller/PageController.php src/composables/useConversionStatus.js src/composables/useScoreVariant.js
+#: lib/Controller/PageController.php src/lib/shareRefusals.js
 msgid "This link is no longer valid or needs its password again. Open the link again."
 msgstr ""
 
@@ -2413,10 +2413,6 @@ msgid "A drawing beside the music was not saved. Start it on the staff."
 msgstr ""
 
 #: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
-msgid "Too many new scores were prepared through this link. Try again later."
-msgstr ""
-
-#: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
 msgid "The conversion service could not be reached."
 msgstr ""
 
@@ -2798,6 +2794,14 @@ msgstr ""
 
 #: src/lib/barGroups.js
 msgid "Text"
+msgstr ""
+
+#: src/lib/shareRefusals.js
+msgid "Too many new scores were prepared through this link. Try again later."
+msgstr ""
+
+#: src/lib/shareRefusals.js
+msgid "This score can no longer be found. It may have been moved or deleted, or it is no longer shared."
 msgstr ""
 
 #: src/lib/singLane.js

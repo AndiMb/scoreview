@@ -124,7 +124,7 @@ msgstr "Wem die Datei gehört, leitet die Partitur immer und kann nicht abberufe
 msgid "This person is not a leader of this score."
 msgstr "Diese Person ist keine Leitung dieser Partitur."
 
-#: lib/Controller/PageController.php src/composables/useConversionStatus.js src/composables/useScoreVariant.js
+#: lib/Controller/PageController.php src/lib/shareRefusals.js
 msgid "This link is no longer valid or needs its password again. Open the link again."
 msgstr "Dieser Link gilt nicht mehr oder braucht erneut sein Passwort. Öffne den Link noch einmal."
 
@@ -2413,10 +2413,6 @@ msgid "A drawing beside the music was not saved. Start it on the staff."
 msgstr "Eine Zeichnung neben den Noten wurde nicht gespeichert. Beginne sie auf der Notenzeile."
 
 #: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
-msgid "Too many new scores were prepared through this link. Try again later."
-msgstr "Über diesen Link wurden zu viele neue Partituren vorbereitet. Versuche es später noch einmal."
-
-#: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
 msgid "The conversion service could not be reached."
 msgstr "Der Konvertierungsdienst konnte nicht erreicht werden."
 
@@ -2799,6 +2795,14 @@ msgstr "Band"
 #: src/lib/barGroups.js
 msgid "Text"
 msgstr "Text"
+
+#: src/lib/shareRefusals.js
+msgid "Too many new scores were prepared through this link. Try again later."
+msgstr "Über diesen Link wurden zu viele neue Partituren vorbereitet. Versuche es später noch einmal."
+
+#: src/lib/shareRefusals.js
+msgid "This score can no longer be found. It may have been moved or deleted, or it is no longer shared."
+msgstr "Diese Partitur ist nicht mehr zu finden. Vielleicht wurde sie verschoben oder gelöscht, oder sie ist nicht mehr freigegeben."
 
 #: src/lib/singLane.js
 msgid "Perfect"

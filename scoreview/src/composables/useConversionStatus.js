@@ -4,6 +4,7 @@ import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { translate } from '../l10n.js'
 import { nextStatusDelay } from '../lib/conversionPoll.js'
+import { isShareRefusal, shareRefusalText } from '../lib/shareRefusals.js'
 import { useClientConversion } from './useClientConversion.js'
 
 /** Only for the one automatic retry after a stored error. */
@@ -41,23 +42,6 @@ const VARIANT_POLL_MS = 1500
 const VARIANT_DEADLINE_MS = 180_000
 
 const t = (text, vars) => translate('scoreview', text, vars)
-
-/**
- * Refusals of a request made with a public link's token
- * (Middleware\DirectAccessMiddleware, ConversionController::quotaExceeded).
- * They come as an HTTP error, not as a stored conversion error, but they
- * have a code of their own and get a sentence like one - a raw "Request
- * failed with status code 401" would tell a visitor nothing.
- */
-const SHARE_REFUSALS = new Set([
-	'share_auth',
-	'share_invalid',
-	'share_no_read',
-	'share_not_allowed',
-	'public_disabled',
-	'share_quota',
-	'share_throttled',
-])
 
 /**
  * Wartet darauf, dass der Server die Partitur konvertiert hat, und übersetzt
@@ -148,8 +132,10 @@ export function useConversionStatus({ fileId, onReady }) {
 	 * @return {string}
 	 */
 	function codeText(code) {
-		const linkInvalid = t('This link is no longer valid or needs its password again. Open the link again.')
-		const tryLater = t('Too many new scores were prepared through this link. Try again later.')
+		const share = shareRefusalText(code, t)
+		if (share !== null) {
+			return share
+		}
 		const messages = {
 			sidecar_unreachable: t('The conversion service could not be reached.'),
 			sidecar_rejected: t('The conversion service rejected the file.'),
@@ -168,17 +154,7 @@ export function useConversionStatus({ fileId, onReady }) {
 			stale: t('The conversion was never finished. On the server this usually means that background job processing (cron) is not running.'),
 			client_too_large: t('This score is too large to be set in this browser, and this server cannot convert it itself.'),
 			client_engine_unavailable: t('This score could not be set in this browser, and this server cannot convert it itself. Reloading the page may help.'),
-			// A public link: gone, or its password is to be entered again
-			// (or this route is not open to links - the same advice helps).
-			share_auth: linkInvalid,
-			share_invalid: linkInvalid,
-			share_no_read: linkInvalid,
-			share_not_allowed: linkInvalid,
-			public_disabled: linkInvalid,
-			// The link's quota of new conversions (per hour), or the
-			// brute-force protection - both pass with time.
-			share_quota: tryLater,
-			share_throttled: tryLater,
+			// Refusals of a public link's request: lib/shareRefusals.js.
 			// "Hide download" keeps the source closed that the browser would
 			// have to set (Service\ClientFallback::sourceOpenTo). Once the
 			// owner opens the score, the server has it converted.
@@ -211,7 +187,7 @@ export function useConversionStatus({ fileId, onReady }) {
 			state.value = 'error'
 			errorMessage.value = err.message
 			const code = err?.response?.data?.errorCode
-			errorCode.value = SHARE_REFUSALS.has(code) ? code : ''
+			errorCode.value = isShareRefusal(code) ? code : ''
 			return
 		}
 		if (mine !== generation) {
