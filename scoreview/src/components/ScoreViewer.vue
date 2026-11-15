@@ -631,6 +631,8 @@ import { useZoom } from '../composables/useZoom.js'
 import nodeText from '../directives/nodeText.js'
 import { readInitialState } from '../initialState.js'
 import { translate } from '../l10n.js'
+import { accountScope } from '../lib/accountScope.js'
+import { canOpenPrint } from '../lib/barGroups.js'
 import { capabilitiesOf } from '../lib/capabilities.js'
 import { normalizeFeatures } from '../lib/featureFlags.js'
 import { followReferenceInput } from '../lib/followInput.js'
@@ -809,6 +811,7 @@ export default {
 		// context value, like `offline`. No branch on it anywhere else: every
 		// account route would answer this page 401 (share_not_allowed).
 		const guest = readInitialState('standalone')?.guest === true
+		const account = accountScope(guest)
 		const session = useScoreSession()
 		const { timeline, measuresTimeline, systemRectsByPage, currentEtag, durationMs, clock, scoreMeta } = session
 
@@ -849,7 +852,7 @@ export default {
 		// Anzeigeeinstellungen der Nutzerin (Farbe/Form der Hervorhebung).
 		// Kein Bezug zur Partitur - deshalb ohne Abhaengigkeiten und ohne
 		// Ruecksetzen beim Dateiwechsel.
-		const preferences = useViewerPreferences({ local: () => guest })
+		const preferences = useViewerPreferences({ local: account.local })
 		const autoScroll = useAutoScroll({ scrollEl: scrollElement, enabled: () => preferences.autoScroll.value })
 		const playback = usePlayback({ clock, durationMs, defaultTempoBpm: DEFAULT_TEMPO_BPM })
 		// The playback sounds at the reference the tuner and intonation hear
@@ -882,7 +885,7 @@ export default {
 		// „Meine Stimme" je Partitur, serverseitig gemerkt - geladen im
 		// fileid-Watcher, nicht in reset(): „Neu konvertieren" setzt den
 		// Viewer zurueck, behaelt aber dieselbe Datei und damit dieselbe Wahl.
-		const myPart = useMyPart({ fileId: () => activeFileId.value, local: () => guest })
+		const myPart = useMyPart({ fileId: () => activeFileId.value, local: account.local })
 
 		// Die Transposition, die gerade klingt (H6): die eigene der Partitur,
 		// solange keine Leitung eine fuer alle setzt (P7, „Folgt mir"). Sie
@@ -912,7 +915,7 @@ export default {
 		// Die Leitungen der Partitur. Wie „Meine Stimme" im
 		// fileid-Watcher geladen: Sie haengen an der Datei, nicht an ihrer
 		// Konvertierung, und „Neu konvertieren" aendert an ihnen nichts.
-		const leaders = useLeaders({ fileId: () => activeFileId.value, enabled: () => !guest })
+		const leaders = useLeaders({ fileId: () => activeFileId.value, enabled: account.enabled })
 
 		// Nach „Meine Stimme" und den Leitungen: Welche Stimmnotiz jemand
 		// sieht, haengt an beidem (lib/annotationFilter.js).
@@ -928,7 +931,7 @@ export default {
 			pictureElid: (elid) => session.elids.value.toPicture(elid),
 			myPartId: () => myPart.myPartId.value,
 			isLeader: () => leaders.isLeader.value,
-			enabled: () => !guest,
+			enabled: account.enabled,
 		})
 
 		// Der Speed-Trainer zaehlt an den Loop-Durchlaeufen, braucht aber selbst
@@ -1237,7 +1240,7 @@ export default {
 			standalone: () => standalonePage,
 			originFileId: () => props.fileid,
 			can: performance.can,
-			enabled: () => !guest,
+			enabled: account.enabled,
 		})
 		// Eine andere Partitur von aussen (Prop): Gehoert sie nicht zur
 		// offenen Setliste, ist die Liste vorbei.
@@ -1524,7 +1527,7 @@ export default {
 			isPlaying: () => playback.isPlaying.value,
 			positionMs: () => clock.value?.getCurrentTimeMs() ?? null,
 			waitModeActive: () => waitMode.active.value,
-			persist: () => !guest,
+			persist: account.persist,
 		})
 		// What the singing lane shows besides the judged notes.
 		const sing = reactive(useSingView({
@@ -1662,12 +1665,11 @@ export default {
 		/**
 		 * The print page (E16) in a new tab - the viewer in Files holds only
 		 * the pages in reach, so printing happens on a page that holds all.
-		 * Only where the bar offers it (lib/barGroups.js): with a session,
-		 * in the browser, outside performance mode - the same conditions,
-		 * because the key reaches this without the bar.
+		 * Only where the bar offers it: the same rule (lib/barGroups.js
+		 * canOpenPrint), because the key reaches this without the bar.
 		 */
 		function openPrintPage() {
-			if (!performance.can('settings') || standalonePage || props.offline || guest) {
+			if (!canOpenPrint({ can: performance.can, standalone: standalonePage, offline: props.offline, guest })) {
 				return
 			}
 			// What is on screen: a part or phone pages print as such (E19).

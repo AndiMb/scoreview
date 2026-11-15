@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { anyGroupActive, barGroups, barPins, defaultPins, groupActive, isPinned, MAX_PINS, pinLimitReached, PINNABLE, togglePin, toolOn, toolValue } from './barGroups.js'
+import { anyGroupActive, barGroups, barPins, canOpenPrint, defaultPins, groupActive, isPinned, MAX_PINS, pinLimitReached, PINNABLE, togglePin, toolOn, toolValue } from './barGroups.js'
 import { allowed } from './interactionPolicy.js'
 
 function ctx(overrides = {}) {
@@ -74,6 +74,16 @@ describe('barGroups', () => {
 		expect(items(barGroups(ctx()), 'score')).toContain('print')
 		expect(items(barGroups(ctx({ standalone: true })), 'score')).not.toContain('print')
 		expect(items(barGroups(ctx({ offline: true })), 'score')).not.toContain('print')
+		expect(items(barGroups(ctx({ guest: true })), 'score')).not.toContain('print')
+	})
+
+	it('answers the viewer print check exactly as the bar does', () => {
+		const cases = [{}, { standalone: true }, { offline: true }, { guest: true }, { can: (a) => a !== 'settings' }]
+		for (const c of cases) {
+			expect(canOpenPrint(ctx(c))).toBe(items(barGroups(ctx(c)), 'score')?.includes('print') === true)
+		}
+		expect(canOpenPrint(ctx())).toBe(true)
+		expect(canOpenPrint(ctx({ guest: true }))).toBe(false)
 	})
 
 	it('nimmt offline alles weg, was den Server braucht (E14)', () => {

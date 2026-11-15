@@ -164,11 +164,7 @@ const SECTIONS = Object.freeze({
 			newSetlist: (c) => c.settings && c.setlistCanCreate && c.account,
 		},
 		{
-			// The print page (E16) needs a session and a browser: the
-			// mobile apps print through "open in browser", offline there
-			// is no page.
-			// A visitor neither: the print page and its PDF need a session.
-			print: (c) => c.account && c.standalone !== true && c.settings,
+			print: (c) => canOpenPrint(c),
 			export: (c) => c.exportEnabled === true && c.hasRealPlayer && c.settings && c.account,
 			// Vormerken geht nur von einer Seite aus, die online ist, und
 			// nur im Browser - die Offline-Seite gibt es in den Apps nicht (E14).
@@ -177,6 +173,20 @@ const SECTIONS = Object.freeze({
 		},
 	],
 })
+
+/**
+ * Whether the print page (E16) may open - one rule for the bar's button and
+ * for the viewer's own check, which the keyboard shortcut reaches without
+ * the bar. The page needs a session and a browser: the mobile apps print
+ * through "open in browser", offline there is no page, and a visitor of a
+ * public link has no session for the page and its PDF.
+ *
+ * @param {Pick<BarContext, 'can'|'offline'|'standalone'|'guest'>} ctx
+ * @return {boolean}
+ */
+export function canOpenPrint(ctx) {
+	return ctx.offline !== true && ctx.guest !== true && ctx.standalone !== true && ctx.can('settings')
+}
 
 /**
  * Die sichtbaren Gruppen in Leistenreihenfolge, jede mit ihren sichtbaren
