@@ -20,6 +20,16 @@ import { SPREAD_PREFS } from '../lib/spreadLayout.js'
  */
 const SAVE_DELAY_MS = 600
 
+/**
+ * The settings as last changed in this page, or null. The initial state is
+ * read once with the Files page; a second score opened in the same page
+ * would otherwise start from that old copy and lose, say, a pin set on the
+ * first one - until the page is reloaded.
+ *
+ * @type {?object}
+ */
+let changedInPage = null
+
 /** Wie Service\ViewerPreferences::NOTE_NAME_SYSTEMS - der erste ist die Vorgabe. */
 export const NOTE_NAME_SYSTEMS = Object.freeze(['off', 'de', 'en', 'solfa-fixed', 'solfa-movable'])
 /** Wie Service\ViewerPreferences::LAYOUTS. */
@@ -109,15 +119,18 @@ export function useViewerPreferences({ local = () => false } = {}) {
 	// Dunkelmodus waehlt, soll ihn beim naechsten Oeffnen wiederfinden.
 	let saveTimer = null
 	watch([highlightColor, highlightMode, stereoMyPart, noteTheme, noteNames, noteNamesMine, layout, bandOffered, autoScroll, beatCounts, doublePage, referencePitch, barPins], () => {
+		// A visitor's browser storage is read anew on every opening already.
+		if (!local()) {
+			changedInPage = currentValues()
+		}
 		if (saveTimer) {
 			clearTimeout(saveTimer)
 		}
 		saveTimer = setTimeout(save, SAVE_DELAY_MS)
 	})
 
-	async function save() {
-		saveTimer = null
-		const values = {
+	function currentValues() {
+		return {
 			highlightColor: highlightColor.value,
 			highlightMode: highlightMode.value,
 			stereoMyPart: stereoMyPart.value,
@@ -132,6 +145,11 @@ export function useViewerPreferences({ local = () => false } = {}) {
 			referencePitch: referencePitch.value,
 			barPins: barPins.value,
 		}
+	}
+
+	async function save() {
+		saveTimer = null
+		const values = currentValues()
 		if (local()) {
 			writeGuest(GUEST_KEYS.prefs, values)
 			return
@@ -192,11 +210,16 @@ function leseThemeDunkel() {
  * Read through the same normalisation as the server's values, so a stale or
  * tampered entry falls back like an unknown value from a newer server.
  *
+ * With an account, what a viewer changed in this page wins (changedInPage): the
+ * initial state is the copy from when the Files page loaded, and Files opens
+ * one score after the other without reloading.
+ *
  * @param {boolean} local
  * @return {{highlightColor?: string, highlightMode?: string, stereoMyPart?: boolean, noteTheme?: string}}
  */
 function leseAnfangszustand(local) {
 	const anfang = readInitialState('viewer-preferences') ?? {}
 	const kept = local ? readGuest(GUEST_KEYS.prefs) : null
-	return kept !== null && typeof kept === 'object' && !Array.isArray(kept) ? { ...anfang, ...kept } : anfang
+	const merged = kept !== null && typeof kept === 'object' && !Array.isArray(kept) ? { ...anfang, ...kept } : anfang
+	return local || changedInPage === null ? merged : { ...merged, ...changedInPage }
 }
