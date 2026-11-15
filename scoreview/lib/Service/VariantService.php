@@ -118,6 +118,14 @@ class VariantService {
 	}
 
 	/**
+	 * Gives a fresh claim back when the run is refused after all (a visitor's
+	 * link allowance), so the next request may claim it again at once.
+	 */
+	public function release(ScoreVariant $variant): void {
+		$this->mapper->delete($variant);
+	}
+
+	/**
 	 * Takes over a row whose run died or whose error may be retried. Not a
 	 * lock in itself; two requests could both get here for the same dead
 	 * row, and both would write the same artifacts.

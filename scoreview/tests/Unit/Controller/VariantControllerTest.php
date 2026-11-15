@@ -236,11 +236,42 @@ class VariantControllerTest extends TestCase {
 		$this->withFile();
 		$this->withReadyBase();
 		$this->variantService->method('find')->willReturn(null);
+		$claimed = $this->readyVariant('full~phone~w~0');
+		$this->variantService->method('claim')->willReturn($claimed);
 		$this->quota->method('consume')->willReturn(false);
+		// The won claim goes back, or the row would block as "processing".
+		$this->variantService->expects($this->once())->method('release')->with($claimed);
 		$this->job->expects($this->never())->method('convertVariant');
 		$response = $this->controller()->status(42, 'full~phone~w~0');
 		$this->assertSame(Http::STATUS_TOO_MANY_REQUESTS, $response->getStatus());
 		$this->assertSame(['status' => 'error', 'errorCode' => 'share_quota'], $response->getData());
+	}
+
+	public function testVisitorLosingTheClaimSpendsNoUnit(): void {
+		$this->asVisitor();
+		$this->withFile();
+		$this->withReadyBase();
+		$this->variantService->method('find')->willReturn(null);
+		$this->variantService->method('claim')->willReturn(null);
+		$this->quota->expects($this->never())->method('consume');
+		$this->job->expects($this->never())->method('convertVariant');
+		$this->assertSame('pending', $this->controller()->status(42, 'full~phone~w~0')->getData()['status']);
+	}
+
+	public function testVisitorRestartOverQuotaIs429WithoutRestart(): void {
+		$this->asVisitor();
+		$this->withFile();
+		$this->withReadyBase();
+		$this->variantService->method('find')->willReturn($this->readyVariant('full~phone~w~0'));
+		$this->variantService->method('isCurrent')->willReturn(false);
+		$this->variantService->method('isRunning')->willReturn(false);
+		$this->variantService->method('mayRetry')->willReturn(true);
+		$this->quota->method('consume')->willReturn(false);
+		$this->variantService->expects($this->never())->method('restart');
+		$this->job->expects($this->never())->method('convertVariant');
+		$response = $this->controller()->status(42, 'full~phone~w~0');
+		$this->assertSame(Http::STATUS_TOO_MANY_REQUESTS, $response->getStatus());
+		$this->assertSame('share_quota', $response->getData()['errorCode']);
 	}
 
 	public function testSessionVariantStillUsesUserLimiter(): void {

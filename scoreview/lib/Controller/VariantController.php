@@ -128,9 +128,6 @@ class VariantController extends Controller {
 		// link instead of per user (ShareConversionQuota). The share path wins
 		// over a session, as in UserFileResolver.
 		$grant = $this->directAccess->shareGrant();
-		if ($grant !== null && !$this->shareQuota->consume($grant)) {
-			return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
-		}
 		$user = $grant === null ? $this->userSession->getUser() : null;
 		if ($user !== null) {
 			try {
@@ -140,13 +137,25 @@ class VariantController extends Controller {
 			}
 		}
 
+		// The visitor's unit is spent only by the request that really starts
+		// the run: a claim lost to a parallel request starts nothing, and the
+		// link's allowance is small and counts only work really queued (S4).
+		// A won claim is given back when the allowance is used up, or the row
+		// would sit there as "processing" until it goes stale.
 		if ($variant === null) {
 			$variant = $this->variantService->claim($fileId, $etag, $key);
 			if ($variant === null) {
 				// Claimed a moment ago by another request.
 				return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 			}
+			if ($grant !== null && !$this->shareQuota->consume($grant)) {
+				$this->variantService->release($variant);
+				return $this->shareQuotaExceeded();
+			}
 		} else {
+			if ($grant !== null && !$this->shareQuota->consume($grant)) {
+				return $this->shareQuotaExceeded();
+			}
 			$variant = $this->variantService->restart($variant);
 		}
 
@@ -155,6 +164,10 @@ class VariantController extends Controller {
 		return new JSONResponse($this->variantService->isCurrent($variant)
 			? $this->readyBody($fileId, $base, $variant)
 			: $this->errorBody($variant));
+	}
+
+	private function shareQuotaExceeded(): JSONResponse {
+		return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
 	}
 
 	/**
