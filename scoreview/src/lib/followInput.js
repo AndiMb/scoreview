@@ -80,9 +80,10 @@ export function systemSlices(measuresTimeline, durationMs) {
  * @param {Array<object>} score.metaParts meta.json parts
  * @param {{events: Array<{elid:number, timeMs:number}>, elements: object}} score.measuresTimeline measures.json
  * @param {number} score.durationMs
+ * @param {?(string|number)} [score.myPartId] the singer's part ("my part"), a starting guess for lib/voicePitch.js
  * @return {{notes: object[], parts: object[], options: object}}
  */
-export function followReferenceInput({ notes, markers = [], mixerChannels, metaParts, measuresTimeline, durationMs }) {
+export function followReferenceInput({ notes, markers = [], mixerChannels, metaParts, measuresTimeline, durationMs, myPartId = null }) {
 	const bars = barOccurrences(measuresTimeline)
 	const total = Math.max(durationMs, bars.at(-1)?.timeMs ?? 0)
 	return {
@@ -94,6 +95,7 @@ export function followReferenceInput({ notes, markers = [], mixerChannels, metaP
 			measureStartsMs: bars.map((b) => b.timeMs),
 			measureIds: bars.map((b) => b.measure),
 			systemStartsMs: systemSlices(measuresTimeline, total).map((x) => x.fromMs),
+			voicePart: myPartId === null || myPartId === undefined ? null : String(myPartId),
 		},
 	}
 }

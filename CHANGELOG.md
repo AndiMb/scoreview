@@ -6,6 +6,24 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Turn pages by listening also follows the singer's own voice: the phone
+  hears it loudest, and its pitch is compared with the line of the part it
+  lies on. "My part" is the first guess; a wrong or missing choice is
+  corrected by what is heard. On twelve rehearsal takes, bars within one bar
+  rose from 91 % to 97 %, and still 93-97 % with "my part" set to another
+  voice. The pitch comes from the same spectrum as before - the follower
+  still reads no audio samples.
+- Turn pages by listening shows the place 0.6 s ahead while the music
+  moves, so that the score scrolls and turns slightly before the singers
+  get there. The analysis lags behind the singing by about a quarter of a
+  second; in a pause the place still stops where it did.
+- Where the singer's own part rests before the next system, turn pages by
+  listening moves on to that system during the rest - once the last own
+  note has ended, at most 3 s early - so the next entry is on screen in
+  time. Where the own part sings across, the lead above decides.
+
 ## [1.32.1] – 2026-11-15
 
 ### Added

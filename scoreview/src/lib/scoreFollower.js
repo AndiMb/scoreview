@@ -42,6 +42,7 @@ import { buildQuery, rotateChroma, searchReference } from './globalSearch.js'
 import { createLevelGate } from './listenGates.js'
 import { createOnlineWarp } from './onlineWarp.js'
 import { createTempoTracker } from './tempoTracker.js'
+import { clearVoiceMidi } from './voicePitch.js'
 
 /**
  * @typedef {object} FollowerState
@@ -120,6 +121,8 @@ export function createScoreFollower(reference, options = {}) {
 	let view = null
 	let confidence = 0
 	let ensemble = null
+	// The part whose line the heard voice lies on (lib/onlineWarp.js), once known.
+	let voicePart = null
 	let unmatchedSince = null
 	let lastSearchAt = -Infinity
 	// Recent search results: {endMs, atMs, rate, margin, raw}.
@@ -167,7 +170,7 @@ export function createScoreFollower(reference, options = {}) {
 	/**
 	 * One tap of features.
 	 *
-	 * @param {{c36: ?Float32Array, levelDb: number}} frame
+	 * @param {{c36: ?Float32Array, levelDb: number, voice?: ?object}} frame voice: lib/voicePitch.js
 	 * @param {number} atMs time of the tap (end of the analysis window)
 	 * @return {FollowerState}
 	 */
@@ -187,7 +190,10 @@ export function createScoreFollower(reference, options = {}) {
 		let jumped = false
 		let matched = false
 		if (phase !== 'searching') {
-			const result = warp.step(chroma, onset)
+			// The own voice at the score's tuning (fold12 reads `cents` higher).
+			const heard = chroma ? clearVoiceMidi(frame.voice) : null
+			const voice = heard === null ? null : heard - tuning.cents / 100
+			const result = warp.step(chroma, onset, voice)
 			matched = result.matched
 			if (matched) {
 				onMatch(frame, result, atMs)
@@ -207,6 +213,7 @@ export function createScoreFollower(reference, options = {}) {
 			confidence,
 			evidence: recent.filter(Boolean).length / Math.max(1, recent.length),
 			ensemble,
+			voice: voicePart,
 			tuningCents: tuning.cents,
 			matched,
 			jumped,
@@ -223,6 +230,9 @@ export function createScoreFollower(reference, options = {}) {
 		time.confirm((result.position + 0.5) * reference.frameMs + (o.windowMs / 2) * tempo, atMs, tempo)
 		confidence += 0.1 * (result.similarity - confidence)
 		ensemble = result.ensemble
+		if (result.voice) {
+			voicePart = result.voice
+		}
 		unmatchedSince = null
 		if (phase === 'unsure') {
 			phase = 'following'

@@ -9,15 +9,25 @@
 //
 // In a pause the shown time runs on at most `coastMs` (fermatas and general
 // pauses are music) and then stands. A real jump moves it at once.
+//
+// `leadMs` shows the place that much ahead of the confirmation, out of the
+// same budget: the confirmation is always late (the analysis window, the
+// warp's need for a few frames of evidence; measured on hand-labelled
+// rehearsal recordings: median ~270 ms behind), and a singer must see the
+// next system before reaching it. Taken from the run-on, a pause still ends
+// where it ended without a lead - the lead only moves the cursor while the
+// music moves.
 
 /**
  * @param {object} [options]
  * @param {number} [options.coastMs] how far to run on without confirmation
  * @param {number} [options.jumpMs] a correction larger than this is shown at once
  * @param {number} [options.pullPerSecond] share of the gap closed per second
+ * @param {number} [options.leadMs] how far ahead of the confirmation to show, within coastMs
  * @return {object}
  */
-export function createFollowerTime({ coastMs = 1500, jumpMs = 400, pullPerSecond = 4 } = {}) {
+export function createFollowerTime({ coastMs = 1500, jumpMs = 400, pullPerSecond = 4, leadMs = 0 } = {}) {
+	const lead = Math.min(Math.max(0, leadMs), coastMs)
 	let confirmedMs = null
 	let confirmedAt = null
 	let tempo = 1
@@ -55,7 +65,7 @@ export function createFollowerTime({ coastMs = 1500, jumpMs = 400, pullPerSecond
 		if (confirmedMs === null) {
 			return null
 		}
-		const since = Math.min(Math.max(0, nowMs - confirmedAt), coastMs)
+		const since = Math.min(Math.max(0, nowMs - confirmedAt) + lead, coastMs)
 		return confirmedMs + since * tempo
 	}
 
@@ -75,7 +85,7 @@ export function createFollowerTime({ coastMs = 1500, jumpMs = 400, pullPerSecond
 		} else {
 			const dt = Math.max(0, nowMs - shownAt) / 1000
 			// Advance with the music, then close part of the remaining gap.
-			const advanced = shown + dt * 1000 * (nowMs - confirmedAt < coastMs ? tempo : 0)
+			const advanced = shown + dt * 1000 * (nowMs - confirmedAt + lead < coastMs ? tempo : 0)
 			const share = Math.min(1, dt * pullPerSecond)
 			shown = advanced + (goal - advanced) * share
 		}
@@ -94,7 +104,7 @@ export function createFollowerTime({ coastMs = 1500, jumpMs = 400, pullPerSecond
  * not carry the cursor on by itself. NaN while nothing is known, which
  * leaves the display on its own clock (usePlayback.followTime).
  *
- * @param {?{atMs:number, shownMs:?number, tempoRatio:number, phase:string}} report
+ * @param {?{atMs:number, shownMs:?number, tempoRatio:number, phase:string, snapped?:boolean}} report
  * @param {number} nowMs on the same clock as report.atMs
  * @param {number} [maxAheadMs]
  * @return {number}
@@ -103,7 +113,8 @@ export function shownBetweenReports(report, nowMs, maxAheadMs = 250) {
 	if (!report || !Number.isFinite(report.shownMs)) {
 		return NaN
 	}
-	if (report.phase !== 'following') {
+	// Moved ahead to the next system (lib/voiceTurns.js): it waits there.
+	if (report.phase !== 'following' || report.snapped) {
 		return report.shownMs
 	}
 	const since = Math.min(Math.max(0, nowMs - report.atMs), maxAheadMs)
