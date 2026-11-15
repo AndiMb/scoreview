@@ -36,6 +36,7 @@
 	<stubs>
 		<file name="tests/psalm-stubs/guzzle.phpstub" preloadClasses="true" />
 		<file name="tests/psalm-stubs/files.phpstub" preloadClasses="true" />
+		<file name="tests/psalm-stubs/files_sharing.phpstub" preloadClasses="true" />
 	</stubs>
 	<issueHandlers>
 		<!-- The OCP stubs name Doctrine's schema classes in docblocks

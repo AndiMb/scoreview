@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\AppInfo;
 
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
+use OCA\Files_Sharing\Event\BeforeTemplateRenderedEvent as PublicShareTemplateEvent;
 use OCA\ScoreView\Listener\AddCspListener;
 use OCA\ScoreView\Listener\AddFeaturePolicyListener;
 use OCA\ScoreView\Listener\CompanionRevocationListener;
@@ -106,11 +107,10 @@ class Application extends App implements IBootstrap {
 
 		// The public link page (/s/{token}): the framing handler, behind the
 		// admin switch. The event class belongs to files_sharing, which is not
-		// part of nextcloud/ocp, so it is named as a string: registering a
-		// listener for a class that does not exist is harmless - the event
-		// simply never fires when files_sharing is off - whereas a ::class
-		// reference would make static analysis fail.
-		$context->registerEventListener('OCA\\Files_Sharing\\Event\\BeforeTemplateRenderedEvent', PublicShareScriptsListener::class);
+		// part of nextcloud/ocp; ::class does not autoload, so the reference
+		// is harmless when files_sharing is off (the event then never fires),
+		// and Psalm knows the class from tests/psalm-stubs/files_sharing.phpstub.
+		$context->registerEventListener(PublicShareTemplateEvent::class, PublicShareScriptsListener::class);
 
 		// Widerruf der Begleit-Token der mobilen Seite ueber die Epoche der
 		// Nutzerin (Service\CompanionTokenService).

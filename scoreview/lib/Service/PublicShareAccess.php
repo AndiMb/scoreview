@@ -120,7 +120,10 @@ class PublicShareAccess {
 			}
 			return $root;
 		}
-		$node = $root instanceof Folder ? $root->getFirstNodeById($fileId) : null;
+		if (!$root instanceof Folder) {
+			throw new PublicShareException(PublicShareException::NOT_FOUND);
+		}
+		$node = $root->getFirstNodeById($fileId);
 		if (!$node instanceof File || $root->getRelativePath($node->getPath()) === null) {
 			throw new PublicShareException(PublicShareException::NOT_FOUND);
 		}
