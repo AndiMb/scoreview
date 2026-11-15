@@ -22,7 +22,7 @@ const NOTES = [
 ]
 const DURATION = 4000
 
-function setup({ channels = [1], loop = null, notes = NOTES } = {}) {
+function setup({ channels = [1], loop = null, notes = NOTES, persist = undefined } = {}) {
 	let listener = null
 	const playing = ref(false)
 	const position = ref(0)
@@ -57,6 +57,7 @@ function setup({ channels = [1], loop = null, notes = NOTES } = {}) {
 		positionMs: () => position.value,
 		waitModeActive: () => waiting.value,
 		now: () => clock,
+		...(persist === undefined ? {} : { persist: () => persist }),
 	}))
 
 	/**
@@ -110,6 +111,19 @@ describe('useSingScore', () => {
 		expect(sing.lastRun.value.isNewBest).toBe(true)
 		// The lane keeps the colours of the run just sung.
 		expect(sing.results.value.size).toBe(3)
+	})
+
+	it('shows a run to a visitor without storing or loading anything', async () => {
+		const { sing, playing, feed } = setup({ persist: false })
+		await sing.start()
+		playing.value = true
+		feed(0, 3700)
+		await nextTick()
+		expect(axiosGet).not.toHaveBeenCalled()
+		expect(axiosPost).not.toHaveBeenCalled()
+		expect(sing.lastRun.value.summary.totalPct).toBe(100)
+		// Nothing is kept, so there is no best to beat and no saving to wait for.
+		expect(sing.lastRun.value).toMatchObject({ kept: false, saving: false, isNewBest: false })
 	})
 
 	it('scores silence as 0 %', async () => {

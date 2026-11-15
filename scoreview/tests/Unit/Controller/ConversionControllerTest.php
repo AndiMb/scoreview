@@ -263,6 +263,55 @@ class ConversionControllerTest extends TestCase {
 		$this->clientFallback->method('reason')->willReturn(null);
 	}
 
+	/**
+	 * "Hide download" closes the source file, and the browser fallback (E7)
+	 * needs exactly that file - so where the fallback would apply, a
+	 * visitor gets a reason instead of a `client` answer whose source then
+	 * fails with 403, or a spinner that never ends.
+	 */
+	public function testVisitorPendingWithHiddenDownloadIsSourceHidden(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, true, 'dig'));
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->clientFallback->method('reason')->willReturn(ScoreConversion::ERROR_LOCAL_UNAVAILABLE);
+		$this->conversionService->method('find')->willReturn(null);
+		$this->jobList->expects($this->never())->method('add');
+
+		$data = $this->controller()->status(42)->getData();
+		$this->assertSame(['status' => 'error', 'errorCode' => ClientFallback::SOURCE_HIDDEN], $data);
+	}
+
+	public function testVisitorWithDownloadAllowedStillConvertsInTheBrowser(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, false, 'dig'));
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->clientFallback->method('reason')->willReturn(ScoreConversion::ERROR_LOCAL_UNAVAILABLE);
+		$this->conversionService->method('find')->willReturn(null);
+
+		$this->assertSame(ClientFallback::STATUS_CLIENT, $this->controller()->status(42)->getData()['status']);
+	}
+
+	public function testHiddenDownloadAlsoStopsTheFallbackAfterAnInfrastructureError(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, true, 'dig'));
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$conversion = $this->datensatz(ScoreConversion::STATUS_ERROR);
+		$conversion->setErrorCode(ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+		$this->conversionService->method('find')->willReturn($conversion);
+		$this->conversionService->method('isStale')->willReturn(false);
+		$this->clientFallback->method('noteConversionError')->willReturn(true);
+
+		$this->assertSame(ClientFallback::SOURCE_HIDDEN, $this->controller()->status(42)->getData()['errorCode']);
+	}
+
+	public function testVisitorIsNotOfferedAReconversion(): void {
+		// The share owner may write the file, the visitor may not: the
+		// reconvert route refuses the link (share_not_allowed), so the
+		// viewer must not offer the button in the first place.
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_READY));
+		$this->conversionService->method('isCurrent')->willReturn(true);
+		$this->conversionService->method('getPageCount')->willReturn(1);
+		$this->assertFalse($this->controller()->status(42)->getData()['canReconvert']);
+	}
+
 	public function testVisitorStatusQueuesUnderShareOwner(): void {
 		$this->asVisitor();
 		$this->conversionService->method('find')->willReturn(null);

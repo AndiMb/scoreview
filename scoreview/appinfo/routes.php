@@ -17,6 +17,11 @@ return [
 		// mobile apps print through "open in browser", a token entry would be
 		// a second surface without a use.
 		['name' => 'page#print', 'url' => '/print/{fileId}', 'verb' => 'GET', 'requirements' => ['fileId' => '\d+']],
+		// The viewer for visitors of a public link, framed by the link page
+		// (src/public.js, Controller\PageController::publicViewer). The token
+		// class is Nextcloud's own for custom link tokens
+		// (ShareAPIController::validateToken): letters, digits and "-".
+		['name' => 'page#publicViewer', 'url' => '/public/{token}/{fileId}', 'verb' => 'GET', 'requirements' => ['token' => '[A-Za-z0-9-]+', 'fileId' => '\d+']],
 
 		// Konvertierungs-Pipeline (siehe docs/architecture.md E1/E2)
 		['name' => 'conversion#status', 'url' => '/api/scores/{fileId}/status', 'verb' => 'GET'],

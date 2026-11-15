@@ -47,6 +47,15 @@ export default {
 			type: String,
 			default: '',
 		},
+
+		/**
+		 * The page sits in a frame whose host closes it (the public link
+		 * page, Nextcloud's viewer around it): then this frame has no cross.
+		 */
+		hostCloses: {
+			type: Boolean,
+			default: false,
+		},
 	},
 
 	setup() {
@@ -61,6 +70,9 @@ export default {
 		 * bleibt es aus.
 		 */
 		schliessbar() {
+			if (this.hostCloses) {
+				return false
+			}
 			return this.bruecke.verfuegbar || window.history.length > 1
 		},
 	},

@@ -104,7 +104,8 @@
 			<p v-else-if="lastRun.saving" class="scoreview-sing-meta">
 				{{ t('Saving …') }}
 			</p>
-			<p v-else-if="!lastRun.saved" class="scoreview-sing-warning">
+			<!-- A run not meant to be kept (a visitor of a public link) is not "not saved". -->
+			<p v-else-if="!lastRun.saved && lastRun.kept !== false" class="scoreview-sing-warning">
 				{{ t('Not saved.') }}
 			</p>
 

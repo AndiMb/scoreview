@@ -6,13 +6,20 @@
 // nimmt den Token-Scope gleich nach open() wieder zurueck. Gemessen auf
 // Nextcloud 31 und 34 antworten ihre Folgeanfragen deshalb mit 401 - ohne den
 // Ausweis unten zeigte der Viewer hier gar nichts an.
+//
+// The same entry serves the page for visitors of a public link
+// (/apps/scoreview/public/{token}/{fileId}, Controller\PageController::
+// publicViewer), framed by the link page. Its pass is the link's token
+// instead (shareToken in the initial state): no companions, no renewal and
+// no app bridge - and no closing cross, Nextcloud's viewer around the frame
+// has one.
 
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { createApp } from 'vue'
 import StandaloneFrame from './components/StandaloneFrame.vue'
 import { readInitialState } from './initialState.js'
-import { ausweisFuer, begleiterErneuerbar, setlisteDerAnfrage } from './lib/directToken.js'
+import { ausweisFuer, begleiterErneuerbar, setlisteDerAnfrage, shareAusweisFuer } from './lib/directToken.js'
 import { createBridge } from './lib/mobileBridge.js'
 
 import './publicPath.js'
@@ -122,10 +129,21 @@ function ausweisAnhaengen(token) {
 		return config
 	})
 
+	fetchMitAusweis((url) => ausweisFuer(url, herkunft, ausweis))
+}
+
+/**
+ * Wraps `window.fetch` so that it carries the headers `zusatzFuer` names for
+ * a URL - the SoundFont and the engine's own downloads go this way (see
+ * ausweisAnhaengen).
+ *
+ * @param {(url: string) => Record<string, string>} zusatzFuer
+ */
+function fetchMitAusweis(zusatzFuer) {
 	const original = window.fetch.bind(window)
 	window.fetch = (eingabe, optionen = {}) => {
 		const url = typeof eingabe === 'string' ? eingabe : eingabe?.url
-		const zusatz = ausweisFuer(url, herkunft, ausweis)
+		const zusatz = zusatzFuer(url)
 		if (Object.keys(zusatz).length === 0) {
 			return original(eingabe, optionen)
 		}
@@ -137,6 +155,26 @@ function ausweisAnhaengen(token) {
 		}
 		return original(eingabe, { ...optionen, headers: header })
 	}
+}
+
+/**
+ * The pass of the public link page: the link's token on every request to
+ * the own origin, over both ways the viewer uses (axios and fetch), with the
+ * same origin rule as the Direct Editing token (lib/directToken.js). The
+ * viewer in guest mode calls only the routes that take it.
+ *
+ * @param {string} token the link's token from the initial state
+ */
+function freigabeAusweisAnhaengen(token) {
+	const herkunft = window.location.origin
+	axios.interceptors.request.use((config) => {
+		config.headers = config.headers ?? {}
+		for (const [name, wert] of Object.entries(shareAusweisFuer(config.url, herkunft, token))) {
+			config.headers[name] = wert
+		}
+		return config
+	})
+	fetchMitAusweis((url) => shareAusweisFuer(url, herkunft, token))
 }
 
 /**
@@ -199,7 +237,9 @@ function beiAblaufNeuLaden(bruecke) {
 	})
 }
 
-if (zustand.token) {
+if (zustand.shareToken) {
+	freigabeAusweisAnhaengen(zustand.shareToken)
+} else if (zustand.token) {
 	ausweisAnhaengen(zustand.token)
 	neueListeFreischalten()
 	beiAblaufNeuLaden(createBridge(window))
@@ -208,6 +248,10 @@ if (zustand.token) {
 createApp(StandaloneFrame, {
 	fileid: zustand.fileId,
 	name: zustand.fileName ?? '',
+	// Framed by Nextcloud's viewer on the link page, which has its own
+	// closing cross - a second one in the frame could only go back in the
+	// history the frame shares with the link page.
+	hostCloses: zustand.guest === true,
 })
 	// Ein Begleit-Token fuer das Stueck, zu dem „Folgt mir" umgezogen ist
 	// (H7) - wie bei der Setliste nur gegen das Direct-Editing-Token dieser

@@ -7,16 +7,20 @@ namespace OCA\ScoreView\Controller;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\FeatureConfig;
+use OCA\ScoreView\Service\PublicShareAccess;
+use OCA\ScoreView\Service\PublicShareException;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\ViewerPolicy;
 use OCA\ScoreView\Service\ViewerPreferences;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
+use OCP\AppFramework\Http\Attribute\BruteForceProtection;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Http\DataDisplayResponse;
+use OCP\AppFramework\Http\FeaturePolicy;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\Response;
@@ -45,6 +49,13 @@ use OCP\Util;
  * would print the few pages that happen to be loaded, inside Nextcloud's
  * frame. The print page holds every page of one score at once, nothing else,
  * and is opened from the viewer - it carries no navigation of its own.
+ *
+ * The page for visitors of a public link is one because the link page
+ * itself must stay as it is: lifting its CSP for WebAssembly would lift it
+ * on every shared photo and contract of the instance. ScoreView's script on
+ * the link page only frames this page (src/public.js); here the viewer runs
+ * under its own policy, as on the mobile apps' page (E8) - the same bundle,
+ * in guest mode.
  */
 class PageController extends Controller {
 	use JsonErrors;
@@ -60,6 +71,7 @@ class PageController extends Controller {
 		private UserFileResolver $fileResolver,
 		private ClientFallback $clientFallback,
 		private IL10N $l,
+		private PublicShareAccess $shareAccess,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -90,6 +102,89 @@ class PageController extends Controller {
 		// conversion fallback (E7) runs the engine here as well - as
 		// WebAssembly, from a blob worker - and only where it can apply.
 		$response->setContentSecurityPolicy($this->viewerPolicy->forPage($this->clientFallback->applies()));
+		return $response;
+	}
+
+	/**
+	 * The viewer for a visitor of a public link, framed by the link page.
+	 *
+	 * The same checks as every request the page makes afterwards
+	 * (Middleware\DirectAccessMiddleware): the switch, the token, the
+	 * password this session has unlocked, the file inside the share. A
+	 * refusal is a plain page with the refusal's status and no viewer
+	 * bundle - nothing of the app loads for a link that does not open.
+	 *
+	 * No CSRF check: a visitor's first request is this GET from a frame,
+	 * and the page only shows. Guessed tokens count against the same
+	 * brute-force bucket as the share header on the API.
+	 */
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[BruteForceProtection(action: 'scoreview_share')]
+	public function publicViewer(string $token, int $fileId): Response {
+		try {
+			$grant = $this->shareAccess->grant($token, $fileId);
+		} catch (PublicShareException $e) {
+			return $this->publicRefusal($e);
+		}
+		$node = $grant->node;
+		if (!$node instanceof File) {
+			return $this->publicRefusal(new PublicShareException(PublicShareException::NOT_FOUND));
+		}
+
+		$this->initialState->provideInitialState('standalone', [
+			'fileId' => $node->getId(),
+			'fileName' => $node->getName(),
+			// The visitor's pass for the page's own requests (src/standalone.js,
+			// header X-ScoreView-Share). It came in the URL; it stays in this
+			// page and never reaches storage.
+			'shareToken' => $token,
+			// Read once by the viewer (ScoreViewer.vue): what needs an account
+			// is not offered, settings stay in this browser.
+			'guest' => true,
+			'hideDownload' => $grant->hideDownload,
+		]);
+		// No account behind the visitor: the switches without everything that
+		// writes into one (FeatureConfig::forGuest), the default display
+		// settings - those the visitor changes are kept in the browser.
+		$this->initialState->provideInitialState('features', $this->features->forGuest());
+		$this->initialState->provideInitialState('viewer-preferences', $this->preferences->get(null));
+		Util::addScript(Application::APP_ID, Application::APP_ID . '-standalone');
+
+		$response = new TemplateResponse(Application::APP_ID, 'standalone', [], TemplateResponse::RENDER_AS_BASE);
+		// The viewer's policy (WebAssembly, the SoundFont's origin). Blob
+		// workers only where the visitor's browser may convert: with "hide
+		// download" it has no source to convert from (ClientFallback::
+		// sourceOpenTo). frame-ancestors stays Nextcloud's 'self' - the link
+		// page of the same instance frames this page, nobody else may.
+		$response->setContentSecurityPolicy($this->viewerPolicy->forPage(
+			$this->clientFallback->applies() && ClientFallback::sourceOpenTo($grant)));
+		// The microphone for the tuner, scored singing and the follower,
+		// as on the mobile apps' page (DirectEditing\ScoreDirectEditor): the
+		// frame's allow="microphone" and the link page's policy only pass it
+		// on - this page has to allow it itself.
+		if ($this->features->usesMicrophone()) {
+			$policy = new FeaturePolicy();
+			$policy->addAllowedMicrophoneDomain("'self'");
+			$response->setFeaturePolicy($policy);
+		}
+		return $response;
+	}
+
+	/**
+	 * The page for a link that does not open the score: one sentence, the
+	 * refusal's status, and a throttle for what looks like guessing - an
+	 * unknown token or a password not entered, as the middleware counts.
+	 */
+	private function publicRefusal(PublicShareException $e): Response {
+		$message = $e->getErrorCode() === PublicShareException::NOT_FOUND
+			? $this->l->t('File not found or no access.')
+			: $this->l->t('This link is no longer valid or needs its password again. Open the link again.');
+		$response = new TemplateResponse(Application::APP_ID, 'public-error', ['message' => $message], TemplateResponse::RENDER_AS_BASE);
+		$response->setStatus($e->getStatus());
+		if (in_array($e->getErrorCode(), [PublicShareException::SHARE_INVALID, PublicShareException::SHARE_AUTH], true)) {
+			$response->throttle(['action' => 'scoreview_share']);
+		}
 		return $response;
 	}
 

@@ -56,7 +56,7 @@ msgstr ""
 msgid "Invalid note anchor."
 msgstr ""
 
-#: lib/Controller/ConversionController.php lib/Controller/JsonErrors.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
+#: lib/Controller/ConversionController.php lib/Controller/JsonErrors.php lib/Controller/PageController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
 msgid "File not found or no access."
 msgstr ""
 
@@ -122,6 +122,10 @@ msgstr ""
 
 #: lib/Controller/LeaderController.php
 msgid "This person is not a leader of this score."
+msgstr ""
+
+#: lib/Controller/PageController.php src/composables/useConversionStatus.js src/composables/useScoreVariant.js
+msgid "This link is no longer valid or needs its password again. Open the link again."
 msgstr ""
 
 #: lib/Controller/PageController.php
@@ -2409,6 +2413,10 @@ msgid "A drawing beside the music was not saved. Start it on the staff."
 msgstr ""
 
 #: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
+msgid "Too many new scores were prepared through this link. Try again later."
+msgstr ""
+
+#: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
 msgid "The conversion service could not be reached."
 msgstr ""
 
@@ -2450,6 +2458,10 @@ msgstr ""
 
 #: src/composables/useConversionStatus.js
 msgid "This score could not be set in this browser, and this server cannot convert it itself. Reloading the page may help."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
+msgid "This score is not prepared yet. Ask the person who shared it to open it once."
 msgstr ""
 
 #: src/composables/useConversionStatus.js

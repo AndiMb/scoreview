@@ -179,6 +179,12 @@ export function useScoreVariant(deps) {
 			// service, not the score, and the server tries again after a minute.
 			sidecar_busy: t('The conversion service is busy. Please try again in a moment.'),
 			sidecar_unreachable: t('The conversion service could not be reached.'),
+			// Through a public link: the link's quota of new conversions, or
+			// the link itself is gone (useConversionStatus has the same).
+			share_quota: t('Too many new scores were prepared through this link. Try again later.'),
+			share_throttled: t('Too many new scores were prepared through this link. Try again later.'),
+			share_auth: t('This link is no longer valid or needs its password again. Open the link again.'),
+			share_invalid: t('This link is no longer valid or needs its password again. Open the link again.'),
 		}
 		return texts[errorCode.value] ?? t('This part or page format could not be engraved. The score is shown as the file has it.')
 	})

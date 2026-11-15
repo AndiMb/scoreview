@@ -221,7 +221,10 @@ class ConversionController extends Controller {
 			// Antwort hier ist eine Anzeigehilfe, keine Absicherung). Ohne sie
 			// stuende der Knopf auch an einer nur geliehenen Partitur und
 			// endete jedes Mal in einem 403.
-			$body['canReconvert'] = $node->isUpdateable();
+			// Never for a visitor of a public link: the node is the share
+			// owner's and may well be updateable, but the visitor is not
+			// the owner, and reconvert does not take a share token.
+			$body['canReconvert'] = $node->isUpdateable() && $this->directAccess->shareGrant() === null;
 			// Whether the server can engrave display variants (E19) - a
 			// capability, not a path (E15). The choices themselves come from
 			// meta.json, which the viewer loads anyway.
@@ -418,6 +421,13 @@ class ConversionController extends Controller {
 	 * leer.
 	 */
 	private function clientResponse(Node $node, ?string $grund): JSONResponse {
+		// A link with "hide download" gives the browser no source to set -
+		// an end, with its reason, instead of a fallback bound to fail
+		// (Service\ClientFallback::sourceOpenTo). Nothing is queued: the
+		// server cannot convert, that is why we are here.
+		if (!ClientFallback::sourceOpenTo($this->directAccess->shareGrant())) {
+			return new JSONResponse(['status' => ScoreConversion::STATUS_ERROR, 'errorCode' => ClientFallback::SOURCE_HIDDEN]);
+		}
 		$etag = $node->getEtag();
 		return new JSONResponse([
 			'status' => ClientFallback::STATUS_CLIENT,

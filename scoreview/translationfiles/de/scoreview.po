@@ -56,7 +56,7 @@ msgstr "Unbekannter Stempel."
 msgid "Invalid note anchor."
 msgstr "Ungültiger Notizanker."
 
-#: lib/Controller/ConversionController.php lib/Controller/JsonErrors.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
+#: lib/Controller/ConversionController.php lib/Controller/JsonErrors.php lib/Controller/PageController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
 msgid "File not found or no access."
 msgstr "Datei nicht gefunden oder kein Zugriff."
 
@@ -123,6 +123,10 @@ msgstr "Wem die Datei gehört, leitet die Partitur immer und kann nicht abberufe
 #: lib/Controller/LeaderController.php
 msgid "This person is not a leader of this score."
 msgstr "Diese Person ist keine Leitung dieser Partitur."
+
+#: lib/Controller/PageController.php src/composables/useConversionStatus.js src/composables/useScoreVariant.js
+msgid "This link is no longer valid or needs its password again. Open the link again."
+msgstr "Dieser Link gilt nicht mehr oder braucht erneut sein Passwort. Öffne den Link noch einmal."
 
 #: lib/Controller/PageController.php
 msgid "The offline page is turned off on this server."
@@ -2409,6 +2413,10 @@ msgid "A drawing beside the music was not saved. Start it on the staff."
 msgstr "Eine Zeichnung neben den Noten wurde nicht gespeichert. Beginne sie auf der Notenzeile."
 
 #: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
+msgid "Too many new scores were prepared through this link. Try again later."
+msgstr "Über diesen Link wurden zu viele neue Partituren vorbereitet. Versuche es später noch einmal."
+
+#: src/composables/useConversionStatus.js src/composables/useScoreVariant.js
 msgid "The conversion service could not be reached."
 msgstr "Der Konvertierungsdienst konnte nicht erreicht werden."
 
@@ -2451,6 +2459,10 @@ msgstr "Diese Partitur ist zu groß, um in diesem Browser gesetzt zu werden, und
 #: src/composables/useConversionStatus.js
 msgid "This score could not be set in this browser, and this server cannot convert it itself. Reloading the page may help."
 msgstr "Diese Partitur konnte in diesem Browser nicht gesetzt werden, und dieser Server kann sie nicht selbst konvertieren. Ein Neuladen der Seite hilft möglicherweise."
+
+#: src/composables/useConversionStatus.js
+msgid "This score is not prepared yet. Ask the person who shared it to open it once."
+msgstr "Diese Partitur ist noch nicht vorbereitet. Bitte die Person, die sie geteilt hat, sie einmal zu öffnen."
 
 #: src/composables/useConversionStatus.js
 msgid "An unknown error occurred during conversion."

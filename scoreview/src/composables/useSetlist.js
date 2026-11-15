@@ -30,9 +30,11 @@ import { firstPlayableIndex, indexOfFile, nextIndex, positionOf, previousIndex }
  * @param {(action: string) => boolean} [deps.can] the interaction policy
  *   (usePerformanceMode.can): paging through the list is `nextPiece` - it
  *   works in performance mode too -, the editor is `settings`
+ * @param {() => boolean} [deps.enabled] false for a visitor of a public
+ *   link: setlists are read from an account's view of the folder
  * @return {object}
  */
-export function useSetlist({ fileId, setFileId, standalone, originFileId = fileId, can = () => true }) {
+export function useSetlist({ fileId, setFileId, standalone, originFileId = fileId, can = () => true, enabled = () => true }) {
 	const t = (text) => translate('scoreview', text)
 
 	// Die geladene Liste, wie GET /api/setlists/{id} sie liefert.
@@ -196,7 +198,7 @@ export function useSetlist({ fileId, setFileId, standalone, originFileId = fileI
 	async function loadOffers() {
 		const mine = ++offerGeneration
 		const id = fileId()
-		if (standalone() && String(id) !== String(originFileId())) {
+		if (!enabled() || (standalone() && String(id) !== String(originFileId()))) {
 			offers.value = []
 			return
 		}

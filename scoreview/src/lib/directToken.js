@@ -138,6 +138,31 @@ export function ausweisFuer(url, herkunft, { token, originFileId, begleiter }) {
 	return header
 }
 
+// --- Public share links ----------------------------------------------------
+//
+// The page for visitors of a public link (Controller\PageController::
+// publicViewer) has no session either; its pass is the link's own token.
+// Same rule as above - only to the own origin, never to a blob: or data:
+// URL - and nothing else: no companions (a visitor has no setlists), and no
+// renewal, because the token does not expire on its own.
+
+export const SHARE_HEADER = 'X-ScoreView-Share'
+
+/**
+ * The headers for a request of the public link page. Every request to the
+ * own origin carries it; the app's routes that do not take a share token
+ * answer 401 `share_not_allowed` then, which is why the viewer in guest mode
+ * calls none of them (ScoreViewer.vue, `guest`).
+ *
+ * @param {string} url
+ * @param {string} herkunft `window.location.origin`
+ * @param {string} token the link's token
+ * @return {Record<string, string>}
+ */
+export function shareAusweisFuer(url, herkunft, token) {
+	return darfTokenTragen(url, herkunft) ? { [SHARE_HEADER]: token } : {}
+}
+
 /**
  * Ob eine abgewiesene Anfrage an einem Begleiter scheiterte, den ein neuer
  * ersetzen kann - abgelaufen (12 h), widerrufen (Epoche) oder nicht mehr

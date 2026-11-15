@@ -68,3 +68,16 @@ describe('interactionPolicy.allowed - offline (E14)', () => {
 		expect(allowed('page', { offline: true, performance: true })).toBe(true)
 	})
 })
+
+describe('interactionPolicy.allowed - visitor on a public link', () => {
+	it('blocks notes and the leader\'s jumps, which need an account', () => {
+		expect(allowed('annotate', { guest: true })).toBe(false)
+		expect(allowed('followJump', { guest: true, following: true })).toBe(false)
+	})
+
+	it('lets a visitor play, read and practise', () => {
+		for (const action of ['play', 'seek', 'loop', 'mixer', 'tone', 'settings', 'page', 'zoom', 'nextPiece', 'noteClick']) {
+			expect(allowed(action, { guest: true })).toBe(true)
+		}
+	})
+})

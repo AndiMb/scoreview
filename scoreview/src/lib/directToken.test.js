@@ -6,6 +6,8 @@ import {
 	darfTokenTragen,
 	dateiDerAnfrage,
 	setlisteDerAnfrage,
+	SHARE_HEADER,
+	shareAusweisFuer,
 	TOKEN_HEADER,
 } from './directToken.js'
 
@@ -105,5 +107,18 @@ describe('Begleit-Token', () => {
 		expect(begleiterErneuerbar(401, 'token_expired')).toBe(false)
 		expect(begleiterErneuerbar(403, 'companion_purpose')).toBe(false)
 		expect(begleiterErneuerbar(403, 'token_file_mismatch')).toBe(false)
+	})
+})
+
+describe('shareAusweisFuer', () => {
+	it('carries the share token to the own instance', () => {
+		expect(shareAusweisFuer('/apps/scoreview/api/scores/7/status', EIGEN, 'abc123')).toEqual({ [SHARE_HEADER]: 'abc123' })
+		expect(shareAusweisFuer(`${EIGEN}/apps/scoreview/api/soundfont`, EIGEN, 'abc123')).toEqual({ [SHARE_HEADER]: 'abc123' })
+	})
+
+	it('gives nothing to a foreign host or to a blob', () => {
+		expect(shareAusweisFuer('https://cdn.example.org/gm.sf3', EIGEN, 'abc123')).toEqual({})
+		expect(shareAusweisFuer('blob:https://wolke.example/1234', EIGEN, 'abc123')).toEqual({})
+		expect(shareAusweisFuer('data:text/plain,x', EIGEN, 'abc123')).toEqual({})
 	})
 })

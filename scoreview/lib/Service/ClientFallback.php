@@ -62,6 +62,12 @@ class ClientFallback {
 	 */
 	public const STATUS_CLIENT = 'client';
 
+	/**
+	 * What a visitor gets instead of `client` where "hide download" closes
+	 * the source the browser would have to set (see sourceOpenTo()).
+	 */
+	public const SOURCE_HIDDEN = 'client_source_hidden';
+
 	/** Das Urteil selbst ist der Grund - `ok` heisst: Der Server kann. */
 	public const CONFIG_VERDICT = 'client_fallback_verdict';
 	public const CONFIG_VERDICT_AT = 'client_fallback_verdict_at';
@@ -106,6 +112,25 @@ class ClientFallback {
 	public function reason(): ?string {
 		$urteil = $this->urteil();
 		return $urteil === self::VERDICT_OK ? null : $urteil;
+	}
+
+	/**
+	 * Whether the browser may take over for this request, should the server
+	 * be unable to: it sets the score from its source file (E7), and a
+	 * public link with "hide download" keeps that file closed
+	 * (conversion#source answers 403). Saying so here, where the fallback is
+	 * decided, rather than in the viewer: otherwise the visitor would get
+	 * `client`, fail on the source and see a transport error - and the
+	 * viewer would need a branch for the kind of page it runs on.
+	 *
+	 * Static because it asks nothing of the stored verdict: it is a rule
+	 * about the request, the same for the status answer and the page's CSP
+	 * (Controller\PageController::publicViewer, no blob workers then).
+	 *
+	 * @param ?PublicShareGrant $grant the visitor's link, null for a member
+	 */
+	public static function sourceOpenTo(?PublicShareGrant $grant): bool {
+		return $grant === null || !$grant->hideDownload;
 	}
 
 	/**

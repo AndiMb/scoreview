@@ -7,6 +7,9 @@ namespace OCA\ScoreView\Tests\Unit\Controller;
 use OCA\ScoreView\Controller\PageController;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\FeatureConfig;
+use OCA\ScoreView\Service\PublicShareAccess;
+use OCA\ScoreView\Service\PublicShareException;
+use OCA\ScoreView\Service\PublicShareGrant;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\ViewerPolicy;
 use OCA\ScoreView\Service\ViewerPreferences;
@@ -23,6 +26,7 @@ use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUser;
 use OCP\IUserSession;
+use OCP\Util;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -32,6 +36,10 @@ use PHPUnit\Framework\TestCase;
  *
  * The print page (E16): a file the session cannot see is a 404 before
  * anything else (S8); a visible one gets its name and the viewer's policy.
+ *
+ * The page for visitors of a public link: framed by the link page, guest
+ * state instead of an account, and a plain error page - without the viewer
+ * bundle - for a link that does not open the score.
  */
 class PageControllerTest extends TestCase {
 	/** @var array<string, bool> */
@@ -42,6 +50,16 @@ class PageControllerTest extends TestCase {
 	private string $requestUri = '/index.php/apps/scoreview/offline';
 	private ?Node $ownFile = null;
 	private bool $clientFallback = false;
+	/** What PublicShareAccess::grant() answers: a grant, or the refusal to throw. */
+	private PublicShareGrant|PublicShareException|null $grant = null;
+	/** @var list<array{0: string, 1: ?int}> */
+	private array $grantCalls = [];
+
+	protected function setUp(): void {
+		// Util keeps the scripts of the page in a static list - reset, so
+		// one test cannot see the scripts of another.
+		(new \ReflectionProperty(Util::class, 'scripts'))->setValue(null, []);
+	}
 
 	private function controller(): PageController {
 		$appConfig = $this->createMock(IAppConfig::class);
@@ -79,11 +97,21 @@ class PageControllerTest extends TestCase {
 		$resolver->method('resolveOwnNode')->willReturnCallback(fn (int $fileId) => $fileId === 42 ? $this->ownFile : null);
 		$fallback = $this->createMock(ClientFallback::class);
 		$fallback->method('applies')->willReturnCallback(fn () => $this->clientFallback);
+		$preferences = $this->createMock(ViewerPreferences::class);
+		$preferences->method('get')->willReturnCallback(fn (?string $uid) => ['for' => $uid]);
+		$shares = $this->createMock(PublicShareAccess::class);
+		$shares->method('grant')->willReturnCallback(function (string $token, ?int $fileId) {
+			$this->grantCalls[] = [$token, $fileId];
+			if ($this->grant instanceof PublicShareException) {
+				throw $this->grant;
+			}
+			return $this->grant;
+		});
 
 		return new PageController(
 			$request,
 			new FeatureConfig($appConfig),
-			$this->createMock(ViewerPreferences::class),
+			$preferences,
 			$session,
 			$state,
 			$url,
@@ -91,6 +119,7 @@ class PageControllerTest extends TestCase {
 			$resolver,
 			$fallback,
 			$l,
+			$shares,
 		);
 	}
 
@@ -196,5 +225,113 @@ class PageControllerTest extends TestCase {
 		$csp = $this->controller()->print(42)->getContentSecurityPolicy()->buildPolicy();
 		$this->assertMatchesRegularExpression("/worker-src [^;]*'self'[^;]*blob:/", $csp);
 		$this->assertMatchesRegularExpression('/connect-src [^;]*blob:/', $csp);
+	}
+
+	// --- public link page ----------------------------------------
+
+	/** @return list<string> the app's scripts the page would load */
+	private function appScripts(): array {
+		// Bundles only - Util adds the app's translations next to each one.
+		$scripts = (new \ReflectionProperty(Util::class, 'scripts'))->getValue();
+		return array_values(array_filter($scripts['scoreview'] ?? [], fn (string $path) => str_starts_with($path, 'scoreview/js/')));
+	}
+
+	private function visitorGrant(bool $hideDownload = false): void {
+		$this->grant = new PublicShareGrant('owner', $this->file(), $hideDownload, 'digest');
+	}
+
+	public function testPublicViewerRejectsInvalidShare(): void {
+		$this->grant = new PublicShareException(PublicShareException::SHARE_INVALID);
+		$response = $this->controller()->publicViewer('tok123', 42);
+
+		$this->assertSame(Http::STATUS_UNAUTHORIZED, $response->getStatus());
+		// Counts against the brute-force protection, as a wrong token on
+		// Nextcloud's own /s/ page does.
+		$this->assertTrue($response->isThrottled());
+		$this->assertSame([], $this->appScripts());
+		$this->assertArrayNotHasKey('standalone', $this->states);
+		$this->assertArrayNotHasKey('features', $this->states);
+	}
+
+	public function testPublicViewerKeepsTheStatusOfTheRefusal(): void {
+		$this->grant = new PublicShareException(PublicShareException::NOT_FOUND);
+		$response = $this->controller()->publicViewer('tok123', 42);
+		$this->assertSame(Http::STATUS_NOT_FOUND, $response->getStatus());
+		// A file outside the share is no guess at the token - not throttled.
+		$this->assertFalse($response->isThrottled());
+		$this->assertSame([], $this->appScripts());
+	}
+
+	public function testPublicViewerSetsGuestStateAndPolicy(): void {
+		$this->visitorGrant();
+		$this->bools[FeatureConfig::INTONATION] = true;
+		$this->bools[FeatureConfig::RECORDING] = true;
+		$this->bools[FeatureConfig::PRACTICE_EXPORT] = true;
+		$response = $this->controller()->publicViewer('tok123', 42);
+
+		$this->assertSame([['tok123', 42]], $this->grantCalls);
+		$this->assertInstanceOf(TemplateResponse::class, $response);
+		$this->assertSame('standalone', $response->getTemplateName());
+		$this->assertSame(TemplateResponse::RENDER_AS_BASE, $response->getRenderAs());
+		$this->assertSame([
+			'fileId' => 42,
+			'fileName' => 'Aequale.mscz',
+			'shareToken' => 'tok123',
+			'guest' => true,
+			'hideDownload' => false,
+		], $this->states['standalone']);
+		$this->assertSame($this->featureConfig()->forGuest(), $this->states['features']);
+		$this->assertFalse($this->states['features']['recording']);
+		$this->assertFalse($this->states['features']['practiceExport']);
+		// The defaults - a visitor has no account to read preferences from.
+		$this->assertSame(['for' => null], $this->states['viewer-preferences']);
+		$this->assertSame(['scoreview/js/scoreview-standalone'], $this->appScripts());
+
+		$csp = $response->getContentSecurityPolicy()->buildPolicy();
+		$this->assertStringContainsString("'wasm-unsafe-eval'", $csp);
+		// Framed by the link page of the same instance, by nobody else.
+		$this->assertMatchesRegularExpression("/frame-ancestors 'self';/", $csp);
+		// The tuner and scored singing need the microphone inside the frame.
+		$this->assertMatchesRegularExpression("/microphone 'self'/", $response->getFeaturePolicy()->buildPolicy());
+	}
+
+	public function testPublicViewerAsksForNoMicrophoneWithoutAMicrophoneFeature(): void {
+		$this->visitorGrant();
+		$this->bools[FeatureConfig::RECORDING] = false;
+		$this->bools[FeatureConfig::INTONATION] = false;
+		$this->bools[FeatureConfig::SCORE_FOLLOWER] = false;
+		$response = $this->controller()->publicViewer('tok123', 42);
+		$this->assertDoesNotMatchRegularExpression("/microphone 'self'/", $response->getFeaturePolicy()->buildPolicy());
+	}
+
+	public function testPublicViewerHideDownloadHasNoBlobWorker(): void {
+		$this->visitorGrant(true);
+		$this->clientFallback = true;
+		$response = $this->controller()->publicViewer('tok123', 42);
+
+		$this->assertTrue($this->states['standalone']['hideDownload']);
+		$csp = $response->getContentSecurityPolicy()->buildPolicy();
+		// The fallback needs the source, which "hide download" closes - so
+		// the page does not open what it cannot use.
+		$this->assertDoesNotMatchRegularExpression('/worker-src [^;]*blob:/', $csp);
+		$this->assertDoesNotMatchRegularExpression('/connect-src [^;]*blob:/', $csp);
+	}
+
+	public function testPublicViewerAllowsBlobWorkersWhereTheVisitorsBrowserConverts(): void {
+		$this->visitorGrant(false);
+		$this->clientFallback = true;
+		$csp = $this->controller()->publicViewer('tok123', 42)->getContentSecurityPolicy()->buildPolicy();
+		$this->assertMatchesRegularExpression("/worker-src [^;]*'self'[^;]*blob:/", $csp);
+	}
+
+	private function featureConfig(): FeatureConfig {
+		$appConfig = $this->createMock(IAppConfig::class);
+		$appConfig->method('getValueBool')->willReturnCallback(
+			fn (string $app, string $key, bool $default = false) => $this->bools[$key] ?? $default,
+		);
+		$appConfig->method('getValueInt')->willReturnCallback(
+			fn (string $app, string $key, int $default = 0) => $default,
+		);
+		return new FeatureConfig($appConfig);
 	}
 }

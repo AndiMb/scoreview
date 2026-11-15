@@ -2,6 +2,7 @@ import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
 import { ref } from 'vue'
 import { clampLevel, DEFAULT_OTHERS_LEVEL } from '../lib/coachMix.js'
+import { GUEST_KEYS, readGuest, writeGuest } from '../lib/guestStore.js'
 
 /** Die Vorgaben der Uebe-Einstellungen, wie Service\ViewerPreferences. */
 const PRACTICE_DEFAULTS = Object.freeze({
@@ -34,11 +35,16 @@ const PRACTICE_DEFAULTS = Object.freeze({
  * gemerkte Stimme in der Partitur nicht mehr (Re-Upload), bleibt sie
  * wirkungslos - `myPartIndex` im Viewer findet sie dann einfach nicht.
  *
+ * A visitor of a public link has no account to remember it in: with
+ * `local` the same choice goes to this browser instead (lib/guestStore.js),
+ * per score just the same - and no request reaches the account routes.
+ *
  * @param {object} deps
  * @param {() => (number|string)} deps.fileId aktuelle fileId
+ * @param {() => boolean} [deps.local] keep it in the browser, not on the server
  * @return {object}
  */
-export function useMyPart({ fileId }) {
+export function useMyPart({ fileId, local = () => false }) {
 	const myPartId = ref(null)
 	const practice = ref({ ...PRACTICE_DEFAULTS })
 
@@ -54,6 +60,12 @@ export function useMyPart({ fileId }) {
 		const mine = ++generation
 		myPartId.value = null
 		practice.value = { ...PRACTICE_DEFAULTS }
+		if (local()) {
+			const stored = readGuest(GUEST_KEYS.myPart(fileId()))
+			myPartId.value = typeof stored === 'string' || typeof stored === 'number' ? String(stored) : null
+			practice.value = normalizePractice(readGuest(GUEST_KEYS.practice(fileId())))
+			return
+		}
 		try {
 			const res = await axios.get(url())
 			if (mine === generation) {
@@ -74,6 +86,10 @@ export function useMyPart({ fileId }) {
 	async function set(partId) {
 		generation++
 		myPartId.value = partId
+		if (local()) {
+			writeGuest(GUEST_KEYS.myPart(fileId()), partId)
+			return
+		}
 		try {
 			await axios.put(url(), { partId })
 		} catch (err) {
@@ -92,6 +108,10 @@ export function useMyPart({ fileId }) {
 	async function setPractice(changes) {
 		generation++
 		practice.value = normalizePractice({ ...practice.value, ...changes })
+		if (local()) {
+			writeGuest(GUEST_KEYS.practice(fileId()), practice.value)
+			return
+		}
 		try {
 			await axios.put(generateUrl('/apps/scoreview/api/scores/{fileId}/practice', { fileId: fileId() }), changes)
 		} catch (err) {

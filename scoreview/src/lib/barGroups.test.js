@@ -85,6 +85,26 @@ describe('barGroups', () => {
 		])
 	})
 
+	it('gives a visitor on a public link only what runs in the browser', () => {
+		// Switched on by the administration, but every one of them writes into
+		// an account - the visitor has none. The microphone tools stay; scored
+		// singing then shows its result without storing it.
+		const can = (action) => allowed(action, { guest: true })
+		const groups = barGroups(ctx({
+			can,
+			guest: true,
+			intonationEnabled: true,
+			singScoreEnabled: true,
+			followerEnabled: true,
+			practiceLogEnabled: true,
+		}))
+		expect(groups.map((g) => [g.id, g.items])).toEqual([
+			['playback', ['loop', 'metronome', 'tempo', 'mixer', 'transpose', 'coach', 'tuner', 'follower', 'sing']],
+			['view', ['zoom', 'autoScroll', 'myPart', 'noteNames', 'noteText', 'layout', 'appearance']],
+			['score', ['partChoice', 'toneMode', 'info']],
+		])
+	})
+
 	it('bietet Vormerken in den Apps nicht an', () => {
 		expect(items(barGroups(ctx({ standalone: true })), 'score')).not.toContain('offline')
 	})

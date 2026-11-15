@@ -18,9 +18,11 @@ import { serverError } from '../lib/serverError.js'
  *
  * @param {object} deps
  * @param {() => (number|string)} deps.fileId aktuelle fileId
+ * @param {() => boolean} [deps.enabled] false for a visitor of a public
+ *   link: leaders belong to accounts, and the route would refuse the link
  * @return {object}
  */
-export function useLeaders({ fileId }) {
+export function useLeaders({ fileId, enabled = () => true }) {
 	const t = (text) => translate('scoreview', text)
 	const leaders = ref([])
 	const isLeader = ref(false)
@@ -43,6 +45,9 @@ export function useLeaders({ fileId }) {
 
 	async function load() {
 		const mine = ++generation
+		if (!enabled()) {
+			return
+		}
 		try {
 			const res = await axios.get(url('leaders'))
 			if (mine === generation) {
