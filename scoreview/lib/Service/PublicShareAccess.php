@@ -100,9 +100,12 @@ class PublicShareAccess {
 	}
 
 	/**
-	 * Only through the share's own node: getFirstNodeById on the shared
-	 * folder searches its subtree and nothing else, so a fileId from
-	 * elsewhere in the owner's storage cannot leak in.
+	 * Only through the share's own node, and checked again afterwards:
+	 * Folder::getFirstNodeById first consults a per-user path-by-id cache and
+	 * accepts a cached path on a bare string prefix (NC 34, Root::
+	 * getFirstNodeByIdInPath), so a share of /anna/files/Chor could return
+	 * /anna/files/Chor-privat/x.mscz to a logged-in visitor. getRelativePath
+	 * respects the "/" boundary and returns null for anything outside.
 	 */
 	private function fileInShare(IShare $share, int $fileId): Node {
 		try {
@@ -118,7 +121,7 @@ class PublicShareAccess {
 			return $root;
 		}
 		$node = $root instanceof Folder ? $root->getFirstNodeById($fileId) : null;
-		if (!$node instanceof File) {
+		if (!$node instanceof File || $root->getRelativePath($node->getPath()) === null) {
 			throw new PublicShareException(PublicShareException::NOT_FOUND);
 		}
 		return $node;

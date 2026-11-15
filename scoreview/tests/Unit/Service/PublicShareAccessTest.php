@@ -65,10 +65,23 @@ class PublicShareAccessTest extends TestCase {
 		return $share;
 	}
 
-	private function file(int $id): File&MockObject {
+	private function file(int $id, string $path = '/anna/files/Chor/stueck.mscz'): File&MockObject {
 		$file = $this->createMock(File::class);
 		$file->method('getId')->willReturn($id);
+		$file->method('getPath')->willReturn($path);
 		return $file;
+	}
+
+	/** A shared folder whose getRelativePath behaves like Nextcloud's PathHelper. */
+	private function sharedFolder(string $path = '/anna/files/Chor'): Folder&MockObject {
+		$folder = $this->createMock(Folder::class);
+		$folder->method('getPath')->willReturn($path);
+		$folder->method('getRelativePath')->willReturnCallback(fn (string $p) => match (true) {
+			$p === $path => '/',
+			str_starts_with($p, $path . '/') => substr($p, strlen($path)),
+			default => null,
+		});
+		return $folder;
 	}
 
 	private function rejection(?int $fileId = null): PublicShareException {
@@ -179,8 +192,8 @@ class PublicShareAccessTest extends TestCase {
 	}
 
 	public function testFolderShareFindsNestedFile(): void {
-		$nested = $this->file(77);
-		$folder = $this->createMock(Folder::class);
+		$nested = $this->file(77, '/anna/files/Chor/Sopran/Advent/stueck.mscz');
+		$folder = $this->sharedFolder();
 		$folder->method('getId')->willReturn(10);
 		// Two levels deep: Chor/Sopran/stueck.mscz - getFirstNodeById searches
 		// the whole subtree, so depth must not matter.
@@ -191,16 +204,26 @@ class PublicShareAccessTest extends TestCase {
 		self::assertSame('anna', $grant->ownerUid);
 	}
 
+	public function testFolderShareSiblingWithSamePrefixRejects(): void {
+		// What a stale path-by-id cache hit can return: a file in a sibling
+		// folder whose name merely starts with the shared folder's name.
+		$folder = $this->sharedFolder('/anna/files/Chor');
+		$folder->method('getFirstNodeById')->with(78)
+			->willReturn($this->file(78, '/anna/files/Chor-privat/x.mscz'));
+		$this->share(node: $folder);
+		self::assertSame('not_found', $this->rejection(78)->getErrorCode());
+	}
+
 	public function testFolderShareFolderIdRejects(): void {
 		$sub = $this->createMock(Folder::class);
-		$folder = $this->createMock(Folder::class);
+		$folder = $this->sharedFolder();
 		$folder->method('getFirstNodeById')->with(11)->willReturn($sub);
 		$this->share(node: $folder);
 		self::assertSame('not_found', $this->rejection(11)->getErrorCode());
 	}
 
 	public function testFolderShareUnknownIdRejects(): void {
-		$folder = $this->createMock(Folder::class);
+		$folder = $this->sharedFolder();
 		$folder->method('getFirstNodeById')->willReturn(null);
 		$this->share(node: $folder);
 		self::assertSame('not_found', $this->rejection(99)->getErrorCode());
