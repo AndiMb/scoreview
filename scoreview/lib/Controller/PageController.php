@@ -142,7 +142,9 @@ class PageController extends Controller {
 			// Read once by the viewer (ScoreViewer.vue): what needs an account
 			// is not offered, settings stay in this browser.
 			'guest' => true,
-			'hideDownload' => $grant->hideDownload,
+			// No "hide download" flag here: the viewer needs none. The server
+			// closes conversion#source for it and ClientFallback then never
+			// sends this visitor to convert in the browser.
 		]);
 		// No account behind the visitor: the switches without everything that
 		// writes into one (FeatureConfig::forGuest), the default display

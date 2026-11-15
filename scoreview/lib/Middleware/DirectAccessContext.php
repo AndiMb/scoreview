@@ -96,7 +96,14 @@ class DirectAccessContext {
 		return $this->mode;
 	}
 
-	/** Ob die Anfrage per Token kam, gleich welcher Art. */
+	/**
+	 * Ob die Anfrage per Token kam, gleich welcher Art.
+	 *
+	 * True for SHARE as well: a visitor's link token is a token in this
+	 * sense (no session behind the request), but she is NOT a direct-editing
+	 * token holder (DIRECT) - whoever means exactly that compares mode(), and
+	 * whoever means the visitor asks shareGrant().
+	 */
 	public function isToken(): bool {
 		return $this->mode !== self::SESSION;
 	}

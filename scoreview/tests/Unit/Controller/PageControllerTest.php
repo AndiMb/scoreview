@@ -278,7 +278,6 @@ class PageControllerTest extends TestCase {
 			'fileName' => 'Aequale.mscz',
 			'shareToken' => 'tok123',
 			'guest' => true,
-			'hideDownload' => false,
 		], $this->states['standalone']);
 		$this->assertSame($this->featureConfig()->forGuest(), $this->states['features']);
 		$this->assertFalse($this->states['features']['recording']);
@@ -309,7 +308,7 @@ class PageControllerTest extends TestCase {
 		$this->clientFallback = true;
 		$response = $this->controller()->publicViewer('tok123', 42);
 
-		$this->assertTrue($this->states['standalone']['hideDownload']);
+		$this->assertArrayNotHasKey('hideDownload', $this->states['standalone']);
 		$csp = $response->getContentSecurityPolicy()->buildPolicy();
 		// The fallback needs the source, which "hide download" closes - so
 		// the page does not open what it cannot use.
