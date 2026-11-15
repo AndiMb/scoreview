@@ -1034,6 +1034,78 @@ and the part name, set at the left edge of the title frame, can overlap a
 long title on the narrow upright page. Both are MuseScore's layout of the
 frame on a small page.
 
+## Public share links
+
+Off by default; an administrator switches it on
+([Installation](installation.md#scores-on-public-share-links)). Then a click
+on a `.mscz` on a public link page (`/s/…`) opens the viewer for visitors
+without an account, framed by Nextcloud's own viewer – for a shared file as
+well as for a shared folder, where Nextcloud's arrows step from score to score
+([E25](architecture.md#e25-öffentliche-freigaben-viewer-im-rahmen-der-link-seite),
+rules in [S12](architecture.md#s12-ein-freigabe-token-öffnet-nur-lesende-routen-und-nur-seine-freigabe), both German).
+
+**What visitors get:** the score, playback, mixer and "my part", tempo, display
+variants (parts, phone pages, concert pitch), note names, lyrics, beat counts,
+metronome, count-in, a loop, the starting note, the tuner and scored singing.
+
+**What they do not get**, because it lives in an account: notes and drawings,
+recordings, the practice log, leaders and "Follow me", saved loops, the best
+results of scored singing, setlists, the offline page and "Convert again".
+Practice tracks (MP3), the PDF file and printing are **always** off for
+visitors, not only with "hide download": they write into the owner's files or
+need a session. What visitors set – "my part", display settings, the
+reference pitch – stays in their browser (`localStorage`); another browser or
+a private window starts from the defaults.
+
+**"Hide download"** closes the `.mscz` itself, and with it the
+[conversion in the browser](#conversion-in-the-browser), which needs that
+file. Where the server converts, visitors notice nothing of this. Where it
+cannot (the browser would have to step in), a score that is not converted yet
+shows "This score is not prepared yet. Ask the person who shared it to open it
+once." – once a member opens it, the server has it.
+
+**Who pays.** A conversion that a visitor starts runs under the account of
+the share's **owner** – measured for a file of one's own, a file in a team
+folder and a folder another member shared to the link's creator (it ran under
+that other member, who owns the file).
+
+**Quota per link.** New conversions and display variants that visitors start
+are capped per link: 20 per hour by default (1–500, administration). Counted
+is every job that is really started, including a retry after a failure;
+opening an already converted score or variant never counts. Above the limit
+the viewer says "Too many new scores were prepared through this link. Try
+again later."; what is already converted keeps loading. Measured with a limit
+of 3: the base conversion and two variants went through, the third new
+variant was refused, an existing one still opened, and another link was not
+affected. The limit belongs to the link, not to an address: ten browsers behind
+one address opened a converted score through the same link in about 11 s,
+none refused.
+
+**Password-protected links** work as Nextcloud's link page does: the password
+entered there unlocks the viewer for that browser session, and a changed
+password locks it again – measured on Nextcloud 34.0.0 and 31.0.14. ScoreView
+checks no password of its own.
+
+**Guessing is throttled** – and that has a side effect. An unknown link or a
+password not yet entered counts against Nextcloud's brute-force protection,
+as on `/s/…` itself. Afterwards Nextcloud delays **every** request of that
+address to these routes, valid ones included, until the attempts age out.
+Measured after six such requests from one address: the next valid request
+took 6.9 s on Nextcloud 31 and 0.06 s on Nextcloud 34. Behind one address (a
+rehearsal room's NAT) a few stale or mistyped links can slow everyone down.
+
+**Microphone.** The tuner, scored singing and turning pages by listening work
+in the frame. For this, the link page allows the microphone for its own origin
+– only while the switch is on and a microphone feature is on; the browser
+still asks. The link page's CSP stays as it is; WebAssembly is allowed only on
+ScoreView's own framed page.
+
+**Not measured:** Nextcloud 32 and 33 (the session keys checked are those of
+31 and 34); a real phone and Safari/iOS as a visitor (only an emulated Galaxy
+S23 viewport in Chromium); swiping between scores of a folder on a touch
+screen – inside the frame a swipe reaches the score, not Nextcloud's viewer,
+so its arrows are the way.
+
 ## What the app deliberately does not do
 
 - **No server-side rendering on managed hosting.** The local conversion path

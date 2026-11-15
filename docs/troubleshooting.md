@@ -50,6 +50,28 @@ foreach ($qb->executeQuery()->fetchAll() as $row) { print_r($row); }
 `SELECT * FROM oc_mimetypes WHERE mimetype LIKE '%musescore%'` –, not that of
 `application/octet-stream`.
 
+## A score on a public share link only offers “Download”
+
+Visitors of a public link see ScoreView only when the administration has
+switched it on – it is off by default
+([Installation](installation.md#scores-on-public-share-links)). If it is on:
+
+1. **Did the app update run?** After an update without `occ upgrade` the link
+   page may keep the old script list. Run `occ upgrade`.
+2. **Is it the password page?** ScoreView loads only after the password has
+   been entered.
+3. **Is the link "file drop" only?** An upload-only link lists nothing to open.
+4. **Is the mimetype right?** As [in Files](#a-mscz-file-only-offers-download):
+   without it, "Open in ScoreView" appears in the file's menu instead of
+   opening on a click.
+
+When the viewer opens but says the link is no longer valid or needs its
+password again, the link expired, was deleted, or its password was changed –
+open the link anew. "Too many new scores were prepared through this link" is
+the link's hourly quota
+([Limits](limits.md#public-share-links)); what is already converted keeps
+loading.
+
 ## “Edit” is missing in the Nextcloud app on the phone
 
 The mobile apps get in through Nextcloud's Direct Editing

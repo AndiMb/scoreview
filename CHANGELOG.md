@@ -6,6 +6,23 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.32.0] – unreleased
+
+### Added
+
+- Scores on public share links. Once an administrator switches it on (off by
+  default), a click on a `.mscz` on a public link page opens ScoreView for
+  visitors without an account - for shared files and folders, with or
+  without a password; in a folder, Nextcloud's viewer steps from score to
+  score. Visitors get playback, the mixer, display variants, note names,
+  lyrics, the tuner and scored singing; what lives in an account (notes,
+  recordings, practice log, "Follow me", setlists, practice tracks, PDF,
+  print) is not offered, and their settings stay in the browser. The link
+  page itself keeps Nextcloud's security policy: the viewer runs in a frame
+  on a page of its own. Conversions that visitors start run under the
+  share owner's account and are capped per link (20 per hour by default,
+  adjustable). Details in `docs/limits.md`.
+
 ## [1.31.0] – 2026-11-14
 
 ### Added

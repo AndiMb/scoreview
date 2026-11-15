@@ -83,16 +83,19 @@ nie als Weg ([E15](#e15-fähigkeiten-statt-weg)).
 
 ### HTTP-API
 
-Die Routen stehen in `scoreview/appinfo/routes.php` und liegen bis auf vier
+Die Routen stehen in `scoreview/appinfo/routes.php` und liegen bis auf fünf
 unter `/apps/scoreview/api/`. Die App hat bewusst **keinen Einstieg in
 Partituren außerhalb von Files** und keinen Navigationseintrag;
-`/apps/scoreview/` antwortet 404. Eigene Seiten gibt es zwei, und keine ist
+`/apps/scoreview/` antwortet 404. Eigene Seiten gibt es drei, und keine ist
 ein Einstieg: die Offline-Seite unter `/apps/scoreview/offline` zeigt nur, was
 vorher in Files vorgemerkt wurde
 ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)); die Druckseite
 unter `/apps/scoreview/print/{fileId}` wird aus dem Viewer heraus geöffnet
-([E16](#e16-drucken-aus-den-seiten-svgs)).
-Eingestiegen wird auf vier Wegen, und alle vier zeigen **dieselbe Komponente**:
+([E16](#e16-drucken-aus-den-seiten-svgs)); die Besucherseite unter
+`/apps/scoreview/public/{token}/{fileId}` wird nur von der Link-Seite einer
+öffentlichen Freigabe eingerahmt
+([E25](#e25-öffentliche-freigaben-viewer-im-rahmen-der-link-seite)).
+Eingestiegen wird auf fünf Wegen, und alle fünf zeigen **dieselbe Komponente**:
 
 1. **Nextclouds Viewer**, am Mimetype `application/x-musescore` – der
    reguläre Weg im Browser.
@@ -105,6 +108,10 @@ Eingestiegen wird auf vier Wegen, und alle vier zeigen **dieselbe Komponente**:
    ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)). Auch sie hat
    keine eigene Route – sie wird unter `/apps/files/directEditing/{token}`
    ausgeliefert.
+5. **Die Link-Seite einer öffentlichen Freigabe** (`/s/{token}`), wenn die
+   Verwaltung es einschaltet: Nextclouds Viewer öffnet dort einen Rahmen auf
+   die Besucherseite
+   ([E25](#e25-öffentliche-freigaben-viewer-im-rahmen-der-link-seite)).
 
 Der vierte Weg bringt eine zweite Art Ausweis mit: Seine Seite kommt **ohne
 Sitzungscookie** an, ihre Folgeanfragen weisen sich mit einem
@@ -115,6 +122,14 @@ geprüft wird es in `Middleware\DirectAccessMiddleware`. Ohne Header verhält
 sich jede Route wie eine gewöhnliche Route mit Sitzung. Die Spalte „Token“ unten nennt, was eine
 Route mit Token annimmt; Einzelheiten in
 [E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps).
+
+Der fünfte Weg hat einen dritten Ausweis: den Token der Freigabe selbst, im
+Header `X-ScoreView-Share`. Ihn nehmen **nur** sieben lesende Routen an –
+`status`, `artifact`, `source` (nicht bei „Download verbergen“), die beiden
+Variantenrouten, das SoundFont und die ohnehin öffentliche Engine. Jede andere
+Route mit `#[DirectTokenOrSession]` antwortet mit diesem Header 401
+`share_not_allowed`, auch neben einer angemeldeten Sitzung
+([S12](#s12-ein-freigabe-token-öffnet-nur-lesende-routen-und-nur-seine-freigabe)).
 
 | Route | Zweck | Token |
 |---|---|---|
@@ -151,6 +166,7 @@ Route mit Token annimmt; Einzelheiten in
 | `GET /api/health`, `POST /api/selftest` | Betriebsdiagnose, Sidecar-Selbsttest (nur Admins) | – |
 | `GET /offline`, `GET /offline/sw.js`, `GET /offline/manifest.webmanifest` | Offline-Seite, ihr Service Worker und ihr Web-App-Manifest ([E14](#e14-eine-offline-seite-mit-eigenem-service-worker)); Worker und Manifest **ohne Anmeldung** – statischer Code ohne Daten, den der Browser beim Aktualisieren ohne Sitzung holt | – |
 | `GET /print/{fileId}` | Die Druckseite: alle Seiten einer Partitur für den Druckdialog des Browsers ([E16](#e16-drucken-aus-den-seiten-svgs)); 404 für jede Datei außerhalb des eigenen Dateibaums | – |
+| `GET /public/{token}/{fileId}` | Die Besucherseite einer öffentlichen Freigabe, im Rahmen der Link-Seite ([E25](#e25-öffentliche-freigaben-viewer-im-rahmen-der-link-seite)); **ohne Anmeldung**, prüft dasselbe wie die Middleware ([S12](#s12-ein-freigabe-token-öffnet-nur-lesende-routen-und-nur-seine-freigabe)) und antwortet sonst mit einer Fehlerseite und deren Status | Freigabe-Token im Pfad |
 
 Der Statusendpunkt trägt zusätzlich `canWriteFolder`: ob die Person neben der
 Partitur anlegen darf. Daran hängt, ob der Viewer „Tracks für alle Stimmen“
@@ -1035,7 +1051,7 @@ Navigation, sonst wird das neue Stück als Einzelstück geöffnet
 Die Regeln, die die Probe- und Konzertfunktionen und die eigenständige Seite
 ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps)) verbindlich
 einhalten. Die Begründungen stehen ausführlich an den verlinkten Stellen; hier
-steht, was nicht aufgeweicht werden darf. Im Code sind sie als `S1`…`S11`
+steht, was nicht aufgeweicht werden darf. Im Code sind sie als `S1`…`S12`
 referenziert.
 
 ### S1: Begleit-Token sind an Zweck, Datei und Direct-Editing-Token gebunden
@@ -1276,10 +1292,76 @@ Was nicht aufgeweicht werden darf:
 Der Lebendtest `<laufzeit> --version` läuft ohne Abschottung: Er führt kein
 Skript aus, und welche Flags gelten, ergibt sich erst aus seiner Antwort.
 
+### S12: Ein Freigabe-Token öffnet nur lesende Routen und nur seine Freigabe
+
+Besucher einer öffentlichen Freigabe haben kein Konto
+([E25](#e25-öffentliche-freigaben-viewer-im-rahmen-der-link-seite)). Ihr
+Ausweis ist der Token des Links im Header `X-ScoreView-Share`, geprüft in
+`Middleware\DirectAccessMiddleware`, entschieden in
+`Service\PublicShareAccess`. Was nicht aufgeweicht werden darf:
+
+- **Aus, bis die Verwaltung einschaltet.** `feature_public_share` steht auf
+  aus. Aus heißt: kein Skript auf `/s/…`, keine Mikrofonfreigabe dort, und
+  jeder Header antwortet 401 `public_disabled`. Ein Update allein öffnet
+  keiner Instanz anonyme Routen.
+- **Opt-in je Route.** Den Token nehmen nur Routen mit
+  `#[DirectTokenOrSession(share: …)]`: `conversion#status`,
+  `conversion#artifact`, `variant#status`, `variant#artifact`,
+  `sound_font#get` (`share: 'read'`) und `conversion#source`
+  (`share: 'download'`; bei „Download verbergen“ 403
+  `share_download_hidden`). `engine#get` ist ohnehin öffentlich. Jede andere
+  Route mit dem Attribut antwortet 401 `share_not_allowed`, alle übrigen
+  kennen den Header nicht und verlangen eine Sitzung. Schreibende Routen
+  nehmen ihn nie.
+- **Der Freigabepfad gewinnt.** Trägt eine Anfrage den Header, gilt er, auch
+  wenn daneben eine Sitzung besteht: Wer angemeldet einen fremden Link
+  öffnet, bekommt die Datei dieses Links statt eines 404 aus dem eigenen
+  Dateibaum – und über diesen Weg keine Route des eigenen Kontos.
+- **Nur Nextclouds eigene Prüfungen.** Linkfreigabe (`TYPE_LINK`,
+  `TYPE_EMAIL`) mit Leserecht; Ablauf, gesperrte Eigentümer und entzogene
+  Linkrechte prüft schon `getShareByToken()`. Ein Passwort gilt nur, wenn die
+  Link-Seite es in **dieser Sitzung** freigeschaltet hat (NC ≥ 33:
+  `public_link_authenticated_frontend`, NC 31/32:
+  `public_link_authenticated_token` mit Passwort-Hash). Gespeichert ist der
+  Hash zum Zeitpunkt der Eingabe; ein geändertes Passwort sperrt also jede
+  ältere Sitzung aus. Eine eigene Passwortprüfung gibt es nicht – sie wäre
+  ein zweiter Baustein neben Nextclouds eigenem, ohne dessen
+  Bruteforce-Schutz.
+- **Nur die Datei der Freigabe.** Eine `fileId` muss die geteilte Datei sein
+  oder im geteilten Ordner liegen; geprüft über den Knoten der Freigabe und
+  danach mit `getRelativePath()`, weil `getFirstNodeById()` einen
+  zwischengespeicherten Pfad an einem bloßen Präfix annimmt (`/Chor` und
+  `/Chor-privat`). Sonst 404 ([S8](#s8-404-vor-403)). Routen ohne `fileId`
+  (SoundFont) prüfen nur den Link.
+- **Zurechnung, keine Anmeldung.** Kein `setVolatileActiveUser()`, kein
+  `useTokenScope()`. Eine Konvertierung, die ein Besuch anstößt, läuft unter
+  dem **Eigentümer der Freigabe** (`getShareOwner()`, nicht `getSharedBy()`:
+  bei Weiterfreigaben liegt die Datei sicher nur in seinem Baum).
+  `UserFileResolver::attributionUserId()` nennt ihn allein dem Einreihen;
+  alles, was je Nutzerin gespeichert wird, sieht für Besucher keine.
+- **Ein Kontingent je Link** ([S4](#s4-teure-arbeit-ist-gedeckelt) für
+  Besucher). Gezählt wird, wo tatsächlich ein Job eingereiht oder eine
+  Variante gesetzt wird – die erste Einreihung wie jeder erneute Versuch nach
+  einem Fehler, nie eine bloße Abfrage oder ein fertiges Artefakt. Vorgabe
+  20 je Stunde (`public_share_conversions_per_hour`, 1–500). Schlüssel ist
+  der Hash des Tokens, nicht die IP: Ein Chor sitzt hinter einer Adresse.
+  Darüber 429 `share_quota`, mit eigener Meldung im Viewer.
+- **Raten zählt.** Ein unbekannter Token oder ein nicht eingegebenes Passwort
+  zählt gegen Nextclouds Bruteforce-Schutz (Aktion `scoreview_share`), wie
+  `/s/…` selbst; am Höchstwert 429 `share_throttled`. Nextcloud verzögert
+  danach **jede** Anfrage dieser Adresse in dieser Aktion, auch gültige –
+  dieselbe Eigenschaft wie bei `/s/…` im Kern.
+- **Die Link-Seite bleibt, wie sie ist.** Ihre CSP wird nicht gelockert;
+  `wasm-unsafe-eval` trägt nur die Besucherseite in ihrer eigenen Antwort.
+  Gelockert wird auf `/s/…` allein die Permissions-Policy: Mikrofon für
+  `'self'`, nur bei eingeschaltetem Schalter und wenn eine Mikrofonfunktion an
+  ist ([S3](#s3-das-mikrofon-nur-wo-es-gebraucht-wird)) – ein Rahmen darf nur,
+  was seine Elternseite erlaubt.
+
 ## Entwurfsentscheidungen
 
 Diese Entscheidungen tragen den Aufbau. Sie sind im Code an vielen Stellen als
-`E1`…`E24` referenziert und sollten nicht ohne erneute Bewertung revidiert
+`E1`…`E25` referenziert und sollten nicht ohne erneute Bewertung revidiert
 werden.
 
 ### E1: MIDI statt MP3 als Audioartefakt
@@ -1832,10 +1914,15 @@ Grund, der von außen nicht zu erraten ist: Ein von der CSP blockierter
 `securitypolicyviolation` – ohne eigene Zeitgrenze bliebe der Viewer für immer
 auf „wird konvertiert" stehen.
 
-**Was er nicht löst.** Öffentliche Freigaben: Die Routen hängen am
-angemeldeten Nutzerkontext, und die CSP-Lockerung greift nur auf
-`/apps/files`. Der Rückfall nimmt dafür die serverseitige Hürde weg, mehr
-nicht.
+**Was er nicht löst.** Öffentliche Freigaben mit „Download verbergen“: Der
+Rückfall braucht die Quelldatei, und genau die hält ein solcher Link
+verschlossen. Statt `client` antwortet der Status dort mit dem Fehler
+`client_source_hidden` („noch nicht vorbereitet“), entschieden in
+`ClientFallback::sourceOpenTo()` – nicht im Viewer –, und die Besucherseite
+gibt dann auch keine `blob:`-Worker frei. Ohne „Download verbergen“ greift der
+Rückfall für Besucher wie für Mitglieder; die CSP-Lockerung trägt dort die
+Besucherseite in ihrer eigenen Antwort, nicht die Link-Seite
+([E25](#e25-öffentliche-freigaben-viewer-im-rahmen-der-link-seite)).
 
 ### E8: Eine eigenständige Seite für die mobilen Apps
 
@@ -3059,6 +3146,71 @@ das Band.
 
 Der Schalter `feature_sing_score` setzt die Intonation voraus; ist sie aus,
 antworten die Routen 404 wie die übrigen abgeschalteten Funktionen.
+
+### E25: Öffentliche Freigaben: Viewer im Rahmen der Link-Seite
+
+Wer einen öffentlichen Link auf eine `.mscz` oder einen Ordner mit
+Partituren öffnet, soll sie ohne Konto ansehen und abspielen können: zum
+Vorführen, und damit Schnuppernde in der Probe die Noten aufs Handy bekommen.
+Schalter `feature_public_share`, Vorgabe aus.
+
+**Drei Bauweisen standen zur Wahl:**
+
+| | Bauweise | Urteil |
+|---|---|---|
+| 1 | Viewer direkt in der Link-Seite, wie in Files | `wasm-unsafe-eval` müsste auf **jede** `/s/…`-Seite der Instanz, auch auf geteilte Fotos und Verträge; das Ereignis der Link-Seite weiß nicht, ob überhaupt eine Partitur geteilt ist. Verworfen |
+| **2** | **Nextclouds Viewer auf der Link-Seite, darin ein `<iframe>` auf eine eigene Seite** | Die Link-Seite bleibt bis auf das Mikrofon ungelockert, die eigene Seite trägt ihre CSP selbst, Blättern und Schließen macht Nextclouds Viewer. **Gewählt** |
+| 3 | Eigene Seite in einem neuen Tab | Nichts gelockert, aber jede Partitur ein Tab und der Weg zurück in den Ordner umständlich – schlecht fürs Handy in der Probe. Verworfen |
+
+**Aufbau.** `Listener\PublicShareScriptsListener` hängt an
+`BeforeTemplateRenderedEvent` der Link-Seite das kleine Bündel
+`scoreview-public` (`src/public.js`) – nur bei eingeschaltetem Schalter, nicht
+auf der Passwortseite und nicht bei File-Drop ohne Leserecht. Ob die Freigabe
+Partituren enthält, wird nicht geprüft (bei Ordnern zu teuer); das Bündel ist
+klein (rund 56 KB, ~20 KB gzip – die Übersetzungen kosten mit). Es registriert
+bei Nextclouds Viewer einen Handler für `application/x-musescore` in einer
+eigenen Gruppe, damit der Viewer im Ordner blättert, und die Dateiaktion auf
+der Endung ([E6](#e6-drei-einstiege-in-files--mimetype-dateiendung-setliste))
+für Dateien ohne Mimetype. Die Komponente ist nur ein
+`<iframe allow="microphone; fullscreen; autoplay">` auf
+`/apps/scoreview/public/{token}/{fileId}`, und zwar nur für die gezeigte Datei:
+Für einen gruppierten Handler hängt der Viewer die Nachbarn versteckt mit ein,
+um sie vorzuladen – bei Bildern billig, hier wären es zwei weitere vollständige
+Viewer samt SoundFont und Statusabfragen gegen das Kontingent
+(`lib/scoreFrameWrapper.js` hört deshalb auf `active`). In Files bleibt der
+Handler ohne Gruppe: Dort ist die Komponente der ganze Viewer.
+
+Die Besucherseite (`PageController::publicViewer`) prüft dasselbe wie jede
+spätere Anfrage
+([S12](#s12-ein-freigabe-token-öffnet-nur-lesende-routen-und-nur-seine-freigabe)),
+setzt `ViewerPolicy` auf ihre eigene Antwort und liefert das Bündel der
+eigenständigen Seite ([E8](#e8-eine-eigenständige-seite-für-die-mobilen-apps))
+ohne Kopfzeile aus – das Schließkreuz stellt Nextclouds Viewer. Statt des
+Direct-Editing-Tokens hängt `src/standalone.js` den Freigabe-Token an jede
+Anfrage gleicher Herkunft, nach denselben Regeln (`lib/directToken.js`: keine
+`blob:`/`data:`-URLs, keine fremde Herkunft). Das Token-Muster der Route ist
+das von Nextcloud für eigene Link-Token: Buchstaben, Ziffern und `-`.
+
+**Gastmodus ohne `if (gast)`.** Was ein Konto braucht, verschwindet über die
+vorhandenen Schalter, wie auf der Offline-Seite: `FeatureConfig::forGuest()`
+schaltet Aufnahmen, „Folgt mir“, Übetagebuch, Offline-Seite und Übe-Tracks
+aus, `barGroups` kennt den Kontextwert `guest` (kein Drucken, keine Notizen,
+Leitungen, Setlisten), und die Composables, die beim Öffnen eine Konto-Route
+fragen würden, hängen an diesen Schaltern. Anzeigeeinstellungen, „Meine
+Stimme“ und die Übe-Einstellungen bleiben im Browser (`lib/guestStore.js` über
+`lib/storage.js`); die Sing-Wertung zeigt ihr Ergebnis und speichert nichts.
+„Neu konvertieren“ gibt es für Besucher nicht (`canReconvert` ist dort immer
+`false`).
+
+MP3-Export, PDF und Druck sind für Besucher **immer** aus, nicht erst bei
+„Download verbergen“: Sie schreiben ins Konto oder brauchen eine Sitzung.
+„Download verbergen“ schließt nur die Quelldatei und damit den Rückfall im
+Browser ([E7](#e7-konvertierung-im-browser-als-rückfall)).
+
+**Bewusst nicht dabei:** Notizen und Zeichnungen, Aufnahmen, Übetagebuch,
+Leitung und „Folgt mir“, gespeicherte Loops, Sing-Bestwerte, Setlisten im
+geteilten Ordner, die Offline-Seite, File-Drop-Freigaben. Ein möglicher
+zweiter Schritt sind Besucher als reine Mitleser von „Folgt mir“.
 
 ## Formatgrundlagen
 
