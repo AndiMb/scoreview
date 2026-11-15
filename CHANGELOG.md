@@ -6,6 +6,27 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.32.1] – 2026-11-15
+
+### Added
+
+- Turn pages by listening: a "Wait" button next to the follower's status
+  holds the score where it is - for announcements or a restart elsewhere -
+  until the next tapped note or entered bar.
+
+### Changed
+
+- Turn pages by listening starts only from a tapped note or an entered bar,
+  as its status asks. It no longer searches for the place by itself first:
+  in a rehearsal, a place found that way was the one that jumped from the
+  middle of a piece to its end. After the tap it corrects the place as
+  before.
+
+### Fixed
+
+- Display settings changed in the viewer - pinned buttons among them - were
+  lost on the next score opened in Files until the page was reloaded.
+
 ## [1.32.0] – 2026-11-15
 
 ### Added
