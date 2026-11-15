@@ -77,7 +77,7 @@ class VariantController extends Controller {
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[DirectTokenOrSession]
+	#[DirectTokenOrSession(share: 'read')]
 	public function status(int $fileId, string $key): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$parsed = VariantKey::parse($key);
@@ -154,7 +154,7 @@ class VariantController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[DirectTokenOrSession(csrfInSession: false)]
+	#[DirectTokenOrSession(csrfInSession: false, share: 'read')]
 	public function artifact(int $fileId, string $key, string $name): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null || VariantKey::parse($key) === null) {

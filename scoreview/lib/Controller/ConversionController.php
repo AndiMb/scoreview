@@ -115,7 +115,7 @@ class ConversionController extends Controller {
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[DirectTokenOrSession]
+	#[DirectTokenOrSession(share: 'read')]
 	public function status(int $fileId): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
@@ -314,7 +314,7 @@ class ConversionController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[DirectTokenOrSession(csrfInSession: false)]
+	#[DirectTokenOrSession(csrfInSession: false, share: 'read')]
 	public function artifact(int $fileId, string $name): Http\Response {
 		return $this->serveCachedFile($fileId, $name);
 	}
@@ -334,7 +334,7 @@ class ConversionController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[DirectTokenOrSession(csrfInSession: false)]
+	#[DirectTokenOrSession(csrfInSession: false, share: 'download')]
 	public function source(int $fileId): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if (!$node instanceof File) {

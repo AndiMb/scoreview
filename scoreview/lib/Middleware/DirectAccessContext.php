@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Middleware;
 
+use OCA\ScoreView\Service\PublicShareGrant;
 use OCP\Files\Node;
 
 /**
@@ -32,8 +33,11 @@ class DirectAccessContext {
 	public const SESSION = 'session';
 	public const DIRECT = 'direct';
 	public const COMPANION = 'companion';
+	/** A visitor with a public share token - no account, no user in the session. */
+	public const SHARE = 'share';
 
 	private string $mode = self::SESSION;
+	private ?PublicShareGrant $shareGrant = null;
 	private ?int $originFileId = null;
 	private ?string $directDigest = null;
 	private bool $resolved = false;
@@ -45,7 +49,25 @@ class DirectAccessContext {
 		$this->mode = self::SESSION;
 		$this->originFileId = null;
 		$this->directDigest = null;
+		$this->shareGrant = null;
 		$this->resolved = true;
+	}
+
+	/**
+	 * The middleware accepted a public share token. No origin file and no
+	 * Direct Editing digest: neither the setlist rules (S2) nor companion
+	 * tokens apply to a visitor, and the routes that use them refuse her.
+	 */
+	public function setShare(PublicShareGrant $grant): void {
+		$this->mode = self::SHARE;
+		$this->originFileId = null;
+		$this->directDigest = null;
+		$this->shareGrant = $grant;
+		$this->resolved = true;
+	}
+
+	public function shareGrant(): ?PublicShareGrant {
+		return $this->mode === self::SHARE ? $this->shareGrant : null;
 	}
 
 	/**
@@ -58,6 +80,7 @@ class DirectAccessContext {
 		$this->mode = $mode;
 		$this->originFileId = $originFileId;
 		$this->directDigest = $directDigest;
+		$this->shareGrant = null;
 		$this->resolved = true;
 	}
 
