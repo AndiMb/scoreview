@@ -1,0 +1,22 @@
+<?php
+
+// files_sharing ships with the server; its event is not part of OCP. Shape as
+// in NC 31-34 (apps/files_sharing/lib/Event/BeforeTemplateRenderedEvent.php).
+
+namespace OCA\Files_Sharing\Event;
+
+use OCP\EventDispatcher\Event;
+use OCP\Share\IShare;
+
+class BeforeTemplateRenderedEvent extends Event {
+	public const SCOPE_PUBLIC_SHARE_AUTH = 'publicShareAuth';
+
+	public function __construct(IShare $share, ?string $scope = null) {
+	}
+
+	public function getShare(): IShare {
+	}
+
+	public function getScope(): ?string {
+	}
+}

@@ -1,5 +1,6 @@
 import { computed, ref, watch } from 'vue'
 import { translate } from '../l10n.js'
+import { shareRefusalText } from '../lib/shareRefusals.js'
 import { readStored, writeStored } from '../lib/storage.js'
 import { availableSource, FORMATS, keyForChoice, sourceOptions } from '../lib/variantChoice.js'
 
@@ -168,6 +169,11 @@ export function useScoreVariant(deps) {
 		: t('This server engraves no parts or phone pages; the score is shown as the file has it.')))
 
 	const errorText = computed(() => {
+		// A refused link request (lib/shareRefusals.js, shared with the base score).
+		const share = shareRefusalText(errorCode.value, t)
+		if (share !== null) {
+			return share
+		}
 		const texts = {
 			variant_unsupported: t('This server engraves no parts or phone pages.'),
 			rate_limited: t('Too many new parts or page formats in a short time. Please try again later.'),

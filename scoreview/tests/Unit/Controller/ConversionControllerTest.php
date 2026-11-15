@@ -6,10 +6,13 @@ namespace OCA\ScoreView\Tests\Unit\Controller;
 
 use OCA\ScoreView\Controller\ConversionController;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
+use OCA\ScoreView\Service\PublicShareGrant;
+use OCA\ScoreView\Service\ShareConversionQuota;
 use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Http;
@@ -47,12 +50,18 @@ class ConversionControllerTest extends TestCase {
 	private ConversionService&MockObject $conversionService;
 	private ClientFallback&MockObject $clientFallback;
 	private IJobList&MockObject $jobList;
+	private DirectAccessContext&MockObject $directAccess;
+	private ShareConversionQuota&MockObject $quota;
+	/** @var array<string, int> */
+	private array $requeueStore = [];
 
 	protected function setUp(): void {
 		$this->fileResolver = $this->createMock(UserFileResolver::class);
 		$this->conversionService = $this->createMock(ConversionService::class);
 		$this->clientFallback = $this->createMock(ClientFallback::class);
 		$this->jobList = $this->createMock(IJobList::class);
+		$this->directAccess = $this->createMock(DirectAccessContext::class);
+		$this->quota = $this->createMock(ShareConversionQuota::class);
 	}
 
 	private function controller(): ConversionController {
@@ -71,6 +80,8 @@ class ConversionControllerTest extends TestCase {
 			$this->createMock(SoundFontService::class),
 			$this->createMock(ConversionBackend::class),
 			$this->cacheFactory ?? $this->noCache(),
+			$this->directAccess,
+			$this->quota,
 		);
 	}
 
@@ -84,7 +95,8 @@ class ConversionControllerTest extends TestCase {
 
 	/** A memory cache that behaves like one - for the requeue throttle. */
 	private function withCache(): void {
-		$store = [];
+		$this->requeueStore = [];
+		$store = &$this->requeueStore;
 		$cache = $this->createMock(ICache::class);
 		$cache->method('get')->willReturnCallback(function (string $key) use (&$store) {
 			return $store[$key] ?? null;
@@ -242,6 +254,144 @@ class ConversionControllerTest extends TestCase {
 		for ($i = 0; $i < 5; $i++) {
 			$this->assertSame(ScoreConversion::STATUS_PENDING, $controller->status(42)->getData()['status']);
 		}
+	}
+
+	private function asVisitor(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, false, 'dig'));
+		$this->fileResolver->method('attributionUserId')->willReturn('owner');
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->clientFallback->method('reason')->willReturn(null);
+	}
+
+	/**
+	 * "Hide download" closes the source file, and the browser fallback (E7)
+	 * needs exactly that file - so where the fallback would apply, a
+	 * visitor gets a reason instead of a `client` answer whose source then
+	 * fails with 403, or a spinner that never ends.
+	 */
+	public function testVisitorPendingWithHiddenDownloadIsSourceHidden(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, true, 'dig'));
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->clientFallback->method('reason')->willReturn(ScoreConversion::ERROR_LOCAL_UNAVAILABLE);
+		$this->conversionService->method('find')->willReturn(null);
+		$this->jobList->expects($this->never())->method('add');
+
+		$data = $this->controller()->status(42)->getData();
+		$this->assertSame(['status' => 'error', 'errorCode' => ClientFallback::SOURCE_HIDDEN], $data);
+	}
+
+	public function testVisitorWithDownloadAllowedStillConvertsInTheBrowser(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, false, 'dig'));
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->clientFallback->method('reason')->willReturn(ScoreConversion::ERROR_LOCAL_UNAVAILABLE);
+		$this->conversionService->method('find')->willReturn(null);
+
+		$this->assertSame(ClientFallback::STATUS_CLIENT, $this->controller()->status(42)->getData()['status']);
+	}
+
+	public function testHiddenDownloadAlsoStopsTheFallbackAfterAnInfrastructureError(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, true, 'dig'));
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$conversion = $this->datensatz(ScoreConversion::STATUS_ERROR);
+		$conversion->setErrorCode(ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+		$this->conversionService->method('find')->willReturn($conversion);
+		$this->conversionService->method('isStale')->willReturn(false);
+		$this->clientFallback->method('noteConversionError')->willReturn(true);
+
+		$this->assertSame(ClientFallback::SOURCE_HIDDEN, $this->controller()->status(42)->getData()['errorCode']);
+	}
+
+	public function testVisitorIsNotOfferedAReconversion(): void {
+		// The share owner may write the file, the visitor may not: the
+		// reconvert route refuses the link (share_not_allowed), so the
+		// viewer must not offer the button in the first place.
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_READY));
+		$this->conversionService->method('isCurrent')->willReturn(true);
+		$this->conversionService->method('getPageCount')->willReturn(1);
+		$this->assertFalse($this->controller()->status(42)->getData()['canReconvert']);
+	}
+
+	public function testVisitorStatusQueuesUnderShareOwner(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn(null);
+		$this->quota->expects($this->once())->method('consume')->willReturn(true);
+		$this->jobList->expects($this->once())->method('add')
+			->with($this->anything(), ['userId' => 'owner', 'fileId' => 42]);
+		$this->assertSame(ScoreConversion::STATUS_PENDING, $this->controller()->status(42)->getData()['status']);
+	}
+
+	public function testVisitorStatusOnRunningConversionDoesNotConsume(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_PROCESSING));
+		$this->conversionService->method('isStale')->willReturn(false);
+		$this->quota->expects($this->never())->method('consume');
+		$this->jobList->expects($this->never())->method('add');
+		$this->controller()->status(42);
+	}
+
+	public function testVisitorPollOfAnAlreadyQueuedJobDoesNotConsume(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn(null);
+		$this->jobList->method('has')->willReturn(true);
+		$this->quota->expects($this->never())->method('consume');
+		$this->controller()->status(42);
+	}
+
+	public function testVisitorStatusOnReadyConversionDoesNotConsume(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_READY));
+		$this->conversionService->method('isCurrent')->willReturn(true);
+		$this->conversionService->method('getPageCount')->willReturn(1);
+		$this->quota->expects($this->never())->method('consume');
+		$this->jobList->expects($this->never())->method('add');
+		$this->assertSame(ScoreConversion::STATUS_READY, $this->controller()->status(42)->getData()['status']);
+	}
+
+	public function testVisitorRetryUsesTheLinkKeyAndConsumesOncePerInterval(): void {
+		$this->withCache();
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_ERROR));
+		$this->conversionService->method('isStale')->willReturn(false);
+		$this->quota->expects($this->once())->method('consume')->willReturn(true);
+		$this->jobList->expects($this->once())->method('add');
+
+		$controller = $this->controller();
+		$controller->status(42);
+		$controller->status(42);
+		$this->assertSame(['42:share:dig' => 1], $this->requeueStore);
+	}
+
+	public function testVisitorRetryOverQuotaIs429(): void {
+		$this->withCache();
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_ERROR));
+		$this->conversionService->method('isStale')->willReturn(false);
+		$this->quota->method('consume')->willReturn(false);
+		$this->jobList->expects($this->never())->method('add');
+		$response = $this->controller()->status(42);
+		$this->assertSame(Http::STATUS_TOO_MANY_REQUESTS, $response->getStatus());
+		$this->assertSame('share_quota', $response->getData()['errorCode']);
+	}
+
+	public function testVisitorQuotaExceededIs429(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn(null);
+		$this->quota->method('consume')->willReturn(false);
+		$this->jobList->expects($this->never())->method('add');
+		$response = $this->controller()->status(42);
+		$this->assertSame(Http::STATUS_TOO_MANY_REQUESTS, $response->getStatus());
+		$this->assertSame(['status' => 'error', 'errorCode' => 'share_quota'], $response->getData());
+	}
+
+	public function testSessionStatusNeverTouchesTheShareQuota(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->fileResolver->method('attributionUserId')->willReturn('anna');
+		$this->clientFallback->method('reason')->willReturn(null);
+		$this->conversionService->method('find')->willReturn(null);
+		$this->quota->expects($this->never())->method('consume');
+		$this->jobList->expects($this->once())->method('add')->with($this->anything(), ['userId' => 'anna', 'fileId' => 42]);
+		$this->controller()->status(42);
 	}
 
 	public function testReconvertQueuesEvenRightAfterAPoll(): void {

@@ -55,8 +55,10 @@ function failureText(err) {
  * @param {() => ?string} [deps.myPartId] „Meine Stimme"
  * @param {() => boolean} [deps.isLeader] Anzeigehilfe; durchgesetzt wird
  *   die Rolle serverseitig
+ * @param {() => boolean} [deps.enabled] false for a visitor of a public
+ *   link: notes and saved loops live in accounts, so none are loaded
  */
-export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag, durationMs, seek, parts = () => [], pictureParts = parts, pictureElid = (elid) => elid, myPartId = () => null, isLeader = () => false }) {
+export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag, durationMs, seek, parts = () => [], pictureParts = parts, pictureElid = (elid) => elid, myPartId = () => null, isLeader = () => false, enabled = () => true }) {
 	const annotations = ref([])
 	const error = ref('')
 	const visible = ref(false)
@@ -261,6 +263,9 @@ export function useAnnotations({ fileId, timeline, measuresTimeline, currentEtag
 
 	async function load() {
 		const mine = generation
+		if (!enabled()) {
+			return
+		}
 		try {
 			const res = await axios.get(url())
 			if (mine === generation) {

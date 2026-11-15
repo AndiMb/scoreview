@@ -538,6 +538,27 @@ knowing:
 An external SoundFont (`soundfont_url`) needs nothing further: the offline page
 allows its origin in its own CSP.
 
+### Scores on public share links
+
+**Show scores on public share links** (`feature_public_share`, section
+**Public share links**, off by default). When on, a click on a `.mscz` on a
+public link page opens ScoreView for visitors without an account – for shared
+files and shared folders, with or without a password
+([E25](architecture.md#e25-öffentliche-freigaben-viewer-im-rahmen-der-link-seite) (German)).
+Switch it on knowingly: visitors can start conversions, which run under the
+account of the share's owner. They are capped per link:
+
+```sh
+occ config:app:set scoreview public_share_conversions_per_hour --value 20   # 1-500
+```
+
+What visitors can and cannot do is listed in the
+[Limits](limits.md#public-share-links). The switch changes nothing for
+other link pages: their CSP stays as it is, and the microphone is allowed on
+`/s/…` only while this switch and a microphone feature are on. When switched
+off, link pages load nothing of ScoreView again, and the app refuses visitors'
+requests.
+
 ## Settings at a glance
 
 | Key | Where | Meaning |
@@ -561,6 +582,8 @@ allows its origin in its own CSP.
 | `feature_practice_log` | Administration | Practice log: own practice time per score, weekly goal from the leaders (default on) |
 | `practice_track_max_mb` | Administration | Maximum size of a practice track in MB (default 60, 5–500) |
 | `feature_offline` | Administration | Offline page and "Save for offline use" (default on) |
+| `feature_public_share` | Administration | Scores on public share links, for visitors without an account (default off) |
+| `public_share_conversions_per_hour` | Administration | New conversions and display variants that visitors of one link may start per hour (default 20, 1–500) |
 | `follow_poll_ms` | Administration | Polling interval of "Follow me" without push, in ms (default 800, allowed 500–3000) |
 | `max_recordings_per_score` | Administration | Recordings per person and score (default 5, 1–50) |
 | `max_recording_seconds` | Administration | Maximum length of a recording in seconds (default 600, 10–3600) |

@@ -34,7 +34,11 @@ use OCP\Security\FeaturePolicy\AddFeaturePolicyEvent;
  * 2. Mindestens eine Mikrofonfunktion ist eingeschaltet.
  * 3. Der Pfad beginnt mit `/apps/files` - dort, und nur dort, laeuft der
  *    Viewer (wie beim CSP-Listener, Listener\AddCspListener). Dashboard,
- *    Talk und alles Uebrige behalten `'none'`.
+ *    Talk und alles Uebrige behalten `'none'`. Ausnahme: die oeffentliche
+ *    Link-Seite `/s/{token}`, wenn der Admin-Schalter fuer oeffentliche
+ *    Freigaben an ist - dort sitzt der Viewer in einem iframe der eigenen
+ *    Seite, und ein Frame darf das Mikrofon nur nutzen, wenn die Elternseite
+ *    es erlaubt.
  *
  * Was bleibt: Innerhalb von Files gilt eine erteilte Erlaubnis fuer alle
  * Skripte dort - wie bei Talk, feiner geht es mit einer Richtlinie je
@@ -45,6 +49,8 @@ use OCP\Security\FeaturePolicy\AddFeaturePolicyEvent;
  */
 class AddFeaturePolicyListener implements IEventListener {
 	private const FILES_PATH_PREFIX = '/apps/files';
+	/** The public link page; the viewer runs in a frame there, which inherits the page's policy. */
+	private const SHARE_PATH_PREFIX = '/s/';
 
 	public function __construct(
 		private IRequest $request,
@@ -56,7 +62,7 @@ class AddFeaturePolicyListener implements IEventListener {
 		if (!$event instanceof AddFeaturePolicyEvent) {
 			return;
 		}
-		if ($this->isXhr() || !$this->isFilesPage() || !$this->features->usesMicrophone()) {
+		if ($this->isXhr() || !$this->isAllowedPage() || !$this->features->usesMicrophone()) {
 			return;
 		}
 
@@ -74,19 +80,34 @@ class AddFeaturePolicyListener implements IEventListener {
 			|| $this->request->getHeader('OCS-APIRequest') !== '';
 	}
 
-	private function isFilesPage(): bool {
+	/**
+	 * The Files page, and the public link page when public shares are on. On
+	 * `/s/...` the permission is what lets the framed score page record: a
+	 * frame can only use a feature its parent allows (and only with
+	 * allow="microphone" on the iframe).
+	 */
+	private function isAllowedPage(): bool {
+		$path = $this->pathInfo();
+		if ($path === null) {
+			return false;
+		}
+		// Exakt `/apps/files` oder darunter - nicht `/apps/files_sharing`.
+		if ($path === self::FILES_PATH_PREFIX || str_starts_with($path, self::FILES_PATH_PREFIX . '/')) {
+			return true;
+		}
+		return $this->features->publicShareEnabled()
+			&& strlen($path) > strlen(self::SHARE_PATH_PREFIX)
+			&& str_starts_with($path, self::SHARE_PATH_PREFIX);
+	}
+
+	private function pathInfo(): ?string {
 		try {
 			$path = $this->request->getPathInfo();
 		} catch (\Throwable) {
 			// Nicht dekodierbar: sicher keine regulaere Files-Seite - im
 			// Zweifel gesperrt lassen.
-			return false;
+			return null;
 		}
-		if (!is_string($path)) {
-			return false;
-		}
-		// Exakt `/apps/files` oder darunter - nicht `/apps/files_sharing`.
-		return $path === self::FILES_PATH_PREFIX
-			|| str_starts_with($path, self::FILES_PATH_PREFIX . '/');
+		return is_string($path) ? $path : null;
 	}
 }

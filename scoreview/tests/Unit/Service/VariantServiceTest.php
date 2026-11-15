@@ -76,6 +76,12 @@ class VariantServiceTest extends TestCase {
 		$this->assertSame('ex0~orig~w~0', $row->getVariant());
 	}
 
+	public function testAReleasedClaimIsDeleted(): void {
+		$variant = new ScoreVariant();
+		$this->mapper->expects($this->once())->method('delete')->with($variant);
+		$this->service()->release($variant);
+	}
+
 	public function testOtherDatabaseErrorsAreNotSwallowed(): void {
 		$this->mapper->method('insert')->willThrowException(new DbException('gone'));
 		$this->expectException(DbException::class);

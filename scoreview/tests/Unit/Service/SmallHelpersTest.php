@@ -6,8 +6,10 @@ namespace OCA\ScoreView\Tests\Unit\Service;
 
 use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\FileNames;
+use OCA\ScoreView\Service\PublicShareGrant;
 use OCA\ScoreView\Service\TargetParts;
 use OCA\ScoreView\Service\UserFileResolver;
+use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
@@ -158,5 +160,57 @@ class SmallHelpersTest extends TestCase {
 
 	public function testAFailingLookupIsNullNotAnError(): void {
 		$this->assertNull($this->resolver('anna', failure: new \RuntimeException('storage offline'))->resolveOwnNode(42));
+	}
+
+	// --- UserFileResolver with a public share token --------------------------
+
+	private function shareContext(?int $fileId = 42): DirectAccessContext {
+		$node = null;
+		if ($fileId !== null) {
+			$node = $this->createMock(File::class);
+			$node->method('getId')->willReturn($fileId);
+		}
+		$context = new DirectAccessContext();
+		$context->setShare(new PublicShareGrant('anna', $node, false, str_repeat('0', 64)));
+		return $context;
+	}
+
+	public function testAttributionUserIdIsShareOwner(): void {
+		$this->assertSame('anna', $this->resolver(null, null, null, $this->shareContext())->attributionUserId());
+	}
+
+	/** A visitor has no account; only queueing a conversion may name the owner. */
+	public function testCurrentUserIdStaysNullForVisitors(): void {
+		$this->assertNull($this->resolver(null, null, null, $this->shareContext())->currentUserId());
+	}
+
+	public function testAttributionUserIdIsTheSessionUserWithoutShare(): void {
+		$this->assertSame('bert', $this->resolver('bert')->attributionUserId());
+		$this->assertNull($this->resolver(null)->attributionUserId());
+	}
+
+	/**
+	 * The share wins over a session (the middleware decides so): a member
+	 * opening someone else's link reads the owner's file, and its conversion
+	 * belongs to the owner, in whose tree ConvertScoreJob will look.
+	 */
+	public function testShareWinsOverSession(): void {
+		$context = $this->shareContext();
+		$folder = $this->createMock(Folder::class);
+		$folder->expects($this->never())->method('getFirstNodeById');
+		$resolver = $this->resolver('bert', $folder, null, $context);
+
+		$this->assertSame($context->shareGrant()?->node, $resolver->resolveOwnNode(42));
+		$this->assertSame('anna', $resolver->attributionUserId());
+		$this->assertSame('bert', $resolver->currentUserId());
+	}
+
+	public function testShareOpensOnlyTheGrantedFile(): void {
+		$folder = $this->createMock(Folder::class);
+		$folder->expects($this->never())->method('getFirstNodeById');
+
+		$this->assertNull($this->resolver(null, $folder, null, $this->shareContext())->resolveOwnNode(43));
+		$this->assertNull($this->resolver('bert', $folder, null, $this->shareContext())->resolveOwnNode(43));
+		$this->assertNull($this->resolver(null, $folder, null, $this->shareContext(null))->resolveOwnNode(42));
 	}
 }

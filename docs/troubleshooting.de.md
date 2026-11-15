@@ -1,4 +1,4 @@
-<!-- translation-of: troubleshooting.md sha256:749fd9d59261 -->
+<!-- translation-of: troubleshooting.md sha256:d6490149cd14 -->
 # Troubleshooting
 
 [English](troubleshooting.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -50,6 +50,30 @@ foreach ($qb->executeQuery()->fetchAll() as $row) { print_r($row); }
 `mimetype` muss die ID von `application/x-musescore` sein – herauszufinden über
 `SELECT * FROM oc_mimetypes WHERE mimetype LIKE '%musescore%'` –, nicht die von
 `application/octet-stream`.
+
+## Eine Partitur auf einem öffentlichen Freigabelink bietet nur „Herunterladen“
+
+Besucher eines öffentlichen Links sehen ScoreView nur, wenn die Verwaltung es
+eingeschaltet hat – Vorgabe ist aus
+([Installation](installation.de.md#partituren-auf-öffentlichen-freigabelinks)).
+Ist es an:
+
+1. **Lief das App-Update?** Nach einem Update ohne `occ upgrade` behält die
+   Link-Seite womöglich die alte Skriptliste. `occ upgrade` ausführen.
+2. **Ist es die Passwortseite?** ScoreView lädt erst, wenn das Passwort
+   eingegeben ist.
+3. **Ist der Link nur zum Hochladen („File Drop“)?** Ein solcher Link listet
+   nichts zum Öffnen.
+4. **Stimmt der Mimetype?** Wie [in Files](#eine-mscz-datei-bietet-nur-herunterladen-an):
+   ohne ihn steht „In ScoreView öffnen“ im Menü der Datei, statt dass ein Klick
+   sie öffnet.
+
+Öffnet der Viewer, meldet aber, der Link sei nicht mehr gültig oder brauche
+sein Passwort erneut, ist der Link abgelaufen, gelöscht oder sein Passwort
+geändert – den Link neu öffnen. „Über diesen Link wurden zu viele neue
+Partituren vorbereitet“ ist das Stundenkontingent des Links
+([Grenzwerte](limits.de.md#öffentliche-freigabelinks)); was schon konvertiert
+ist, lädt weiter.
 
 ## In der Nextcloud-App am Telefon fehlt „Bearbeiten“
 

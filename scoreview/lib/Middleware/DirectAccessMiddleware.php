@@ -8,6 +8,8 @@ use Exception;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\CompanionTokenException;
 use OCA\ScoreView\Service\CompanionTokenService;
+use OCA\ScoreView\Service\PublicShareAccess;
+use OCA\ScoreView\Service\PublicShareException;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
@@ -22,6 +24,8 @@ use OCP\ICacheFactory;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\IUserSession;
+use OCP\Security\Bruteforce\IThrottler;
+use OCP\Security\Bruteforce\MaxDelayReached;
 use ReflectionException;
 use ReflectionMethod;
 use Throwable;
@@ -66,6 +70,9 @@ use Throwable;
 class DirectAccessMiddleware extends Middleware {
 	public const HEADER = 'X-ScoreView-Token';
 	public const COMPANION_HEADER = 'X-ScoreView-Companion';
+	/** A public share token - only on routes with DirectTokenOrSession(share: ...). */
+	public const SHARE_HEADER = 'X-ScoreView-Share';
+	private const SHARE_THROTTLE_ACTION = 'scoreview_share';
 
 	/**
 	 * How often a token is extended at most. Core's extend() is an UPDATE on
@@ -92,6 +99,8 @@ class DirectAccessMiddleware extends Middleware {
 		private CompanionTokenService $companions,
 		private DirectAccessContext $context,
 		ICacheFactory $cacheFactory,
+		private PublicShareAccess $shares,
+		private IThrottler $throttler,
 	) {
 		$this->extendCache = $cacheFactory->isAvailable() ? $cacheFactory->createDistributed('scoreview-token-extend') : null;
 	}
@@ -99,6 +108,14 @@ class DirectAccessMiddleware extends Middleware {
 	public function beforeController(Controller $controller, string $methodName): void {
 		$attribute = $this->attribute($controller, $methodName);
 		if ($attribute === null) {
+			return;
+		}
+
+		// Before the session: a logged-in member opening someone else's link
+		// must get the file of that link, not a 404 from her own tree.
+		$share = $this->request->getHeader(self::SHARE_HEADER);
+		if ($share !== '') {
+			$this->share($attribute, $share);
 			return;
 		}
 
@@ -192,6 +209,61 @@ class DirectAccessMiddleware extends Middleware {
 		// (Manager::getFileForToken) - the same answer the controller would
 		// get, so it need not ask again.
 		$this->context->rememberNode($uid, $file);
+	}
+
+	/**
+	 * A visitor with a public share token, or a member who opened a link.
+	 *
+	 * No CSRF check and no session mode here, on purpose: only routes marked
+	 * `share` get this far, and they all only read. Their one side effect,
+	 * queueing a conversion or variant, is capped per link by a quota rather
+	 * than by a CSRF token a visitor's page would not have anyway. And no
+	 * setVolatileActiveUser()/useTokenScope(): the visitor is attributed to
+	 * the share owner (UserFileResolver::attributionUserId()), never logged
+	 * in as her - nothing here may end up in the session.
+	 *
+	 * @throws DirectAccessException
+	 */
+	private function share(DirectTokenOrSession $attribute, string $token): void {
+		if ($attribute->share === null) {
+			throw new DirectAccessException(Http::STATUS_UNAUTHORIZED, 'share_not_allowed');
+		}
+
+		// Unlike the Direct Editing and companion tokens, a share token is
+		// short (15 characters by default) and may be chosen by its owner,
+		// so guessing is a real attack - core protects its own /s/ routes
+		// the same way. Only guessing signals are counted (see below), so a
+		// rehearsal room behind one address is not slowed by stale links.
+		$ip = $this->request->getRemoteAddress();
+		try {
+			$this->throttler->sleepDelayOrThrowOnMax($ip, self::SHARE_THROTTLE_ACTION);
+		} catch (MaxDelayReached) {
+			throw new DirectAccessException(Http::STATUS_TOO_MANY_REQUESTS, 'share_throttled');
+		}
+
+		// Routes without a fileId (SoundFont) touch no file; for them the
+		// grant names none. Every other route has its file checked against
+		// the share - the controller reads the same parameter.
+		$fileId = $this->request->getParam('fileId');
+		try {
+			$grant = $this->shares->grant($token, $fileId === null ? null : (int)$fileId);
+		} catch (PublicShareException $e) {
+			if ($e->getErrorCode() === PublicShareException::SHARE_INVALID
+				|| $e->getErrorCode() === PublicShareException::SHARE_AUTH) {
+				$this->throttler->registerAttempt(self::SHARE_THROTTLE_ACTION, $ip);
+			}
+			throw new DirectAccessException($e->getStatus(), $e->getErrorCode());
+		}
+
+		if ($attribute->share === 'download' && $grant->hideDownload) {
+			throw new DirectAccessException(Http::STATUS_FORBIDDEN, 'share_download_hidden');
+		}
+
+		$this->context->setShare($grant);
+		if ($grant->node !== null) {
+			// Under the owner's UID, as UserFileResolver will ask for it.
+			$this->context->rememberNode($grant->ownerUid, $grant->node);
+		}
 	}
 
 	/**

@@ -28,9 +28,10 @@ export const EXIT_HOLD_MS = 1000
  * @param {() => void} [deps.onEnter] beim Einschalten (Panels schliessen, Ton aus)
  * @param {() => boolean} [deps.following] ob gerade einer Leitung gefolgt wird (spaeter)
  * @param {() => boolean} [deps.offline] ob der Viewer auf der Offline-Seite laeuft (E14)
+ * @param {() => boolean} [deps.guest] a visitor of a public link, without an account
  * @return {object}
  */
-export function usePerformanceMode({ onEnter = () => {}, following = () => false, offline = () => false }) {
+export function usePerformanceMode({ onEnter = () => {}, following = () => false, offline = () => false, guest = () => false }) {
 	const active = ref(false)
 	// Whether the lock is being held. The ring fills by a CSS animation of
 	// EXIT_HOLD_MS (ScoreLockButton.vue), not by a value written per frame:
@@ -39,7 +40,7 @@ export function usePerformanceMode({ onEnter = () => {}, following = () => false
 	const holding = ref(false)
 	let timer = null
 
-	const context = computed(() => ({ performance: active.value, following: following(), offline: offline() }))
+	const context = computed(() => ({ performance: active.value, following: following(), offline: offline(), guest: guest() }))
 
 	/**
 	 * @param {string} action eine Bedienung aus interactionPolicy.ACTIONS

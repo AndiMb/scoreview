@@ -9,6 +9,9 @@ use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Middleware\DirectAccessException;
 use OCA\ScoreView\Middleware\DirectAccessMiddleware;
 use OCA\ScoreView\Service\CompanionTokenService;
+use OCA\ScoreView\Service\PublicShareAccess;
+use OCA\ScoreView\Service\PublicShareException;
+use OCA\ScoreView\Service\PublicShareGrant;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -28,7 +31,10 @@ use OCP\IRequest;
 use OCP\IUser;
 use OCP\IUserManager;
 use OCP\IUserSession;
+use OCP\Security\Bruteforce\IThrottler;
+use OCP\Security\Bruteforce\MaxDelayReached;
 use OCP\Security\ISecureRandom;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -45,6 +51,8 @@ use RuntimeException;
  */
 class DirectAccessMiddlewareTest extends TestCase {
 	private const DE_TOKEN = 't0ken';
+	private const SHARE_TOKEN = 'Abc123SharE';
+	private const IP = '203.0.113.7';
 	private const SECRET = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 
 	private IRequest&MockObject $request;
@@ -55,6 +63,8 @@ class DirectAccessMiddlewareTest extends TestCase {
 	private DirectAccessContext $context;
 	private CompanionTokenService $companions;
 	private DirectAccessMiddleware $middleware;
+	private PublicShareAccess&MockObject $shares;
+	private IThrottler&MockObject $throttler;
 
 	/** @var array<string, string> Header der Anfrage */
 	private array $header = [];
@@ -102,9 +112,17 @@ class DirectAccessMiddlewareTest extends TestCase {
 		$this->cacheFactory = $this->createMock(ICacheFactory::class);
 		$this->cacheFactory->method('isAvailable')->willReturn(false);
 		$this->companions = $this->dienst();
-		$this->middleware = new DirectAccessMiddleware(
+		$this->shares = $this->createMock(PublicShareAccess::class);
+		$this->throttler = $this->createMock(IThrottler::class);
+		$this->request->method('getRemoteAddress')->willReturn(self::IP);
+		$this->middleware = $this->neu($this->cacheFactory);
+	}
+
+	private function neu(ICacheFactory $cacheFactory): DirectAccessMiddleware {
+		return new DirectAccessMiddleware(
 			$this->request, $this->userSession, $this->directEditing,
-			$this->userManager, $this->rootFolder, $this->companions, $this->context, $this->cacheFactory);
+			$this->userManager, $this->rootFolder, $this->companions, $this->context, $cacheFactory,
+			$this->shares, $this->throttler);
 	}
 
 	/** Ein Token-Dienst gegen die Attrappen dieses Tests - `$geheimnis` bestimmt den Schluessel. */
@@ -265,9 +283,7 @@ class DirectAccessMiddlewareTest extends TestCase {
 		$factory = $this->createMock(ICacheFactory::class);
 		$factory->method('isAvailable')->willReturn(true);
 		$factory->method('createDistributed')->willReturn($cache);
-		$this->middleware = new DirectAccessMiddleware(
-			$this->request, $this->userSession, $this->directEditing,
-			$this->userManager, $this->rootFolder, $this->companions, $this->context, $factory);
+		$this->middleware = $this->neu($factory);
 
 		$this->userSession->method('getUser')->willReturn(null);
 		$this->header[DirectAccessMiddleware::HEADER] = self::DE_TOKEN;
@@ -402,9 +418,7 @@ class DirectAccessMiddlewareTest extends TestCase {
 		$alt = $this->begleiter(43);
 		$this->geheimnis = str_repeat('ab', 32);
 		$this->companions = $this->dienst();
-		$this->middleware = new DirectAccessMiddleware(
-			$this->request, $this->userSession, $this->directEditing,
-			$this->userManager, $this->rootFolder, $this->companions, $this->context, $this->cacheFactory);
+		$this->middleware = $this->neu($this->cacheFactory);
 		$this->mobil($alt);
 		$this->params['fileId'] = '43';
 
@@ -529,6 +543,191 @@ class DirectAccessMiddlewareTest extends TestCase {
 		$this->abgewiesen('ohneCsrf', Http::STATUS_FORBIDDEN, 'companion_not_allowed', 'SoundFont');
 	}
 
+	// --- Public share token ------------------------------------------------
+
+	/** A grant in Anna's share - for score 42, or for no file at all. */
+	private function freigabe(bool $hideDownload = false, ?int $fileId = 42): PublicShareGrant {
+		$node = null;
+		if ($fileId !== null) {
+			$node = $this->createMock(File::class);
+			$node->method('getId')->willReturn($fileId);
+		}
+		return new PublicShareGrant('anna', $node, $hideDownload, hash('sha256', self::SHARE_TOKEN));
+	}
+
+	/** A visitor without an account: no session, only the share header. */
+	private function besucher(): void {
+		$this->userSession->method('getUser')->willReturn(null);
+		$this->header[DirectAccessMiddleware::SHARE_HEADER] = self::SHARE_TOKEN;
+	}
+
+	/**
+	 * The token opens only the routes that say so - everything else (notes,
+	 * recordings, setlists, ...) belongs to an account a visitor lacks.
+	 */
+	public function testShareHeaderOnRouteWithoutShareFlagIs401(): void {
+		$this->besucher();
+		$this->params['fileId'] = '42';
+		$this->shares->expects($this->never())->method('grant');
+
+		foreach (['mitCsrf', 'ohneCsrf', 'ausgabe', 'liste', 'imOrdner'] as $methode) {
+			$this->abgewiesen($methode, Http::STATUS_UNAUTHORIZED, 'share_not_allowed', $methode);
+		}
+	}
+
+	public function testShareHeaderGrantsReadRoute(): void {
+		$this->besucher();
+		$this->params['fileId'] = '42';
+		$grant = $this->freigabe();
+		$this->shares->expects($this->once())->method('grant')->with(self::SHARE_TOKEN, 42)->willReturn($grant);
+		$this->throttler->expects($this->once())->method('sleepDelayOrThrowOnMax')->with(self::IP, 'scoreview_share');
+		$this->throttler->expects($this->never())->method('registerAttempt');
+
+		$this->middleware->beforeController($this->controller(), 'freigabeLesen');
+
+		$this->assertSame(DirectAccessContext::SHARE, $this->context->mode());
+		$this->assertTrue($this->context->resolved());
+		$this->assertSame($grant, $this->context->shareGrant());
+		$this->assertSame($grant->node, $this->context->knownNode('anna', 42), 'the file is known under the owner');
+	}
+
+	/** SoundFont: no fileId, so the grant is asked for no file - and names none. */
+	public function testShareOnRouteWithoutFileIdAsksForNoFile(): void {
+		$this->besucher();
+		$this->shares->expects($this->once())->method('grant')->with(self::SHARE_TOKEN, null)
+			->willReturn($this->freigabe(false, null));
+
+		$this->middleware->beforeController($this->controller(), 'freigabeLesen');
+
+		$this->assertSame(DirectAccessContext::SHARE, $this->context->mode());
+		$this->assertNull($this->context->knownNode('anna', 42));
+	}
+
+	/**
+	 * A logged-in member opening someone else's link must get the file of
+	 * the link, not a 404 from her own tree - and the read-only route asks
+	 * for no CSRF token on that path.
+	 */
+	public function testShareHeaderWinsOverSession(): void {
+		$bert = $this->createMock(IUser::class);
+		$bert->method('getUID')->willReturn('bert');
+		$this->userSession->method('getUser')->willReturn($bert);
+		$this->header[DirectAccessMiddleware::SHARE_HEADER] = self::SHARE_TOKEN;
+		$this->params['fileId'] = '42';
+		$this->request->expects($this->never())->method('passesCSRFCheck');
+		$this->request->expects($this->never())->method('passesStrictCookieCheck');
+		$this->shares->method('grant')->willReturn($this->freigabe());
+
+		$this->middleware->beforeController($this->controller(), 'freigabeLesen');
+
+		$this->assertSame(DirectAccessContext::SHARE, $this->context->mode());
+		$this->assertNotNull($this->context->knownNode('anna', 42));
+	}
+
+	public function testHideDownloadBlocksSourceRoute(): void {
+		$this->besucher();
+		$this->params['fileId'] = '42';
+		$this->shares->method('grant')->willReturn($this->freigabe(true));
+
+		$this->abgewiesen('freigabeQuelle', Http::STATUS_FORBIDDEN, 'share_download_hidden', 'hidden download');
+
+		// Rendering stays allowed - "hide download" closes only the source file.
+		$this->middleware->beforeController($this->controller(), 'freigabeLesen');
+		$this->assertSame(DirectAccessContext::SHARE, $this->context->mode());
+	}
+
+	public function testSourceRouteOpenWithoutHideDownload(): void {
+		$this->besucher();
+		$this->params['fileId'] = '42';
+		$this->shares->method('grant')->willReturn($this->freigabe(false));
+
+		$this->middleware->beforeController($this->controller(), 'freigabeQuelle');
+		$this->assertSame(DirectAccessContext::SHARE, $this->context->mode());
+	}
+
+	/**
+	 * @return array<string, array{string, int, bool}>
+	 */
+	public static function shareFailures(): array {
+		return [
+			'unknown token' => [PublicShareException::SHARE_INVALID, 401, true],
+			'locked password' => [PublicShareException::SHARE_AUTH, 401, true],
+			'switch off' => [PublicShareException::PUBLIC_DISABLED, 401, false],
+			'file drop' => [PublicShareException::SHARE_NO_READ, 403, false],
+			'file outside the share' => [PublicShareException::NOT_FOUND, 404, false],
+		];
+	}
+
+	/** Only guessing signals count - a deleted file or a switched-off feature is no attack. */
+	#[DataProvider('shareFailures')]
+	public function testInvalidShareRegistersBruteForceAttempt(string $code, int $status, bool $counts): void {
+		$this->besucher();
+		$this->params['fileId'] = '42';
+		$this->shares->method('grant')->willThrowException(new PublicShareException($code));
+		$this->throttler->expects($counts ? $this->once() : $this->never())
+			->method('registerAttempt')->with('scoreview_share', self::IP);
+
+		$this->abgewiesen('freigabeLesen', $status, $code, $code);
+	}
+
+	public function testThrottledShareIs429(): void {
+		$this->besucher();
+		$this->throttler->method('sleepDelayOrThrowOnMax')->willThrowException(new MaxDelayReached());
+		$this->shares->expects($this->never())->method('grant');
+
+		$this->abgewiesen('freigabeLesen', Http::STATUS_TOO_MANY_REQUESTS, 'share_throttled', 'throttled');
+	}
+
+	/**
+	 * A visitor is attributed to the owner, never logged in as her: no
+	 * volatile user, no token scope, nothing that writes to the session -
+	 * even when a Direct Editing token comes along.
+	 */
+	public function testNoScopeOrVolatileUserIsSet(): void {
+		$this->besucher();
+		$this->header[DirectAccessMiddleware::HEADER] = self::DE_TOKEN;
+		$this->params['fileId'] = '42';
+		$this->shares->method('grant')->willReturn($this->freigabe());
+		$this->directEditing->expects($this->never())->method('getToken');
+		$this->userSession->expects($this->never())->method('setVolatileActiveUser');
+		$this->userSession->expects($this->never())->method('setUser');
+
+		$controller = $this->controller();
+		$this->middleware->beforeController($controller, 'freigabeLesen');
+		$this->middleware->afterController($controller, 'freigabeLesen', new JSONResponse([]));
+	}
+
+	/**
+	 * The list of routes a share token opens is a security promise, so it is
+	 * pinned here: a new `share:` on any route must show up as a failing
+	 * test, not slip through review. engine#get needs no entry - it is
+	 * #[PublicPage] without this attribute and open to anyone anyway.
+	 */
+	public function testOnlyTheReadOnlyScoreRoutesAcceptAShareToken(): void {
+		$found = [];
+		foreach (glob(__DIR__ . '/../../../lib/Controller/*Controller.php') as $path) {
+			$class = 'OCA\\ScoreView\\Controller\\' . basename($path, '.php');
+			foreach ((new \ReflectionClass($class))->getMethods() as $method) {
+				foreach ($method->getAttributes(DirectTokenOrSession::class) as $attribute) {
+					$share = $attribute->newInstance()->share;
+					if ($share !== null) {
+						$found[basename($path, '.php') . '#' . $method->getName()] = $share;
+					}
+				}
+			}
+		}
+		ksort($found);
+
+		$this->assertSame([
+			'ConversionController#artifact' => 'read',
+			'ConversionController#source' => 'download',
+			'ConversionController#status' => 'read',
+			'SoundFontController#get' => 'read',
+			'VariantController#artifact' => 'read',
+			'VariantController#status' => 'read',
+		], $found);
+	}
+
 	// --- Ruecknahme des Scopes ---------------------------------------------
 
 	public function testNimmtSelbstGesetztenScopeNachDemLaufZurueck(): void {
@@ -627,5 +826,17 @@ class AttributTraeger extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession(companion: null, directOnly: true)]
 	public function ausgabe(): void {
+	}
+
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession(share: 'read')]
+	public function freigabeLesen(): void {
+	}
+
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[DirectTokenOrSession(csrfInSession: false, share: 'download')]
+	public function freigabeQuelle(): void {
 	}
 }

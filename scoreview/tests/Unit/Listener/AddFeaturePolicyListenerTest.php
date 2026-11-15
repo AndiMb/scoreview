@@ -22,7 +22,7 @@ class AddFeaturePolicyListenerTest extends TestCase {
 	 * @param array<string, string> $header
 	 * @return ?EmptyFeaturePolicy null, wenn nichts hinzugefuegt wurde
 	 */
-	private function lauf(string|\Throwable $pfad, bool $mikrofon = true, array $header = []): ?EmptyFeaturePolicy {
+	private function lauf(string|\Throwable $pfad, bool $mikrofon = true, array $header = [], bool $publicShare = false): ?EmptyFeaturePolicy {
 		$request = $this->createMock(IRequest::class);
 		if ($pfad instanceof \Throwable) {
 			$request->method('getPathInfo')->willThrowException($pfad);
@@ -32,6 +32,7 @@ class AddFeaturePolicyListenerTest extends TestCase {
 		$request->method('getHeader')->willReturnCallback(fn (string $name) => $header[$name] ?? '');
 		$features = $this->createMock(FeatureConfig::class);
 		$features->method('usesMicrophone')->willReturn($mikrofon);
+		$features->method('publicShareEnabled')->willReturn($publicShare);
 
 		$gefangen = null;
 		$event = $this->createMock(AddFeaturePolicyEvent::class);
@@ -68,5 +69,22 @@ class AddFeaturePolicyListenerTest extends TestCase {
 	public function testNichtFuerHintergrundanfragen(): void {
 		$this->assertNull($this->lauf('/apps/files/api/v1/x', true, ['X-Requested-With' => 'XMLHttpRequest']));
 		$this->assertNull($this->lauf('/apps/files/api/v1/x', true, ['OCS-APIRequest' => 'true']));
+	}
+
+	public function testMicrophoneOnSharePageWhenPublicShareOn(): void {
+		foreach (['/s/abcDEF123', '/s/abcDEF123/'] as $pfad) {
+			$richtlinie = $this->lauf($pfad, true, [], true);
+			$this->assertNotNull($richtlinie, $pfad);
+			$this->assertStringContainsString("microphone 'self'", $richtlinie->buildPolicy(), $pfad);
+		}
+	}
+
+	public function testNoMicrophoneOnSharePageWhenOff(): void {
+		$this->assertNull($this->lauf('/s/abcDEF123', true, [], false));
+		// Switch on, but no microphone feature: nothing to allow.
+		$this->assertNull($this->lauf('/s/abcDEF123', false, [], true));
+		// Not a share page.
+		$this->assertNull($this->lauf('/sx/abc', true, [], true));
+		$this->assertNull($this->lauf('/s', true, [], true));
 	}
 }

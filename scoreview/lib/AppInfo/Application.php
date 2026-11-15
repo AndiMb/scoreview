@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace OCA\ScoreView\AppInfo;
 
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
+use OCA\Files_Sharing\Event\BeforeTemplateRenderedEvent as PublicShareTemplateEvent;
 use OCA\ScoreView\Listener\AddCspListener;
 use OCA\ScoreView\Listener\AddFeaturePolicyListener;
 use OCA\ScoreView\Listener\CompanionRevocationListener;
 use OCA\ScoreView\Listener\FilesLoadAdditionalScriptsListener;
 use OCA\ScoreView\Listener\NodeDeletedListener;
+use OCA\ScoreView\Listener\PublicShareScriptsListener;
 use OCA\ScoreView\Listener\RegisterDirectEditorListener;
 use OCA\ScoreView\Listener\ScoreFileListener;
 use OCA\ScoreView\Listener\ScoreMimetypeListener;
@@ -102,6 +104,13 @@ class Application extends App implements IBootstrap {
 		// Das Mikrofon auf der Files-Seite, nur wenn eine Funktion es braucht
 		// (Listener\AddFeaturePolicyListener, S3 in docs/architecture.md).
 		$context->registerEventListener(AddFeaturePolicyEvent::class, AddFeaturePolicyListener::class);
+
+		// The public link page (/s/{token}): the framing handler, behind the
+		// admin switch. The event class belongs to files_sharing, which is not
+		// part of nextcloud/ocp; ::class does not autoload, so the reference
+		// is harmless when files_sharing is off (the event then never fires),
+		// and Psalm knows the class from tests/psalm-stubs/files_sharing.phpstub.
+		$context->registerEventListener(PublicShareTemplateEvent::class, PublicShareScriptsListener::class);
 
 		// Widerruf der Begleit-Token der mobilen Seite ueber die Epoche der
 		// Nutzerin (Service\CompanionTokenService).

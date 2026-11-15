@@ -9,12 +9,14 @@ use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\PracticeTrackService;
+use OCA\ScoreView\Service\ShareConversionQuota;
 use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
@@ -98,6 +100,8 @@ class ConversionController extends Controller {
 		private SoundFontService $soundFontService,
 		private ConversionBackend $backend,
 		ICacheFactory $cacheFactory,
+		private DirectAccessContext $directAccess,
+		private ShareConversionQuota $shareQuota,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->requeueCache = $cacheFactory->isAvailable() ? $cacheFactory->createDistributed('scoreview-requeue') : null;
@@ -115,7 +119,7 @@ class ConversionController extends Controller {
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[DirectTokenOrSession]
+	#[DirectTokenOrSession(share: 'read')]
 	public function status(int $fileId): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null) {
@@ -177,7 +181,9 @@ class ConversionController extends Controller {
 			if ($this->clientFallback->noteConversionError($conversion->getErrorCode())) {
 				return $this->clientResponse($node, $conversion->getErrorCode());
 			}
-			$this->retryConversion($fileId);
+			if (!$this->retryConversion($fileId)) {
+				return $this->quotaExceeded();
+			}
 		} elseif ($conversion->getStatus() === ScoreConversion::STATUS_READY) {
 			if (!$this->conversionService->isCurrent($conversion)) {
 				// Aeltere Cache-Formatversion (oder, auf dem lokalen Weg, eine
@@ -215,7 +221,10 @@ class ConversionController extends Controller {
 			// Antwort hier ist eine Anzeigehilfe, keine Absicherung). Ohne sie
 			// stuende der Knopf auch an einer nur geliehenen Partitur und
 			// endete jedes Mal in einem 403.
-			$body['canReconvert'] = $node->isUpdateable();
+			// Never for a visitor of a public link: the node is the share
+			// owner's and may well be updateable, but the visitor is not
+			// the owner, and reconvert does not take a share token.
+			$body['canReconvert'] = $node->isUpdateable() && $this->directAccess->shareGrant() === null;
 			// Whether the server can engrave display variants (E19) - a
 			// capability, not a path (E15). The choices themselves come from
 			// meta.json, which the viewer loads anyway.
@@ -282,7 +291,7 @@ class ConversionController extends Controller {
 	/** Reiht eine (Neu-)Konvertierung ein - Idempotenz/Ueberspringen bereits laufender Jobs regelt ConvertScoreJob selbst. */
 	private function queueConversion(int $fileId): void {
 		$this->jobList->add(ConvertScoreJob::class, [
-			'userId' => $this->fileResolver->currentUserId(),
+			'userId' => $this->fileResolver->attributionUserId(),
 			'fileId' => $fileId,
 		]);
 	}
@@ -291,17 +300,32 @@ class ConversionController extends Controller {
 	 * queueConversion() from a status poll - at most once per
 	 * REQUEUE_INTERVAL_SECONDS for the same file and user.
 	 */
-	private function retryConversion(int $fileId): void {
-		if ($this->requeueCache === null) {
-			$this->queueConversion($fileId);
-			return;
+	private function retryConversion(int $fileId): bool {
+		$grant = $this->directAccess->shareGrant();
+		$key = null;
+		if ($this->requeueCache !== null) {
+			// A visitor has no user id; her link is the unit that is throttled.
+			$key = $fileId . ':' . ($grant !== null ? 'share:' . $grant->tokenDigest : ($this->fileResolver->currentUserId() ?? ''));
+			if ($this->requeueCache->get($key) !== null) {
+				return true;
+			}
 		}
-		$key = $fileId . ':' . ($this->fileResolver->currentUserId() ?? '');
-		if ($this->requeueCache->get($key) !== null) {
-			return;
+		// The quota counts where a job is really added - never on a mere
+		// poll. A job that is still listed is not new work (matters without
+		// a memory cache, where every poll gets here); the requeue check
+		// above bounds a failing or no-op score to one unit per interval.
+		if ($grant !== null
+			&& !$this->jobList->has(ConvertScoreJob::class, ['userId' => $this->fileResolver->attributionUserId(), 'fileId' => $fileId])
+			&& !$this->shareQuota->consume($grant)) {
+			return false;
 		}
 		$this->queueConversion($fileId);
-		$this->requeueCache->set($key, 1, self::REQUEUE_INTERVAL_SECONDS);
+		$this->requeueCache?->set($key, 1, self::REQUEUE_INTERVAL_SECONDS);
+		return true;
+	}
+
+	private function quotaExceeded(): JSONResponse {
+		return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
 	}
 
 	/**
@@ -314,7 +338,7 @@ class ConversionController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[DirectTokenOrSession(csrfInSession: false)]
+	#[DirectTokenOrSession(csrfInSession: false, share: 'read')]
 	public function artifact(int $fileId, string $name): Http\Response {
 		return $this->serveCachedFile($fileId, $name);
 	}
@@ -334,7 +358,7 @@ class ConversionController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[DirectTokenOrSession(csrfInSession: false)]
+	#[DirectTokenOrSession(csrfInSession: false, share: 'download')]
 	public function source(int $fileId): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if (!$node instanceof File) {
@@ -378,7 +402,9 @@ class ConversionController extends Controller {
 		if ($grund !== null) {
 			return $this->clientResponse($node, $grund);
 		}
-		$this->retryConversion($fileId);
+		if (!$this->retryConversion($fileId)) {
+			return $this->quotaExceeded();
+		}
 		return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 	}
 
@@ -395,6 +421,13 @@ class ConversionController extends Controller {
 	 * leer.
 	 */
 	private function clientResponse(Node $node, ?string $grund): JSONResponse {
+		// A link with "hide download" gives the browser no source to set -
+		// an end, with its reason, instead of a fallback bound to fail
+		// (Service\ClientFallback::sourceOpenTo). Nothing is queued: the
+		// server cannot convert, that is why we are here.
+		if (!ClientFallback::sourceOpenTo($this->directAccess->shareGrant())) {
+			return new JSONResponse(['status' => ScoreConversion::STATUS_ERROR, 'errorCode' => ClientFallback::SOURCE_HIDDEN]);
+		}
 		$etag = $node->getEtag();
 		return new JSONResponse([
 			'status' => ClientFallback::STATUS_CLIENT,

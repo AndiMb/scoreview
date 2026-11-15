@@ -3,6 +3,7 @@ import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref, watch } from 'vue'
 import { readInitialState } from '../initialState.js'
 import { COUNT_MODES } from '../lib/countLabels.js'
+import { GUEST_KEYS, readGuest, writeGuest } from '../lib/guestStore.js'
 import {
 	highlightCssVars,
 	normalizeHighlightColor,
@@ -39,11 +40,17 @@ export const LAYOUTS = Object.freeze(['pages', 'band', 'lyrics'])
  * die Verzoegerung, in der die erste Note noch in der Vorgabefarbe
  * aufleuchtet.
  *
+ * A visitor of a public link has no account: with `local` the settings go
+ * to this browser (lib/guestStore.js) and come back from it on top of the
+ * defaults the page delivers - the same settings, kept elsewhere.
+ *
+ * @param {object} [deps]
+ * @param {() => boolean} [deps.local] keep them in the browser, not on the server
  * @return {object} die Einstellungen als Refs, dazu die fertigen
  *   CSS-Variablen fuer das Notenbild
  */
-export function useViewerPreferences() {
-	const anfang = leseAnfangszustand()
+export function useViewerPreferences({ local = () => false } = {}) {
+	const anfang = leseAnfangszustand(local())
 	const highlightColor = ref(normalizeHighlightColor(anfang.highlightColor))
 	const highlightMode = ref(normalizeHighlightMode(anfang.highlightMode))
 	const stereoMyPart = ref(anfang.stereoMyPart === true)
@@ -110,22 +117,27 @@ export function useViewerPreferences() {
 
 	async function save() {
 		saveTimer = null
+		const values = {
+			highlightColor: highlightColor.value,
+			highlightMode: highlightMode.value,
+			stereoMyPart: stereoMyPart.value,
+			noteTheme: noteTheme.value,
+			noteNames: noteNames.value,
+			noteNamesMine: noteNamesMine.value,
+			layout: layout.value,
+			bandOffered: bandOffered.value,
+			autoScroll: autoScroll.value,
+			beatCounts: beatCounts.value,
+			doublePage: doublePage.value,
+			referencePitch: referencePitch.value,
+			barPins: barPins.value,
+		}
+		if (local()) {
+			writeGuest(GUEST_KEYS.prefs, values)
+			return
+		}
 		try {
-			await axios.post(generateUrl('/apps/scoreview/api/preferences'), {
-				highlightColor: highlightColor.value,
-				highlightMode: highlightMode.value,
-				stereoMyPart: stereoMyPart.value,
-				noteTheme: noteTheme.value,
-				noteNames: noteNames.value,
-				noteNamesMine: noteNamesMine.value,
-				layout: layout.value,
-				bandOffered: bandOffered.value,
-				autoScroll: autoScroll.value,
-				beatCounts: beatCounts.value,
-				doublePage: doublePage.value,
-				referencePitch: referencePitch.value,
-				barPins: barPins.value,
-			})
+			await axios.post(generateUrl('/apps/scoreview/api/preferences'), values)
 		} catch (err) {
 			// Bewusst nur ins Log: Die Einstellung wirkt im geoeffneten Viewer
 			// bereits, sie ist nur nicht ueber die Sitzung hinaus gemerkt. Ein
@@ -176,8 +188,15 @@ function leseThemeDunkel() {
  * nichts hinterlegt hat (aeltere Instanz, Aufruf ausserhalb der
  * Files-Seite). Dann gelten die Vorgaben aus lib/highlightStyle.js.
  *
+ * With `local`, what this browser kept wins over the delivered defaults.
+ * Read through the same normalisation as the server's values, so a stale or
+ * tampered entry falls back like an unknown value from a newer server.
+ *
+ * @param {boolean} local
  * @return {{highlightColor?: string, highlightMode?: string, stereoMyPart?: boolean, noteTheme?: string}}
  */
-function leseAnfangszustand() {
-	return readInitialState('viewer-preferences') ?? {}
+function leseAnfangszustand(local) {
+	const anfang = readInitialState('viewer-preferences') ?? {}
+	const kept = local ? readGuest(GUEST_KEYS.prefs) : null
+	return kept !== null && typeof kept === 'object' && !Array.isArray(kept) ? { ...anfang, ...kept } : anfang
 }

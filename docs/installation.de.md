@@ -1,4 +1,4 @@
-<!-- translation-of: installation.md sha256:98b6f6974c14 -->
+<!-- translation-of: installation.md sha256:e1ee6f767119 -->
 # Installation und Konfiguration
 
 [English](installation.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -547,6 +547,28 @@ wissen:
 Ein externes SoundFont (`soundfont_url`) braucht nichts weiter: Die
 Offline-Seite gibt dessen Herkunft in ihrer CSP selbst frei.
 
+### Partituren auf öffentlichen Freigabelinks
+
+**Partituren auf öffentlichen Freigabelinks anzeigen** (`feature_public_share`,
+Abschnitt **Öffentliche Freigabelinks**, Vorgabe aus). Eingeschaltet öffnet
+ein Klick auf eine `.mscz` auf der Link-Seite einer öffentlichen Freigabe
+ScoreView für Besucher ohne Konto – bei geteilten Dateien und Ordnern, mit
+oder ohne Passwort
+([E25](architecture.md#e25-öffentliche-freigaben-viewer-im-rahmen-der-link-seite)).
+Bewusst einschalten: Besucher können Konvertierungen anstoßen, die unter dem
+Konto des Eigentümers der Freigabe laufen. Sie sind je Link gedeckelt:
+
+```sh
+occ config:app:set scoreview public_share_conversions_per_hour --value 20   # 1-500
+```
+
+Was Besucher können und was nicht, steht in den
+[Grenzwerten](limits.de.md#öffentliche-freigabelinks). An anderen Link-Seiten
+ändert der Schalter nichts: Ihre CSP bleibt, wie sie ist, und das Mikrofon ist
+auf `/s/…` nur erlaubt, solange dieser Schalter und eine Mikrofonfunktion an
+sind. Ausgeschaltet laden Link-Seiten wieder nichts von ScoreView, und die App
+weist Anfragen von Besuchern ab.
+
 ## Einstellungen im Überblick
 
 | Schlüssel | Wo | Bedeutung |
@@ -570,6 +592,8 @@ Offline-Seite gibt dessen Herkunft in ihrer CSP selbst frei.
 | `feature_practice_log` | Verwaltung | Übetagebuch: eigene Übezeit je Stück, Wochenziel der Leitungen (Vorgabe an) |
 | `practice_track_max_mb` | Verwaltung | Höchstgröße eines Übe-Tracks in MB (Vorgabe 60, 5–500) |
 | `feature_offline` | Verwaltung | Offline-Seite und „Offline vormerken“ (Vorgabe an) |
+| `feature_public_share` | Verwaltung | Partituren auf öffentlichen Freigabelinks, für Besucher ohne Konto (Vorgabe aus) |
+| `public_share_conversions_per_hour` | Verwaltung | Neue Konvertierungen und Darstellungsvarianten, die Besucher eines Links je Stunde anstoßen dürfen (Vorgabe 20, 1–500) |
 | `follow_poll_ms` | Verwaltung | Abfrageintervall von „Folgt mir“ ohne Push in ms (Vorgabe 800, erlaubt 500–3000) |
 | `max_recordings_per_score` | Verwaltung | Aufnahmen je Person und Partitur (Vorgabe 5, 1–50) |
 | `max_recording_seconds` | Verwaltung | Höchstlänge einer Aufnahme in Sekunden (Vorgabe 600, 10–3600) |

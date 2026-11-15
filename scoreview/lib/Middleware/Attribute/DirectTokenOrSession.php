@@ -55,6 +55,14 @@ class DirectTokenOrSession {
 		 * Kette, an deren Ende jede Datei stuende.
 		 */
 		public bool $directOnly = false,
+		/**
+		 * Whether a public share token (`X-ScoreView-Share`) opens the route:
+		 * `null` never, `read` for rendering and playback, `download` for
+		 * the source file - which "hide download" on the link closes. Opt-in
+		 * per route, because a visitor has no account: every route that
+		 * writes to one stays shut for her.
+		 */
+		public ?string $share = null,
 	) {
 	}
 }

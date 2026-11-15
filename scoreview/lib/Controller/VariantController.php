@@ -10,8 +10,10 @@ use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreVariant;
 use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\ShareConversionQuota;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\VariantKey;
 use OCA\ScoreView\Service\VariantService;
@@ -61,6 +63,8 @@ class VariantController extends Controller {
 		private IUserSession $userSession,
 		private IURLGenerator $urlGenerator,
 		private IL10N $l,
+		private DirectAccessContext $directAccess,
+		private ShareConversionQuota $shareQuota,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -77,7 +81,7 @@ class VariantController extends Controller {
 	#[NoAdminRequired]
 	#[PublicPage]
 	#[NoCSRFRequired]
-	#[DirectTokenOrSession]
+	#[DirectTokenOrSession(share: 'read')]
 	public function status(int $fileId, string $key): JSONResponse {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		$parsed = VariantKey::parse($key);
@@ -120,7 +124,11 @@ class VariantController extends Controller {
 			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('This score has no such part.')], Http::STATUS_NOT_FOUND);
 		}
 
-		$user = $this->userSession->getUser();
+		// A visitor on a public link has no account: her runs are capped per
+		// link instead of per user (ShareConversionQuota). The share path wins
+		// over a session, as in UserFileResolver.
+		$grant = $this->directAccess->shareGrant();
+		$user = $grant === null ? $this->userSession->getUser() : null;
 		if ($user !== null) {
 			try {
 				$this->limiter->registerUserRequest('scoreview-variant', self::RUNS_PER_HOUR, 3600, $user);
@@ -129,13 +137,25 @@ class VariantController extends Controller {
 			}
 		}
 
+		// The visitor's unit is spent only by the request that really starts
+		// the run: a claim lost to a parallel request starts nothing, and the
+		// link's allowance is small and counts only work really queued (S4).
+		// A won claim is given back when the allowance is used up, or the row
+		// would sit there as "processing" until it goes stale.
 		if ($variant === null) {
 			$variant = $this->variantService->claim($fileId, $etag, $key);
 			if ($variant === null) {
 				// Claimed a moment ago by another request.
 				return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 			}
+			if ($grant !== null && !$this->shareQuota->consume($grant)) {
+				$this->variantService->release($variant);
+				return $this->shareQuotaExceeded();
+			}
 		} else {
+			if ($grant !== null && !$this->shareQuota->consume($grant)) {
+				return $this->shareQuotaExceeded();
+			}
 			$variant = $this->variantService->restart($variant);
 		}
 
@@ -146,6 +166,10 @@ class VariantController extends Controller {
 			: $this->errorBody($variant));
 	}
 
+	private function shareQuotaExceeded(): JSONResponse {
+		return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
+	}
+
 	/**
 	 * One artifact of a cached variant: `page-N`, `timing`, `measures`,
 	 * `meta`. Delivered as the base's are - immutable, as an attachment, with
@@ -154,7 +178,7 @@ class VariantController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[DirectTokenOrSession(csrfInSession: false)]
+	#[DirectTokenOrSession(csrfInSession: false, share: 'read')]
 	public function artifact(int $fileId, string $key, string $name): Http\Response {
 		$node = $this->fileResolver->resolveOwnNode($fileId);
 		if ($node === null || VariantKey::parse($key) === null) {

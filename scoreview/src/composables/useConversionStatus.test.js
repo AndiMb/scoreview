@@ -203,6 +203,62 @@ describe('useConversionStatus', () => {
 })
 
 /**
+ * A visitor on a public link (the page under /apps/scoreview/public/...)
+ * meets refusals no member does: the link is gone or wants its password
+ * again, the link's quota of new conversions is used up, or the browser
+ * fallback needs the source the link hides. Each gets a sentence of its own
+ * instead of "Request failed with status code 401" or an endless spinner.
+ */
+describe('useConversionStatus - refusals on a public link', () => {
+	const LINK = 'This link is no longer valid or needs its password again. Open the link again.'
+	const LATER = 'Too many new scores were prepared through this link. Try again later.'
+	const HIDDEN = 'This score is not prepared yet. Ask the person who shared it to open it once.'
+
+	beforeEach(() => {
+		axiosGet.mockReset()
+	})
+
+	async function refusedWith(status, errorCode) {
+		axiosGet.mockRejectedValueOnce(Object.assign(new Error(`Request failed with status code ${status}`), {
+			response: { status, data: { errorCode } },
+		}))
+		const conversion = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
+		await conversion.poll()
+		return conversion
+	}
+
+	it.each([
+		[401, 'share_auth', LINK],
+		[401, 'share_invalid', LINK],
+		[401, 'public_disabled', LINK],
+		[401, 'share_not_allowed', LINK],
+		[403, 'share_no_read', LINK],
+		[429, 'share_quota', LATER],
+		[429, 'share_throttled', LATER],
+	])('says what a %i with %s means', async (status, code, text) => {
+		const conversion = await refusedWith(status, code)
+		expect(conversion.state.value).toBe('error')
+		expect(conversion.errorCode.value).toBe(code)
+		expect(conversion.errorText.value).toBe(text)
+	})
+
+	it('keeps the raw message for a refusal without a code of its own', async () => {
+		const conversion = await refusedWith(500, undefined)
+		expect(conversion.errorCode.value).toBe('')
+		expect(conversion.errorText.value).toBe('Request failed with status code 500')
+	})
+
+	it('explains a source the link hides instead of waiting for ever', async () => {
+		axiosGet.mockResolvedValueOnce({ data: { status: 'error', errorCode: 'client_source_hidden' } })
+		const conversion = useConversionStatus({ fileId: () => 42, onReady: vi.fn() })
+		await conversion.poll()
+		expect(conversion.state.value).toBe('error')
+		expect(conversion.errorText.value).toBe(HIDDEN)
+		conversion.stop()
+	})
+})
+
+/**
  * Display variants (E19) come from wherever the base came from - decided in
  * the one branch of poll(), not again for each variant.
  */

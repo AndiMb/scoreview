@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:f74109456c64 -->
+<!-- translation-of: limits.md sha256:d97a918e62b5 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -1055,6 +1055,89 @@ großes System unter Umständen nicht unter den Titel, der dann seine erste
 Seite für sich hat; und der Stimmname, der am linken Rand des Titelrahmens
 steht, kann auf der schmalen Hochkant-Seite einen langen Titel überdecken.
 Beides ist MuseScores Satz des Rahmens auf kleinem Papier.
+
+## Öffentliche Freigabelinks
+
+Vorgabe aus; die Verwaltung schaltet es ein
+([Installation](installation.de.md#partituren-auf-öffentlichen-freigabelinks)).
+Dann öffnet ein Klick auf eine `.mscz` auf der Link-Seite einer öffentlichen
+Freigabe (`/s/…`) den Viewer für Besucher ohne Konto, eingerahmt von
+Nextclouds eigenem Viewer – bei einer geteilten Datei ebenso wie bei einem
+geteilten Ordner, in dem Nextclouds Pfeile von Partitur zu Partitur blättern
+([E25](architecture.md#e25-öffentliche-freigaben-viewer-im-rahmen-der-link-seite),
+Regeln in [S12](architecture.md#s12-ein-freigabe-token-öffnet-nur-lesende-routen-und-nur-seine-freigabe)).
+
+**Was Besucher bekommen:** die Partitur, Wiedergabe, Mixer und „Meine
+Stimme“, Tempo, Darstellungsvarianten (Stimmenauszüge, Handyseiten,
+klingende Notation), Tonnamen, Liedtext, Zählzeiten, Metronom, Einzähler,
+einen Loop, den Anfangston, das Stimmgerät und die Sing-Wertung.
+
+**Was sie nicht bekommen**, weil es in einem Konto liegt: Notizen und
+Zeichnungen, Aufnahmen, das Übetagebuch, Leitung und „Folgt mir“,
+gespeicherte Loops, Bestwerte der Sing-Wertung, Setlisten, die Offline-Seite
+und „Neu konvertieren“. Übe-Tracks (MP3), die PDF-Datei und Drucken sind für
+Besucher **immer** aus, nicht erst bei „Download verbergen“: Sie schreiben in
+die Dateien des Eigentümers oder brauchen eine Sitzung. Was Besucher
+einstellen – „Meine Stimme“, Anzeigeeinstellungen, den Stimmton – bleibt in
+ihrem Browser (`localStorage`); ein anderer Browser oder ein privates Fenster
+beginnt mit den Vorgaben.
+
+**„Download verbergen“** hält die `.mscz` selbst verschlossen und damit auch
+die [Konvertierung im Browser](#konvertierung-im-browser), die genau diese
+Datei braucht. Wo der Server konvertiert, merken Besucher davon nichts. Wo er
+es nicht kann (der Browser müsste einspringen), zeigt eine noch nicht
+konvertierte Partitur „Diese Partitur ist noch nicht vorbereitet. Bitte die
+Person, die sie geteilt hat, sie einmal zu öffnen.“ – sobald ein Mitglied sie
+öffnet, liegt sie auf dem Server.
+
+**Wer zahlt.** Eine Konvertierung, die ein Besuch anstößt, läuft unter dem
+Konto des **Eigentümers** der Freigabe – gemessen für eine eigene Datei, eine
+Datei in einem Team-Ordner und einen Ordner, den ein anderes Mitglied der
+Person geteilt hat, die den Link angelegt hat (sie lief unter diesem anderen
+Mitglied, dem die Datei gehört).
+
+**Kontingent je Link.** Neue Konvertierungen und Darstellungsvarianten, die
+Besucher anstoßen, sind je Link gedeckelt: Vorgabe 20 je Stunde (1–500,
+Verwaltung). Gezählt wird jeder tatsächlich gestartete Job, auch ein erneuter
+Versuch nach einem Fehler; eine schon konvertierte Partitur oder Variante zu
+öffnen, zählt nie. Über der Grenze sagt der Viewer „Über diesen Link wurden
+zu viele neue Partituren vorbereitet. Versuche es später noch einmal.“; was
+schon konvertiert ist, lädt weiter. Gemessen mit der Grenze 3: die
+Grundkonvertierung und zwei Varianten gingen durch, die dritte neue Variante
+wurde abgewiesen, eine vorhandene öffnete weiter, und ein anderer Link blieb
+unberührt. Die Grenze gehört zum Link, nicht zur Adresse: Zehn Browser hinter
+einer Adresse öffneten eine konvertierte Partitur über denselben Link in
+rund 11 s, keiner abgewiesen.
+
+**Passwortgeschützte Links** verhalten sich wie Nextclouds Link-Seite: Das
+dort eingegebene Passwort schaltet den Viewer für diese Browsersitzung frei,
+ein geändertes Passwort sperrt ihn wieder – gemessen auf Nextcloud 34.0.0 und
+31.0.14. Eine eigene Passwortprüfung hat ScoreView nicht.
+
+**Raten wird gebremst** – mit einer Nebenwirkung. Ein unbekannter Link oder
+ein noch nicht eingegebenes Passwort zählt gegen Nextclouds
+Bruteforce-Schutz, wie auf `/s/…` selbst. Danach verzögert Nextcloud **jede**
+Anfrage dieser Adresse an diese Routen, auch gültige, bis die Versuche
+verfallen. Gemessen nach sechs solchen Anfragen von einer Adresse: Die
+nächste gültige dauerte auf Nextcloud 31 6,9 s, auf Nextcloud 34 0,06 s.
+Hinter einer Adresse (dem NAT eines Proberaums) können wenige veraltete oder
+vertippte Links alle bremsen.
+
+**Mikrofon.** Im Rahmen steht dem Viewer das Mikrofon offen: Die Link-Seite
+erlaubt es für die eigene Herkunft – nur solange der Schalter an ist und eine
+Mikrofonfunktion eingeschaltet ist; der Browser fragt trotzdem nach. Gemessen
+mit dem Stimmgerät (Chromium mit nachgebildetem Mikrofon, Nextcloud 34): Der
+Rahmen bekam das Mikrofon, und das Stimmgerät startete. Sing-Wertung und
+Mitblättern nach Gehör nutzen denselben Mikrofonzugang, wurden im Rahmen aber
+nicht ausprobiert. Die CSP der Link-Seite
+bleibt, wie sie ist; WebAssembly erlaubt nur die eingerahmte eigene Seite von
+ScoreView.
+
+**Nicht gemessen:** Nextcloud 32 und 33 (geprüft werden die Sitzungsschlüssel
+von 31 und 34); ein echtes Handy und Safari/iOS als Besucher (nur ein
+nachgebildetes Galaxy-S23-Format in Chromium); Wischen zwischen den
+Partituren eines Ordners auf einem Touchscreen – im Rahmen erreicht ein
+Wischen die Partitur, nicht Nextclouds Viewer; der Weg sind dessen Pfeile.
 
 ## Was die App bewusst nicht tut
 

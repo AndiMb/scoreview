@@ -39,6 +39,8 @@
  *   den Server braucht, entfaellt - ein Kontextwert, keine Weiche im Viewer
  * @property {boolean} [standalone] Direct Editing der mobilen Apps (E8) -
  *   dort gibt es die Offline-Seite nicht
+ * @property {boolean} [guest] a visitor of a public link: what writes into
+ *   an account goes, like offline - a context value, no branch in the viewer
  */
 
 /** @typedef {'playback'|'view'|'score'} GroupId */
@@ -97,7 +99,8 @@ export const MAX_PINS = 4
  * is visible. One table for both questions the bar asks: what to show
  * (barGroups) and which group a running tool lights up (groupActive) - two
  * lists would drift apart. Each rule gets the BarContext plus `settings`
- * (can('settings')) and `online` (not the offline page).
+ * (can('settings')), `online` (not the offline page) and `account` (online
+ * with an account behind it - not a visitor of a public link).
  *
  * @type {Record<GroupId, Array<Record<string, (c: object) => boolean>>>}
  */
@@ -114,20 +117,21 @@ const SECTIONS = Object.freeze({
 		},
 		// The microphone tools, together: same question for the microphone.
 		{
-			recording: (c) => (c.recordingEnabled || c.intonationEnabled) && c.settings && c.online,
+			recording: (c) => (c.recordingEnabled || c.intonationEnabled) && c.settings && c.account,
 			// The tuner (B3) hangs on the intonation switch: same analysis,
 			// same microphone question. It needs no server, so it stays offline.
 			tuner: (c) => c.intonationEnabled === true && c.settings,
 			// Automatic page turning from the microphone - its own switch,
 			// off unless the administration turns it on.
 			follower: (c) => c.followerEnabled === true && c.settings,
-			// Scored singing (E24) stores its runs on the server.
+			// Scored singing (E24) stores its runs on the server. A visitor
+			// sings too and sees the result; nothing is stored then.
 			sing: (c) => c.intonationEnabled === true && c.singScoreEnabled === true && c.settings && c.online,
 		},
 		{
 			// Practising is counted on the server; a page without one has
 			// nothing to show (E20).
-			practiceLog: (c) => c.practiceLogEnabled === true && c.settings && c.online,
+			practiceLog: (c) => c.practiceLogEnabled === true && c.settings && c.account,
 		},
 	],
 	view: [
@@ -155,23 +159,34 @@ const SECTIONS = Object.freeze({
 			partChoice: (c) => c.hasParts === true && c.settings,
 			// Right below "my part": "my note" is the first note of it.
 			toneMode: (c) => c.hasRealPlayer && c.can('tone'),
-			rehearsal: (c) => c.settings && c.online,
+			rehearsal: (c) => c.settings && c.account,
 			// „Neue Setliste" im Ordner der offenen Partitur (E11).
-			newSetlist: (c) => c.settings && c.setlistCanCreate && c.online,
+			newSetlist: (c) => c.settings && c.setlistCanCreate && c.account,
 		},
 		{
-			// The print page (E16) needs a session and a browser: the
-			// mobile apps print through "open in browser", offline there
-			// is no page.
-			print: (c) => c.online && c.standalone !== true && c.settings,
-			export: (c) => c.exportEnabled === true && c.hasRealPlayer && c.settings && c.online,
+			print: (c) => canOpenPrint(c),
+			export: (c) => c.exportEnabled === true && c.hasRealPlayer && c.settings && c.account,
 			// Vormerken geht nur von einer Seite aus, die online ist, und
 			// nur im Browser - die Offline-Seite gibt es in den Apps nicht (E14).
-			offline: (c) => c.offlineEnabled === true && c.online && c.standalone !== true && c.settings,
+			offline: (c) => c.offlineEnabled === true && c.account && c.standalone !== true && c.settings,
 			info: (c) => c.settings,
 		},
 	],
 })
+
+/**
+ * Whether the print page (E16) may open - one rule for the bar's button and
+ * for the viewer's own check, which the keyboard shortcut reaches without
+ * the bar. The page needs a session and a browser: the mobile apps print
+ * through "open in browser", offline there is no page, and a visitor of a
+ * public link has no session for the page and its PDF.
+ *
+ * @param {Pick<BarContext, 'can'|'offline'|'standalone'|'guest'>} ctx
+ * @return {boolean}
+ */
+export function canOpenPrint(ctx) {
+	return ctx.offline !== true && ctx.guest !== true && ctx.standalone !== true && ctx.can('settings')
+}
 
 /**
  * Die sichtbaren Gruppen in Leistenreihenfolge, jede mit ihren sichtbaren
@@ -186,7 +201,8 @@ const SECTIONS = Object.freeze({
  * @return {BarGroup[]}
  */
 export function barGroups(ctx) {
-	const c = { ...ctx, settings: ctx.can('settings'), online: ctx.offline !== true }
+	const online = ctx.offline !== true
+	const c = { ...ctx, settings: ctx.can('settings'), online, account: online && ctx.guest !== true }
 	return GROUP_IDS
 		.map((id) => {
 			const sections = SECTIONS[id]

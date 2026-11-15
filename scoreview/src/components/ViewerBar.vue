@@ -662,6 +662,7 @@ export default {
 				followerEnabled: features.scoreFollower,
 				offline: view.offline,
 				standalone: view.standalonePage,
+				guest: view.guest,
 			})
 		},
 

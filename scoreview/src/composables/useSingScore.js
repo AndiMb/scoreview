@@ -66,9 +66,12 @@ const END_SLACK_MS = 300
  *        whether a stop is the end of the unit (the microphone's frames lag behind)
  * @param {() => boolean} deps.waitModeActive
  * @param {() => number} [deps.now] real ms
+ * @param {() => boolean} [deps.persist] false for a visitor of a public
+ *   link: the run is judged and shown, nothing is stored or loaded - there
+ *   is no account to keep a best score in
  * @return {object}
  */
-export function useSingScore({ fileId, enabled, intonation, notes, myChannels, measureOf, loopRange, durationMs, isPlaying, positionMs = () => null, waitModeActive, now = () => performance.now() }) {
+export function useSingScore({ fileId, enabled, intonation, notes, myChannels, measureOf, loopRange, durationMs, isPlaying, positionMs = () => null, waitModeActive, now = () => performance.now(), persist = () => true }) {
 	const active = ref(false)
 	const level = ref(DEFAULT_SING_LEVEL)
 	/** {state: 'scoring'|'liveOnly', unit, chords, tempoFactor} or null */
@@ -117,7 +120,7 @@ export function useSingScore({ fileId, enabled, intonation, notes, myChannels, m
 
 	async function loadHistory(unit = currentUnit()) {
 		const mine = ++generation
-		if (!enabled() || fileId() === null || fileId() === undefined) {
+		if (!enabled() || !persist() || fileId() === null || fileId() === undefined) {
 			return
 		}
 		try {
@@ -362,6 +365,10 @@ export function useSingScore({ fileId, enabled, intonation, notes, myChannels, m
 		const summary = summarizeRun(list)
 		const tempoPct = Math.round(r.tempoFactor * 100)
 		const scored = r.state === 'scoring' && summary.notesScored > 0
+		// `kept`: whether this run is meant to be stored at all. Without, the
+		// panel shows the result and nothing about saving, and there is no
+		// best to beat (SingPanel.vue).
+		const kept = persist()
 		const previousBest = best.value[String(tempoPct)] ?? null
 		lastRun.value = {
 			summary,
@@ -370,17 +377,18 @@ export function useSingScore({ fileId, enabled, intonation, notes, myChannels, m
 			level: level.value,
 			tempoPct,
 			scored,
+			kept,
 			saved: false,
-			saving: scored,
+			saving: scored && kept,
 			previousBest,
-			isNewBest: scored && summary.totalPct !== null && (previousBest === null || summary.totalPct > previousBest),
+			isNewBest: kept && scored && summary.totalPct !== null && (previousBest === null || summary.totalPct > previousBest),
 		}
 		run.value = null
 		done = true
 		frames = []
 		levelPoints = []
 		next = 0
-		if (scored) {
+		if (scored && kept) {
 			save(r.unit, summary, tempoPct)
 		}
 	}

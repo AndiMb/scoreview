@@ -8,8 +8,11 @@ use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Controller\VariantController;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreVariant;
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\PublicShareGrant;
+use OCA\ScoreView\Service\ShareConversionQuota;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Http;
@@ -43,6 +46,8 @@ class VariantControllerTest extends TestCase {
 	private ConvertScoreJob&MockObject $job;
 	private ILimiter&MockObject $limiter;
 	private IURLGenerator&MockObject $urls;
+	private DirectAccessContext&MockObject $directAccess;
+	private ShareConversionQuota&MockObject $quota;
 
 	protected function setUp(): void {
 		$this->fileResolver = $this->createMock(UserFileResolver::class);
@@ -52,6 +57,8 @@ class VariantControllerTest extends TestCase {
 		$this->backend->method('supportsVariants')->willReturn(true);
 		$this->job = $this->createMock(ConvertScoreJob::class);
 		$this->limiter = $this->createMock(ILimiter::class);
+		$this->directAccess = $this->createMock(DirectAccessContext::class);
+		$this->quota = $this->createMock(ShareConversionQuota::class);
 		$this->urls = $this->createMock(IURLGenerator::class);
 		$this->urls->method('linkToRoute')->willReturnCallback(
 			static fn (string $route, array $p) => $route . ':' . ($p['key'] ?? '') . ':' . $p['name'] . ':' . $p['v']);
@@ -73,6 +80,8 @@ class VariantControllerTest extends TestCase {
 			$session,
 			$this->urls,
 			$l,
+			$this->directAccess,
+			$this->quota,
 		);
 	}
 
@@ -193,6 +202,86 @@ class VariantControllerTest extends TestCase {
 		$this->variantService->method('claim')->willReturn(null);
 		$this->job->expects($this->never())->method('convertVariant');
 		$this->assertSame('pending', $this->controller()->status(42, 'full~phone~w~0')->getData()['status']);
+	}
+
+	private function asVisitor(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, false, 'dig'));
+	}
+
+	public function testVisitorVariantCacheHitDoesNotConsume(): void {
+		$this->asVisitor();
+		$this->withFile();
+		$this->withReadyBase();
+		$this->variantService->method('find')->willReturn($this->readyVariant('full~phone~w~0'));
+		$this->variantService->method('isCurrent')->willReturn(true);
+		$this->quota->expects($this->never())->method('consume');
+		$this->limiter->expects($this->never())->method('registerUserRequest');
+		$this->assertSame('ready', $this->controller()->status(42, 'full~phone~w~0')->getData()['status']);
+	}
+
+	public function testVisitorVariantMissConsumesOnce(): void {
+		$this->asVisitor();
+		$this->withFile();
+		$this->withReadyBase();
+		$this->variantService->method('find')->willReturn(null);
+		$this->variantService->method('claim')->willReturn($this->readyVariant('full~phone~w~0'));
+		$this->quota->expects($this->once())->method('consume')->willReturn(true);
+		$this->limiter->expects($this->never())->method('registerUserRequest');
+		$this->job->expects($this->once())->method('convertVariant');
+		$this->controller()->status(42, 'full~phone~w~0');
+	}
+
+	public function testVisitorVariantQuotaExceededIs429(): void {
+		$this->asVisitor();
+		$this->withFile();
+		$this->withReadyBase();
+		$this->variantService->method('find')->willReturn(null);
+		$claimed = $this->readyVariant('full~phone~w~0');
+		$this->variantService->method('claim')->willReturn($claimed);
+		$this->quota->method('consume')->willReturn(false);
+		// The won claim goes back, or the row would block as "processing".
+		$this->variantService->expects($this->once())->method('release')->with($claimed);
+		$this->job->expects($this->never())->method('convertVariant');
+		$response = $this->controller()->status(42, 'full~phone~w~0');
+		$this->assertSame(Http::STATUS_TOO_MANY_REQUESTS, $response->getStatus());
+		$this->assertSame(['status' => 'error', 'errorCode' => 'share_quota'], $response->getData());
+	}
+
+	public function testVisitorLosingTheClaimSpendsNoUnit(): void {
+		$this->asVisitor();
+		$this->withFile();
+		$this->withReadyBase();
+		$this->variantService->method('find')->willReturn(null);
+		$this->variantService->method('claim')->willReturn(null);
+		$this->quota->expects($this->never())->method('consume');
+		$this->job->expects($this->never())->method('convertVariant');
+		$this->assertSame('pending', $this->controller()->status(42, 'full~phone~w~0')->getData()['status']);
+	}
+
+	public function testVisitorRestartOverQuotaIs429WithoutRestart(): void {
+		$this->asVisitor();
+		$this->withFile();
+		$this->withReadyBase();
+		$this->variantService->method('find')->willReturn($this->readyVariant('full~phone~w~0'));
+		$this->variantService->method('isCurrent')->willReturn(false);
+		$this->variantService->method('isRunning')->willReturn(false);
+		$this->variantService->method('mayRetry')->willReturn(true);
+		$this->quota->method('consume')->willReturn(false);
+		$this->variantService->expects($this->never())->method('restart');
+		$this->job->expects($this->never())->method('convertVariant');
+		$response = $this->controller()->status(42, 'full~phone~w~0');
+		$this->assertSame(Http::STATUS_TOO_MANY_REQUESTS, $response->getStatus());
+		$this->assertSame('share_quota', $response->getData()['errorCode']);
+	}
+
+	public function testSessionVariantStillUsesUserLimiter(): void {
+		$this->withFile();
+		$this->withReadyBase();
+		$this->variantService->method('find')->willReturn(null);
+		$this->variantService->method('claim')->willReturn($this->readyVariant('full~phone~w~0'));
+		$this->quota->expects($this->never())->method('consume');
+		$this->limiter->expects($this->once())->method('registerUserRequest');
+		$this->controller()->status(42, 'full~phone~w~0');
 	}
 
 	public function testTooManyRunsAreRefused(): void {

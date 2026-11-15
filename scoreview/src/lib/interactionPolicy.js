@@ -47,13 +47,21 @@ const PERFORMANCE_ALLOWED = new Set(['page', 'zoom', 'nextPiece', 'followJump'])
 const OFFLINE_DENIED = new Set(['annotate', 'followJump'])
 
 /**
+ * What a visitor of a public link cannot do: notes and a leader's jumps
+ * belong to an account, and the visitor has none. The server refuses both
+ * routes anyway; blocked here, the controls do not appear in the first place.
+ */
+const GUEST_DENIED = new Set(['annotate', 'followJump'])
+
+/**
  * @param {string} action eine der ACTIONS
- * @param {{performance?: boolean, following?: boolean, offline?: boolean}} ctx
+ * @param {{performance?: boolean, following?: boolean, offline?: boolean, guest?: boolean}} ctx
  *   performance: Aufführungsmodus an; following: das Geraet folgt gerade
- *   einer Leitung; offline: der Viewer laeuft auf der Offline-Seite (E14)
+ *   einer Leitung; offline: der Viewer laeuft auf der Offline-Seite (E14);
+ *   guest: a visitor of a public link, without an account
  * @return {boolean}
  */
-export function allowed(action, { performance = false, following = false, offline = false } = {}) {
+export function allowed(action, { performance = false, following = false, offline = false, guest = false } = {}) {
 	if (!ACTIONS.includes(action)) {
 		// Unbekannt heisst gesperrt: Ein Tippfehler im Aktionsnamen darf den
 		// Aufführungsmodus nicht unbemerkt aushebeln.
@@ -62,6 +70,9 @@ export function allowed(action, { performance = false, following = false, offlin
 	if (offline && OFFLINE_DENIED.has(action)) {
 		// Offline gibt es keinen Server, der eine Notiz annaehme oder eine
 		// Leitung schickte. Gesperrt statt still verloren.
+		return false
+	}
+	if (guest && GUEST_DENIED.has(action)) {
 		return false
 	}
 	if (action === 'followJump') {

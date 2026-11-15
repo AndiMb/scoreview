@@ -4,6 +4,7 @@ import { generateUrl } from '@nextcloud/router'
 import { computed, getCurrentScope, onScopeDispose, ref } from 'vue'
 import { translate } from '../l10n.js'
 import { nextStatusDelay } from '../lib/conversionPoll.js'
+import { isShareRefusal, shareRefusalText } from '../lib/shareRefusals.js'
 import { useClientConversion } from './useClientConversion.js'
 
 /** Only for the one automatic retry after a stored error. */
@@ -131,6 +132,10 @@ export function useConversionStatus({ fileId, onReady }) {
 	 * @return {string}
 	 */
 	function codeText(code) {
+		const share = shareRefusalText(code, t)
+		if (share !== null) {
+			return share
+		}
 		const messages = {
 			sidecar_unreachable: t('The conversion service could not be reached.'),
 			sidecar_rejected: t('The conversion service rejected the file.'),
@@ -149,6 +154,11 @@ export function useConversionStatus({ fileId, onReady }) {
 			stale: t('The conversion was never finished. On the server this usually means that background job processing (cron) is not running.'),
 			client_too_large: t('This score is too large to be set in this browser, and this server cannot convert it itself.'),
 			client_engine_unavailable: t('This score could not be set in this browser, and this server cannot convert it itself. Reloading the page may help.'),
+			// Refusals of a public link's request: lib/shareRefusals.js.
+			// "Hide download" keeps the source closed that the browser would
+			// have to set (Service\ClientFallback::sourceOpenTo). Once the
+			// owner opens the score, the server has it converted.
+			client_source_hidden: t('This score is not prepared yet. Ask the person who shared it to open it once.'),
 			unknown: t('An unknown error occurred during conversion.'),
 		}
 		return messages[code] ?? messages.unknown
@@ -176,7 +186,8 @@ export function useConversionStatus({ fileId, onReady }) {
 			}
 			state.value = 'error'
 			errorMessage.value = err.message
-			errorCode.value = ''
+			const code = err?.response?.data?.errorCode
+			errorCode.value = isShareRefusal(code) ? code : ''
 			return
 		}
 		if (mine !== generation) {

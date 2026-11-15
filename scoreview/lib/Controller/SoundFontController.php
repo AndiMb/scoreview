@@ -35,6 +35,9 @@ use Psr\Log\LoggerInterface;
  * #[PublicPage] macht nur den Weg zur eigenen Middleware frei, die ohne
  * Sitzung UND ohne gueltigen Token mit 401 abweist.
  *
+ * A visitor on a public share link gets it with the share token
+ * (`share: 'read'`) - playback needs it as much as the score does.
+ *
  * Warum die App das selbst ausliefert statt den Browser direkt zum
  * SoundFont-Host zu schicken: same-origin. Kein CORS-Problem, keine
  * CSP-connect-src-Ausnahme, und vor allem nichts, was ein Betreiber erst
@@ -60,7 +63,7 @@ class SoundFontController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	#[PublicPage]
-	#[DirectTokenOrSession(csrfInSession: false)]
+	#[DirectTokenOrSession(csrfInSession: false, share: 'read')]
 	public function get(): Http\Response {
 		try {
 			$file = $this->soundFontService->getOrFetch();

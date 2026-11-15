@@ -56,7 +56,7 @@ msgstr ""
 msgid "Invalid note anchor."
 msgstr ""
 
-#: lib/Controller/ConversionController.php lib/Controller/JsonErrors.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
+#: lib/Controller/ConversionController.php lib/Controller/JsonErrors.php lib/Controller/PageController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
 msgid "File not found or no access."
 msgstr ""
 
@@ -122,6 +122,10 @@ msgstr ""
 
 #: lib/Controller/LeaderController.php
 msgid "This person is not a leader of this score."
+msgstr ""
+
+#: lib/Controller/PageController.php src/lib/shareRefusals.js
+msgid "This link is no longer valid or needs its password again. Open the link again."
 msgstr ""
 
 #: lib/Controller/PageController.php
@@ -398,6 +402,18 @@ msgstr ""
 
 #: src/components/AdminSettings.vue
 msgid "Practice log (own practice time per score, weekly goal from the leaders)"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Public share links"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Show scores on public share links. Visitors can start conversions, limited per link."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "New conversions per share link and hour"
 msgstr ""
 
 #: src/components/AdminSettings.vue src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
@@ -1592,7 +1608,7 @@ msgstr ""
 msgid "Score page {n}"
 msgstr ""
 
-#: src/components/ScorePanel.vue src/components/ScoreViewer.vue src/components/ViewerBar.vue
+#: src/components/ScorePanel.vue src/components/ScoreViewer.vue src/components/ViewerBar.vue src/public.js
 msgid "Close"
 msgstr ""
 
@@ -2441,6 +2457,10 @@ msgid "This score could not be set in this browser, and this server cannot conve
 msgstr ""
 
 #: src/composables/useConversionStatus.js
+msgid "This score is not prepared yet. Ask the person who shared it to open it once."
+msgstr ""
+
+#: src/composables/useConversionStatus.js
 msgid "An unknown error occurred during conversion."
 msgstr ""
 
@@ -2776,6 +2796,14 @@ msgstr ""
 msgid "Text"
 msgstr ""
 
+#: src/lib/shareRefusals.js
+msgid "Too many new scores were prepared through this link. Try again later."
+msgstr ""
+
+#: src/lib/shareRefusals.js
+msgid "This score can no longer be found. It may have been moved or deleted, or it is no longer shared."
+msgstr ""
+
 #: src/lib/singLane.js
 msgid "Perfect"
 msgstr ""
@@ -2840,7 +2868,7 @@ msgstr ""
 msgid "Page {n} of {total}"
 msgstr ""
 
-#: src/viewer.js
+#: src/public.js src/viewer.js
 msgid "Open in ScoreView"
 msgstr ""
 
