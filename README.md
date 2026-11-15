@@ -12,6 +12,9 @@ that follows along in sync, instead of as a static PDF export.
 Made for choir and ensemble work: the music looks like your own sheet music,
 every part can be heard on its own, and every measure is one click away.
 
+▶ **[Watch the two-minute feature tour on YouTube](https://youtu.be/rdMtFba9DxY)**
+([German version](https://youtu.be/XyMul5YWA4k))
+
 ![The viewer with the playback cursor running](docs/img/viewer.png)
 
 ## What the app does

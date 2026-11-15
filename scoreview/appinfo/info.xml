@@ -18,6 +18,9 @@ Gedacht für Chor- und Ensemblearbeit: Die Noten sehen aus wie die eigenen
 Noten, jede Stimme ist einzeln hörbar, und jeder Takt ist in einem Klick
 erreichbar.
 
+Video: [Die zweiminütige Feature-Tour auf YouTube](https://youtu.be/XyMul5YWA4k)
+([englische Fassung](https://youtu.be/rdMtFba9DxY))
+
 Eine hochgeladene .mscz-Datei wird einmalig serverseitig zu Notenseiten (SVG),
 MIDI und Timing-Daten konvertiert und danach gecacht: erneutes Öffnen derselben
 Datei rendert nicht neu, sondern bedient sich aus dem Cache. Erst eine Änderung
@@ -67,6 +70,9 @@ synthesized MIDI playback in sync, instead of a static PDF export.
 Made for choir and ensemble work: the notation looks like the sheet music you
 already know, every voice can be heard on its own, and every measure is one
 click away.
+
+Video: [the two-minute feature tour on YouTube](https://youtu.be/rdMtFba9DxY)
+([German version](https://youtu.be/XyMul5YWA4k))
 
 An uploaded .mscz file is converted once, server-side, to notation pages (SVG),
 MIDI and timing data, then cached: opening the same file again does not

@@ -1,4 +1,4 @@
-<!-- translation-of: README.md sha256:6a61504aa061 -->
+<!-- translation-of: README.md sha256:f7ffed328d7f -->
 # ScoreView
 
 [English](README.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -12,6 +12,9 @@ der synchron mitläuft, statt als starrer PDF-Export.
 
 Gedacht für Chor- und Ensemblearbeit: Die Noten sehen aus wie die eigenen Noten,
 jede Stimme ist einzeln hörbar, und jeder Takt ist in einem Klick erreichbar.
+
+▶ **[Die zweiminütige Feature-Tour auf YouTube ansehen](https://youtu.be/XyMul5YWA4k)**
+([englische Fassung](https://youtu.be/rdMtFba9DxY))
 
 ![Der Viewer mit laufendem Wiedergabe-Cursor](docs/img/viewer.de.png)
 
