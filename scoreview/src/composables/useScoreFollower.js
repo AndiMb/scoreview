@@ -20,9 +20,12 @@ const t = (text) => translate('scoreview', text)
  *
  * The singer sets the starting place by tapping a note or entering a bar
  * (anchor): measured on rehearsal recordings, a tap before each run lifted
- * bars within one bar from about 71 % to 91 % and left no wrong turn. The
- * follower still searches the whole piece, so a run without a tap is found
- * too, only later.
+ * bars within one bar from about 71 % to 91 % and left no wrong turn. So
+ * nothing moves before that tap (`waiting`) - in a rehearsal the follower
+ * that found a place by itself was the one that jumped from the middle to
+ * the end. After the tap the search still corrects the place: letting it
+ * only offer instead dropped the same recordings from 91 % to 51 %.
+ * `wait()` goes back to waiting, for announcements and a restart elsewhere.
  *
  * @param {object} deps
  * @param {object} deps.microphone useMicrophone()
@@ -32,8 +35,10 @@ const t = (text) => translate('scoreview', text)
  */
 export function useScoreFollower({ microphone, input, followTime }) {
 	const active = ref(false)
-	/** 'searching' | 'following' | 'unsure' | 'lost' (lib/scoreFollower.js) */
-	const phase = ref('searching')
+	/** 'waiting' for a tap, else as lib/scoreFollower.js: 'searching' | 'following' | 'unsure' | 'lost' */
+	const phase = ref('waiting')
+	// Waiting since a wait() rather than since switching on (the status text).
+	const held = ref(false)
 	const error = ref('')
 
 	let worker = null
@@ -43,6 +48,8 @@ export function useScoreFollower({ microphone, input, followTime }) {
 	let spectrum = null
 	let report = null
 	let starting = false
+	// Reports of frames heard before this time belong to before the tap.
+	let listenFromMs = Infinity
 	let destroyed = false
 	const generation = createGeneration()
 
@@ -59,6 +66,11 @@ export function useScoreFollower({ microphone, input, followTime }) {
 				return
 			}
 			if (data.type === 'state') {
+				// Waiting: the follower inside runs on, but nothing it finds is
+				// shown - the next tap starts it afresh anyway.
+				if (!(data.atMs >= listenFromMs)) {
+					return
+				}
 				report = data
 				phase.value = data.phase
 			} else if (data.type === 'error') {
@@ -130,7 +142,9 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		handle.source.connect(analyser)
 		spectrum = new Float32Array(analyser.frequencyBinCount)
 		report = null
-		phase.value = 'searching'
+		listenFromMs = Infinity
+		phase.value = 'waiting'
+		held.value = false
 		w.postMessage({ type: 'init', input: score })
 		if (Number.isFinite(startMs)) {
 			anchor(startMs)
@@ -162,9 +176,26 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		}
 		const atMs = nowMs()
 		worker.postMessage({ type: 'anchor', scoreMs, atMs })
+		listenFromMs = atMs
+		held.value = false
 		// Shown at once, not 50 ms later with the worker's next report.
 		report = { atMs, shownMs: scoreMs, tempoRatio: 1, phase: 'following' }
 		phase.value = 'following'
+	}
+
+	/**
+	 * Stop following until the next tap: the score stays where it is, the
+	 * microphone stays open (no second permission question on a phone).
+	 */
+	function wait() {
+		if (!active.value) {
+			return
+		}
+		const shown = shownMs()
+		listenFromMs = Infinity
+		report = Number.isFinite(shown) ? { atMs: nowMs(), shownMs: shown, tempoRatio: 1, phase: 'waiting' } : null
+		phase.value = 'waiting'
+		held.value = true
 	}
 
 	function stop() {
@@ -183,8 +214,10 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		analyser = null
 		spectrum = null
 		report = null
+		listenFromMs = Infinity
 		context = null
 		active.value = false
+		held.value = false
 		followTime(null)
 		microphone.release('follower')
 	}
@@ -222,5 +255,5 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		}
 	}
 
-	return { active, phase, error, start, stop, toggle, anchor, destroy }
+	return { active, phase, held, error, start, stop, toggle, anchor, wait, destroy }
 }

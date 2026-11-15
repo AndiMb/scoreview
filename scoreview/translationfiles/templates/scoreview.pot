@@ -1725,6 +1725,10 @@ msgid "Technical detail"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
+msgid "Wait"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
 msgid "The leader has moved on to another piece."
 msgstr ""
 
@@ -1853,15 +1857,19 @@ msgid "Rehearsal"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
+msgid "Waiting - tap the note where you start again"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
+msgid "Listening - tap the note where the singing starts"
+msgstr ""
+
+#: src/components/ScoreViewer.vue
 msgid "Following"
 msgstr ""
 
 #: src/components/ScoreViewer.vue
 msgid "Lost the place - tap the note where you are"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Listening - tap the note where the singing starts"
 msgstr ""
 
 #: src/components/SetlistBar.vue src/components/SetlistEditor.vue

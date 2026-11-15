@@ -95,9 +95,16 @@
 					v-if="followerStatus"
 					class="scoreview-follower-status"
 					:class="{ 'scoreview-follower-status--quiet': scoreFollower.phase === 'following' && !scoreFollower.error }"
-					role="status"
 					@click="scoreFollower.error = ''">
-					{{ followerStatus }}
+					<span role="status">{{ followerStatus }}</span>
+					<!-- For announcements and a restart elsewhere: hold until the next tap. -->
+					<NcButton
+						v-if="scoreFollower.active && scoreFollower.phase !== 'waiting' && !scoreFollower.error"
+						variant="tertiary"
+						size="small"
+						@click.stop="scoreFollower.wait()">
+						{{ t('Wait') }}
+					</NcButton>
 				</div>
 				<NcNoteCard v-if="leaderMovedTo" type="info" class="scoreview-follow-moved">
 					{{ t('The leader has moved on to another piece.') }}
@@ -1049,6 +1056,10 @@ export default {
 				return ''
 			}
 			switch (scoreFollower.phase.value) {
+				case 'waiting':
+					return scoreFollower.held.value
+						? t('Waiting - tap the note where you start again')
+						: t('Listening - tap the note where the singing starts')
 				case 'following':
 				case 'unsure':
 					return t('Following')
@@ -2862,6 +2873,11 @@ export default {
 	box-shadow: 0 0 6px var(--color-box-shadow);
 	font-size: 1.1em;
 	text-align: center;
+}
+
+.scoreview-follower-status .button-vue {
+	margin-inline-start: 8px;
+	vertical-align: middle;
 }
 
 .scoreview-follower-status--quiet {
