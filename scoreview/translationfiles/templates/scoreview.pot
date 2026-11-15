@@ -400,6 +400,18 @@ msgstr ""
 msgid "Practice log (own practice time per score, weekly goal from the leaders)"
 msgstr ""
 
+#: src/components/AdminSettings.vue
+msgid "Public share links"
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "Show scores on public share links. Visitors can start conversions, limited per link."
+msgstr ""
+
+#: src/components/AdminSettings.vue
+msgid "New conversions per share link and hour"
+msgstr ""
+
 #: src/components/AdminSettings.vue src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
 msgid "Save"
 msgstr ""

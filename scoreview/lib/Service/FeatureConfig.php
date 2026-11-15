@@ -30,6 +30,7 @@ class FeatureConfig {
 	public const OFFLINE = 'feature_offline';
 	public const PRACTICE_LOG = 'feature_practice_log';
 	public const SING_SCORE = 'feature_sing_score';
+	public const PUBLIC_SHARE = 'feature_public_share';
 
 	public const FOLLOW_POLL_MS = 'follow_poll_ms';
 	public const MAX_RECORDINGS_PER_SCORE = 'max_recordings_per_score';
@@ -38,6 +39,7 @@ class FeatureConfig {
 	public const MAX_RECORDING_BYTES_TOTAL = 'max_recording_bytes_total';
 	public const PRACTICE_TRACK_MAX_MB = 'practice_track_max_mb';
 	public const PDF_MAX_MB = 'pdf_max_mb';
+	public const PUBLIC_SHARE_CONVERSIONS_PER_HOUR = 'public_share_conversions_per_hour';
 
 	private const MB = 1024 * 1024;
 
@@ -60,6 +62,9 @@ class FeatureConfig {
 		// sees their runs. It needs the intonation as well; off here leaves
 		// the intonation without points.
 		self::SING_SCORE => true,
+		// Scores on public share links: off, because it opens conversions to
+		// visitors without an account. The administrator opts in knowingly.
+		self::PUBLIC_SHARE => false,
 	];
 
 	/**
@@ -94,6 +99,11 @@ class FeatureConfig {
 	 * room for scores with large embedded images; the limit only keeps an
 	 * accident (or a forged upload) from filling a folder.
 	 *
+	 * `public_share_conversions_per_hour`: newly queued conversions and
+	 * variants per share token and hour. A visitor has no account and no
+	 * quota, so this is the only brake on a link that gets passed around;
+	 * 20 covers a choir opening one score in several variants.
+	 *
 	 * @var array<string, array{int, int, int}>
 	 */
 	public const NUMBERS = [
@@ -104,6 +114,7 @@ class FeatureConfig {
 		self::MAX_RECORDING_BYTES_TOTAL => [5 * 1024 * self::MB, 100 * self::MB, 10 * 1024 * 1024 * self::MB],
 		self::PRACTICE_TRACK_MAX_MB => [60, 5, 500],
 		self::PDF_MAX_MB => [50, 5, 500],
+		self::PUBLIC_SHARE_CONVERSIONS_PER_HOUR => [20, 1, 500],
 	];
 
 	public function __construct(
@@ -127,6 +138,14 @@ class FeatureConfig {
 		return $this->isEnabled(self::RECORDING)
 			|| $this->isEnabled(self::INTONATION)
 			|| $this->isEnabled(self::SCORE_FOLLOWER);
+	}
+
+	public function publicShareEnabled(): bool {
+		return $this->isEnabled(self::PUBLIC_SHARE);
+	}
+
+	public function publicShareConversionsPerHour(): int {
+		return $this->number(self::PUBLIC_SHARE_CONVERSIONS_PER_HOUR);
 	}
 
 	public function followPollMs(): int {
@@ -178,6 +197,26 @@ class FeatureConfig {
 			'maxRecordingsPerScore' => $this->maxRecordingsPerScore(),
 			'maxRecordingSeconds' => $this->maxRecordingSeconds(),
 		];
+	}
+
+	/**
+	 * What a visitor on a public share link gets: the viewer's features minus
+	 * everything that writes into an account. Practice tracks, PDF and print
+	 * land in the owner's files, and recordings, the follow session and the
+	 * practice log belong to a signed-in person, so they are always off for a
+	 * guest. Intonation, scored singing and the score follower run in the
+	 * browser only and stay as configured.
+	 *
+	 * @return array{followSession: bool, recording: bool, intonation: bool, scoreFollower: bool, practiceExport: bool, offline: bool, practiceLog: bool, singScore: bool, followPollMs: int, maxRecordingsPerScore: int, maxRecordingSeconds: int}
+	 */
+	public function forGuest(): array {
+		return [
+			'followSession' => false,
+			'recording' => false,
+			'practiceExport' => false,
+			'offline' => false,
+			'practiceLog' => false,
+		] + $this->forViewer();
 	}
 
 	/**

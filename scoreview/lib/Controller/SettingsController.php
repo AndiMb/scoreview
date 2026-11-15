@@ -144,6 +144,8 @@ class SettingsController extends Controller {
 		?bool $featureOffline = null,
 		?bool $featurePracticeLog = null,
 		?bool $featureSingScore = null,
+		?bool $featurePublicShare = null,
+		?int $publicShareConversionsPerHour = null,
 		?int $practiceTrackMaxMb = null,
 		?int $pdfMaxMb = null,
 		?string $sidecarRenderer = null,
@@ -238,6 +240,7 @@ class SettingsController extends Controller {
 			FeatureConfig::OFFLINE => $featureOffline,
 			FeatureConfig::PRACTICE_LOG => $featurePracticeLog,
 			FeatureConfig::SING_SCORE => $featureSingScore,
+			FeatureConfig::PUBLIC_SHARE => $featurePublicShare,
 		] as $switch => $enabled) {
 			if ($enabled !== null) {
 				$this->features->setEnabled($switch, $enabled);
@@ -263,6 +266,7 @@ class SettingsController extends Controller {
 			// Schon in MB gespeichert (E13) - die Einheit des Formulars.
 			'practiceTrackMaxMb' => [FeatureConfig::PRACTICE_TRACK_MAX_MB, $practiceTrackMaxMb, 1],
 			'pdfMaxMb' => [FeatureConfig::PDF_MAX_MB, $pdfMaxMb, 1],
+			'publicShareConversionsPerHour' => [FeatureConfig::PUBLIC_SHARE_CONVERSIONS_PER_HOUR, $publicShareConversionsPerHour, 1],
 		] as $field => [$key, $value, $unit]) {
 			$stored = $value === null
 				? $this->features->number($key)

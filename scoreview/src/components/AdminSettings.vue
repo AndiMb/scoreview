@@ -222,6 +222,26 @@
 					{{ t('Practice log (own practice time per score, weekly goal from the leaders)') }}
 				</NcCheckboxRadioSwitch>
 
+				<!--
+					Visitors on a public share link have no account and no quota,
+					so conversions they start are counted per link.
+				-->
+				<h3 class="scoreview-subheading">
+					{{ t('Public share links') }}
+				</h3>
+				<NcCheckboxRadioSwitch v-model="form.featurePublicShare" type="switch" class="scoreview-field">
+					{{ t('Show scores on public share links. Visitors can start conversions, limited per link.') }}
+				</NcCheckboxRadioSwitch>
+				<NcTextField
+					v-if="form.featurePublicShare"
+					:modelValue="String(form.publicShareConversionsPerHour)"
+					type="number"
+					class="scoreview-field"
+					:label="t('New conversions per share link and hour')"
+					:placeholder="String(publicShareLimit.default)"
+					:helperText="t('Allowed: {min}–{max}. Default: {default}.', { min: publicShareLimit.min, max: publicShareLimit.max, default: publicShareLimit.default })"
+					@update:modelValue="setPublicShareLimit" />
+
 				<div class="scoreview-actions">
 					<NcButton variant="primary" type="submit" :disabled="saving">
 						<template #icon>
@@ -357,6 +377,8 @@ export default {
 				featurePracticeLog: initial.featurePracticeLog ?? true,
 				featureSingScore: initial.featureSingScore ?? true,
 				featureScoreFollower: initial.featureScoreFollower ?? false,
+				featurePublicShare: initial.featurePublicShare ?? false,
+				publicShareConversionsPerHour: initial.publicShareConversionsPerHour?.value ?? 20,
 				practiceTrackMaxMb: initial.practiceTrackMaxMb?.value ?? 60,
 				pdfMaxMb: initial.pdfMaxMb?.value ?? 50,
 				followPollMs: initial.followPollMs ?? 800,
@@ -454,6 +476,11 @@ export default {
 			return this.initial.pdfMaxMb ?? { min: 5, max: 500, default: 50 }
 		},
 
+		/** @return {{min: number, max: number, default: number}} */
+		publicShareLimit() {
+			return this.initial.publicShareConversionsPerHour ?? { min: 1, max: 500, default: 20 }
+		},
+
 		/** Konvertiert dieser Server gerade gar nicht selbst? */
 		fallbackActive() {
 			return this.health?.clientFallback?.active === true
@@ -494,6 +521,11 @@ export default {
 			this.form.pdfMaxMb = Number.isFinite(number) ? number : this.pdfLimit.default
 		},
 
+		setPublicShareLimit(value) {
+			const number = Number.parseInt(value, 10)
+			this.form.publicShareConversionsPerHour = Number.isFinite(number) ? number : this.publicShareLimit.default
+		},
+
 		async save() {
 			this.saving = true
 			this.saveState = ''
@@ -504,7 +536,7 @@ export default {
 				if (typeof res.data?.followPollMs === 'number') {
 					this.form.followPollMs = res.data.followPollMs
 				}
-				for (const key of [...this.recordingLimitFields.map((f) => f.key), 'practiceTrackMaxMb', 'pdfMaxMb']) {
+				for (const key of [...this.recordingLimitFields.map((f) => f.key), 'practiceTrackMaxMb', 'pdfMaxMb', 'publicShareConversionsPerHour']) {
 					if (typeof res.data?.[key] === 'number') {
 						this.form[key] = res.data[key]
 					}

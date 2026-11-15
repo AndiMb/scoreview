@@ -74,8 +74,10 @@ class AdminSettings implements IDelegatedSettings {
 			'featureOffline' => $this->features->isEnabled(FeatureConfig::OFFLINE),
 			'featurePracticeLog' => $this->features->isEnabled(FeatureConfig::PRACTICE_LOG),
 			'featureSingScore' => $this->features->isEnabled(FeatureConfig::SING_SCORE),
+			'featurePublicShare' => $this->features->publicShareEnabled(),
 			'practiceTrackMaxMb' => self::limit(FeatureConfig::PRACTICE_TRACK_MAX_MB, intdiv($this->features->practiceTrackMaxBytes(), self::MB), 1),
 			'pdfMaxMb' => self::limit(FeatureConfig::PDF_MAX_MB, intdiv($this->features->pdfMaxBytes(), self::MB), 1),
+			'publicShareConversionsPerHour' => self::limit(FeatureConfig::PUBLIC_SHARE_CONVERSIONS_PER_HOUR, $this->features->publicShareConversionsPerHour(), 1),
 			'followPollMs' => $this->features->followPollMs(),
 			// Grenzen aus derselben Quelle wie die Pruefung beim Speichern -
 			// das Zahlenfeld soll nicht anbieten, was der Server danach klemmt.

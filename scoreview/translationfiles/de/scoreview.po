@@ -400,6 +400,18 @@ msgstr "Offline-Seite (Partituren und Setlisten im Browser gespeichert)"
 msgid "Practice log (own practice time per score, weekly goal from the leaders)"
 msgstr "Übetagebuch (eigene Übezeit je Stück, Wochenziel der Leitungen)"
 
+#: src/components/AdminSettings.vue
+msgid "Public share links"
+msgstr "Öffentliche Freigabelinks"
+
+#: src/components/AdminSettings.vue
+msgid "Show scores on public share links. Visitors can start conversions, limited per link."
+msgstr "Partituren auf öffentlichen Freigabelinks anzeigen. Besucher können Konvertierungen anstoßen, begrenzt je Link."
+
+#: src/components/AdminSettings.vue
+msgid "New conversions per share link and hour"
+msgstr "Neue Konvertierungen je Freigabelink und Stunde"
+
 #: src/components/AdminSettings.vue src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
 msgid "Save"
 msgstr "Speichern"

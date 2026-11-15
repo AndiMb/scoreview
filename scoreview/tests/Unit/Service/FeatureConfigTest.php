@@ -132,4 +132,27 @@ class FeatureConfigTest extends TestCase {
 			'maxRecordingSeconds' => 600,
 		], $daten);
 	}
+
+	public function testPublicShareIsOffByDefault(): void {
+		$this->assertFalse($this->config()->publicShareEnabled());
+		$this->assertTrue($this->config([], [FeatureConfig::PUBLIC_SHARE => true])->publicShareEnabled());
+	}
+
+	public function testConversionsPerHourDefaultsTo20AndClamps(): void {
+		$this->assertSame(20, $this->config()->publicShareConversionsPerHour());
+		$this->assertSame(1, FeatureConfig::clamp(FeatureConfig::PUBLIC_SHARE_CONVERSIONS_PER_HOUR, 0));
+		$this->assertSame(500, FeatureConfig::clamp(FeatureConfig::PUBLIC_SHARE_CONVERSIONS_PER_HOUR, 9999));
+	}
+
+	public function testForGuestTurnsOffAccountFeatures(): void {
+		$all = array_fill_keys(array_keys(FeatureConfig::SWITCHES), true);
+		$guest = $this->config([], $all)->forGuest();
+
+		foreach (['recording', 'followSession', 'practiceLog', 'practiceExport', 'offline'] as $key) {
+			$this->assertFalse($guest[$key], $key);
+		}
+		$this->assertTrue($guest['intonation']);
+		$this->assertTrue($guest['singScore']);
+		$this->assertTrue($guest['scoreFollower']);
+	}
 }
