@@ -9,6 +9,7 @@
 import { getSharingToken } from '@nextcloud/sharing/public'
 import { translate } from './l10n.js'
 import { publicFrameUrl } from './lib/publicFrame.js'
+import { scoreFrameWrapper } from './lib/scoreFrameWrapper.js'
 import { registerScoreFileAction, registerScoreHandler } from './lib/scoreHandler.js'
 
 import './publicPath.js'
@@ -39,79 +40,10 @@ function createFrame(fileId, title = 'ScoreView') {
 	return frame
 }
 
-// A plain-object component without a template, like ScoreViewerWrapper in
-// viewer.js: Viewer bundles its own copy of Vue, which cannot render a
-// template compiled against ours.
-//
-// render() returns null - a comment placeholder - and the iframe is inserted
-// next to it from plain DOM. That is also what viewer.js does for its inner
-// app, and it avoids importing Vue just for h(): this bundle loads on every
-// share page and a second Vue runtime would be most of it.
-const ScoreFrameWrapper = {
-	name: 'ScoreFrameWrapper',
-
-	props: {
-		fileid: {
-			type: [Number, String],
-			required: true,
-		},
-		// Passed by Viewer as :loaded.sync; without update:loaded its spinner
-		// would stay on top of the frame for good.
-		loaded: {
-			type: Boolean,
-			default: false,
-		},
-	},
-
-	emits: ['update:loaded'],
-
-	render() {
-		return null
-	},
-
-	mounted() {
-		this.mountFrame()
-		// At once: the framed page shows its own conversion and error states,
-		// so Viewer's generic spinner would only cover them.
-		this.$emit('update:loaded', true)
-	},
-
-	// beforeDestroy (Vue 2) and beforeUnmount (Vue 3): only the one of the
-	// running Vue exists for it; the other name is ignored.
-	beforeDestroy() {
-		this.unmountFrame()
-	},
-	beforeUnmount() {
-		this.unmountFrame()
-	},
-
-	watch: {
-		fileid() {
-			this.unmountFrame()
-			this.mountFrame()
-		},
-	},
-
-	methods: {
-		mountFrame() {
-			// Next to the placeholder, in its real parent: this.$el is a comment
-			// node and cannot take children, and its own parent belongs to
-			// Viewer's Vue, which never sees a node it did not create.
-			const parent = this.$el?.parentNode
-			if (!parent) {
-				return
-			}
-			this.frame = createFrame(this.fileid)
-			parent.insertBefore(this.frame, this.$el.nextSibling)
-		},
-		unmountFrame() {
-			this.frame?.remove()
-			this.frame = null
-		},
-	},
-}
-
-registerScoreHandler(ScoreFrameWrapper)
+// In a group of its own: Viewer then lists the scores of a shared folder and
+// steps through them with its arrows - without a group it shows the one file
+// only. Only the shown file gets a frame (lib/scoreFrameWrapper.js).
+registerScoreHandler(scoreFrameWrapper(createFrame), { group: 'scoreview' })
 
 // ---------------------------------------------------------------------------
 // The file action on the extension (E6)

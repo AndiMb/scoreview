@@ -13,13 +13,21 @@ import { MSCZ_MIME, needsOwnFileAction } from './scoreFile.js'
  *
  * @param {object} component A plain render() component - Viewer bundles its own
  *   Vue, so an SFC template compiled against ours would crash there
+ * @param {object} [options]
+ * @param {string} [options.group] Viewer's handler group: navigation through
+ *   the folder, with hidden neighbours mounted for preloading
  */
-export function registerScoreHandler(component) {
+export function registerScoreHandler(component, { group } = {}) {
 	if (typeof OCA !== 'undefined' && OCA?.Viewer?.registerHandler) {
 		OCA.Viewer.registerHandler({
 			id: 'scoreview',
 			mimes: [MSCZ_MIME],
 			component,
+			// Viewer steps through a folder only for a grouped handler - and
+			// then also mounts the neighbours hidden, which a component has to
+			// be built for (lib/scoreFrameWrapper.js). The Files entry keeps
+			// none: its component is the whole viewer.
+			...(group ? { group } : {}),
 		})
 	}
 }
