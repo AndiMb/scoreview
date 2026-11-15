@@ -3196,7 +3196,7 @@ vorhandenen Schalter, wie auf der Offline-Seite: `FeatureConfig::forGuest()`
 schaltet Aufnahmen, „Folgt mir“, Übetagebuch, Offline-Seite und Übe-Tracks
 aus, `barGroups` kennt den Kontextwert `guest` (kein Drucken, keine Notizen,
 Leitungen, Setlisten), und die Composables, die beim Öffnen eine Konto-Route
-fragen würden, hängen an diesen Schaltern. Anzeigeeinstellungen, „Meine
+fragen würden, hängen an diesen Schaltern (`lib/accountScope.js`). Anzeigeeinstellungen, „Meine
 Stimme“ und die Übe-Einstellungen bleiben im Browser (`lib/guestStore.js` über
 `lib/storage.js`); die Sing-Wertung zeigt ihr Ergebnis und speichert nichts.
 „Neu konvertieren“ gibt es für Besucher nicht (`canReconvert` ist dort immer
@@ -3209,8 +3209,8 @@ Browser ([E7](#e7-konvertierung-im-browser-als-rückfall)).
 
 **Bewusst nicht dabei:** Notizen und Zeichnungen, Aufnahmen, Übetagebuch,
 Leitung und „Folgt mir“, gespeicherte Loops, Sing-Bestwerte, Setlisten im
-geteilten Ordner, die Offline-Seite, File-Drop-Freigaben. Ein möglicher
-zweiter Schritt sind Besucher als reine Mitleser von „Folgt mir“.
+geteilten Ordner, die Offline-Seite, File-Drop-Freigaben. Auch als reine
+Mitleser folgen Besucher keiner Leitung: „Folgt mir“ gibt es nur mit Konto.
 
 ## Formatgrundlagen
 

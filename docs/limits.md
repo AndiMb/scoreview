@@ -1094,10 +1094,12 @@ Measured after six such requests from one address: the next valid request
 took 6.9 s on Nextcloud 31 and 0.06 s on Nextcloud 34. Behind one address (a
 rehearsal room's NAT) a few stale or mistyped links can slow everyone down.
 
-**Microphone.** The tuner, scored singing and turning pages by listening work
-in the frame. For this, the link page allows the microphone for its own origin
-– only while the switch is on and a microphone feature is on; the browser
-still asks. The link page's CSP stays as it is; WebAssembly is allowed only on
+**Microphone.** Inside the frame the microphone is open to the viewer: the
+link page allows it for its own origin – only while the switch is on and a
+microphone feature is on; the browser still asks. Measured with the tuner
+(Chromium with a simulated microphone, Nextcloud 34): the frame got the
+microphone and the tuner started. Scored singing and turning pages by
+listening use the same microphone access but were not tried in the frame. The link page's CSP stays as it is; WebAssembly is allowed only on
 ScoreView's own framed page.
 
 **Not measured:** Nextcloud 32 and 33 (the session keys checked are those of

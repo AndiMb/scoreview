@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:56634d5eef00 -->
+<!-- translation-of: limits.md sha256:d97a918e62b5 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -1123,10 +1123,13 @@ nächste gültige dauerte auf Nextcloud 31 6,9 s, auf Nextcloud 34 0,06 s.
 Hinter einer Adresse (dem NAT eines Proberaums) können wenige veraltete oder
 vertippte Links alle bremsen.
 
-**Mikrofon.** Stimmgerät, Sing-Wertung und Mitblättern nach Gehör
-funktionieren im Rahmen. Dafür erlaubt die Link-Seite das Mikrofon für die
-eigene Herkunft – nur solange der Schalter an ist und eine Mikrofonfunktion
-eingeschaltet ist; der Browser fragt trotzdem nach. Die CSP der Link-Seite
+**Mikrofon.** Im Rahmen steht dem Viewer das Mikrofon offen: Die Link-Seite
+erlaubt es für die eigene Herkunft – nur solange der Schalter an ist und eine
+Mikrofonfunktion eingeschaltet ist; der Browser fragt trotzdem nach. Gemessen
+mit dem Stimmgerät (Chromium mit nachgebildetem Mikrofon, Nextcloud 34): Der
+Rahmen bekam das Mikrofon, und das Stimmgerät startete. Sing-Wertung und
+Mitblättern nach Gehör nutzen denselben Mikrofonzugang, wurden im Rahmen aber
+nicht ausprobiert. Die CSP der Link-Seite
 bleibt, wie sie ist; WebAssembly erlaubt nur die eingerahmte eigene Seite von
 ScoreView.
 

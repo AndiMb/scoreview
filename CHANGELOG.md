@@ -6,8 +6,6 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
-## [1.32.0] – unreleased
-
 ### Added
 
 - Scores on public share links. Once an administrator switches it on (off by
