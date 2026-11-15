@@ -50,6 +50,10 @@ class ConversionControllerTest extends TestCase {
 	private ConversionService&MockObject $conversionService;
 	private ClientFallback&MockObject $clientFallback;
 	private IJobList&MockObject $jobList;
+	private DirectAccessContext&MockObject $directAccess;
+	private ShareConversionQuota&MockObject $quota;
+	/** @var array<string, int> */
+	private array $requeueStore = [];
 
 	protected function setUp(): void {
 		$this->fileResolver = $this->createMock(UserFileResolver::class);
@@ -81,8 +85,6 @@ class ConversionControllerTest extends TestCase {
 		);
 	}
 
-	private DirectAccessContext&MockObject $directAccess;
-	private ShareConversionQuota&MockObject $quota;
 	private ?ICacheFactory $cacheFactory = null;
 
 	private function noCache(): ICacheFactory {
@@ -93,7 +95,8 @@ class ConversionControllerTest extends TestCase {
 
 	/** A memory cache that behaves like one - for the requeue throttle. */
 	private function withCache(): void {
-		$store = [];
+		$this->requeueStore = [];
+		$store = &$this->requeueStore;
 		$cache = $this->createMock(ICache::class);
 		$cache->method('get')->willReturnCallback(function (string $key) use (&$store) {
 			return $store[$key] ?? null;
@@ -284,6 +287,42 @@ class ConversionControllerTest extends TestCase {
 		$this->jobList->method('has')->willReturn(true);
 		$this->quota->expects($this->never())->method('consume');
 		$this->controller()->status(42);
+	}
+
+	public function testVisitorStatusOnReadyConversionDoesNotConsume(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_READY));
+		$this->conversionService->method('isCurrent')->willReturn(true);
+		$this->conversionService->method('getPageCount')->willReturn(1);
+		$this->quota->expects($this->never())->method('consume');
+		$this->jobList->expects($this->never())->method('add');
+		$this->assertSame(ScoreConversion::STATUS_READY, $this->controller()->status(42)->getData()['status']);
+	}
+
+	public function testVisitorRetryUsesTheLinkKeyAndConsumesOncePerInterval(): void {
+		$this->withCache();
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_ERROR));
+		$this->conversionService->method('isStale')->willReturn(false);
+		$this->quota->expects($this->once())->method('consume')->willReturn(true);
+		$this->jobList->expects($this->once())->method('add');
+
+		$controller = $this->controller();
+		$controller->status(42);
+		$controller->status(42);
+		$this->assertSame(['42:share:dig' => 1], $this->requeueStore);
+	}
+
+	public function testVisitorRetryOverQuotaIs429(): void {
+		$this->withCache();
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_ERROR));
+		$this->conversionService->method('isStale')->willReturn(false);
+		$this->quota->method('consume')->willReturn(false);
+		$this->jobList->expects($this->never())->method('add');
+		$response = $this->controller()->status(42);
+		$this->assertSame(Http::STATUS_TOO_MANY_REQUESTS, $response->getStatus());
+		$this->assertSame('share_quota', $response->getData()['errorCode']);
 	}
 
 	public function testVisitorQuotaExceededIs429(): void {

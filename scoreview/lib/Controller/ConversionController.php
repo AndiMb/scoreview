@@ -181,7 +181,9 @@ class ConversionController extends Controller {
 			if ($this->clientFallback->noteConversionError($conversion->getErrorCode())) {
 				return $this->clientResponse($node, $conversion->getErrorCode());
 			}
-			$this->retryConversion($fileId);
+			if (!$this->retryConversion($fileId)) {
+				return $this->quotaExceeded();
+			}
 		} elseif ($conversion->getStatus() === ScoreConversion::STATUS_READY) {
 			if (!$this->conversionService->isCurrent($conversion)) {
 				// Aeltere Cache-Formatversion (oder, auf dem lokalen Weg, eine
@@ -295,19 +297,32 @@ class ConversionController extends Controller {
 	 * queueConversion() from a status poll - at most once per
 	 * REQUEUE_INTERVAL_SECONDS for the same file and user.
 	 */
-	private function retryConversion(int $fileId): void {
-		if ($this->requeueCache === null) {
-			$this->queueConversion($fileId);
-			return;
-		}
-		// A visitor has no user id; her link is the unit that is throttled.
+	private function retryConversion(int $fileId): bool {
 		$grant = $this->directAccess->shareGrant();
-		$key = $fileId . ':' . ($grant !== null ? 'share:' . $grant->tokenDigest : ($this->fileResolver->currentUserId() ?? ''));
-		if ($this->requeueCache->get($key) !== null) {
-			return;
+		$key = null;
+		if ($this->requeueCache !== null) {
+			// A visitor has no user id; her link is the unit that is throttled.
+			$key = $fileId . ':' . ($grant !== null ? 'share:' . $grant->tokenDigest : ($this->fileResolver->currentUserId() ?? ''));
+			if ($this->requeueCache->get($key) !== null) {
+				return true;
+			}
+		}
+		// The quota counts where a job is really added - never on a mere
+		// poll. A job that is still listed is not new work (matters without
+		// a memory cache, where every poll gets here); the requeue check
+		// above bounds a failing or no-op score to one unit per interval.
+		if ($grant !== null
+			&& !$this->jobList->has(ConvertScoreJob::class, ['userId' => $this->fileResolver->attributionUserId(), 'fileId' => $fileId])
+			&& !$this->shareQuota->consume($grant)) {
+			return false;
 		}
 		$this->queueConversion($fileId);
-		$this->requeueCache->set($key, 1, self::REQUEUE_INTERVAL_SECONDS);
+		$this->requeueCache?->set($key, 1, self::REQUEUE_INTERVAL_SECONDS);
+		return true;
+	}
+
+	private function quotaExceeded(): JSONResponse {
+		return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
 	}
 
 	/**
@@ -384,16 +399,9 @@ class ConversionController extends Controller {
 		if ($grund !== null) {
 			return $this->clientResponse($node, $grund);
 		}
-		// Only work that is not queued yet counts against a link's quota:
-		// the viewer polls every few seconds while the job waits, and those
-		// polls (and retryConversion()'s re-queues) must not eat the budget.
-		$grant = $this->directAccess->shareGrant();
-		if ($grant !== null
-			&& !$this->jobList->has(ConvertScoreJob::class, ['userId' => $this->fileResolver->attributionUserId(), 'fileId' => $fileId])
-			&& !$this->shareQuota->consume($grant)) {
-			return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
+		if (!$this->retryConversion($fileId)) {
+			return $this->quotaExceeded();
 		}
-		$this->retryConversion($fileId);
 		return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 	}
 
