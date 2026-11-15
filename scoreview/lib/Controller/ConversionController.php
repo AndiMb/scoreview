@@ -9,12 +9,14 @@ use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
 use OCA\ScoreView\Service\PracticeTrackService;
+use OCA\ScoreView\Service\ShareConversionQuota;
 use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
@@ -98,6 +100,8 @@ class ConversionController extends Controller {
 		private SoundFontService $soundFontService,
 		private ConversionBackend $backend,
 		ICacheFactory $cacheFactory,
+		private DirectAccessContext $directAccess,
+		private ShareConversionQuota $shareQuota,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 		$this->requeueCache = $cacheFactory->isAvailable() ? $cacheFactory->createDistributed('scoreview-requeue') : null;
@@ -282,7 +286,7 @@ class ConversionController extends Controller {
 	/** Reiht eine (Neu-)Konvertierung ein - Idempotenz/Ueberspringen bereits laufender Jobs regelt ConvertScoreJob selbst. */
 	private function queueConversion(int $fileId): void {
 		$this->jobList->add(ConvertScoreJob::class, [
-			'userId' => $this->fileResolver->currentUserId(),
+			'userId' => $this->fileResolver->attributionUserId(),
 			'fileId' => $fileId,
 		]);
 	}
@@ -296,7 +300,9 @@ class ConversionController extends Controller {
 			$this->queueConversion($fileId);
 			return;
 		}
-		$key = $fileId . ':' . ($this->fileResolver->currentUserId() ?? '');
+		// A visitor has no user id; her link is the unit that is throttled.
+		$grant = $this->directAccess->shareGrant();
+		$key = $fileId . ':' . ($grant !== null ? 'share:' . $grant->tokenDigest : ($this->fileResolver->currentUserId() ?? ''));
 		if ($this->requeueCache->get($key) !== null) {
 			return;
 		}
@@ -377,6 +383,15 @@ class ConversionController extends Controller {
 		$grund = $this->clientFallback->reason();
 		if ($grund !== null) {
 			return $this->clientResponse($node, $grund);
+		}
+		// Only work that is not queued yet counts against a link's quota:
+		// the viewer polls every few seconds while the job waits, and those
+		// polls (and retryConversion()'s re-queues) must not eat the budget.
+		$grant = $this->directAccess->shareGrant();
+		if ($grant !== null
+			&& !$this->jobList->has(ConvertScoreJob::class, ['userId' => $this->fileResolver->attributionUserId(), 'fileId' => $fileId])
+			&& !$this->shareQuota->consume($grant)) {
+			return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
 		}
 		$this->retryConversion($fileId);
 		return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);

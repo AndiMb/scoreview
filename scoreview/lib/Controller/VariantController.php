@@ -10,8 +10,10 @@ use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreVariant;
 use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\ShareConversionQuota;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\VariantKey;
 use OCA\ScoreView\Service\VariantService;
@@ -61,6 +63,8 @@ class VariantController extends Controller {
 		private IUserSession $userSession,
 		private IURLGenerator $urlGenerator,
 		private IL10N $l,
+		private DirectAccessContext $directAccess,
+		private ShareConversionQuota $shareQuota,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -120,7 +124,14 @@ class VariantController extends Controller {
 			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('This score has no such part.')], Http::STATUS_NOT_FOUND);
 		}
 
-		$user = $this->userSession->getUser();
+		// A visitor on a public link has no account: her runs are capped per
+		// link instead of per user (ShareConversionQuota). The share path wins
+		// over a session, as in UserFileResolver.
+		$grant = $this->directAccess->shareGrant();
+		if ($grant !== null && !$this->shareQuota->consume($grant)) {
+			return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
+		}
+		$user = $grant === null ? $this->userSession->getUser() : null;
 		if ($user !== null) {
 			try {
 				$this->limiter->registerUserRequest('scoreview-variant', self::RUNS_PER_HOUR, 3600, $user);

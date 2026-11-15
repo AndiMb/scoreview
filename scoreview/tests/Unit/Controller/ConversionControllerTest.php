@@ -6,10 +6,13 @@ namespace OCA\ScoreView\Tests\Unit\Controller;
 
 use OCA\ScoreView\Controller\ConversionController;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LocalConverter;
+use OCA\ScoreView\Service\PublicShareGrant;
+use OCA\ScoreView\Service\ShareConversionQuota;
 use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Http;
@@ -53,6 +56,8 @@ class ConversionControllerTest extends TestCase {
 		$this->conversionService = $this->createMock(ConversionService::class);
 		$this->clientFallback = $this->createMock(ClientFallback::class);
 		$this->jobList = $this->createMock(IJobList::class);
+		$this->directAccess = $this->createMock(DirectAccessContext::class);
+		$this->quota = $this->createMock(ShareConversionQuota::class);
 	}
 
 	private function controller(): ConversionController {
@@ -71,9 +76,13 @@ class ConversionControllerTest extends TestCase {
 			$this->createMock(SoundFontService::class),
 			$this->createMock(ConversionBackend::class),
 			$this->cacheFactory ?? $this->noCache(),
+			$this->directAccess,
+			$this->quota,
 		);
 	}
 
+	private DirectAccessContext&MockObject $directAccess;
+	private ShareConversionQuota&MockObject $quota;
 	private ?ICacheFactory $cacheFactory = null;
 
 	private function noCache(): ICacheFactory {
@@ -242,6 +251,59 @@ class ConversionControllerTest extends TestCase {
 		for ($i = 0; $i < 5; $i++) {
 			$this->assertSame(ScoreConversion::STATUS_PENDING, $controller->status(42)->getData()['status']);
 		}
+	}
+
+	private function asVisitor(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, false, 'dig'));
+		$this->fileResolver->method('attributionUserId')->willReturn('owner');
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->clientFallback->method('reason')->willReturn(null);
+	}
+
+	public function testVisitorStatusQueuesUnderShareOwner(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn(null);
+		$this->quota->expects($this->once())->method('consume')->willReturn(true);
+		$this->jobList->expects($this->once())->method('add')
+			->with($this->anything(), ['userId' => 'owner', 'fileId' => 42]);
+		$this->assertSame(ScoreConversion::STATUS_PENDING, $this->controller()->status(42)->getData()['status']);
+	}
+
+	public function testVisitorStatusOnRunningConversionDoesNotConsume(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_PROCESSING));
+		$this->conversionService->method('isStale')->willReturn(false);
+		$this->quota->expects($this->never())->method('consume');
+		$this->jobList->expects($this->never())->method('add');
+		$this->controller()->status(42);
+	}
+
+	public function testVisitorPollOfAnAlreadyQueuedJobDoesNotConsume(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn(null);
+		$this->jobList->method('has')->willReturn(true);
+		$this->quota->expects($this->never())->method('consume');
+		$this->controller()->status(42);
+	}
+
+	public function testVisitorQuotaExceededIs429(): void {
+		$this->asVisitor();
+		$this->conversionService->method('find')->willReturn(null);
+		$this->quota->method('consume')->willReturn(false);
+		$this->jobList->expects($this->never())->method('add');
+		$response = $this->controller()->status(42);
+		$this->assertSame(Http::STATUS_TOO_MANY_REQUESTS, $response->getStatus());
+		$this->assertSame(['status' => 'error', 'errorCode' => 'share_quota'], $response->getData());
+	}
+
+	public function testSessionStatusNeverTouchesTheShareQuota(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->fileResolver->method('attributionUserId')->willReturn('anna');
+		$this->clientFallback->method('reason')->willReturn(null);
+		$this->conversionService->method('find')->willReturn(null);
+		$this->quota->expects($this->never())->method('consume');
+		$this->jobList->expects($this->once())->method('add')->with($this->anything(), ['userId' => 'anna', 'fileId' => 42]);
+		$this->controller()->status(42);
 	}
 
 	public function testReconvertQueuesEvenRightAfterAPoll(): void {
