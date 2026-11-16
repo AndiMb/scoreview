@@ -28,6 +28,17 @@ describe('createFollowerTime', () => {
 		expect(time.confirmedMs()).toBe(5000)
 	})
 
+	it('shows leadMs ahead while the music moves, and stands where it stood without a lead', () => {
+		const time = createFollowerTime({ coastMs: 1500, leadMs: 600 })
+		time.confirm(5000, 0, 1.2)
+		expect(time.target(100)).toBeCloseTo(5000 + 700 * 1.2)
+		// The pause ends where it would without a lead: the lead comes out of the run-on.
+		for (let now = 0; now <= 4000; now += 20) {
+			time.shownMs(now)
+		}
+		expect(time.shownMs(4000)).toBeCloseTo(5000 + 1500 * 1.2, -1)
+	})
+
 	it('closes a small gap smoothly and shows a jump at once', () => {
 		const time = createFollowerTime({ jumpMs: 400 })
 		time.confirm(1000, 0, 1)
@@ -42,6 +53,10 @@ describe('createFollowerTime', () => {
 })
 
 describe('shownBetweenReports', () => {
+	it('waits at a place moved ahead to the next system', () => {
+		expect(shownBetweenReports({ atMs: 0, shownMs: 10000, tempoRatio: 1, phase: 'following', snapped: true }, 200)).toBe(10000)
+	})
+
 	const report = { atMs: 1000, shownMs: 5000, tempoRatio: 1.2, phase: 'following' }
 
 	it('is NaN while nothing is known, so the display keeps its own clock', () => {

@@ -1019,6 +1019,7 @@ export default {
 					metaParts: scoreMeta.value?.parts ?? [],
 					measuresTimeline: measuresTimeline.value,
 					durationMs: durationMs.value,
+					myPartId: myPart.myPartId.value,
 				})
 			},
 			followTime: (getter) => {

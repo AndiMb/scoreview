@@ -99,4 +99,22 @@ describe('createOnlineWarp', () => {
 		const warp = createOnlineWarp(reference)
 		expect(warp.step(liveAt('tutti', 0)).position).toBeNull()
 	})
+
+	it('weighs in the line the heard voice lies on, even when "my part" is another', () => {
+		// Two sung parts: the voice part and a second line a fourth below.
+		const sung = [...notes, ...melody.map((p, i) => ({ onMs: i * 500, offMs: i * 500 + 480, pitch: p - 5, channel: 2 }))]
+		const ref = buildFollowReference(sung, [...parts, { id: 'low', label: 'Low', channels: [2], vocal: true }], { durationMs: 20000, voicePart: 'low' })
+		expect(ref.voices.map((v) => v.id)).toEqual(['v', 'low'])
+		const warp = createOnlineWarp(ref)
+		warp.anchor(0)
+		let last = null
+		for (let perf = 0; perf < 6000; perf += 50) {
+			const f = Math.floor(perf / ref.frameMs)
+			const tutti = ref.ensembles[0]
+			last = warp.step(Float32Array.from(tutti.chroma.subarray(f * 12, f * 12 + 12)), null, melody[Math.floor(perf / 500)])
+		}
+		// "my part" was the low line; the voice sang the upper one.
+		expect(last.voice).toBe('v')
+		expect(Math.abs(last.position * ref.frameMs - 6000)).toBeLessThanOrEqual(250)
+	})
 })

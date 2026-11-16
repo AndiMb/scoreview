@@ -9,6 +9,7 @@ import { followMetrics } from '../../src/lib/followMetrics.js'
 import { buildFollowReference } from '../../src/lib/followRef.js'
 import { decideTurn, rowAt } from '../../src/lib/followTurn.js'
 import { createScoreFollower } from '../../src/lib/scoreFollower.js'
+import { createVoicePitch } from '../../src/lib/voicePitch.js'
 import { generatePiece } from './piece.mjs'
 import { renderPerformance, truthAt } from './synth.mjs'
 
@@ -29,6 +30,7 @@ export { fftSizeFor }
  * @return {Array<{atMs:number, c36:?Float32Array, levelDb:number}>}
  */
 export function featureFrames(samples, sampleRate, { hopMs = HOP_MS, fftSize = fftSizeFor(sampleRate) } = {}) {
+	const voicePitch = createVoicePitch(sampleRate, fftSize)
 	const frames = []
 	const hop = (hopMs / 1000) * sampleRate
 	for (let end = fftSize; end <= samples.length; end += hop) {
@@ -37,6 +39,7 @@ export function featureFrames(samples, sampleRate, { hopMs = HOP_MS, fftSize = f
 		frames.push({
 			atMs: (at / sampleRate) * 1000,
 			c36: chroma36(db, sampleRate, fftSize),
+			voice: voicePitch(db),
 			levelDb: spectrumLevelDb(db, sampleRate, fftSize),
 		})
 	}

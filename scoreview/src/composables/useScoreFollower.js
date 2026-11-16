@@ -3,6 +3,7 @@ import { translate } from '../l10n.js'
 import { chroma36, fftSizeFor, spectrumLevelDb } from '../lib/chroma.js'
 import { shownBetweenReports } from '../lib/followerTime.js'
 import { createGeneration } from '../lib/generation.js'
+import { createVoicePitch } from '../lib/voicePitch.js'
 
 /** One tap of features - the rate the follower was measured at (tools/follow/replay.mjs HOP_MS). */
 const TAP_MS = 50
@@ -46,6 +47,7 @@ export function useScoreFollower({ microphone, input, followTime }) {
 	let context = null
 	let timer = null
 	let spectrum = null
+	let voicePitch = null
 	let report = null
 	let starting = false
 	// Reports of frames heard before this time belong to before the tap.
@@ -141,6 +143,8 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		analyser.smoothingTimeConstant = 0
 		handle.source.connect(analyser)
 		spectrum = new Float32Array(analyser.frequencyBinCount)
+		// The singer's own voice, from the same spectrum (S7: no samples).
+		voicePitch = createVoicePitch(context.sampleRate, analyser.fftSize)
 		report = null
 		listenFromMs = Infinity
 		phase.value = 'waiting'
@@ -161,7 +165,13 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		analyser.getFloatFrequencyData(spectrum)
 		const sampleRate = context.sampleRate
 		const c36 = chroma36(spectrum, sampleRate, analyser.fftSize)
-		const message = { type: 'frame', c36, levelDb: spectrumLevelDb(spectrum, sampleRate, analyser.fftSize), atMs: nowMs() }
+		const message = {
+			type: 'frame',
+			c36,
+			levelDb: spectrumLevelDb(spectrum, sampleRate, analyser.fftSize),
+			voice: c36 ? voicePitch(spectrum) : null,
+			atMs: nowMs(),
+		}
 		worker.postMessage(message, c36 ? [c36.buffer] : [])
 	}
 
@@ -213,6 +223,7 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		}
 		analyser = null
 		spectrum = null
+		voicePitch = null
 		report = null
 		listenFromMs = Infinity
 		context = null

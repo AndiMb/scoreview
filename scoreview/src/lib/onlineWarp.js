@@ -31,6 +31,7 @@
 // conductor talks.
 
 import { similarity } from './chroma.js'
+import { pitchClassDistance } from './voicePitch.js'
 
 /**
  * @param {import('./followRef.js').FollowReference} reference
@@ -44,6 +45,15 @@ import { similarity } from './chroma.js'
  *   50 ms frames reach 0.8, 75-92 % reach 0.7; at 0.8 the path stood still for a
  *   third of the singing and fell behind for good)
  * @param {number} [options.tempoWindowFrames] frames of path used for the tempo
+ * @param {number} [options.voiceWeight] share of the singer's own line in the match
+ *   where it sings (lib/voicePitch.js; reference.voices)
+ * @param {number} [options.voiceSigma] semitones off the line at which its match falls to 0.61
+ * @param {number} [options.voiceSpanFrames] frames either side where the line may lie -
+ *   the 170 ms window hears a note change late, and a singer is never on the frame
+ * @param {number} [options.voicePrior] starting fit of "my part" (reference.voicePreferred)
+ * @param {number} [options.voiceMinFit] fit a line needs before it weighs in
+ * @param {number} [options.voiceMargin] lead over the next line it needs
+ * @param {number} [options.voiceRate] how fast the fit follows each clear voice frame
  * @return {object}
  */
 export function createOnlineWarp(reference, options = {}) {
@@ -54,7 +64,28 @@ export function createOnlineWarp(reference, options = {}) {
 		restPenalty = 0.02,
 		minMatch = 0.7,
 		tempoWindowFrames = 60,
+		// Own voice, measured on twelve rehearsal takes with a tap before each
+		// run: bars within one bar 91 -> 97 % with "my part" right or unset,
+		// 93-96 % with it wrong (the line the voice lies on wins).
+		voiceWeight = 0.5,
+		voiceSigma = 0.8,
+		voiceSpanFrames = 2,
+		voicePrior = 0.5,
+		voiceMinFit = 0.4,
+		voiceMargin = 0.1,
+		voiceRate = 0.05,
 	} = options
+	const lines = voiceWeight > 0 ? (reference.voices ?? []).map((v) => v.line) : []
+	// Which line the heard voice lies on, along the path (0..1 per line).
+	// "My part" starts ahead, so it counts from the first note; a wrong
+	// choice falls back within seconds - measured: weighting a part the
+	// singer does not sing dropped bars within one bar from 91 to 60 %.
+	const voiceFit = new Float64Array(lines.length)
+	if (reference.voicePreferred >= 0 && reference.voicePreferred < lines.length) {
+		voiceFit[reference.voicePreferred] = voicePrior
+	}
+	let line = null
+	let voiceIndex = -1
 	const n = reference.frames
 	const ensembles = reference.ensembles
 	let score = new Float64Array(n).fill(-Infinity)
@@ -96,14 +127,19 @@ export function createOnlineWarp(reference, options = {}) {
 	 * One tap.
 	 *
 	 * @param {?Float32Array} chroma 12 bins, null if the gates said "no music"
-	 * @return {{position: ?number, matched: boolean, similarity: number, ensemble: ?string}}
+	 * @param {?object} [_onset] unused here (lib/tempoTracker.js)
+	 * @param {?number} [voice] the singer's own pitch, MIDI at the score's tuning, null if unclear
+	 * @return {{position: ?number, matched: boolean, similarity: number, ensemble: ?string, voice: ?string}}
 	 */
-	function step(chroma) {
+	// The same arguments as lib/tempoTracker.js, which uses the onset.
+	// eslint-disable-next-line no-unused-vars
+	function step(chroma, _onset = null, voice = null) {
 		liveStep++
 		if (position === null) {
-			return { position: null, matched: false, similarity: 0, ensemble: null }
+			return { position: null, matched: false, similarity: 0, ensemble: null, voice: null }
 		}
 		let best = 0
+		line = voice === null ? null : voiceLine()
 		if (chroma) {
 			for (let j = lo; j <= hi; j++) {
 				let s = -1
@@ -117,6 +153,11 @@ export function createOnlineWarp(reference, options = {}) {
 						s = v
 						w = e
 					}
+				}
+				// Where the own part sings, its line weighs in; where it
+				// rests, a clear voice is someone else's and says nothing.
+				if (line && s > -1 && Number.isFinite(line[j])) {
+					s = (1 - voiceWeight) * s + voiceWeight * voiceMatch(voice, j)
 				}
 				sims[j] = s
 				winner[j] = w
@@ -167,6 +208,9 @@ export function createOnlineWarp(reference, options = {}) {
 		position = arg
 		if (matched) {
 			updateFit(chroma, arg)
+			if (voice !== null) {
+				updateVoiceFit(voice, arg)
+			}
 			history.push([liveStep, arg])
 			while (history.length > tempoWindowFrames) {
 				history.shift()
@@ -186,6 +230,56 @@ export function createOnlineWarp(reference, options = {}) {
 			matched,
 			similarity: matched ? sims[arg] : 0,
 			ensemble: ensembles[active].id,
+			// The part whose line the heard voice weighs on, if any.
+			voice: line ? reference.voices[voiceIndex].id : null,
+		}
+	}
+
+	/**
+	 * How well the voice lies on a line near frame j.
+	 *
+	 * @param {number} voice MIDI
+	 * @param {number} j
+	 * @param {Float32Array} [of] the line, the one in use by default
+	 * @return {number} 0..1, -1 if the line rests all around j
+	 */
+	function voiceMatch(voice, j, of = line) {
+		let best = -1
+		for (let k = Math.max(0, j - voiceSpanFrames); k <= Math.min(n - 1, j + voiceSpanFrames); k++) {
+			if (Number.isFinite(of[k])) {
+				const d = pitchClassDistance(voice, of[k]) / voiceSigma
+				best = Math.max(best, Math.exp(-0.5 * d * d))
+			}
+		}
+		return best
+	}
+
+	/**
+	 * The line the voice has lain on, if one clearly leads - null otherwise.
+	 *
+	 * @return {?Float32Array}
+	 */
+	function voiceLine() {
+		let first = -1
+		let second = 0
+		for (let p = 0; p < lines.length; p++) {
+			if (first < 0 || voiceFit[p] > voiceFit[first]) {
+				second = first < 0 ? 0 : Math.max(second, voiceFit[first])
+				first = p
+			} else {
+				second = Math.max(second, voiceFit[p])
+			}
+		}
+		voiceIndex = first >= 0 && voiceFit[first] >= voiceMinFit && voiceFit[first] - second >= voiceMargin ? first : -1
+		return voiceIndex >= 0 ? lines[voiceIndex] : null
+	}
+
+	function updateVoiceFit(voice, j) {
+		for (let p = 0; p < lines.length; p++) {
+			const m = voiceMatch(voice, j, lines[p])
+			if (m >= 0) {
+				voiceFit[p] += voiceRate * (m - voiceFit[p])
+			}
 		}
 	}
 

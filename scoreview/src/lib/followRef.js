@@ -23,6 +23,7 @@
 
 import { normalize, similarity, toCens } from './chroma.js'
 import { printedMs } from './followMetrics.js'
+import { partLine } from './voicePitch.js'
 
 /** Spacing of the reference frames (ms), the same as the live tapping. */
 export const FRAME_MS = 50
@@ -95,6 +96,25 @@ export function isVocal(part) {
 		return true
 	}
 	return VOCAL_IDS.test(String(part.instrumentId ?? ''))
+}
+
+/**
+ * The sung lines, for the singer's own voice (lib/voicePitch.js): one per
+ * sung part - every part if none is sung - and which of them the singer
+ * said is theirs ("my part"). Only a starting guess: the warp checks which
+ * line the voice it hears actually lies on (lib/onlineWarp.js).
+ *
+ * @param {Array<{onMs:number, offMs:number, pitch:number, channel:number}>} notes
+ * @param {Array<{id:string, label:string, channels:number[], vocal:boolean}>} parts
+ * @param {number} frames
+ * @param {number} frameMs
+ * @param {?string} [voicePart] id of the singer's part
+ * @return {{voices: Array<{id:string, label:string, line:Float32Array}>, voicePreferred: number}}
+ */
+export function voicesOf(notes, parts, frames, frameMs, voicePart = null) {
+	const sung = parts.some((p) => p.vocal) ? parts.filter((p) => p.vocal) : parts
+	const voices = sung.map((p) => ({ id: p.id, label: p.label, line: partLine(notes, p.channels, frames, frameMs) }))
+	return { voices, voicePreferred: voices.findIndex((v) => v.id === voicePart) }
 }
 
 /**
@@ -239,6 +259,7 @@ export function buildFollowReference(notes, parts, options = {}) {
 		frames,
 		durationMs,
 		ensembles,
+		...voicesOf(notes, parts, frames, frameMs, options.voicePart),
 		censMs,
 		cens,
 		ambiguity: ambiguityOf(cens[0], Math.round(ambiguityWindowMs / censMs), Math.round(ambiguityNeighbourMs / censMs), printedFrame),
