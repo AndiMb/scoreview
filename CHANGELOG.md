@@ -6,6 +6,8 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.33.0] – 2026-11-17
+
 ### Changed
 
 - Turn pages by listening also follows the singer's own voice: the phone
