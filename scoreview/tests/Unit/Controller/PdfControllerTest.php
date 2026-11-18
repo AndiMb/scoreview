@@ -34,6 +34,8 @@ use PHPUnit\Framework\TestCase;
  * (409). The folder logic is SiblingFileServiceTest's.
  */
 class PdfControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private SiblingFileService&MockObject $files;
 	private RequestBodyReader&MockObject $body;
@@ -42,7 +44,7 @@ class PdfControllerTest extends TestCase {
 	private Folder&MockObject $parent;
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->files = $this->createMock(SiblingFileService::class);
 		$this->body = $this->createMock(RequestBodyReader::class);
 		$this->request = $this->createMock(IRequest::class);

@@ -35,6 +35,8 @@ use PHPUnit\Framework\TestCase;
  * 5. **Alle Routen auch mit Token** (E8).
  */
 class FollowControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private FollowService&MockObject $follow;
 	private bool $eingeschaltet = true;
@@ -55,7 +57,7 @@ class FollowControllerTest extends TestCase {
 		$this->access = new DirectAccessContext();
 		$this->access->setSession();
 		$this->companions = $this->createMock(CompanionTokenService::class);
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->follow = $this->createMock(FollowService::class);
 		$this->follow->method('nowMs')->willReturn(1790000000123);
 	}

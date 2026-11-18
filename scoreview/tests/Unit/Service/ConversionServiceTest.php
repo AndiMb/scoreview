@@ -297,6 +297,17 @@ class ConversionServiceTest extends TestCase {
 		$this->assertSame($current, $this->service()->isCurrent($this->fertig($backend, $engine)));
 	}
 
+	/** The one rule both artifact routes deliver by (issue #60). */
+	public function testOnlyAReadyRowOfTheCurrentFormatIsServable(): void {
+		$service = $this->service();
+		$this->assertTrue($service->isServable($this->fertig('local', 'old-engine')));
+		$this->assertFalse($service->isServable($this->fertig('local', null, ConversionService::CURRENT_FORMAT_VERSION - 1)));
+		$pending = $this->fertig('local', null);
+		$pending->setStatus(ScoreConversion::STATUS_PENDING);
+		$this->assertFalse($service->isServable($pending));
+		$this->assertFalse($service->isServable(null));
+	}
+
 	public function testIsCurrentStillRequiresTheCurrentFormat(): void {
 		$this->backend->method('isLocal')->willReturn(true);
 		$this->localConverter->method('engineVersion')->willReturn('4.7.6-engine.3');

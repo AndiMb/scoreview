@@ -12,7 +12,9 @@ use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ConversionBackend;
+use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\PublicShareGrant;
 use OCA\ScoreView\Service\ShareConversionQuota;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\VariantKey;
@@ -25,6 +27,7 @@ use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\Files\File;
 use OCP\Files\NotFoundException;
+use OCP\IAppConfig;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
@@ -47,10 +50,16 @@ use OCP\Security\RateLimiting\IRateLimitExceededException;
 class VariantController extends Controller {
 	use JsonErrors;
 
-	private const IMMUTABLE_CACHE_SECONDS = 31536000;
-
 	/** Runs per person and hour (S4): each is a process of 130-250 MB. */
 	public const RUNS_PER_HOUR = 20;
+
+	/** The person's runs for this hour are spent (RUNS_PER_HOUR). */
+	public const ERROR_RATE_LIMITED = 'rate_limited';
+	/**
+	 * The base is not (or no longer) ready to derive a variant from - a new
+	 * version of the file; the viewer reloads the base.
+	 */
+	public const ERROR_BASE_NOT_READY = 'base_not_ready';
 
 	public function __construct(
 		IRequest $request,
@@ -65,6 +74,7 @@ class VariantController extends Controller {
 		private IL10N $l,
 		private DirectAccessContext $directAccess,
 		private ShareConversionQuota $shareQuota,
+		private IAppConfig $appConfig,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -83,18 +93,18 @@ class VariantController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession(share: 'read')]
 	public function status(int $fileId, string $key): JSONResponse {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
+		$node = $this->fileResolver->resolveScore($fileId);
 		$parsed = VariantKey::parse($key);
-		if (!$node instanceof File || $parsed === null) {
+		if ($node === null || $parsed === null) {
 			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
 
 		$etag = $node->getEtag();
 		$base = $this->conversionService->find($fileId, $etag);
-		if ($base === null || $base->getStatus() !== ScoreConversion::STATUS_READY || !$this->conversionService->isCurrentFormat($base)) {
+		if (!$this->conversionService->isServable($base)) {
 			// The viewer asks for a variant only once the base is shown; a
 			// base that is not ready (any more) is a new version of the file.
-			return new JSONResponse(['status' => 'error', 'errorCode' => 'base_not_ready'], Http::STATUS_CONFLICT);
+			return new JSONResponse(['status' => ScoreConversion::STATUS_ERROR, 'errorCode' => self::ERROR_BASE_NOT_READY], Http::STATUS_CONFLICT);
 		}
 		if (!$this->backend->supportsVariants()) {
 			return new JSONResponse(['status' => ScoreConversion::STATUS_ERROR, 'errorCode' => ScoreVariant::ERROR_UNSUPPORTED]);
@@ -124,39 +134,38 @@ class VariantController extends Controller {
 			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('This score has no such part.')], Http::STATUS_NOT_FOUND);
 		}
 
-		// A visitor on a public link has no account: her runs are capped per
-		// link instead of per user (ShareConversionQuota). The share path wins
-		// over a session, as in UserFileResolver.
-		$grant = $this->directAccess->shareGrant();
-		$user = $grant === null ? $this->userSession->getUser() : null;
-		if ($user !== null) {
-			try {
-				$this->limiter->registerUserRequest('scoreview-variant', self::RUNS_PER_HOUR, 3600, $user);
-			} catch (IRateLimitExceededException) {
-				return new JSONResponse(['status' => ScoreConversion::STATUS_ERROR, 'errorCode' => 'rate_limited'], Http::STATUS_TOO_MANY_REQUESTS);
-			}
-		}
-
-		// The visitor's unit is spent only by the request that really starts
-		// the run: a claim lost to a parallel request starts nothing, and the
-		// link's allowance is small and counts only work really queued (S4).
-		// A won claim is given back when the allowance is used up, or the row
-		// would sit there as "processing" until it goes stale.
 		if ($variant === null) {
 			$variant = $this->variantService->claim($fileId, $etag, $key);
 			if ($variant === null) {
 				// Claimed a moment ago by another request.
 				return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
 			}
-			if ($grant !== null && !$this->shareQuota->consume($grant)) {
-				$this->variantService->release($variant);
-				return $this->shareQuotaExceeded();
-			}
 		} else {
-			if ($grant !== null && !$this->shareQuota->consume($grant)) {
-				return $this->shareQuotaExceeded();
-			}
 			$variant = $this->variantService->restart($variant);
+		}
+
+		// Every refusal from here on gives the row back, or it would sit
+		// there as "processing" until it goes stale and block the next try.
+		//
+		// The instance's limit first (S4): a full instance is no fault of the
+		// reader and spends none of her allowance - `pending`, and the viewer
+		// asks again on its next poll.
+		if (!$this->variantService->hasCapacity(ConversionConfig::variantMaxParallel($this->appConfig))) {
+			$this->variantService->release($variant);
+			return new JSONResponse(['status' => ScoreConversion::STATUS_PENDING]);
+		}
+
+		// Then the reader's own allowance, spent only by the request that
+		// really starts the run - a claim lost to a parallel request or a full
+		// instance starts nothing. A visitor on a public link has no account:
+		// her runs are capped per link instead of per user
+		// (ShareConversionQuota). The share path wins over a session, as in
+		// UserFileResolver.
+		$grant = $this->directAccess->shareGrant();
+		$refused = $grant !== null ? $this->spendShareQuota($grant) : $this->spendUserLimit();
+		if ($refused !== null) {
+			$this->variantService->release($variant);
+			return $refused;
 		}
 
 		$this->convertJob->convertVariant($node, $variant);
@@ -166,8 +175,24 @@ class VariantController extends Controller {
 			: $this->errorBody($variant));
 	}
 
-	private function shareQuotaExceeded(): JSONResponse {
-		return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
+	private function spendShareQuota(PublicShareGrant $grant): ?JSONResponse {
+		if ($this->shareQuota->consume($grant)) {
+			return null;
+		}
+		return new JSONResponse(['status' => ScoreConversion::STATUS_ERROR, 'errorCode' => ShareConversionQuota::ERROR_CODE], Http::STATUS_TOO_MANY_REQUESTS);
+	}
+
+	private function spendUserLimit(): ?JSONResponse {
+		$user = $this->userSession->getUser();
+		if ($user === null) {
+			return null;
+		}
+		try {
+			$this->limiter->registerUserRequest('scoreview-variant', self::RUNS_PER_HOUR, 3600, $user);
+			return null;
+		} catch (IRateLimitExceededException) {
+			return new JSONResponse(['status' => ScoreConversion::STATUS_ERROR, 'errorCode' => self::ERROR_RATE_LIMITED], Http::STATUS_TOO_MANY_REQUESTS);
+		}
 	}
 
 	/**
@@ -180,7 +205,7 @@ class VariantController extends Controller {
 	#[PublicPage]
 	#[DirectTokenOrSession(csrfInSession: false, share: 'read')]
 	public function artifact(int $fileId, string $key, string $name): Http\Response {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
+		$node = $this->fileResolver->resolveScore($fileId);
 		if ($node === null || VariantKey::parse($key) === null) {
 			return $this->notFound();
 		}
@@ -194,12 +219,7 @@ class VariantController extends Controller {
 		} catch (NotFoundException) {
 			return new JSONResponse(['error' => $this->l->t('Requested file does not exist.')], Http::STATUS_NOT_FOUND);
 		}
-		$response = new ArtifactResponse($file->read(), $mimeType, $this->request, $file->getSize());
-		$response->addHeader('Content-Disposition', 'attachment');
-		$response->setETag($etag);
-		$response->setLastModified($variant->getUpdatedAt());
-		$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
-		return $response;
+		return ArtifactResponse::immutable($file, $mimeType, $this->request, $etag, $variant->getUpdatedAt());
 	}
 
 	/**
@@ -209,7 +229,7 @@ class VariantController extends Controller {
 	 * stored against the base (E19).
 	 */
 	private function readyBody(int $fileId, ScoreConversion $base, ScoreVariant $variant): array {
-		$version = $variant->getEtag() . '-' . $variant->getUpdatedAt()->getTimestamp();
+		$version = ArtifactResponse::version($variant);
 		$artifact = fn (string $name) => $this->urlGenerator->linkToRoute(
 			Application::APP_ID . '.variant.artifact',
 			['fileId' => $fileId, 'key' => $variant->getVariant(), 'name' => $name, 'v' => $version]);
@@ -225,7 +245,7 @@ class VariantController extends Controller {
 				'pages' => $pages,
 				'midi' => $this->urlGenerator->linkToRoute(
 					Application::APP_ID . '.conversion.artifact',
-					['fileId' => $fileId, 'name' => 'midi', 'v' => $base->getEtag() . '-' . $base->getUpdatedAt()->getTimestamp()]),
+					['fileId' => $fileId, 'name' => 'midi', 'v' => ArtifactResponse::version($base)]),
 				'timingJson' => $artifact('timing'),
 				'measuresJson' => $artifact('measures'),
 				'metaJson' => $artifact('meta'),
@@ -234,12 +254,16 @@ class VariantController extends Controller {
 		];
 	}
 
+	/** The stored text only for members - see ConversionController::status(). */
 	private function errorBody(ScoreVariant $variant): array {
-		return [
+		$body = [
 			'status' => ScoreConversion::STATUS_ERROR,
 			'variant' => $variant->getVariant(),
 			'errorCode' => $variant->getErrorCode() ?? ScoreConversion::ERROR_UNKNOWN,
-			'error' => $variant->getErrorMessage(),
 		];
+		if ($this->directAccess->shareGrant() === null) {
+			$body['error'] = $variant->getErrorMessage();
+		}
+		return $body;
 	}
 }

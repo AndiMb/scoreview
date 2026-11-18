@@ -61,10 +61,11 @@ class LeaderController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function index(int $fileId): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->fileResolver->resolveUserScore($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		return new JSONResponse($this->listing($node, $userId));
 	}
 
@@ -73,10 +74,11 @@ class LeaderController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function create(int $fileId, string $userId = ''): JSONResponse {
-		[$node, $actor] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->fileResolver->resolveUserScore($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $actor] = $score;
 		try {
 			$this->leaders->appoint($node, $actor, $userId);
 		} catch (LeaderException $e) {
@@ -90,10 +92,11 @@ class LeaderController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function destroy(int $fileId, string $uid): JSONResponse {
-		[$node, $actor] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->fileResolver->resolveUserScore($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $actor] = $score;
 		try {
 			$this->leaders->revoke($node, $actor, $uid);
 		} catch (LeaderException $e) {
@@ -114,10 +117,11 @@ class LeaderController extends Controller {
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[AnonRateLimit(limit: 30, period: 60)]
 	public function candidates(int $fileId, string $q = ''): JSONResponse {
-		[$node, $actor] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->fileResolver->resolveUserScore($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $actor] = $score;
 		try {
 			return new JSONResponse($this->leaders->candidates($node, $actor, $q));
 		} catch (LeaderException $e) {
@@ -148,16 +152,6 @@ class LeaderController extends Controller {
 			$leaders[] = $row;
 		}
 		return ['isLeader' => $isLeader, 'leaders' => $leaders];
-	}
-
-	/**
-	 * @return array{0: ?Node, 1: string} Node und Person, oder [null, ''],
-	 *                                    wenn die Datei nicht sichtbar ist
-	 */
-	private function resolve(int $fileId): array {
-		$userId = $this->fileResolver->currentUserId();
-		$node = $userId === null ? null : $this->fileResolver->resolveOwnNode($fileId);
-		return $node === null ? [null, ''] : [$node, $userId];
 	}
 
 	private function refused(LeaderException $e): JSONResponse {

@@ -293,7 +293,7 @@ class SetlistService {
 					if ($depth < self::CANDIDATE_DEPTH) {
 						$queue[] = [$child, $depth + 1];
 					}
-				} elseif ($child instanceof File && str_ends_with(mb_strtolower($child->getName()), '.mscz')) {
+				} elseif ($child instanceof File && ScoreFiles::hasScoreName($child->getName())) {
 					$found[] = [
 						'fileId' => $child->getId(),
 						'name' => $child->getName(),
@@ -394,7 +394,7 @@ class SetlistService {
 		} catch (NotFoundException|NotPermittedException) {
 			return ['status' => self::STATUS_MISSING, 'node' => null];
 		}
-		if (!$node instanceof File || !str_ends_with(mb_strtolower($node->getName()), '.mscz')) {
+		if (!$node instanceof File || !ScoreFiles::hasScoreName($node->getName())) {
 			// Da, aber nichts, was der Viewer zeigen kann - ein anderer Hinweis
 			// als „fehlt", denn hier hilft keine Freigabe.
 			return ['status' => self::STATUS_UNSUPPORTED, 'node' => null];

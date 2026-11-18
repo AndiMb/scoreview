@@ -16,6 +16,9 @@ use OCP\Security\RateLimiting\IRateLimitExceededException;
  * choir opening an already converted score never meets the limit.
  */
 class ShareConversionQuota {
+	/** What the status endpoints answer (429) once the link's allowance is spent. */
+	public const ERROR_CODE = 'share_quota';
+
 	public function __construct(
 		private ILimiter $limiter,
 		private FeatureConfig $features,

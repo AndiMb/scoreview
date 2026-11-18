@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Tests\Unit\Service;
 
+use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\FileNames;
 use OCA\ScoreView\Service\PublicShareGrant;
+use OCA\ScoreView\Service\ScoreFiles;
 use OCA\ScoreView\Service\TargetParts;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\Files\File;
@@ -212,5 +214,63 @@ class SmallHelpersTest extends TestCase {
 		$this->assertNull($this->resolver(null, $folder, null, $this->shareContext())->resolveOwnNode(43));
 		$this->assertNull($this->resolver('bert', $folder, null, $this->shareContext())->resolveOwnNode(43));
 		$this->assertNull($this->resolver(null, $folder, null, $this->shareContext(null))->resolveOwnNode(42));
+	}
+
+	// --- ScoreFiles and resolveScore (issue #51) ------------------------------
+
+	private function file(string $name, string $mimetype = 'application/octet-stream'): File {
+		$file = $this->createMock(File::class);
+		$file->method('getName')->willReturn($name);
+		$file->method('getMimetype')->willReturn($mimetype);
+		return $file;
+	}
+
+	public function testAScoreIsKnownByItsNameInAnyCase(): void {
+		$this->assertTrue(ScoreFiles::hasScoreName('Messe.mscz'));
+		$this->assertTrue(ScoreFiles::hasScoreName('ÜBUNG.MSCZ'));
+		$this->assertFalse(ScoreFiles::hasScoreName('Messe.mscz.pdf'));
+		$this->assertFalse(ScoreFiles::hasScoreName('mscz'));
+	}
+
+	public function testAScoreIsAFileByNameOrByMimetype(): void {
+		$this->assertTrue(ScoreFiles::isScore($this->file('Messe.mscz')));
+		// Name changed, mimetype registered: still the score Files shows.
+		$this->assertTrue(ScoreFiles::isScore($this->file('Messe', Application::MSCZ_MIMETYPE)));
+		$this->assertFalse(ScoreFiles::isScore($this->file('Notenliste.pdf', 'application/pdf')));
+		$this->assertFalse(ScoreFiles::isScore($this->createMock(Folder::class)));
+		$this->assertFalse(ScoreFiles::isScore(null));
+	}
+
+	public function testANodeThatCannotNameItselfIsNoScore(): void {
+		$file = $this->createMock(File::class);
+		$file->method('getName')->willThrowException(new \RuntimeException('gone'));
+		$this->assertFalse(ScoreFiles::isScore($file));
+	}
+
+	public function testResolveScoreRefusesFoldersAndOtherFiles(): void {
+		$score = $this->file('Messe.mscz');
+		$nodes = [42 => $score, 43 => $this->createMock(Folder::class), 44 => $this->file('Plan.pdf', 'application/pdf')];
+		$folder = $this->createMock(Folder::class);
+		$folder->method('getFirstNodeById')->willReturnCallback(fn (int $id) => $nodes[$id] ?? null);
+		$resolver = $this->resolver('anna', $folder);
+
+		$this->assertSame($score, $resolver->resolveScore(42));
+		$this->assertNull($resolver->resolveScore(43));
+		$this->assertNull($resolver->resolveScore(44));
+		$this->assertNull($resolver->resolveScore(45));
+		$this->assertSame([$score, 'anna'], $resolver->resolveUserScore(42));
+		$this->assertNull($resolver->resolveUserScore(43));
+	}
+
+	/** A visitor reads the score, but has no account to store anything under. */
+	public function testResolveUserScoreIsNullForAVisitor(): void {
+		$context = new DirectAccessContext();
+		$score = $this->file('Messe.mscz');
+		$score->method('getId')->willReturn(42);
+		$context->setShare(new PublicShareGrant('anna', $score, false, str_repeat('0', 64)));
+		$resolver = $this->resolver(null, null, null, $context);
+
+		$this->assertSame($score, $resolver->resolveScore(42));
+		$this->assertNull($resolver->resolveUserScore(42));
 	}
 }

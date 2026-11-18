@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Service;
 
 use OCA\ScoreView\AppInfo\Application;
-use OCP\Files\File;
 use OCP\Files\Folder;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
@@ -52,9 +51,13 @@ class PracticeTrackService {
 		return $this->files->save($folder, $userId, $mp3, $name, self::EXTENSION, $replace);
 	}
 
-	/** Eine Partitur, kein Ordner und keine beliebige Datei. */
+	/**
+	 * Eine Partitur, kein Ordner und keine beliebige Datei (ScoreFiles).
+	 *
+	 * @psalm-assert-if-true \OCP\Files\File $node
+	 */
 	public static function isScore(?Node $node): bool {
-		return $node instanceof File && $node->getMimetype() === Application::MSCZ_MIMETYPE;
+		return ScoreFiles::isScore($node);
 	}
 
 	/**

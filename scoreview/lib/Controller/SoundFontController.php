@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
 use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\SoundFontBusyException;
@@ -45,8 +46,6 @@ use Psr\Log\LoggerInterface;
  * Service\SoundFontService).
  */
 class SoundFontController extends Controller {
-	/** Wie in ConversionController: der Inhalt ist fuer eine Version unveraenderlich. */
-	private const IMMUTABLE_CACHE_SECONDS = 31536000;
 
 	/** A fetch of the default SoundFont takes a few seconds on a usual line. */
 	private const BUSY_RETRY_AFTER_SECONDS = 10;
@@ -115,7 +114,8 @@ class SoundFontController extends Controller {
 		// makes that a 304.
 		$requested = (string)$this->request->getParam('v', '');
 		if ($version !== '' && hash_equals($version, $requested)) {
-			$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
+			// As the artifacts: the content is immutable for a version.
+			$response->cacheFor(ArtifactResponse::IMMUTABLE_CACHE_SECONDS, false, true);
 		} else {
 			$response->addHeader('Cache-Control', 'private, no-cache');
 		}

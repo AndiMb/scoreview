@@ -226,4 +226,47 @@ class SidecarClientTest extends TestCase {
 			$this->assertSame($code, $e->getErrorCode());
 		}
 	}
+
+	/**
+	 * Every request carries the secret and a timeout - one the caller
+	 * names, or the default: a hanging sidecar must not hold a cron worker
+	 * for as long as the HTTP client would wait by itself (issue #65).
+	 */
+	public function testEveryRequestHasTheSecretAndATimeout(): void {
+		$client = $this->antwortender([
+			'http://sidecar:8765/convert/job-1' => '{"status":"processing"}',
+			'http://sidecar:8765/files/a.svg' => '<svg/>',
+			'http://sidecar:8765/soundfont/info' => '{"available":false}',
+		]);
+		$client->pollStatus('job-1');
+		$client->fetchFile('/files/a.svg');
+		$client->fetchSoundFontInfo();
+
+		$this->assertSame(
+			[SidecarClient::DEFAULT_TIMEOUT_SECONDS, SidecarClient::DEFAULT_TIMEOUT_SECONDS, 5],
+			array_map(static fn (array $anfrage) => $anfrage[2]['timeout'] ?? null, $this->anfragen),
+		);
+		foreach ($this->anfragen as [, , $options]) {
+			$this->assertSame('geheim', $options['headers']['X-ScoreView-Secret']);
+		}
+	}
+
+	/** A refusal while polling is a refusal, not an outage - as on submitting. */
+	public function testAPollRefusedIsRejectedAndA503IsNoQueue(): void {
+		foreach ([[new ClientException(401), ScoreConversion::ERROR_SIDECAR_REJECTED], [new ServerException(503), ScoreConversion::ERROR_SIDECAR_UNREACHABLE]] as [$fehler, $code]) {
+			$http = $this->createMock(IClient::class);
+			$http->method('get')->willThrowException($fehler);
+			$service = $this->createMock(IClientService::class);
+			$service->method('newClient')->willReturn($http);
+			$config = $this->createMock(IAppConfig::class);
+			$config->method('getValueString')->willReturn('x');
+			try {
+				(new SidecarClient($service, $config))->pollStatus('job-1');
+				$this->fail('SidecarException expected');
+			} catch (SidecarException $e) {
+				$this->assertNotInstanceOf(SidecarBusyException::class, $e);
+				$this->assertSame($code, $e->getErrorCode());
+			}
+		}
+	}
 }

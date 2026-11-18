@@ -162,14 +162,21 @@ OCP 31 und PHPUnit 10, PHP 8.5 gegen OCP 35 und PHPUnit 13), lokaler Konverter (
 scoreview-engine, auf Node 18 und 22) und Sidecar (pytest auf Python 3.10 und
 3.12). Was lokal grün ist, ist es dort in aller Regel auch.
 
-Dazu drei eigene Jobs: einer validiert `appinfo/info.xml` gegen das Schema des
+Dazu vier eigene Jobs: einer validiert `appinfo/info.xml` gegen das Schema des
 App Stores – der Store lehnt beim Hochladen ab, was nicht passt, also erst nach
 dem Tag, wenn die Version schon vergeben ist. Einer prüft, dass der Engine-Pin
 in `converter/package.json` und `MUSESCORE_VERSION` in `sidecar/Dockerfile`
-dieselbe MuseScore-Version nennen. Und einer meldet bekannte
-Sicherheitslücken (`npm run audit`, `composer audit`); damit eine neue
-Meldung auch ohne Commit auffällt, läuft die CI zusätzlich jeden
-Montagmorgen. `npm run audit` ist `npm audit` mit Schwelle „high“, kennt aber
+dieselbe MuseScore-Version nennen. Einer (`sidecar-image`) baut das
+Sidecar-Image, startet es mit einem Wegwerf-Secret und ruft `/selftest` für
+beide Renderer sowie den `HEALTHCHECK` ab – aber nur, wenn sich unter
+`sidecar/`, `scoreview/converter/` oder an `ci.yml` etwas geändert hat; über
+`workflow_call` (Release) und `workflow_dispatch` (Pin-PR des Engine-Bots)
+baut er immer. Nur so fällt eine falsche AppImage-Prüfsumme oder eine Datei,
+die in `Dockerfile.dockerignore` fehlt, vor einem Handbau auf. Und einer
+meldet bekannte Sicherheitslücken (`npm run audit`, `composer audit`); damit
+eine neue Meldung auch ohne Commit auffällt, läuft dieser Job zusätzlich
+jeden Montagmorgen – allein, alle anderen Jobs überspringen den geplanten
+Lauf. `npm run audit` ist `npm audit` mit Schwelle „high“, kennt aber
 Ausnahmen: Gibt es für eine Meldung keine bereinigte Version, kommt ihre
 GHSA-Kennung mit Begründung und Ablaufdatum in `tools/audit-allowlist.json`.
 Nach dem Ablauf wird der Job wieder rot, bis jemand verlängert oder behebt;
@@ -178,7 +185,14 @@ Entfernen.
 
 `.github/dependabot.yml` hält die Abhängigkeiten wöchentlich aktuell, in vier
 getrennten Bäumen (App, lokaler Konverter, PHP-Dev-Pakete, Sidecar) plus den
-GitHub Actions; jeder dieser Pull Requests läuft durch dieselbe CI. Für
+Basis-Images des Sidecars (per Digest gepinnt; nur neue Digests unter
+demselben Tag, keine Versionssprünge) und den GitHub Actions; jeder dieser Pull Requests läuft
+durch dieselbe CI. Actions von Dritten stehen auf einem Commit-SHA mit der
+Version als Kommentar (`@<sha> # v1.2.3`) statt auf einem verschiebbaren Tag;
+Dependabot hebt beides zusammen. Das Nextcloud-Image, mit dem `release.yml`
+signiert, ist ebenfalls per Digest gepinnt, liegt aber in einem
+`run`-Skript, wo Dependabot es nicht sieht – es wird von Hand gehoben
+(Anleitung im Kommentar dort). Für
 `scoreview-engine` greift das nicht – die Abhängigkeit hängt an einer
 Release-URL, und die kennt keine Registry. Das übernimmt
 `.github/workflows/engine-release.yml`: Es schaut täglich nach einem neuen
@@ -325,6 +339,17 @@ Frontend, installiert die PHP-Abhängigkeiten ohne Dev-Pakete **und den lokalen
 Konverter samt Engine**, stellt daraus den Auslieferungsbaum zusammen,
 signiert ihn, packt ihn und hängt ihn an das GitHub-Release.
 
+Das geschieht in **zwei Jobs, getrennt entlang der Secrets**. `build` führt
+alles aus, was fremden Code startet – npm-Installskripte, Webpack, Composer,
+den Engine-Selbsttest –, mit nur lesendem Token, ohne gespeicherte
+Git-Zugangsdaten und ohne Secret in Reichweite. Er gibt den unsignierten
+Auslieferungsbaum als Artefakt weiter (als tar, damit die Dateimodi
+überleben). `publish` checkt nichts aus und baut nichts: Er packt das
+Artefakt aus, signiert, packt den Tarball und veröffentlicht ihn. Nur dort
+gibt es Schlüssel, Zertifikat und App-Store-Token, und auch dort nur in den
+Schritten, die sie brauchen; Schlüsseldateien entstehen mit `umask 077` und
+verschwinden per `trap`, auch wenn ein Schritt scheitert.
+
 Der Umweg über die Action ist notwendig, nicht bequem: `scoreview/js/` ist
 gitignored, ein direkt aus dem Repo gepacktes `scoreview/` enthielte also **kein
 einziges Frontend-Bundle** und wäre unbrauchbar. Der Tarball muss aus einem
@@ -351,6 +376,15 @@ des Auslieferungsbaums verlangt sie.
 dann signieren, dann packen. Die Signatur listet jede Datei einzeln auf – würde
 erst signiert und danach beim Packen etwas ausgeschlossen, meldete die
 Integritätsprüfung auf jeder Instanz fehlende Dateien.
+
+Zusammengestellt wird über eine Ausschlussliste, geprüft dagegen über eine
+**Erlaubnisliste**: Jeder Eintrag im App-Wurzelverzeichnis, in `converter/`
+und in `vendor/` muss in der Gegenprobe genannt sein, sonst bricht das Release
+ab und nennt den neuen Eintrag. Eine neue Werkzeugkonfiguration im
+App-Verzeichnis geht so nicht still mit ins Paket, sondern verlangt eine
+Entscheidung – in die Ausschlussliste oder in die Erlaubnisliste. Tiefer im
+Baum (außerhalb von `node_modules`) sucht die Gegenprobe nach Test-,
+Konfigurations- und Cache-Dateien.
 
 ### Was nicht mit ins Paket geht
 

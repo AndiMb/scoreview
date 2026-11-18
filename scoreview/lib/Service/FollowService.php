@@ -94,8 +94,8 @@ class FollowService {
 	private const MEMBER_LOCK_TTL = 5;
 	private const MEMBER_LOCK_ATTEMPTS = 20;
 	private const MEMBER_LOCK_WAIT_US = 5000;
-	/** Transposition in Halbtoenen, wie im Player (H6). */
-	public const TRANSPOSE_LIMIT = 12;
+	/** Transposition in Halbtoenen, wie im Player (H6) - eine Grenze fuer beide. */
+	public const TRANSPOSE_LIMIT = ViewerPreferences::TRANSPOSE_LIMIT;
 	/** Hoechste Taktnummer, die angenommen wird - Schutz vor Unsinn, keine Fachgrenze. */
 	public const MAX_MEASURE = 100000;
 	/** Laenge eines Studierbuchstabens samt Zusatz („C+3", „A1"). */
@@ -217,14 +217,7 @@ class FollowService {
 			if ($position !== null) {
 				$state['position'] = ['seq' => 1] + $position;
 			}
-			$now = $this->time->getDateTime();
-			$row = new FollowSession();
-			$row->setFileId($fileId);
-			$row->setLeaderUid($actor);
-			$row->setStartedAt($now);
-			$row->setHeartbeatAt($now);
-			$row->setVersion($session);
-			$row->setState($this->encode($state));
+			$row = $this->newRow($fileId, $actor, $session, $state);
 			try {
 				$this->mapper->insert($row);
 			} catch (DbException $e) {
@@ -357,9 +350,7 @@ class FollowService {
 			$state = $this->decode($row);
 			$this->endPredecessors($state['movedFrom'], $fileId, $state['session']);
 		}
-		$none = self::none();
-		$this->cache->set($this->key($fileId), $this->entry($none), $this->ttl);
-		$this->push->notify($this->members($fileId, $actor), $fileId, $none['version']);
+		$none = $this->announceEnded($fileId, $actor);
 		$this->cache->remove($this->membersKey($fileId));
 		return $none;
 	}
@@ -420,14 +411,8 @@ class FollowService {
 		$state['movedSeq'] = $seq;
 		$state['carriedFrom'] = $leadsTarget ? null : (int)$origin;
 		$state['movedFrom'] = $fromId;
-		$now = $this->time->getDateTime();
-		$row = new FollowSession();
-		$row->setFileId($toId);
-		$row->setLeaderUid($actor);
-		$row->setStartedAt($now);
-		$row->setHeartbeatAt($now);
-		$row->setVersion(random_int(1, 1000000000));
-		$row->setState($this->encode($state));
+		$row = $this->newRow($toId, $actor, random_int(1, 1000000000), $state);
+		$now = $row->getHeartbeatAt();
 		try {
 			$this->mapper->insert($row);
 		} catch (DbException $e) {
@@ -463,9 +448,7 @@ class FollowService {
 		// there would otherwise stay live for TIMEOUT_SECONDS while the client
 		// believes the move failed.
 		if ($this->mapper->deleteIfVersion($toId, $row->getVersion()) > 0) {
-			$none = self::none();
-			$this->cache->set($this->key($toId), $this->entry($none), $this->ttl);
-			$this->push->notify($this->members($toId, $actor), $toId, $none['version']);
+			$this->announceEnded($toId, $actor);
 		}
 		throw new FollowException(FollowException::CONFLICT);
 	}
@@ -809,9 +792,34 @@ class FollowService {
 	/** Beendet eine Sitzung ohne Rechtepruefung - nur fuer die Herkunft eines Umzugs. */
 	private function endQuietly(int $fileId): void {
 		$this->mapper->deleteByFileId($fileId);
+		$this->announceEnded($fileId, '');
+	}
+
+	/**
+	 * After a session's row is gone: the cache says "none" at once, rather
+	 * than serving the ended session until it expires, and the devices
+	 * registered for push hear of it.
+	 *
+	 * @param string $except the acting leader, who needs no message ('' for none)
+	 */
+	private function announceEnded(int $fileId, string $except): array {
 		$none = self::none();
 		$this->cache->set($this->key($fileId), $this->entry($none), $this->ttl);
-		$this->push->notify($this->members($fileId, ''), $fileId, $none['version']);
+		$this->push->notify($this->members($fileId, $except), $fileId, $none['version']);
+		return $none;
+	}
+
+	/** A fresh session row, started and alive as of now. */
+	private function newRow(int $fileId, string $leader, int $version, array $state): FollowSession {
+		$now = $this->time->getDateTime();
+		$row = new FollowSession();
+		$row->setFileId($fileId);
+		$row->setLeaderUid($leader);
+		$row->setStartedAt($now);
+		$row->setHeartbeatAt($now);
+		$row->setVersion($version);
+		$row->setState($this->encode($state));
+		return $row;
 	}
 
 	/**

@@ -6,8 +6,9 @@ namespace OCA\ScoreView\Tests\Unit\Service;
 
 use OCA\ScoreView\Db\Annotation;
 use OCA\ScoreView\Db\AnnotationMapper;
-use OCA\ScoreView\Service\AnnotationLimitException;
+use OCA\ScoreView\Service\AnnotationException;
 use OCA\ScoreView\Service\AnnotationService;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IUserManager;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -23,12 +24,15 @@ use PHPUnit\Framework\TestCase;
 class AnnotationServiceTest extends TestCase {
 	private AnnotationMapper&MockObject $mapper;
 	private IUserManager&MockObject $userManager;
+	private ITimeFactory&MockObject $time;
 	private AnnotationService $service;
 
 	protected function setUp(): void {
 		$this->mapper = $this->createMock(AnnotationMapper::class);
 		$this->userManager = $this->createMock(IUserManager::class);
-		$this->service = new AnnotationService($this->mapper, $this->userManager);
+		$this->time = $this->createMock(ITimeFactory::class);
+		$this->time->method('getDateTime')->willReturnCallback(fn () => new \DateTime('@1790000000'));
+		$this->service = new AnnotationService($this->mapper, $this->userManager, $this->time);
 	}
 
 	private function annotation(string $owner, string $visibility, int $measureNumber = 1): Annotation {
@@ -88,7 +92,7 @@ class AnnotationServiceTest extends TestCase {
 			->willReturn($this->annotation('bob', Annotation::VISIBILITY_SHARED));
 		$this->mapper->expects($this->never())->method('update');
 
-		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionObject(new AnnotationException(AnnotationException::FORBIDDEN));
 		$this->service->updateContent(7, 42, 'alice', false, 'neu');
 	}
 
@@ -99,7 +103,7 @@ class AnnotationServiceTest extends TestCase {
 		$this->mapper->method('findByIdAndFileId')
 			->willReturn($this->annotation('alice', Annotation::VISIBILITY_SHARED));
 
-		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionObject(new AnnotationException(AnnotationException::FORBIDDEN));
 		$this->service->updateContent(7, 42, 'alice', false, 'neu');
 	}
 
@@ -131,7 +135,7 @@ class AnnotationServiceTest extends TestCase {
 			->willReturn($this->annotation('bob', Annotation::VISIBILITY_SHARED));
 		$this->mapper->expects($this->never())->method('delete');
 
-		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionObject(new AnnotationException(AnnotationException::FORBIDDEN));
 		$this->service->delete(7, 42, 'alice', false);
 	}
 
@@ -228,7 +232,7 @@ class AnnotationServiceTest extends TestCase {
 
 		// 403 statt 404: Die Notiz ist fuer jede Person mit Dateizugriff
 		// ohnehin sichtbar - auch fuer ihre abberufene Autorin.
-		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionObject(new AnnotationException(AnnotationException::FORBIDDEN));
 		$this->service->updateContent(7, 42, 'alice', true, 'neu', false);
 	}
 
@@ -245,7 +249,7 @@ class AnnotationServiceTest extends TestCase {
 			->willReturn($this->annotation('bob', Annotation::VISIBILITY_PARTS));
 		$this->mapper->expects($this->never())->method('delete');
 
-		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionObject(new AnnotationException(AnnotationException::FORBIDDEN));
 		$this->service->delete(7, 42, 'alice', true, false);
 	}
 
@@ -257,7 +261,7 @@ class AnnotationServiceTest extends TestCase {
 		$this->mapper->method('findByIdAndFileId')
 			->willReturn($this->annotation('bob', Annotation::VISIBILITY_SHARED));
 
-		$this->expectException(\RuntimeException::class);
+		$this->expectExceptionObject(new AnnotationException(AnnotationException::FORBIDDEN));
 		$this->service->updateContent(7, 42, 'alice', false, 'neu', true);
 	}
 
@@ -274,8 +278,19 @@ class AnnotationServiceTest extends TestCase {
 			->willReturn($this->annotation('alice', Annotation::VISIBILITY_PRIVATE));
 		$this->mapper->expects($this->never())->method('update');
 
-		$this->expectException(\InvalidArgumentException::class);
+		$this->expectExceptionObject(new AnnotationException(AnnotationException::EMPTY));
 		$this->service->updateContent(7, 42, 'alice', false, '   ');
+	}
+
+	/** What may not be created may not be changed into either (AnnotationValidator). */
+	public function testAStampsTextIsBoundedOnChangeAsOnCreate(): void {
+		$annotation = $this->annotation('alice', Annotation::VISIBILITY_PRIVATE);
+		$annotation->setKind(Annotation::KIND_STAMP);
+		$this->mapper->method('findByIdAndFileId')->willReturn($annotation);
+		$this->mapper->expects($this->never())->method('update');
+
+		$this->expectExceptionObject(new AnnotationException(AnnotationException::TOO_LONG));
+		$this->service->updateContent(7, 42, 'alice', false, str_repeat('a', 10001));
 	}
 
 	public function testEinStempelDarfOhneTextSein(): void {
@@ -338,7 +353,7 @@ class AnnotationServiceTest extends TestCase {
 		$this->mapper->method('countByFileAndUser')->with(42, 'alice')->willReturn(AnnotationService::MAX_PER_USER_AND_FILE);
 		$this->mapper->expects($this->never())->method('insert');
 
-		$this->expectException(AnnotationLimitException::class);
+		$this->expectExceptionObject(new AnnotationException(AnnotationException::LIMIT));
 		$this->service->create(42, 'alice', 1, 0.0, null, null, 'Notiz', Annotation::VISIBILITY_PRIVATE);
 	}
 

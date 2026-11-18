@@ -6,6 +6,8 @@ namespace OCA\ScoreView\Tests\Unit\Service;
 
 use OCA\ScoreView\Service\HealthService;
 use OCA\ScoreView\Service\LocalConverter;
+use OCP\AppFramework\Utility\ITimeFactory;
+use OCP\IAppConfig;
 use OCP\IL10N;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -61,6 +63,24 @@ class HealthServiceTest extends TestCase {
 			['ok' => true, 'reason' => null, 'error' => null],
 			$this->localStatus(['ok' => true, 'reason' => null, 'error' => null]),
 		);
+	}
+
+	/** The cron's age is measured on the injected clock, not on time(). */
+	public function testCronAgeComesFromTheClock(): void {
+		$appConfig = $this->createMock(IAppConfig::class);
+		$appConfig->method('getValueInt')->willReturn(1_790_000_000);
+		$appConfig->method('getValueString')->willReturn('cron');
+		$time = $this->createMock(ITimeFactory::class);
+		$time->method('getTime')->willReturn(1_790_000_000 + 901);
+
+		$class = new \ReflectionClass(HealthService::class);
+		$service = $class->newInstanceWithoutConstructor();
+		$class->getProperty('appConfig')->setValue($service, $appConfig);
+		$class->getProperty('time')->setValue($service, $time);
+		$status = $class->getMethod('cronStatus')->invoke($service);
+
+		$this->assertSame(901, $status['ageSeconds']);
+		$this->assertFalse($status['healthy']);
 	}
 
 	public function testUnknownReasonKeepsTheTechnicalError(): void {

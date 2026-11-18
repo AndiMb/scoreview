@@ -148,7 +148,6 @@ class LocalConverterTest extends TestCase {
 			. "    at async file:///app/converter/convert.mjs:240:2\n";
 
 		$methode = new \ReflectionMethod(LocalConverter::class, 'lastLine');
-		$methode->setAccessible(true);
 
 		$this->assertSame(
 			'RuntimeError: null function or function signature mismatch',
@@ -229,7 +228,6 @@ class LocalConverterTest extends TestCase {
 		// Ueber Reflection wie lastLine(): execute() ist bewusst privat, und
 		// der oeffentliche Weg dorthin verlangt node samt Engine.
 		$methode = new \ReflectionMethod(LocalConverter::class, 'execute');
-		$methode->setAccessible(true);
 		return $methode->invoke($this->converter(), $kommando, sys_get_temp_dir(), 30, $umgebung);
 	}
 

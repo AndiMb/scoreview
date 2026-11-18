@@ -106,6 +106,14 @@ class PublicShareAccess {
 	 * getFirstNodeByIdInPath), so a share of /anna/files/Chor could return
 	 * /anna/files/Chor-privat/x.mscz to a logged-in visitor. getRelativePath
 	 * respects the "/" boundary and returns null for anything outside.
+	 *
+	 * And only a score (ScoreFiles): a folder share holds whatever its owner
+	 * put there, and every route behind this grant either shows a score or
+	 * converts one. A visitor naming the PDF next to it would otherwise
+	 * queue a conversion of it - spending the link's allowance and feeding
+	 * the converter content that was never meant for it. Refused here, once,
+	 * for every share route, as FollowController::move refuses a non-score
+	 * target for members.
 	 */
 	private function fileInShare(IShare $share, int $fileId): Node {
 		try {
@@ -115,7 +123,7 @@ class PublicShareAccess {
 			throw new PublicShareException(PublicShareException::NOT_FOUND);
 		}
 		if ($root instanceof File) {
-			if ($root->getId() !== $fileId) {
+			if ($root->getId() !== $fileId || !ScoreFiles::isScore($root)) {
 				throw new PublicShareException(PublicShareException::NOT_FOUND);
 			}
 			return $root;
@@ -124,7 +132,7 @@ class PublicShareAccess {
 			throw new PublicShareException(PublicShareException::NOT_FOUND);
 		}
 		$node = $root->getFirstNodeById($fileId);
-		if (!$node instanceof File || $root->getRelativePath($node->getPath()) === null) {
+		if (!ScoreFiles::isScore($node) || $root->getRelativePath($node->getPath()) === null) {
 			throw new PublicShareException(PublicShareException::NOT_FOUND);
 		}
 		return $node;

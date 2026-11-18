@@ -52,7 +52,7 @@ class MyPartController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function show(int $fileId): JSONResponse {
-		$userId = $this->userWithAccess($fileId);
+		$userId = $this->fileResolver->resolveUserScore($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
@@ -72,7 +72,7 @@ class MyPartController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function update(int $fileId, ?string $partId = null): JSONResponse {
-		$userId = $this->userWithAccess($fileId);
+		$userId = $this->fileResolver->resolveUserScore($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
@@ -81,10 +81,6 @@ class MyPartController extends Controller {
 		return new JSONResponse(['partId' => $this->preferences->setMyPart($userId, $fileId, $partId)]);
 	}
 
-	/**
-	 * Die Nutzerin, wenn sie die Datei sieht - sonst null. Die Kennung kommt
-	 * aus der Sitzung bzw. dem Token-Scope, nie aus der Anfrage.
-	 */
 	/**
 	 * Uebe-Einstellungen dieser Partitur (H4/H6). Eine eigene Route statt
 	 * eines Felds an `update`: Dort heisst ein fehlendes `partId` „keine
@@ -96,18 +92,10 @@ class MyPartController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function updatePractice(int $fileId, ?int $transpose = null, ?bool $coach = null, ?int $othersLevel = null, ?string $source = null, ?bool $concert = null, ?bool $transposeNotation = null): JSONResponse {
-		$userId = $this->userWithAccess($fileId);
+		$userId = $this->fileResolver->resolveUserScore($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
 		return new JSONResponse(['practice' => $this->preferences->setPractice($userId, $fileId, $transpose, $coach, $othersLevel, $source, $concert, $transposeNotation)]);
-	}
-
-	private function userWithAccess(int $fileId): ?string {
-		$userId = $this->fileResolver->currentUserId();
-		if ($userId === null || $this->fileResolver->resolveOwnNode($fileId) === null) {
-			return null;
-		}
-		return $userId;
 	}
 }

@@ -40,7 +40,45 @@ class ViewerPreferencesTest extends TestCase {
 		$config->expects($this->never())->method('getUserValue');
 		$preferences = new ViewerPreferences($config);
 
-		$this->assertSame($preferences->defaults(), $preferences->get(null));
+		$this->assertSame(self::DEFAULTS, $preferences->get(null));
+	}
+
+	/**
+	 * Written out, not read from the class: a test that compared defaults()
+	 * with get(null) compared a function with itself (issue #62).
+	 */
+	private const DEFAULTS = [
+		'highlightColor' => '#d32f2f',
+		'highlightMode' => 'notes',
+		'stereoMyPart' => false,
+		'noteTheme' => 'auto',
+		'noteNames' => 'off',
+		'noteNamesMine' => true,
+		'layout' => 'pages',
+		'bandOffered' => false,
+		'autoScroll' => true,
+		'beatCounts' => 'off',
+		'doublePage' => 'left',
+		'referencePitch' => 440,
+		'barPins' => null,
+	];
+
+	public function testTheDefaultsAreTheDocumentedOnes(): void {
+		$this->assertSame(self::DEFAULTS, (new ViewerPreferences($this->createMock(IConfig::class)))->defaults());
+	}
+
+	/**
+	 * A user without stored values reads what the config hands back as
+	 * default - the default that get() passes in. That has to be the one
+	 * defaults() names, field by field.
+	 */
+	public function testAUserWithoutStoredValuesSeesTheDefaults(): void {
+		$config = $this->createMock(IConfig::class);
+		$config->expects($this->exactly(count(self::DEFAULTS)))->method('getUserValue')
+			->willReturnCallback(fn (string $userId, string $app, string $key, string $default) => $default);
+		$preferences = new ViewerPreferences($config);
+
+		$this->assertSame($preferences->defaults(), $preferences->get('anna'));
 	}
 
 	public function testSpeichertNormalisiertUndAntwortetMitDemGespeicherten(): void {

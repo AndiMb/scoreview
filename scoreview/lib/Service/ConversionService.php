@@ -116,7 +116,7 @@ class ConversionService {
 	}
 
 	public function createPending(int $fileId, string $etag): ScoreConversion {
-		$now = new \DateTime();
+		$now = $this->time->getDateTime();
 		$conversion = new ScoreConversion();
 		$conversion->setFileId($fileId);
 		$conversion->setEtag($etag);
@@ -258,6 +258,22 @@ class ConversionService {
 	}
 
 	/**
+	 * Whether the artifacts of this row may be delivered: ready and in the
+	 * format the routes read. Looser than isCurrent() on purpose - a row
+	 * rendered by an older engine is still served while the status endpoint
+	 * has its successor converted, so a page already open keeps working.
+	 * The one rule for the base's artifact route and for the variants, which
+	 * are engraved against the base's timing.
+	 *
+	 * @psalm-assert-if-true ScoreConversion $conversion
+	 */
+	public function isServable(?ScoreConversion $conversion): bool {
+		return $conversion !== null
+			&& $conversion->getStatus() === ScoreConversion::STATUS_READY
+			&& $this->isCurrentFormat($conversion);
+	}
+
+	/**
 	 * Whether a ready entry is what the server would render now - otherwise
 	 * opening the score converts it again, like an older format does.
 	 *
@@ -333,7 +349,7 @@ class ConversionService {
 
 	private function updateStatus(ScoreConversion $conversion, string $status): void {
 		$conversion->setStatus($status);
-		$conversion->setUpdatedAt(new \DateTime());
+		$conversion->setUpdatedAt($this->time->getDateTime());
 		$this->mapper->update($conversion);
 	}
 

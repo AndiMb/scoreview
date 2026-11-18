@@ -31,6 +31,17 @@ final class ConversionConfig {
 	public const CJK_FONT_DIR = 'cjk_font_dir';
 	/** A SoundFont address the BROWSER loads from, bypassing the app's own (E1). */
 	public const SOUNDFONT_URL = 'soundfont_url';
+	/** Convert every new or changed score at once instead of on first opening. */
+	public const EAGER_CONVERSION = 'eager_conversion';
+	/** Display variants (E19) engraved at the same time, instance-wide (occ only). */
+	public const VARIANT_MAX_PARALLEL = 'variant_max_parallel';
+
+	/**
+	 * Two: a variant takes 3-4 s, so a third request waits a poll or two,
+	 * and two converter processes of up to 250 MB each fit beside a small
+	 * server's PHP workers. A larger server raises it with occ.
+	 */
+	public const DEFAULT_VARIANT_MAX_PARALLEL = 2;
 
 	/**
 	 * Without a limit the app would hand any file to the converter, however
@@ -55,6 +66,11 @@ final class ConversionConfig {
 	public static function exceedsMaxScoreBytes(IAppConfig $appConfig, int $size): bool {
 		$max = self::maxScoreBytes($appConfig);
 		return $max > 0 && $size > $max;
+	}
+
+	/** At least one - a limit of zero would never engrave anything. */
+	public static function variantMaxParallel(IAppConfig $appConfig): int {
+		return max(1, $appConfig->getValueInt(Application::APP_ID, self::VARIANT_MAX_PARALLEL, self::DEFAULT_VARIANT_MAX_PARALLEL));
 	}
 
 	/**

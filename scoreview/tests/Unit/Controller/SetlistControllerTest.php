@@ -29,6 +29,8 @@ use Psr\Log\LoggerInterface;
  * SetlistServiceTest.
  */
 class SetlistControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private SetlistService&MockObject $service;
 	private DirectAccessContext $access;
@@ -37,7 +39,7 @@ class SetlistControllerTest extends TestCase {
 	private IRequest&MockObject $request;
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->fileResolver->method('currentUserId')->willReturn('anna');
 		$this->service = $this->createMock(SetlistService::class);
 		$this->access = new DirectAccessContext();

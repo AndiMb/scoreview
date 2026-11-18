@@ -86,36 +86,18 @@ class CleanupOrphansJob extends TimedJob {
 		$this->removeExpiredFollowSessions();
 		$this->pruneOldPracticeDays();
 
-		$fileIds = array_unique(array_merge(
-			$this->conversionMapper->findAllFileIds(),
-			$this->annotationMapper->findAllFileIds(),
-			$this->leaderMapper->findAllFileIds(),
-			$this->followMapper->findAllFileIds(),
-			$this->recordingStorage->findAllFileIds(),
-			$this->myPartPreferences->findAllFileIds(),
-			$this->practiceLog->findAllFileIds(),
-			$this->practiceGoals->findAllFileIds(),
-			$this->singRuns->findAllFileIds(),
-		));
+		$stores = $this->stores();
+		$fileIds = array_unique(array_merge(...array_map(static fn (array $store) => $store[0](), $stores)));
 
-		$caches = 0;
-		$annotations = 0;
-		$others = 0;
+		$removed = ['caches' => 0, 'annotations' => 0, 'others' => 0];
 		foreach ($this->candidates($fileIds) as $fileId) {
 			if ($this->stillExists($fileId)) {
 				continue;
 			}
 			try {
-				$this->conversionService->deleteAllForFile($fileId);
-				$caches++;
-				$annotations += $this->annotationMapper->deleteByFileId($fileId);
-				$others += $this->leaderMapper->deleteByFileId($fileId);
-				$others += $this->followMapper->deleteByFileId($fileId);
-				$others += $this->recordingStorage->deleteAllForFile($fileId);
-				$others += $this->myPartPreferences->deleteByFileId($fileId);
-				$others += $this->practiceLog->deleteByFileId($fileId);
-				$others += $this->practiceGoals->deleteByFileId($fileId);
-				$others += $this->singRuns->deleteByFileId($fileId);
+				foreach ($stores as [, $delete, $counter]) {
+					$removed[$counter] += $delete($fileId);
+				}
 			} catch (\Throwable $e) {
 				// Eine einzelne kaputte fileId darf den Durchlauf nicht beenden -
 				// der naechste Lauf versucht es erneut.
@@ -127,13 +109,35 @@ class CleanupOrphansJob extends TimedJob {
 			}
 		}
 
-		if ($caches > 0 || $annotations > 0 || $others > 0) {
-			$this->logger->info('ScoreView: removed {caches} orphaned cache entries, {annotations} annotations and {others} leader roles, sessions, recordings and part selections.', [
-				'caches' => $caches,
-				'annotations' => $annotations,
-				'others' => $others,
-			]);
+		if (array_sum($removed) > 0) {
+			$this->logger->info('ScoreView: removed {caches} orphaned cache entries, {annotations} annotations and {others} leader roles, sessions, recordings and part selections.', $removed);
 		}
+	}
+
+	/**
+	 * Everything the app keeps per fileId: where to find the ids, how to drop
+	 * one, and which number of the log line it adds to. One list for both, so
+	 * that a new table cannot be collected without being cleaned up, or the
+	 * other way round - a store left out here would keep its rows for ever.
+	 * The conversion cache counts per file, not per row.
+	 *
+	 * @return list<array{0: \Closure(): int[], 1: \Closure(int): int, 2: 'caches'|'annotations'|'others'}>
+	 */
+	private function stores(): array {
+		return [
+			[$this->conversionMapper->findAllFileIds(...), function (int $fileId): int {
+				$this->conversionService->deleteAllForFile($fileId);
+				return 1;
+			}, 'caches'],
+			[$this->annotationMapper->findAllFileIds(...), $this->annotationMapper->deleteByFileId(...), 'annotations'],
+			[$this->leaderMapper->findAllFileIds(...), $this->leaderMapper->deleteByFileId(...), 'others'],
+			[$this->followMapper->findAllFileIds(...), $this->followMapper->deleteByFileId(...), 'others'],
+			[$this->recordingStorage->findAllFileIds(...), $this->recordingStorage->deleteAllForFile(...), 'others'],
+			[$this->myPartPreferences->findAllFileIds(...), $this->myPartPreferences->deleteByFileId(...), 'others'],
+			[$this->practiceLog->findAllFileIds(...), $this->practiceLog->deleteByFileId(...), 'others'],
+			[$this->practiceGoals->findAllFileIds(...), $this->practiceGoals->deleteByFileId(...), 'others'],
+			[$this->singRuns->findAllFileIds(...), $this->singRuns->deleteByFileId(...), 'others'],
+		];
 	}
 
 	/**

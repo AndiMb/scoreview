@@ -13,6 +13,7 @@ use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\ICache;
 use OCP\ICacheFactory;
+use OCP\IMemcache;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -118,6 +119,76 @@ class ClientFallbackTest extends TestCase {
 		$this->assertSame(ScoreConversion::ERROR_LOCAL_UNAVAILABLE, $fallback->reason());
 		$this->assertSame([], $this->gespeichert, 'no IAppConfig write, which would invalidate its cache instance-wide');
 		$this->assertSame([ScoreConversion::ERROR_LOCAL_UNAVAILABLE, self::JETZT], $eintraege['verdict']);
+	}
+
+	/** A memcache with an atomic add() - the refresh lock (issue #64). */
+	private function memcache(array &$eintraege): IMemcache {
+		$cache = $this->createMock(IMemcache::class);
+		$cache->method('get')->willReturnCallback(function (string $key) use (&$eintraege) {
+			return $eintraege[$key] ?? null;
+		});
+		$cache->method('set')->willReturnCallback(function (string $key, mixed $value) use (&$eintraege) {
+			$eintraege[$key] = $value;
+			return true;
+		});
+		$cache->method('add')->willReturnCallback(function (string $key, mixed $value) use (&$eintraege) {
+			if (array_key_exists($key, $eintraege)) {
+				return false;
+			}
+			$eintraege[$key] = $value;
+			return true;
+		});
+		$cache->method('remove')->willReturnCallback(function (string $key) use (&$eintraege) {
+			unset($eintraege[$key]);
+			return true;
+		});
+		return $cache;
+	}
+
+	/**
+	 * An expired verdict is renewed by one process, not by every viewer that
+	 * polls at that moment: whoever finds the lock taken answers with the
+	 * old one instead of starting a check of its own.
+	 */
+	public function testWhileAnotherProcessRenewsTheOldVerdictAnswers(): void {
+		$eintraege = ['verdict' => [ScoreConversion::ERROR_LOCAL_UNAVAILABLE, self::JETZT - 301], 'refresh' => 1];
+		$lokal = $this->createMock(LocalConverter::class);
+		$lokal->expects($this->never())->method('describe');
+
+		$this->assertSame(ScoreConversion::ERROR_LOCAL_UNAVAILABLE, $this->fallback(lokal: $lokal, cache: $this->memcache($eintraege))->reason());
+	}
+
+	public function testTheLockHolderRenewsAnExpiredVerdict(): void {
+		$eintraege = ['verdict' => [ScoreConversion::ERROR_LOCAL_UNAVAILABLE, self::JETZT - 301]];
+		$lokal = $this->createMock(LocalConverter::class);
+		$lokal->expects($this->once())->method('describe')->willReturn(['available' => true]);
+		$cache = $this->memcache($eintraege);
+
+		$this->assertNull($this->fallback(lokal: $lokal, cache: $cache)->reason());
+		// The next process finds the renewed verdict, fresh again.
+		$this->assertNull($this->fallback(lokal: $lokal, cache: $cache)->reason());
+		$this->assertSame([null, self::JETZT], [$this->fallback(lokal: $lokal, cache: $cache)->reason(), $eintraege['verdict'][1]]);
+	}
+
+	public function testWithoutAStoredVerdictEveryoneChecks(): void {
+		$eintraege = ['refresh' => 1];
+		$lokal = $this->createMock(LocalConverter::class);
+		$lokal->expects($this->once())->method('describe')->willReturn(['available' => false]);
+
+		// Even with the lock taken: there is nothing old to answer with.
+		$this->assertSame(ScoreConversion::ERROR_LOCAL_UNAVAILABLE, $this->fallback(lokal: $lokal, cache: $this->memcache($eintraege))->reason());
+	}
+
+	public function testTheCacheKeepsAVerdictBeyondItsFreshness(): void {
+		$ttl = null;
+		$cache = $this->createMock(IMemcache::class);
+		$cache->method('set')->willReturnCallback(function (string $key, mixed $value, int $seconds) use (&$ttl) {
+			$ttl = $seconds;
+			return true;
+		});
+		$this->fallback(cache: $cache)->reason();
+
+		$this->assertGreaterThan(300, $ttl, 'an expired verdict must still be there to answer with');
 	}
 
 	public function testForgetClearsTheCachedVerdict(): void {

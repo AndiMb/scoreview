@@ -31,11 +31,13 @@ use PHPUnit\Framework\TestCase;
  * 4. **Alle Routen auch mit Token** (E8).
  */
 class LeaderControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private LeaderService&MockObject $leaders;
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->leaders = $this->createMock(LeaderService::class);
 		$this->leaders->method('listLeaders')->willReturn([
 			['userId' => 'anna', 'displayName' => 'Anna A.', 'isOwner' => true],
@@ -50,7 +52,7 @@ class LeaderControllerTest extends TestCase {
 	}
 
 	private function angemeldet(string $uid, bool $sichtbar = true, bool $leitung = false): Node {
-		$node = $this->createMock(Node::class);
+		$node = $this->scoreDouble();
 		$this->fileResolver->method('currentUserId')->willReturn($uid);
 		$this->fileResolver->method('resolveOwnNode')->willReturn($sichtbar ? $node : null);
 		$this->leaders->method('isLeader')->willReturn($leitung);

@@ -35,6 +35,8 @@ use PHPUnit\Framework\TestCase;
  * PracticeTrackServiceTest.
  */
 class PracticeTrackControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private PracticeTrackService&MockObject $tracks;
 	private RequestBodyReader&MockObject $body;
@@ -43,7 +45,7 @@ class PracticeTrackControllerTest extends TestCase {
 	private array $bools = [];
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->tracks = $this->createMock(PracticeTrackService::class);
 		$this->body = $this->createMock(RequestBodyReader::class);
 		$this->request = $this->createMock(IRequest::class);

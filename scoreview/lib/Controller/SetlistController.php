@@ -258,8 +258,8 @@ class SetlistController extends Controller {
 	/** @return list<int> */
 	private function candidateIdsOfOrigin(): array {
 		$origin = $this->access->originFileId();
-		$score = $origin === null ? null : $this->fileResolver->resolveOwnNode($origin);
-		if (!$score instanceof File) {
+		$score = $origin === null ? null : $this->fileResolver->resolveScore($origin);
+		if ($score === null) {
 			return [];
 		}
 		return array_map(static fn (array $c) => $c['fileId'], $this->setlists->candidates($score));

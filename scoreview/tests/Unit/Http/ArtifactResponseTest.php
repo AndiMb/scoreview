@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Tests\Unit\Http;
 
+use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Db\ScoreVariant;
 use OCA\ScoreView\Http\ArtifactResponse;
 use OCP\AppFramework\Http\IOutput;
+use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -89,5 +92,34 @@ class ArtifactResponseTest extends TestCase {
 	#[DataProvider('acceptEncodings')]
 	public function testReadsAcceptEncoding(string $header, bool $expected): void {
 		$this->assertSame($expected, ArtifactResponse::acceptsGzip($header));
+	}
+
+	// --- One immutable response and one version for base and variants (#60) --
+
+	public function testTheImmutableResponseIsAnAttachmentWithTheFilesEtag(): void {
+		$file = $this->createMock(ISimpleFile::class);
+		$file->method('read')->willReturn($this->handle('{}'));
+		$file->method('getSize')->willReturn(2);
+		$at = new \DateTime('@1790000000');
+
+		$response = ArtifactResponse::immutable($file, 'application/json', $this->request(''), 'etag1', $at);
+
+		$this->assertSame('attachment', $this->header($response, 'Content-Disposition'));
+		$this->assertSame('application/json', $this->header($response, 'Content-Type'));
+		$this->assertSame('etag1', $response->getETag());
+		$this->assertSame($at, $response->getLastModified());
+		$this->assertSame('{}', $this->send($response));
+	}
+
+	public function testBaseAndVariantShareTheVersionFormula(): void {
+		$base = new ScoreConversion();
+		$base->setEtag('e1');
+		$base->setUpdatedAt(new \DateTime('@1790000000'));
+		$variant = new ScoreVariant();
+		$variant->setEtag('e1');
+		$variant->setUpdatedAt(new \DateTime('@1790000000'));
+
+		$this->assertSame('e1-1790000000', ArtifactResponse::version($base));
+		$this->assertSame(ArtifactResponse::version($base), ArtifactResponse::version($variant));
 	}
 }

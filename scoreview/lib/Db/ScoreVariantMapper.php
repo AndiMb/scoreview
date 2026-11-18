@@ -48,6 +48,27 @@ class ScoreVariantMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
+	/**
+	 * Rows that a run holds right now: pending or processing, and touched
+	 * since `$since` - older ones have no run behind them any more
+	 * (VariantService::STALE_AFTER_SECONDS). Across all files: the limit it
+	 * serves is the instance's.
+	 */
+	public function countRunning(\DateTime $since): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count('*', 'n'))
+			->from($this->getTableName())
+			->where($qb->expr()->in('status', $qb->createNamedParameter(
+				[ScoreConversion::STATUS_PENDING, ScoreConversion::STATUS_PROCESSING],
+				IQueryBuilder::PARAM_STR_ARRAY,
+			)))
+			->andWhere($qb->expr()->gte('updated_at', $qb->createNamedParameter($since, IQueryBuilder::PARAM_DATETIME_MUTABLE)));
+		$result = $qb->executeQuery();
+		$count = (int)$result->fetchOne();
+		$result->closeCursor();
+		return $count;
+	}
+
 	public function deleteForFile(int $fileId): void {
 		$qb = $this->db->getQueryBuilder();
 		$qb->delete($this->getTableName())

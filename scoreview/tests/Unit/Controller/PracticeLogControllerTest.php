@@ -26,13 +26,15 @@ use PHPUnit\Framework\TestCase;
  * 4. Nonsense from the browser is a 400, not a stored number.
  */
 class PracticeLogControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private PracticeLogService&MockObject $practice;
 	private LeaderService&MockObject $leaders;
 	private FeatureConfig&MockObject $features;
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->practice = $this->createMock(PracticeLogService::class);
 		$this->leaders = $this->createMock(LeaderService::class);
 		$this->features = $this->createMock(FeatureConfig::class);
@@ -58,7 +60,7 @@ class PracticeLogControllerTest extends TestCase {
 	}
 
 	public function testShowsTheOwnSummary(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->practice->expects($this->once())->method('summary')->with(42, 'anna')
 			->willReturn(['days' => [], 'activeDays' => [], 'goal' => null]);
 
@@ -68,7 +70,7 @@ class PracticeLogControllerTest extends TestCase {
 	}
 
 	public function testAddsAReport(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->practice->expects($this->once())->method('add')->with(42, 'anna', '2026-10-27', 60)->willReturn(120);
 
 		$response = $this->controller()->create(42, '2026-10-27', 60);
@@ -77,7 +79,7 @@ class PracticeLogControllerTest extends TestCase {
 	}
 
 	public function testNonsenseIsABadRequest(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->practice->method('add')->willThrowException(new \InvalidArgumentException());
 
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $this->controller()->create(42, 'x', 60)->getStatus());
@@ -96,14 +98,14 @@ class PracticeLogControllerTest extends TestCase {
 	public function testSwitchedOffIsNotFound(): void {
 		$this->features = $this->createMock(FeatureConfig::class);
 		$this->features->method('isEnabled')->with(FeatureConfig::PRACTICE_LOG)->willReturn(false);
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->practice->expects($this->never())->method('summary');
 
 		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->show(42)->getStatus());
 	}
 
 	public function testOnlyLeadersSetTheGoal(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->leaders->method('isLeader')->willReturn(false);
 		$this->practice->expects($this->never())->method('setGoal');
 
@@ -111,7 +113,7 @@ class PracticeLogControllerTest extends TestCase {
 	}
 
 	public function testALeaderSetsTheGoal(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->leaders->method('isLeader')->willReturn(true);
 		$this->practice->expects($this->once())->method('setGoal')->with(42, 'anna', 60)->willReturn(60);
 

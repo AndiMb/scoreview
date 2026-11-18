@@ -18,7 +18,7 @@ use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
-use OCP\Files\Node;
+use OCP\Files\File;
 use OCP\IL10N;
 use OCP\IRequest;
 
@@ -56,10 +56,11 @@ class PracticeLogController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function show(int $fileId): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->scoreFor($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		$response = new JSONResponse($this->practice->summary($fileId, $userId));
 		$response->cacheFor(0);
 		return $response;
@@ -78,10 +79,11 @@ class PracticeLogController extends Controller {
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[AnonRateLimit(limit: 30, period: 60)]
 	public function create(int $fileId, string $day = '', int $seconds = 0): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->scoreFor($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		try {
 			$total = $this->practice->add($fileId, $userId, $day, $seconds);
 		} catch (\InvalidArgumentException) {
@@ -100,10 +102,11 @@ class PracticeLogController extends Controller {
 	#[UserRateLimit(limit: 20, period: 60)]
 	#[AnonRateLimit(limit: 20, period: 60)]
 	public function updateGoal(int $fileId, int $minutesPerWeek = 0): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->scoreFor($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		if (!$this->leaders->isLeader($node, $userId)) {
 			return new JSONResponse(['error' => $this->l->t('Only leaders can set a practice goal.')], Http::STATUS_FORBIDDEN);
 		}
@@ -112,16 +115,12 @@ class PracticeLogController extends Controller {
 	}
 
 	/**
-	 * @return array{0: ?Node, 1: string}
+	 * The score and the person, or null when the switch is off - only the
+	 * gate is this controller's, the resolution is UserFileResolver's.
+	 *
+	 * @return ?array{0: File, 1: string}
 	 */
-	private function resolve(int $fileId): array {
-		if (!$this->features->isEnabled(FeatureConfig::PRACTICE_LOG)) {
-			return [null, ''];
-		}
-		$userId = $this->fileResolver->currentUserId();
-		if ($userId === null) {
-			return [null, ''];
-		}
-		return [$this->fileResolver->resolveOwnNode($fileId), $userId];
+	private function scoreFor(int $fileId): ?array {
+		return $this->features->isEnabled(FeatureConfig::PRACTICE_LOG) ? $this->fileResolver->resolveUserScore($fileId) : null;
 	}
 }

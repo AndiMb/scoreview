@@ -69,10 +69,10 @@ class PdfController extends Controller {
 	#[AnonRateLimit(limit: 10, period: 60)]
 	public function create(int $fileId, string $name = '', bool $replace = false): JSONResponse {
 		$userId = $this->fileResolver->currentUserId();
-		$score = $this->fileResolver->resolveOwnNode($fileId);
+		$score = $this->fileResolver->resolveScore($fileId);
 		// Only next to a score: a folder as `fileId` would write next to the
 		// folder - for the user folder itself even outside `files/`.
-		if ($userId === null || !PracticeTrackService::isScore($score)) {
+		if ($userId === null || $score === null) {
 			return $this->notFound();
 		}
 		// S2: nothing new comes into being with a companion token.

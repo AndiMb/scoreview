@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Listener;
 
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\BackgroundJob\RegisterMimetypeJob;
+use OCA\ScoreView\Service\ScoreFiles;
 use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -46,7 +47,7 @@ class ScoreMimetypeListener implements IEventListener {
 			return;
 		}
 		$node = $event->getNode();
-		if (!str_ends_with(strtolower($node->getName()), '.mscz')) {
+		if (!ScoreFiles::hasScoreName($node->getName())) {
 			return;
 		}
 

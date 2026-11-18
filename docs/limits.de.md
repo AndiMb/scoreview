@@ -1,4 +1,4 @@
-<!-- translation-of: limits.md sha256:d97a918e62b5 -->
+<!-- translation-of: limits.md sha256:76245e9ab821 -->
 # Grenzwerte und bekannte Einschränkungen
 
 [English](limits.md) · **Deutsch** — Die englische Fassung ist maßgeblich.
@@ -1040,6 +1040,11 @@ Gemessen auf der Testinstanz (Node 20.19, die eigene Testpartitur
 - **Höchstens 8 Varianten je Fassung** bleiben liegen, die am längsten nicht
   geöffnete fällt zuerst weg; **höchstens 20 neue Läufe je Person und Stunde**
   (S4). Das Abrufen einer vorhandenen Variante zählt nicht.
+- **Höchstens 2 Varianten werden auf der ganzen Instanz zugleich gesetzt**,
+  denn jeder Lauf ist ein eigener Prozess in der Anfrage selbst
+  (`variant_max_parallel`, per `occ` einstellbar, mindestens 1). Eine Anfrage
+  darüber wartet und wird erneut gestellt, wie bei einer Variante, die gerade
+  gesetzt wird; das Warten zählt nicht gegen die 20 je Stunde.
 - **Notizen und Stempel** werden gegen die Partitur gespeichert, gleich, was
   beim Anlegen zu sehen war; eine Variante zeigt sie an derselben Note, oder
   am Takt, wo sie diese Note nicht hat. Stempel für Stimmen erscheinen nur auf
@@ -1133,6 +1138,16 @@ nicht ausprobiert. Die CSP der Link-Seite
 bleibt, wie sie ist; WebAssembly erlaubt nur die eingerahmte eigene Seite von
 ScoreView.
 
+Die Mikrofonfreigabe gilt für **jede** öffentliche Link-Seite der Instanz
+(`/s/…`), nicht nur für Links, die zu einer Partitur führen: Wenn die
+Richtlinie der Seite gesetzt wird, steht noch nicht fest, was der Link zeigt,
+und feiner als je Dokument lässt sich eine Richtlinie nicht setzen – dieselbe
+Grenze wie [innerhalb von Files](#mikrofon-aufnahme-und-intonation). Hat
+jemand das Mikrofon für die Instanz einmal erlaubt, könnte jedes Skript auf
+jeder Link-Seite es ohne erneute Rückfrage nutzen. Wer öffentliche
+Freigabelinks oder alle Mikrofonfunktionen ausschaltet, nimmt die Freigabe
+wieder zurück.
+
 **Nicht gemessen:** Nextcloud 32 und 33 (geprüft werden die Sitzungsschlüssel
 von 31 und 34); ein echtes Handy und Safari/iOS als Besucher (nur ein
 nachgebildetes Galaxy-S23-Format in Chromium); Wischen zwischen den
@@ -1208,7 +1223,10 @@ Wischen die Partitur, nicht Nextclouds Viewer; der Weg sind dessen Pfeile.
 - **Kein Sandboxing von MuseScore selbst über den Container hinaus.** Der
   Container läuft non-root mit Speicher- und PID-Limit; eine
   Netzwerk-Isolation nur für den Konvertierungs-Subprozess bräuchte eine eigene
-  Sandbox-Schicht. Die Engine im selben Container ist weiter eingesperrt, wie
+  Sandbox-Schicht. MuseScore läuft mit einer minimalen Umgebung und kann das
+  Secret des Sidecars deshalb nicht lesen, wohl aber alles andere, was der
+  Nutzer im Container darf, auch die Dateien anderer Aufträge; begrenzt ist
+  nur die Größe seiner Ausgabe. Die Engine im selben Container ist weiter eingesperrt, wie
   auf dem lokalen Weg mit Node 22: Jeder Lauf liest nur seine Partitur und
   schreibt nur seine Ausgabe, startet keine Prozesse und sieht nichts von der
   Umgebung des Containers – das Netz bleibt offen, wie in der Tabelle unter

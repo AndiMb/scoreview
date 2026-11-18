@@ -29,11 +29,13 @@
 				<!--
 					Delegierte Admins duerfen diese Seite bedienen, aber nicht die
 					Felder, mit denen der Server ein Programm startet oder eine
-					Adresse abruft (SettingsController::update). Gesperrt und
-					erklaert statt erst beim Speichern abgelehnt.
+					Adresse abruft (SettingsController::update), und auch die
+					Browser-SoundFont-Adresse und die oeffentlichen
+					Freigabelinks nicht (S9). Gesperrt und erklaert statt erst
+					beim Speichern abgelehnt.
 				-->
 				<p v-if="!initial.fullAdmin" class="scoreview-hint">
-					{{ t('Only administrators can change the sidecar connection, the path to node and the SoundFont download URL.') }}
+					{{ t('Only administrators can change the sidecar connection, the path to node, the SoundFont addresses and public share links.') }}
 				</p>
 
 				<template v-if="form.conversionBackend === 'sidecar'">
@@ -123,6 +125,7 @@
 
 				<NcTextField
 					v-model="form.soundFontUrl"
+					:disabled="!initial.fullAdmin"
 					class="scoreview-field"
 					:label="t('Custom SoundFont URL (SF2/SF3, optional)')"
 					placeholder="https://…/MuseScore_General.sf3"
@@ -229,7 +232,14 @@
 				<h3 class="scoreview-subheading">
 					{{ t('Public share links') }}
 				</h3>
-				<NcCheckboxRadioSwitch v-model="form.featurePublicShare" type="switch" class="scoreview-field">
+				<p v-if="!initial.fullAdmin" class="scoreview-hint">
+					{{ t('Only administrators can change the sidecar connection, the path to node, the SoundFont addresses and public share links.') }}
+				</p>
+				<NcCheckboxRadioSwitch
+					v-model="form.featurePublicShare"
+					:disabled="!initial.fullAdmin"
+					type="switch"
+					class="scoreview-field">
 					{{ t('Show scores on public share links. Visitors can start conversions, limited per link.') }}
 				</NcCheckboxRadioSwitch>
 				<NcTextField

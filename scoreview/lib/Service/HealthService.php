@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Service;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
 use OCP\IDBConnection;
 use OCP\IL10N;
@@ -33,6 +34,7 @@ class HealthService {
 		private IAppConfig $appConfig,
 		private IDBConnection $db,
 		private IL10N $l,
+		private ITimeFactory $time,
 	) {
 	}
 
@@ -143,7 +145,7 @@ class HealthService {
 	private function cronStatus(): array {
 		$last = $this->appConfig->getValueInt('core', 'lastcron');
 		$mode = $this->appConfig->getValueString('core', 'backgroundjobs_mode', 'ajax');
-		$ageSeconds = $last > 0 ? (time() - $last) : null;
+		$ageSeconds = $last > 0 ? ($this->time->getTime() - $last) : null;
 		return [
 			'mode' => $mode,
 			'lastRun' => $last > 0 ? $last : null,

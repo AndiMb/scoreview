@@ -11,6 +11,8 @@ use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\ConverterException;
 use OCA\ScoreView\Service\LocalConverter;
+use OCA\ScoreView\Service\LocalConverterException;
+use OCA\ScoreView\Service\ScoreFiles;
 use OCA\ScoreView\Service\SidecarBusyException;
 use OCA\ScoreView\Service\SidecarClient;
 use OCA\ScoreView\Service\SidecarException;
@@ -155,7 +157,10 @@ class ConvertScoreJob extends QueuedJob {
 			// measures. IAppData need not be a local directory (object
 			// storage), so they go to a temporary one first.
 			foreach (['timing' => 'timing.json', 'measures' => 'measures.json'] as $name => $file) {
-				file_put_contents($baseDir . '/' . $file, $this->conversionService->readArtifact($variant->getFileId(), $variant->getEtag(), $name));
+				$content = $this->conversionService->readArtifact($variant->getFileId(), $variant->getEtag(), $name);
+				if (file_put_contents($baseDir . '/' . $file, $content) !== strlen($content)) {
+					throw self::tempWriteFailed($baseDir . '/' . $file);
+				}
 			}
 			$artifacts = $this->localConverter->convertVariant($scorePath, $variant->getVariant(), $baseDir);
 			$this->variantService->markReady(
@@ -414,10 +419,16 @@ class ConvertScoreJob extends QueuedJob {
 	 * Mount), wo es keinen gibt. Kopiert wird als Stream, nicht ueber
 	 * getContent(): der Inhalt soll nie als PHP-String im Speicher stehen.
 	 *
+	 * The copy is checked: on a full temp directory it ends short, and the
+	 * converter would then fail on a truncated score - `conversion_failed`,
+	 * blaming a score that is fine. A short copy is the server's fault, so
+	 * it ends as `local_unavailable`, and the browser takes over (E7) until
+	 * the next check of the runtime.
+	 *
 	 * @throws \RuntimeException
 	 */
 	private function copyToTempFile(File $node): string {
-		$target = $this->tempManager->getTemporaryFile('.mscz');
+		$target = $this->tempManager->getTemporaryFile(ScoreFiles::EXTENSION);
 		if ($target === false) {
 			throw new \RuntimeException('No temporary file name available for the score.');
 		}
@@ -431,12 +442,26 @@ class ConvertScoreJob extends QueuedJob {
 			throw new \RuntimeException('Temporary file could not be written.');
 		}
 		try {
-			stream_copy_to_stream($source, $sink);
+			// false on a short write; plain files are unbuffered, so nothing
+			// is left to fail in fclose. Silenced: the notice PHP raises says
+			// less than the exception below, which is logged with the run.
+			$copied = @stream_copy_to_stream($source, $sink);
 		} finally {
 			fclose($source);
 			fclose($sink);
 		}
+		if ($copied === false) {
+			@unlink($target);
+			throw self::tempWriteFailed($target);
+		}
 		return $target;
+	}
+
+	private static function tempWriteFailed(string $path): LocalConverterException {
+		return new LocalConverterException(
+			sprintf('Could not write the temporary file %s - is the temporary directory full?', $path),
+			errorCode: ScoreConversion::ERROR_LOCAL_UNAVAILABLE,
+		);
 	}
 
 	private function resolveNode(string $userId, int $fileId): ?File {

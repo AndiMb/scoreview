@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Service;
 
 use OCA\ScoreView\Middleware\DirectAccessContext;
+use OCP\Files\File;
 use OCP\Files\IRootFolder;
 use OCP\Files\Node;
 use OCP\IUserSession;
@@ -12,9 +13,8 @@ use OCP\IUserSession;
 /**
  * Löst eine fileId ausschließlich über den Dateibaum der eingeloggten
  * Nutzerin auf - nie ungeprüft vertrauen, Nextclouds Node-API liefert nur,
- * worauf die Nutzerin tatsächlich Zugriff hat. Gemeinsam genutzt von
- * ConversionController und AnnotationController statt dort zweimal
- * dieselbe Logik zu pflegen.
+ * worauf die Nutzerin tatsächlich Zugriff hat. Gemeinsam genutzt von allen
+ * Controllern statt dort je eigene Hilfen zu pflegen.
  */
 class UserFileResolver {
 	public function __construct(
@@ -50,6 +50,34 @@ class UserFileResolver {
 		} catch (\Throwable) {
 			return null;
 		}
+	}
+
+	/**
+	 * A score the requester may read - null for a folder, any other file
+	 * and everything resolveOwnNode() would not find. What every endpoint
+	 * about one score asks for: a folder id must not store notes, queue a
+	 * conversion that can only log "file not found", or hand a stranger's
+	 * PDF to the converter (ScoreFiles says what a score is).
+	 */
+	public function resolveScore(int $fileId): ?File {
+		$node = $this->resolveOwnNode($fileId);
+		return ScoreFiles::isScore($node) ? $node : null;
+	}
+
+	/**
+	 * The score together with the logged-in user, for what is stored per
+	 * person (notes, runs, recordings, preferences, leading) - null for a
+	 * share visitor, who has no account to store anything under.
+	 *
+	 * @return ?array{0: File, 1: string}
+	 */
+	public function resolveUserScore(int $fileId): ?array {
+		$userId = $this->currentUserId();
+		if ($userId === null) {
+			return null;
+		}
+		$score = $this->resolveScore($fileId);
+		return $score === null ? null : [$score, $userId];
 	}
 
 	/**

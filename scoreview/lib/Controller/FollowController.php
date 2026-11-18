@@ -22,7 +22,6 @@ use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
 use OCP\Files\File;
-use OCP\Files\Node;
 use OCP\IL10N;
 use OCP\IRequest;
 
@@ -78,10 +77,11 @@ class FollowController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function show(int $fileId, string $since = '', bool $push = false): Response {
-		[$node, $userId] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->scoreFor($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		if ($push) {
 			$this->follow->refreshMember($fileId, $userId);
 		}
@@ -106,10 +106,11 @@ class FollowController extends Controller {
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[AnonRateLimit(limit: 30, period: 60)]
 	public function create(int $fileId, ?int $measure = null, ?string $mark = null): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->scoreFor($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		try {
 			return $this->respond($this->follow->start($node, $userId, $measure, $mark), $userId, Http::STATUS_CREATED);
 		} catch (FollowException $e) {
@@ -143,10 +144,11 @@ class FollowController extends Controller {
 		?int $transpose = null,
 		?array $playback = null,
 	): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->scoreFor($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		$changes = ['clearLoop' => $clearLoop, 'tone' => $tone, 'heartbeat' => $heartbeat];
 		if ($playback !== null) {
 			$changes['playback'] = $playback;
@@ -174,10 +176,11 @@ class FollowController extends Controller {
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[AnonRateLimit(limit: 30, period: 60)]
 	public function destroy(int $fileId): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->scoreFor($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		try {
 			return $this->respond($this->follow->end($node, $userId), $userId);
 		} catch (FollowException $e) {
@@ -197,14 +200,15 @@ class FollowController extends Controller {
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[AnonRateLimit(limit: 30, period: 60)]
 	public function move(int $fileId, int $targetFileId, ?int $setlistId = null): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
-		$target = $node === null ? null : $this->fileResolver->resolveOwnNode($targetFileId);
+		$score = $this->scoreFor($fileId);
 		// Nur zu einer Partitur: Das Ziel bekommt spaeter Begleit-Token mit dem
 		// Zweck `score` (companion) - ein Ordner oder eine beliebige Datei
 		// waere darueber lesbar (S1).
-		if ($node === null || !$target instanceof File || $target->getMimetype() !== Application::MSCZ_MIMETYPE) {
+		$target = $score === null ? null : $this->fileResolver->resolveScore($targetFileId);
+		if ($score === null || $target === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		try {
 			return $this->respond($this->follow->move($node, $target, $userId, $setlistId), $userId);
 		} catch (FollowException $e) {
@@ -229,17 +233,17 @@ class FollowController extends Controller {
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[AnonRateLimit(limit: 30, period: 60)]
 	public function companion(int $fileId, int $target): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
+		$score = $this->scoreFor($fileId);
 		$digest = $this->access->directDigest();
-		$targetNode = $node === null ? null : $this->fileResolver->resolveOwnNode($target);
-		if ($node === null || !$targetNode instanceof File || $targetNode->getMimetype() !== Application::MSCZ_MIMETYPE
+		$targetNode = $score === null ? null : $this->fileResolver->resolveScore($target);
+		if ($score === null || $targetNode === null
 			|| $digest === null || $this->access->mode() !== DirectAccessContext::DIRECT
 			|| !$this->follow->isMoveTarget($fileId, $target)) {
 			return $this->notFound();
 		}
 		return new JSONResponse([
 			'fileId' => $target,
-			'token' => $this->companions->issue($userId, $target, CompanionTokenService::PURPOSE_SCORE, $digest),
+			'token' => $this->companions->issue($score[1], $target, CompanionTokenService::PURPOSE_SCORE, $digest),
 		]);
 	}
 
@@ -256,10 +260,11 @@ class FollowController extends Controller {
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[AnonRateLimit(limit: 30, period: 60)]
 	public function join(int $fileId): JSONResponse {
-		[$node, $userId] = $this->resolve($fileId);
-		if ($node === null) {
+		$score = $this->scoreFor($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		return new JSONResponse(['push' => $this->follow->join($fileId, $userId)]);
 	}
 
@@ -288,17 +293,13 @@ class FollowController extends Controller {
 	}
 
 	/**
-	 * @return array{0: ?Node, 1: string} Node und Person, oder [null, ''],
-	 *                                    wenn die Funktion aus oder die Datei
-	 *                                    nicht sichtbar ist
+	 * The score and the person, or null when the switch is off - only the
+	 * gate is this controller's, the resolution is UserFileResolver's.
+	 *
+	 * @return ?array{0: File, 1: string}
 	 */
-	private function resolve(int $fileId): array {
-		if (!$this->features->isEnabled(FeatureConfig::FOLLOW_SESSION)) {
-			return [null, ''];
-		}
-		$userId = $this->fileResolver->currentUserId();
-		$node = $userId === null ? null : $this->fileResolver->resolveOwnNode($fileId);
-		return $node === null ? [null, ''] : [$node, $userId];
+	private function scoreFor(int $fileId): ?array {
+		return $this->features->isEnabled(FeatureConfig::FOLLOW_SESSION) ? $this->fileResolver->resolveUserScore($fileId) : null;
 	}
 
 	private function refused(FollowException $e): JSONResponse {

@@ -110,14 +110,18 @@ class SettingsController extends Controller {
 	 *
 	 * **Nicht jedes Feld darf jede Person aendern, die hierher kommt.**
 	 * `#[AuthorizedAdminSetting]` laesst auch delegierte Admins zu - eine
-	 * Rolle fuer "darf die ScoreView-Einstellungen pflegen". Drei Felder
+	 * Rolle fuer "darf die ScoreView-Einstellungen pflegen". Einige Felder
 	 * reichen aber weiter als ScoreView: `node_path` wird per proc_open
 	 * ausgefuehrt (Service\LocalConverter), Sidecar-URL und SoundFont-Quelle
 	 * sind Adressen, die der SERVER abruft - der Sidecar sogar mit dem Secret
 	 * im Header. Wer sie setzt, startet Programme als Webserver-Nutzer bzw.
 	 * laesst den Server beliebige Adressen abfragen (SSRF). Das bleibt den
 	 * vollen Admins vorbehalten, wie jede andere Aenderung, die Code
-	 * ausfuehrt (siehe refusePrivileged()).
+	 * ausfuehrt (siehe refusePrivileged()). Likewise the two that reach
+	 * beyond the instance's members: `soundfont_url` adds an origin to the
+	 * CSP of the Files and viewer pages (Listener\AddCspListener), and the
+	 * public-share switch opens anonymous routes and conversions (S12) -
+	 * docs/architecture.md S9.
 	 *
 	 * Alles wird VOR dem ersten Schreiben geprueft: Eine abgelehnte Anfrage
 	 * aendert nichts, statt die Haelfte des Formulars zu speichern.
@@ -161,7 +165,9 @@ class SettingsController extends Controller {
 		// also sonst ein versehentliches Loeschen bei jedem Speichern der URL.
 		$sidecarSecret = $sidecarSecret === null || trim($sidecarSecret) === '' ? null : trim($sidecarSecret);
 
-		$refused = $this->refusePrivileged($nodePath, $sidecarUrl, $soundFontFetchUrl, $sidecarSecret)
+		$soundFontUrl = $soundFontUrl === null ? null : trim($soundFontUrl);
+
+		$refused = $this->refusePrivileged($nodePath, $sidecarUrl, $soundFontFetchUrl, $sidecarSecret, $soundFontUrl, $featurePublicShare)
 			?? $this->refuseInvalid($nodePath, $sidecarUrl, $soundFontFetchUrl);
 		if ($refused !== null) {
 			return $refused;
@@ -209,7 +215,7 @@ class SettingsController extends Controller {
 		// Die Vorgabe gilt beim Lesen; ein POST ohne das Feld laesst den
 		// gespeicherten Wert stehen, statt ihn still auf "aus" zu setzen.
 		if ($eagerConversion !== null) {
-			$this->appConfig->setValueBool(Application::APP_ID, 'eager_conversion', $eagerConversion);
+			$this->appConfig->setValueBool(Application::APP_ID, ConversionConfig::EAGER_CONVERSION, $eagerConversion);
 		}
 		// Uebersteuerung, nicht Voraussetzung: leer heisst NICHT "kein Ton",
 		// sondern "die App liefert das SoundFont selbst aus, das der ohnehin
@@ -220,7 +226,7 @@ class SettingsController extends Controller {
 		// (und wird von Listener\AddCspListener in connect-src freigegeben).
 		// Fehlt das Feld, bleibt die Uebersteuerung - wie bei den Feldern oben.
 		if ($soundFontUrl !== null) {
-			$this->appConfig->setValueString(Application::APP_ID, ConversionConfig::SOUNDFONT_URL, trim($soundFontUrl));
+			$this->appConfig->setValueString(Application::APP_ID, ConversionConfig::SOUNDFONT_URL, $soundFontUrl);
 		}
 		// Konvertierungsweg, node-Pfad, Sidecar-URL - jede dieser Zeilen kann
 		// aus "kann nicht" ein "kann" gemacht haben. Das gespeicherte Urteil
@@ -290,6 +296,8 @@ class SettingsController extends Controller {
 	/**
 	 * Lehnt eine Aenderung der Felder ab, die Programme starten oder den
 	 * Server Adressen abrufen lassen - es sei denn, eine volle Admin fragt.
+	 * Ebenso die Browser-SoundFont-Adresse (eine fremde Herkunft in der CSP)
+	 * und den Schalter fuer oeffentliche Freigabelinks (S9, S12).
 	 *
 	 * **Abgelehnt wird nur eine AENDERUNG**, nicht das Mitsenden: Das Formular
 	 * schickt immer alle Felder, auch die, die eine delegierte Admin gar nicht
@@ -299,7 +307,7 @@ class SettingsController extends Controller {
 	 * gespeichert - durch; anders - 403 mit Nennung der Felder, und nichts
 	 * wird geschrieben.
 	 */
-	private function refusePrivileged(?string $nodePath, ?string $sidecarUrl, ?string $soundFontFetchUrl, ?string $sidecarSecret): ?JSONResponse {
+	private function refusePrivileged(?string $nodePath, ?string $sidecarUrl, ?string $soundFontFetchUrl, ?string $sidecarSecret, ?string $soundFontUrl, ?bool $featurePublicShare): ?JSONResponse {
 		if (self::isFullAdmin($this->userSession, $this->groupManager)) {
 			return null;
 		}
@@ -308,10 +316,14 @@ class SettingsController extends Controller {
 			'nodePath' => [$nodePath, ConversionConfig::NODE_PATH],
 			'sidecarUrl' => [$sidecarUrl, ConversionConfig::SIDECAR_URL],
 			'soundFontFetchUrl' => [$soundFontFetchUrl, SoundFontService::FETCH_URL_KEY],
+			'soundFontUrl' => [$soundFontUrl, ConversionConfig::SOUNDFONT_URL],
 		] as $field => [$value, $key]) {
 			if ($value !== null && $value !== $this->stored($key)) {
 				$fields[] = $field;
 			}
+		}
+		if ($featurePublicShare !== null && $featurePublicShare !== $this->features->publicShareEnabled()) {
+			$fields[] = 'featurePublicShare';
 		}
 		// Ein Secret wird nie zurueckgeliefert, ein Vergleich waere also nur
 		// ein Orakel dafuer, ob man es erraten hat - jedes Setzen zaehlt.
@@ -322,7 +334,7 @@ class SettingsController extends Controller {
 			return null;
 		}
 		return new JSONResponse([
-			'error' => $this->l->t('Only administrators can change the Node.js path, the conversion service and the SoundFont source.'),
+			'error' => $this->l->t('Only administrators can change the Node.js path, the conversion service, the SoundFont sources and public share links.'),
 			'reason' => 'admin_only',
 			'fields' => $fields,
 		], Http::STATUS_FORBIDDEN);

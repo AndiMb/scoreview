@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Listener;
 
 use OCA\ScoreView\Service\ConversionService;
+use OCA\ScoreView\Service\ScoreFiles;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
 use OCP\Files\Events\Node\NodeDeletedEvent;
@@ -53,7 +54,7 @@ class NodeDeletedListener implements IEventListener {
 		}
 		// Endungspruefung wie im ScoreFileListener und aus demselben Grund
 		// (siehe dort): der Mimetype haengt an einer Serverkonfiguration.
-		if (!str_ends_with(strtolower($node->getName()), '.mscz')) {
+		if (!ScoreFiles::hasScoreName($node->getName())) {
 			return;
 		}
 

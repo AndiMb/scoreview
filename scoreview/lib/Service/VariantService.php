@@ -53,6 +53,7 @@ class VariantService {
 
 	/**
 	 * Errors that say nothing about the score: a busy or unreachable sidecar,
+	 * a local path that could not run (no runtime, a full temp directory),
 	 * or a path that engraved no variants (an image from before the engine
 	 * renderer, MuseScore chosen at the time). The next request may try
 	 * again much sooner - the cause may already be gone.
@@ -60,6 +61,7 @@ class VariantService {
 	private const TRANSIENT_ERRORS = [
 		ScoreConversion::ERROR_SIDECAR_BUSY,
 		ScoreConversion::ERROR_SIDECAR_UNREACHABLE,
+		ScoreConversion::ERROR_LOCAL_UNAVAILABLE,
 		ScoreVariant::ERROR_UNSUPPORTED,
 	];
 	public const RETRY_TRANSIENT_AFTER_SECONDS = 60;
@@ -118,8 +120,30 @@ class VariantService {
 	}
 
 	/**
+	 * Whether the run of a row just claimed or restarted may start now: at
+	 * most `$limit` runs at once across the instance (S4). Each is a
+	 * converter process of 130-250 MB inside a PHP worker, and the
+	 * per-person and per-link allowances count runs per hour, not at once -
+	 * many different keys asked for in parallel would otherwise start as
+	 * many processes.
+	 *
+	 * Counted AFTER the own row is written, and the own row counts: of the
+	 * runs that are let through, the last to count saw all the others
+	 * already written, so no more than `$limit` pass - without a lock and
+	 * without a memory cache. Two requests that count at the same moment
+	 * may both step back; they ask again on the next poll.
+	 */
+	public function hasCapacity(int $limit): bool {
+		$since = (new \DateTime())->setTimestamp($this->time->getTime() - self::STALE_AFTER_SECONDS);
+		return $this->mapper->countRunning($since) <= max(1, $limit);
+	}
+
+	/**
 	 * Gives a fresh claim back when the run is refused after all (a visitor's
-	 * link allowance), so the next request may claim it again at once.
+	 * link allowance, a full instance), so the next request may claim it
+	 * again at once. Also for a restarted row: it was retryable, or it would
+	 * not have been restarted, and the next request finds it gone and claims
+	 * it anew.
 	 */
 	public function release(ScoreVariant $variant): void {
 		$this->mapper->delete($variant);

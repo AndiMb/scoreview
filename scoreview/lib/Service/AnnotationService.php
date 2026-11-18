@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Service;
 
 use OCA\ScoreView\Db\Annotation;
 use OCA\ScoreView\Db\AnnotationMapper;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IUserManager;
 
 /**
@@ -50,6 +51,7 @@ class AnnotationService {
 	public function __construct(
 		private AnnotationMapper $mapper,
 		private IUserManager $userManager,
+		private ITimeFactory $time,
 	) {
 	}
 
@@ -101,13 +103,13 @@ class AnnotationService {
 	 * @param bool $byLeader ob die Autorin beim Anlegen Leitung ist
 	 * @param ?int $endMeasure last measure of a saved loop (KIND_LOOP), already
 	 *                         checked against the start (Controller); null otherwise
-	 * @throws AnnotationLimitException bei MAX_PER_USER_AND_FILE
+	 * @throws AnnotationException LIMIT bei MAX_PER_USER_AND_FILE
 	 */
 	public function create(int $fileId, string $userId, int $measureNumber, float $fraction, ?int $elid, ?string $anchorEtag, string $content, string $visibility, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?string $targetPartsJson = null, bool $byLeader = false, ?int $endMeasure = null): Annotation {
 		if ($this->mapper->countByFileAndUser($fileId, $userId) >= self::MAX_PER_USER_AND_FILE) {
-			throw new AnnotationLimitException('Too many annotations for this file.');
+			throw new AnnotationException(AnnotationException::LIMIT);
 		}
-		$now = new \DateTime();
+		$now = $this->time->getDateTime();
 		$annotation = new Annotation();
 		$annotation->setFileId($fileId);
 		$annotation->setUserId($userId);
@@ -132,15 +134,15 @@ class AnnotationService {
 	 *                       nur bei Stimmnotizen
 	 * @param ?string $targetPartsJson neue Zielstimmen einer Stimmnotiz;
 	 *                                 null = unveraendert, bei anderen Notizen wirkungslos
-	 * @throws \RuntimeException wenn eine geteilte Notiz ohne Schreibrecht
-	 *                           geändert werden soll (Controller macht daraus 403 - eine geteilte
-	 *                           Notiz ist für jeden mit Dateizugriff ohnehin sichtbar, es gibt also
-	 *                           nichts zu verbergen, anders als beim null-Fall unten). Ebenso
-	 *                           bei einer Stimmnotiz ohne Leitungsrolle - auch die sieht jede
-	 *                           Person mit Dateizugriff.
-	 * @throws \InvalidArgumentException wenn eine Textnotiz leer werden soll
-	 *                                   (Controller macht daraus 400). Ein Stempel darf ohne Text
-	 *                                   sein - erst hier bekannt, weil erst hier die Notiz geladen ist.
+	 * @throws AnnotationException FORBIDDEN, wenn eine geteilte Notiz ohne
+	 *                             Schreibrecht geändert werden soll (Controller macht daraus 403 -
+	 *                             eine geteilte Notiz ist für jeden mit Dateizugriff ohnehin
+	 *                             sichtbar, es gibt also nichts zu verbergen, anders als beim
+	 *                             null-Fall unten). Ebenso bei einer Stimmnotiz ohne
+	 *                             Leitungsrolle - auch die sieht jede Person mit Dateizugriff.
+	 *                             EMPTY, wenn eine Textnotiz leer werden soll (400). Ein Stempel
+	 *                             darf ohne Text sein - erst hier bekannt, weil erst hier die
+	 *                             Notiz geladen ist.
 	 * @return ?Annotation null, wenn die ID zu dieser Datei nicht existiert,
 	 *                     ODER eine private Notiz einer anderen Nutzerin gehört (Controller
 	 *                     macht daraus 404 - bewusst ohne Existenz zu bestätigen).
@@ -157,22 +159,24 @@ class AnnotationService {
 		// edit can change whom it is for, not what it shows. Redrawing is
 		// deleting and drawing again.
 		if ($annotation->getKind() !== Annotation::KIND_DRAWING) {
-			if ($annotation->getKind() !== Annotation::KIND_STAMP && trim($content) === '') {
-				throw new \InvalidArgumentException('A text annotation needs text.');
+			if ($annotation->getKind() === Annotation::KIND_STAMP) {
+				AnnotationValidator::length($content);
+			} else {
+				AnnotationValidator::text($content);
 			}
 			$annotation->setContent($content);
 		}
 		if ($targetPartsJson !== null && $annotation->getVisibility() === Annotation::VISIBILITY_PARTS) {
 			$annotation->setTargetParts($targetPartsJson);
 		}
-		$annotation->setUpdatedAt(new \DateTime());
+		$annotation->setUpdatedAt($this->time->getDateTime());
 		return $this->mapper->update($annotation);
 	}
 
 	/**
-	 * @throws \RuntimeException wenn eine geteilte Notiz ohne Schreibrecht
-	 *                           oder eine Stimmnotiz ohne Leitungsrolle gelöscht werden soll
-	 *                           (siehe updateContent())
+	 * @throws AnnotationException FORBIDDEN, wenn eine geteilte Notiz ohne
+	 *                             Schreibrecht oder eine Stimmnotiz ohne Leitungsrolle gelöscht
+	 *                             werden soll (siehe updateContent())
 	 * @return bool false, wenn die ID zu dieser Datei nicht existiert ODER
 	 *              eine private Notiz einer anderen Nutzerin gehört (Controller macht
 	 *              daraus 404) - eigener Rückgabetyp statt null/Annotation wie bei
@@ -196,13 +200,13 @@ class AnnotationService {
 	 *
 	 * @return bool false = so tun, als gaebe es die Notiz nicht (private
 	 *              Notiz einer anderen Nutzerin, Controller: 404)
-	 * @throws \RuntimeException sichtbar, aber nicht schreibbar (Controller: 403)
+	 * @throws AnnotationException FORBIDDEN: sichtbar, aber nicht schreibbar (Controller: 403)
 	 */
 	private function mayWrite(Annotation $annotation, string $userId, bool $canWriteShared, bool $isLeader): bool {
 		$visibility = $annotation->getVisibility();
 		if ($visibility === Annotation::VISIBILITY_SHARED) {
 			if (!$canWriteShared) {
-				throw new \RuntimeException('No write permission for shared annotations of this file.');
+				throw new AnnotationException(AnnotationException::FORBIDDEN);
 			}
 			return true;
 		}
@@ -211,7 +215,7 @@ class AnnotationService {
 			// anderen oder einer inzwischen abberufenen Leitung - sonst
 			// blieben deren Hinweise unkorrigierbar stehen.
 			if (!$isLeader) {
-				throw new \RuntimeException('Only leaders can change part annotations.');
+				throw new AnnotationException(AnnotationException::FORBIDDEN);
 			}
 			return true;
 		}

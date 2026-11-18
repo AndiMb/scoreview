@@ -95,7 +95,6 @@ class CleanupOrphansJobTest extends TestCase {
 			$this->createMock(LoggerInterface::class),
 		);
 		$method = new \ReflectionMethod($job, 'run');
-		$method->setAccessible(true);
 		$method->invoke($job, null);
 	}
 

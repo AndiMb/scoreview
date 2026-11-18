@@ -10,7 +10,6 @@ use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\PublicShareAccess;
 use OCA\ScoreView\Service\PublicShareException;
 use OCA\ScoreView\Service\PublicShareGrant;
-use OCA\ScoreView\Service\UserFileResolver;
 use OCA\ScoreView\Service\ViewerPolicy;
 use OCA\ScoreView\Service\ViewerPreferences;
 use OCP\AppFramework\Http;
@@ -42,6 +41,8 @@ use PHPUnit\Framework\TestCase;
  * bundle - for a link that does not open the score.
  */
 class PageControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	/** @var array<string, bool> */
 	private array $bools = [];
 	private string $soundFontUrl = '';
@@ -93,7 +94,7 @@ class PageControllerTest extends TestCase {
 		$request = $this->createMock(IRequest::class);
 		$request->method('getRequestUri')->willReturnCallback(fn () => $this->requestUri);
 
-		$resolver = $this->createMock(UserFileResolver::class);
+		$resolver = $this->resolverDouble();
 		$resolver->method('resolveOwnNode')->willReturnCallback(fn (int $fileId) => $fileId === 42 ? $this->ownFile : null);
 		$fallback = $this->createMock(ClientFallback::class);
 		$fallback->method('applies')->willReturnCallback(fn () => $this->clientFallback);

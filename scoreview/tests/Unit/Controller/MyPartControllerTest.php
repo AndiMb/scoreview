@@ -31,11 +31,13 @@ use PHPUnit\Framework\TestCase;
  *    hier wird festgehalten, dass die Routen sie ueberhaupt anbieten.
  */
 class MyPartControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private ViewerPreferences&MockObject $preferences;
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->preferences = $this->createMock(ViewerPreferences::class);
 	}
 
@@ -56,7 +58,7 @@ class MyPartControllerTest extends TestCase {
 	}
 
 	public function testLiestDieGespeicherteStimme(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->preferences->expects($this->once())->method('getMyPart')->with('anna', 42)->willReturn('3');
 		$this->preferences->method('getPractice')->willReturn(['transpose' => -2, 'coach' => false, 'othersLevel' => 40]);
 
@@ -67,7 +69,7 @@ class MyPartControllerTest extends TestCase {
 	}
 
 	public function testSpeichertUndAntwortetMitDemGeltenden(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->preferences->expects($this->once())->method('setMyPart')->with('anna', 42, 'x')->willReturn(null);
 
 		$antwort = $this->controller()->update(42, 'x');
@@ -116,7 +118,7 @@ class MyPartControllerTest extends TestCase {
 	}
 
 	public function testSpeichertUebeEinstellungenOhneDieStimmeAnzufassen(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->preferences->expects($this->never())->method('setMyPart');
 		$this->preferences->expects($this->once())->method('setPractice')->with('anna', 42, -2, null, null)
 			->willReturn(['transpose' => -2, 'coach' => false, 'othersLevel' => 40]);

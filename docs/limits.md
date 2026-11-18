@@ -1019,6 +1019,11 @@ Measured on the test instance (Node 20.19, the own test score
 - **At most 8 variants per score version** are kept, the least recently
   opened goes first; **at most 20 new runs per person and hour** (S4).
   Reading a variant that exists does not count.
+- **At most 2 variants are engraved at the same time on the whole
+  instance**, because each run is a process of its own inside the request
+  (`variant_max_parallel`, set with `occ`, at least 1). A request above that
+  waits and is asked again, as for a variant still being engraved; waiting
+  does not count against the 20 per hour.
 - **Notes and stamps** are stored against the full score, whatever was on
   screen when they were made; a variant shows them at the same note, or at
   the measure where it has no such note. Stamps for parts appear only on the
@@ -1102,6 +1107,15 @@ microphone and the tuner started. Scored singing and turning pages by
 listening use the same microphone access but were not tried in the frame. The link page's CSP stays as it is; WebAssembly is allowed only on
 ScoreView's own framed page.
 
+The microphone permission applies to **every** public link page of the
+instance (`/s/…`), not only to links that lead to a score: when the page's
+policy is set it is not yet known what the link shows, and a policy cannot be
+set more finely than per document – the same limit as
+[within Files](#microphone-recording-and-intonation). Once someone has
+allowed the microphone for the instance, any script on any link page could
+use it without asking again. Switching public share links off, or switching
+off every microphone feature, takes the permission away again.
+
 **Not measured:** Nextcloud 32 and 33 (the session keys checked are those of
 31 and 34); a real phone and Safari/iOS as a visitor (only an emulated Galaxy
 S23 viewport in Chromium); swiping between scores of a folder on a touch
@@ -1172,8 +1186,11 @@ so its arrows are the way.
   is engraved on its own ([Display variants](#display-variants)).
 - **No sandboxing of MuseScore itself beyond the container.** The container
   runs non-root with memory and PID limits; network isolation just for the
-  conversion subprocess would need a sandbox layer of its own. The engine in
-  the same container is locked in further, like on the local path with Node
+  conversion subprocess would need a sandbox layer of its own. MuseScore runs
+  with a minimal environment and so cannot read the sidecar's secret, but it
+  can read everything else the container user can, including other jobs'
+  files; only the size of its output is capped. The engine in the same
+  container is locked in further, like on the local path with Node
   22: each run reads only its score and writes only its output, starts no
   processes and sees none of the container's environment – the network stays
   open, as in the table under

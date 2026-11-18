@@ -142,35 +142,49 @@ class ViewerPreferences {
 	}
 
 	/**
+	 * The display settings: field => [config key, stored default, reader].
+	 * One table for get() and defaults(), so that the default a user without
+	 * a stored value reads and the default a visitor gets cannot drift apart.
+	 * The reader normalises a stored string, the default included - what
+	 * goes out is always one of the known values (see the class comment).
+	 *
+	 * @return array<string, array{0: string, 1: string, 2: \Closure(string): mixed}>
+	 */
+	private static function settings(): array {
+		$flag = static fn (string $value): bool => $value === '1';
+		return [
+			'highlightColor' => [self::KEY_HIGHLIGHT_COLOR, self::DEFAULT_COLOR, self::normalizeColor(...)],
+			'highlightMode' => [self::KEY_HIGHLIGHT_MODE, self::DEFAULT_MODE, self::normalizeMode(...)],
+			// Aus: Wer die Funktion nicht kennt, hoert das Stueck wie gewohnt.
+			'stereoMyPart' => [self::KEY_STEREO_MY_PART, '0', $flag],
+			'noteTheme' => [self::KEY_NOTE_THEME, self::DEFAULT_THEME, self::normalizeTheme(...)],
+			'noteNames' => [self::KEY_NOTE_NAMES, 'off', static fn (string $value) => self::oneOf($value, self::NOTE_NAME_SYSTEMS)],
+			// Vorgabe an: Wer Tonnamen einschaltet, will sie meist fuer die
+			// eigene Stimme - an allen vier Zeilen eines Satzes werden sie eng.
+			'noteNamesMine' => [self::KEY_NOTE_NAMES_MINE, '1', $flag],
+			'layout' => [self::KEY_LAYOUT, 'pages', static fn (string $value) => self::oneOf($value, self::LAYOUTS)],
+			'bandOffered' => [self::KEY_BAND_OFFERED, '0', $flag],
+			// On: that is what the viewer always did, and what most people
+			// reading along expect.
+			'autoScroll' => [self::KEY_AUTO_SCROLL, '1', $flag],
+			'beatCounts' => [self::KEY_BEAT_COUNTS, 'off', static fn (string $value) => self::oneOf($value, self::BEAT_COUNTS)],
+			'doublePage' => [self::KEY_DOUBLE_PAGE, self::DEFAULT_DOUBLE_PAGE, self::doublePage(...)],
+			'referencePitch' => [self::KEY_REFERENCE_PITCH, (string)self::DEFAULT_REFERENCE_PITCH, self::normalizeReferencePitch(...)],
+			// Unset means "never chosen" (null), see KEY_BAR_PINS.
+			'barPins' => [self::KEY_BAR_PINS, '', self::decodeBarPins(...)],
+		];
+	}
+
+	/**
 	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string, doublePage: string, referencePitch: int, barPins: ?list<string>}
 	 */
 	public function get(?string $userId): array {
-		if ($userId === null) {
-			return $this->defaults();
+		$values = [];
+		foreach (self::settings() as $field => [$key, $default, $read]) {
+			$values[$field] = $read($userId === null ? $default : $this->config->getUserValue($userId, Application::APP_ID, $key, $default));
 		}
-		return [
-			'highlightColor' => self::normalizeColor(
-				$this->config->getUserValue($userId, Application::APP_ID, self::KEY_HIGHLIGHT_COLOR, self::DEFAULT_COLOR),
-			),
-			'highlightMode' => self::normalizeMode(
-				$this->config->getUserValue($userId, Application::APP_ID, self::KEY_HIGHLIGHT_MODE, self::DEFAULT_MODE),
-			),
-			'stereoMyPart' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_STEREO_MY_PART, '0') === '1',
-			'noteTheme' => self::normalizeTheme(
-				$this->config->getUserValue($userId, Application::APP_ID, self::KEY_NOTE_THEME, self::DEFAULT_THEME),
-			),
-			'noteNames' => self::oneOf($this->config->getUserValue($userId, Application::APP_ID, self::KEY_NOTE_NAMES, 'off'), self::NOTE_NAME_SYSTEMS),
-			// Vorgabe an: Wer Tonnamen einschaltet, will sie meist fuer die
-			// eigene Stimme - an allen vier Zeilen eines Satzes werden sie eng.
-			'noteNamesMine' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_NOTE_NAMES_MINE, '1') === '1',
-			'layout' => self::oneOf($this->config->getUserValue($userId, Application::APP_ID, self::KEY_LAYOUT, 'pages'), self::LAYOUTS),
-			'bandOffered' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_BAND_OFFERED, '0') === '1',
-			'autoScroll' => $this->config->getUserValue($userId, Application::APP_ID, self::KEY_AUTO_SCROLL, '1') === '1',
-			'beatCounts' => self::oneOf($this->config->getUserValue($userId, Application::APP_ID, self::KEY_BEAT_COUNTS, 'off'), self::BEAT_COUNTS),
-			'doublePage' => self::doublePage($this->config->getUserValue($userId, Application::APP_ID, self::KEY_DOUBLE_PAGE, self::DEFAULT_DOUBLE_PAGE)),
-			'referencePitch' => self::normalizeReferencePitch($this->config->getUserValue($userId, Application::APP_ID, self::KEY_REFERENCE_PITCH, (string)self::DEFAULT_REFERENCE_PITCH)),
-			'barPins' => self::decodeBarPins($this->config->getUserValue($userId, Application::APP_ID, self::KEY_BAR_PINS, '')),
-		];
+		/** @var array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string, doublePage: string, referencePitch: int, barPins: ?list<string>} $values */
+		return $values;
 	}
 
 	/**
@@ -458,28 +472,13 @@ class ViewerPreferences {
 	}
 
 	/**
+	 * What someone without stored settings sees - a visitor on a public
+	 * link, a user who never changed anything. The same table as get().
+	 *
 	 * @return array{highlightColor: string, highlightMode: string, stereoMyPart: bool, noteTheme: string, noteNames: string, noteNamesMine: bool, layout: string, bandOffered: bool, autoScroll: bool, beatCounts: string, doublePage: string, referencePitch: int, barPins: ?list<string>}
 	 */
 	public function defaults(): array {
-		return [
-			'highlightColor' => self::DEFAULT_COLOR,
-			'highlightMode' => self::DEFAULT_MODE,
-			// Aus: Wer die Funktion nicht kennt, hoert das Stueck wie
-			// gewohnt.
-			'stereoMyPart' => false,
-			'noteTheme' => self::DEFAULT_THEME,
-			'noteNames' => 'off',
-			'noteNamesMine' => true,
-			'layout' => 'pages',
-			'bandOffered' => false,
-			// On: that is what the viewer always did, and what most people
-			// reading along expect.
-			'autoScroll' => true,
-			'beatCounts' => 'off',
-			'doublePage' => self::DEFAULT_DOUBLE_PAGE,
-			'referencePitch' => self::DEFAULT_REFERENCE_PITCH,
-			'barPins' => null,
-		];
+		return $this->get(null);
 	}
 
 	/** One of DOUBLE_PAGE, otherwise the default (not the first value). */

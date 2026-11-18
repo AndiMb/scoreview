@@ -65,10 +65,10 @@ class PracticeTrackController extends Controller {
 			return $this->notFound();
 		}
 		$userId = $this->fileResolver->currentUserId();
-		$score = $this->fileResolver->resolveOwnNode($fileId);
+		$score = $this->fileResolver->resolveScore($fileId);
 		// Nur neben eine Partitur: Ein Ordner als `fileId` schriebe neben den
 		// Ordner - beim Nutzerordner selbst sogar ausserhalb von `files/`.
-		if ($userId === null || !PracticeTrackService::isScore($score)) {
+		if ($userId === null || $score === null) {
 			return $this->notFound();
 		}
 		// S2: Mit einem Begleit-Token entsteht nichts Neues; mit dem Token der

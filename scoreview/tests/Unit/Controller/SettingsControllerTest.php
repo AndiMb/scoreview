@@ -7,6 +7,7 @@ namespace OCA\ScoreView\Tests\Unit\Controller;
 use OCA\ScoreView\Controller\SettingsController;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
+use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\FeatureConfig;
 use OCA\ScoreView\Service\HealthService;
 use OCA\ScoreView\Service\LocalConverter;
@@ -286,6 +287,41 @@ class SettingsControllerTest extends TestCase {
 		$this->assertSame(403, $antwort->getStatus());
 		$this->assertSame(['sidecarUrl', 'soundFontFetchUrl', 'sidecarSecret'], $antwort->getData()['fields']);
 		$this->assertSame([], $this->strings);
+	}
+
+	/**
+	 * Both reach beyond the instance's members: the SoundFont address is an
+	 * origin in the CSP of every viewer page, the switch opens anonymous
+	 * routes and conversions (issue #66, S9).
+	 */
+	public function testADelegatedAdminMayNotChangeTheBrowserSoundFontOrPublicLinks(): void {
+		$this->vollerAdmin = false;
+
+		$antwort = $this->controller()->update(soundFontUrl: 'https://tracker.example/a.sf3', featurePublicShare: true);
+
+		$this->assertSame(403, $antwort->getStatus());
+		$this->assertSame(['soundFontUrl', 'featurePublicShare'], $antwort->getData()['fields']);
+		$this->assertSame([], $this->strings);
+		$this->assertSame([], $this->bools);
+	}
+
+	public function testADelegatedAdminMaySendBothUnchanged(): void {
+		$this->vollerAdmin = false;
+		$this->strings = [ConversionConfig::SOUNDFONT_URL => 'https://cdn.example/a.sf3'];
+		$this->bools = [FeatureConfig::PUBLIC_SHARE => true];
+
+		$antwort = $this->controller()->update(soundFontUrl: ' https://cdn.example/a.sf3 ', featurePublicShare: true, followPollMs: 900);
+
+		$this->assertSame(200, $antwort->getStatus());
+		$this->assertSame(900, $this->ints[FeatureConfig::FOLLOW_POLL_MS]);
+	}
+
+	public function testAFullAdminSwitchesPublicLinksOn(): void {
+		$antwort = $this->controller()->update(soundFontUrl: 'https://cdn.example/a.sf3', featurePublicShare: true);
+
+		$this->assertSame(200, $antwort->getStatus());
+		$this->assertTrue($this->bools[FeatureConfig::PUBLIC_SHARE]);
+		$this->assertSame('https://cdn.example/a.sf3', $this->strings[ConversionConfig::SOUNDFONT_URL]);
 	}
 
 	public function testDelegierteAdminSpeichertDasFormularMitUnveraendertenFeldern(): void {

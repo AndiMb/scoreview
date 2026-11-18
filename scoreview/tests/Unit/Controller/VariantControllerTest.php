@@ -10,6 +10,7 @@ use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreVariant;
 use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ConversionBackend;
+use OCA\ScoreView\Service\ConversionConfig;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\PublicShareGrant;
 use OCA\ScoreView\Service\ShareConversionQuota;
@@ -18,6 +19,7 @@ use OCA\ScoreView\Service\VariantService;
 use OCP\AppFramework\Http;
 use OCP\Files\File;
 use OCP\Files\SimpleFS\ISimpleFile;
+use OCP\IAppConfig;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IURLGenerator;
@@ -39,6 +41,8 @@ use PHPUnit\Framework\TestCase;
  * 5. The sidecar path engraves no variants and says so with a code.
  */
 class VariantControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private ConversionService&MockObject $conversionService;
 	private VariantService&MockObject $variantService;
@@ -48,11 +52,18 @@ class VariantControllerTest extends TestCase {
 	private IURLGenerator&MockObject $urls;
 	private DirectAccessContext&MockObject $directAccess;
 	private ShareConversionQuota&MockObject $quota;
+	private bool $capacity = true;
+	private int $maxParallel = ConversionConfig::DEFAULT_VARIANT_MAX_PARALLEL;
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
-		$this->conversionService = $this->createMock(ConversionService::class);
+		$this->fileResolver = $this->resolverDouble();
+		// isServable() stays real: it is the rule the artifact routes share.
+		$this->conversionService = $this->getMockBuilder(ConversionService::class)
+			->disableOriginalConstructor()
+			->onlyMethods(array_values(array_diff(get_class_methods(ConversionService::class), ['__construct', 'isServable'])))
+			->getMock();
 		$this->variantService = $this->createMock(VariantService::class);
+		$this->variantService->method('hasCapacity')->willReturnCallback(fn () => $this->capacity);
 		$this->backend = $this->createMock(ConversionBackend::class);
 		$this->backend->method('supportsVariants')->willReturn(true);
 		$this->job = $this->createMock(ConvertScoreJob::class);
@@ -69,6 +80,9 @@ class VariantControllerTest extends TestCase {
 		$session->method('getUser')->willReturn($this->createMock(IUser::class));
 		$l = $this->createMock(IL10N::class);
 		$l->method('t')->willReturnArgument(0);
+		$appConfig = $this->createMock(IAppConfig::class);
+		$appConfig->method('getValueInt')->willReturnCallback(
+			fn (string $app, string $key, int $default = 0) => $key === ConversionConfig::VARIANT_MAX_PARALLEL ? $this->maxParallel : $default);
 		return new VariantController(
 			$this->createMock(IRequest::class),
 			$this->fileResolver,
@@ -82,11 +96,12 @@ class VariantControllerTest extends TestCase {
 			$l,
 			$this->directAccess,
 			$this->quota,
+			$appConfig,
 		);
 	}
 
 	private function withFile(): void {
-		$node = $this->createMock(File::class);
+		$node = $this->scoreDouble();
 		$node->method('getEtag')->willReturn('e1');
 		$this->fileResolver->method('resolveOwnNode')->willReturn($node);
 	}
@@ -258,16 +273,19 @@ class VariantControllerTest extends TestCase {
 		$this->assertSame('pending', $this->controller()->status(42, 'full~phone~w~0')->getData()['status']);
 	}
 
-	public function testVisitorRestartOverQuotaIs429WithoutRestart(): void {
+	public function testVisitorRestartOverQuotaIs429AndGivesTheRowBack(): void {
 		$this->asVisitor();
 		$this->withFile();
 		$this->withReadyBase();
-		$this->variantService->method('find')->willReturn($this->readyVariant('full~phone~w~0'));
+		$failed = $this->readyVariant('full~phone~w~0');
+		$this->variantService->method('find')->willReturn($failed);
 		$this->variantService->method('isCurrent')->willReturn(false);
 		$this->variantService->method('isRunning')->willReturn(false);
 		$this->variantService->method('mayRetry')->willReturn(true);
+		$this->variantService->method('restart')->willReturn($failed);
 		$this->quota->method('consume')->willReturn(false);
-		$this->variantService->expects($this->never())->method('restart');
+		// Retryable anyway; gone, the next request claims it anew.
+		$this->variantService->expects($this->once())->method('release')->with($failed);
 		$this->job->expects($this->never())->method('convertVariant');
 		$response = $this->controller()->status(42, 'full~phone~w~0');
 		$this->assertSame(Http::STATUS_TOO_MANY_REQUESTS, $response->getStatus());
@@ -288,6 +306,9 @@ class VariantControllerTest extends TestCase {
 		$this->withFile();
 		$this->withReadyBase();
 		$this->variantService->method('find')->willReturn(null);
+		$claimed = $this->readyVariant('full~phone~w~0');
+		$this->variantService->method('claim')->willReturn($claimed);
+		$this->variantService->expects($this->once())->method('release')->with($claimed);
 		$this->limiter->method('registerUserRequest')->willThrowException($this->createMock(IRateLimitExceededException::class));
 		$this->job->expects($this->never())->method('convertVariant');
 		$response = $this->controller()->status(42, 'full~phone~w~0');
@@ -305,6 +326,81 @@ class VariantControllerTest extends TestCase {
 		$this->variantService->method('mayRetry')->willReturn(false);
 		$this->job->expects($this->never())->method('convertVariant');
 		$this->assertSame('conversion_failed', $this->controller()->status(42, 'full~phone~w~0')->getData()['errorCode']);
+	}
+
+	// --- An instance-wide limit on runs at once (issue #43) ------------------
+
+	public function testAFullInstanceAnswersPendingAndGivesTheClaimBack(): void {
+		$this->asVisitor();
+		$this->withFile();
+		$this->withReadyBase();
+		$this->capacity = false;
+		$this->variantService->method('find')->willReturn(null);
+		$claimed = $this->readyVariant('full~phone~w~0');
+		$this->variantService->method('claim')->willReturn($claimed);
+		$this->variantService->expects($this->once())->method('release')->with($claimed);
+		// A full instance is no fault of the reader: nothing of her allowance.
+		$this->quota->expects($this->never())->method('consume');
+		$this->limiter->expects($this->never())->method('registerUserRequest');
+		$this->job->expects($this->never())->method('convertVariant');
+
+		$response = $this->controller()->status(42, 'full~phone~w~0');
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['status' => 'pending'], $response->getData());
+	}
+
+	public function testAFullInstanceGivesARestartedRowBackAsWell(): void {
+		$this->withFile();
+		$this->withReadyBase();
+		$this->capacity = false;
+		$failed = $this->readyVariant('full~phone~w~0');
+		$this->variantService->method('find')->willReturn($failed);
+		$this->variantService->method('mayRetry')->willReturn(true);
+		$this->variantService->method('restart')->willReturn($failed);
+		$this->variantService->expects($this->once())->method('release')->with($failed);
+		$this->limiter->expects($this->never())->method('registerUserRequest');
+		$this->job->expects($this->never())->method('convertVariant');
+
+		$this->assertSame(['status' => 'pending'], $this->controller()->status(42, 'full~phone~w~0')->getData());
+	}
+
+	public function testTheLimitComesFromTheAppConfig(): void {
+		$this->withFile();
+		$this->withReadyBase();
+		$this->maxParallel = 5;
+		$this->variantService->method('find')->willReturn(null);
+		$this->variantService->method('claim')->willReturn($this->readyVariant('full~phone~w~0'));
+		$this->variantService->expects($this->once())->method('hasCapacity')->with(5);
+		$this->controller()->status(42, 'full~phone~w~0');
+	}
+
+	// --- Error texts stay with members (issue #44) ---------------------------
+
+	private function failedVariant(): void {
+		$failed = $this->readyVariant('full~phone~w~0');
+		$failed->setStatus(ScoreConversion::STATUS_ERROR);
+		$failed->setErrorCode(ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+		$failed->setErrorMessage('cURL error 6: Could not resolve host: scoreview-sidecar');
+		$this->variantService->method('find')->willReturn($failed);
+		$this->variantService->method('mayRetry')->willReturn(false);
+	}
+
+	public function testAVisitorGetsTheCodeButNotTheText(): void {
+		$this->asVisitor();
+		$this->withFile();
+		$this->withReadyBase();
+		$this->failedVariant();
+		$data = $this->controller()->status(42, 'full~phone~w~0')->getData();
+		$this->assertSame('sidecar_unreachable', $data['errorCode']);
+		$this->assertArrayNotHasKey('error', $data);
+	}
+
+	public function testAMemberKeepsTheText(): void {
+		$this->withFile();
+		$this->withReadyBase();
+		$this->failedVariant();
+		$data = $this->controller()->status(42, 'full~phone~w~0')->getData();
+		$this->assertSame('cURL error 6: Could not resolve host: scoreview-sidecar', $data['error']);
 	}
 
 	public function testArtifactsOfAnUnfinishedVariantAre404(): void {

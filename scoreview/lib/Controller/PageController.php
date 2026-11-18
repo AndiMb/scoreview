@@ -84,8 +84,8 @@ class PageController extends Controller {
 	#[NoAdminRequired]
 	#[NoCSRFRequired]
 	public function print(int $fileId): Response {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
-		if (!$node instanceof File) {
+		$node = $this->fileResolver->resolveScore($fileId);
+		if ($node === null) {
 			return $this->notFound();
 		}
 		$uid = $this->userSession->getUser()?->getUID();

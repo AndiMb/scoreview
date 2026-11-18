@@ -10,6 +10,7 @@ use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\ScoreConversion;
 use OCA\ScoreView\Db\ScoreVariant;
 use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
 use OCP\IAppConfig;
 
 /**
@@ -31,6 +32,15 @@ class SidecarClient {
 		ScoreConversion::ERROR_TIMEOUT,
 		ScoreConversion::ERROR_CONVERSION_FAILED,
 	];
+
+	/**
+	 * For every request that names no timeout of its own: the sidecar is a
+	 * neighbour container, and a request that hangs there must not hold a
+	 * cron worker or a viewer's status request for as long as the HTTP
+	 * client would wait by itself. The long ones (a conversion's self-test,
+	 * a variant, the SoundFont download) say so where they are made.
+	 */
+	public const DEFAULT_TIMEOUT_SECONDS = 30;
 
 	public function __construct(
 		private IClientService $clientService,
@@ -55,6 +65,54 @@ class SidecarClient {
 	}
 
 	/**
+	 * One request to the sidecar, with the secret, a timeout and one reading
+	 * of what went wrong:
+	 *
+	 * - 4xx: the sidecar was reached and refused (wrong secret, upload
+	 *   limit, ...) - a finding of its own, not "unreachable"
+	 *   (ScoreConversion::ERROR_SIDECAR_REJECTED).
+	 * - 503 where `$busyOn503`: the sidecar's queue is full. It is reachable
+	 *   and healthy, only busy - the answer is a later retry, not the
+	 *   fallback to the browser (SidecarBusyException). Only /convert and
+	 *   /variant queue; elsewhere a 503 is what any other 5xx is.
+	 * - everything else (5xx, no connection, timeout): unreachable, the code
+	 *   Service\ClientFallback acts on.
+	 *
+	 * @param 'GET'|'POST' $method
+	 * @param string $what for the message: "Sidecar <what> failed: ..."
+	 * @throws SidecarException
+	 */
+	private function send(string $method, string $path, array $options, string $what, bool $busyOn503 = false): IResponse {
+		$options['headers'] = $this->headers();
+		$options['timeout'] ??= self::DEFAULT_TIMEOUT_SECONDS;
+		$client = $this->clientService->newClient();
+		$url = $this->getBaseUrl() . $path;
+		$message = 'Sidecar ' . $what . ' failed: ';
+		try {
+			return $method === 'POST' ? $client->post($url, $options) : $client->get($url, $options);
+		} catch (ClientException $e) {
+			throw new SidecarException($message . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
+		} catch (ServerException $e) {
+			if ($busyOn503 && $e->getResponse()->getStatusCode() === 503) {
+				throw new SidecarBusyException(
+					'Sidecar busy: ' . $e->getMessage(),
+					self::retryAfterSeconds($e->getResponse()->getHeaderLine('Retry-After')),
+					$e,
+				);
+			}
+			throw new SidecarException($message . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+		} catch (\Exception $e) {
+			throw new SidecarException($message . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+		}
+	}
+
+	/** The HTTP status behind a failed send(), null where there was no answer. */
+	private static function statusOf(SidecarException $e): ?int {
+		$previous = $e->getPrevious();
+		return $previous instanceof ClientException || $previous instanceof ServerException ? $previous->getResponse()->getStatusCode() : null;
+	}
+
+	/**
 	 * Lädt die .mscz hoch und startet die Konvertierung.
 	 *
 	 * `$mscz` ist ein **Stream**, kein String: Guzzle
@@ -75,45 +133,19 @@ class SidecarClient {
 		if (!$this->isConfigured()) {
 			throw new SidecarException('Sidecar is not configured (Settings → ScoreView).', errorCode: ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
-		$client = $this->clientService->newClient();
-		try {
-			$response = $client->post($this->getBaseUrl() . '/convert', [
-				'headers' => $this->headers(),
-				'multipart' => [
-					[
-						'name' => 'file',
-						'contents' => $mscz,
-						'filename' => $filename,
-					],
-					[
-						'name' => 'renderer',
-						'contents' => $renderer,
-					],
+		$response = $this->send('POST', '/convert', [
+			'multipart' => [
+				[
+					'name' => 'file',
+					'contents' => $mscz,
+					'filename' => $filename,
 				],
-			]);
-		} catch (ClientException $e) {
-			// 4xx: der Sidecar wurde erreicht und hat die Anfrage explizit
-			// abgelehnt (falsches Secret, Upload-Groessenlimit, …) - das ist ein
-			// anderer Befund als "nicht erreichbar" und verdient einen eigenen
-			// Code (siehe ScoreConversion::ERROR_*).
-			throw new SidecarException('Sidecar request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
-		} catch (ServerException $e) {
-			// 503 heisst beim Sidecar genau eines: Warteschlange voll. Er ist
-			// also erreichbar und gesund, nur gerade ausgelastet - ein
-			// Neuversuch spaeter ist die Antwort, nicht der Rueckfall auf den
-			// Browser (siehe SidecarBusyException). Jedes andere 5xx bleibt
-			// "nicht erreichbar".
-			if ($e->getResponse()->getStatusCode() === 503) {
-				throw new SidecarBusyException(
-					'Sidecar busy: ' . $e->getMessage(),
-					self::retryAfterSeconds($e->getResponse()->getHeaderLine('Retry-After')),
-					$e,
-				);
-			}
-			throw new SidecarException('Sidecar request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
-		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
-		}
+				[
+					'name' => 'renderer',
+					'contents' => $renderer,
+				],
+			],
+		], 'request', busyOn503: true);
 		$body = json_decode($response->getBody(), true);
 		if (!is_array($body) || !isset($body['jobId'])) {
 			throw new SidecarException('Sidecar response to /convert without jobId.');
@@ -154,16 +186,7 @@ class SidecarClient {
 	 * @throws SidecarException
 	 */
 	public function pollStatus(string $jobId): array {
-		$client = $this->clientService->newClient();
-		try {
-			$response = $client->get($this->getBaseUrl() . "/convert/{$jobId}", [
-				'headers' => $this->headers(),
-			]);
-		} catch (ClientException $e) {
-			throw new SidecarException('Sidecar status request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
-		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar status request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
-		}
+		$response = $this->send('GET', '/convert/' . rawurlencode($jobId), [], 'status request');
 		$body = json_decode($response->getBody(), true);
 		if (!is_array($body) || !isset($body['status'])) {
 			throw new SidecarException('Sidecar response to /convert/{jobId} without status.');
@@ -186,9 +209,9 @@ class SidecarClient {
 			return ['reachable' => false, 'error' => 'No sidecar URL configured.'];
 		}
 		try {
-			$response = $this->clientService->newClient()->get($this->getBaseUrl() . '/health', ['timeout' => 5]);
+			$response = $this->send('GET', '/health', ['timeout' => 5], 'health check');
 			return ['reachable' => trim((string)$response->getBody()) === 'ok'];
-		} catch (\Exception $e) {
+		} catch (SidecarException $e) {
 			return ['reachable' => false, 'error' => $e->getMessage()];
 		}
 	}
@@ -218,11 +241,8 @@ class SidecarClient {
 			// Grosszuegiger Timeout: der Selbsttest laesst eine echte
 			// MuseScore-Konvertierung laufen (gemessen ~6s fuer die
 			// einseitige Testpartitur).
-			$response = $this->clientService->newClient()->get($this->getBaseUrl() . '/selftest?renderer=' . rawurlencode($renderer), [
-				'headers' => $this->headers(),
-				'timeout' => 120,
-			]);
-		} catch (\Exception $e) {
+			$response = $this->send('GET', '/selftest?renderer=' . rawurlencode($renderer), ['timeout' => 120], 'self-test');
+		} catch (SidecarException $e) {
 			return ['ok' => false, 'error' => $e->getMessage()];
 		}
 		$body = json_decode($response->getBody(), true);
@@ -256,8 +276,7 @@ class SidecarClient {
 			throw new SidecarException('Sidecar is not configured (Settings → ScoreView).', errorCode: ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
 		}
 		try {
-			$response = $this->clientService->newClient()->post($this->getBaseUrl() . '/variant', [
-				'headers' => $this->headers(),
+			$response = $this->send('POST', '/variant', [
 				// A run measures 3-4 s; the sidecar waits up to 20 s for a
 				// free slot before it says it is busy.
 				'timeout' => 120,
@@ -267,21 +286,14 @@ class SidecarClient {
 					['name' => 'measures', 'contents' => $measuresJson, 'filename' => 'measures.json'],
 					['name' => 'key', 'contents' => $key],
 				],
-			]);
-		} catch (ClientException $e) {
+			], 'variant request', busyOn503: true);
+		} catch (SidecarException $e) {
 			// 404: the route is missing - an image from before the engine
 			// renderer. Not the score's fault and not an outage.
-			if ($e->getResponse()->getStatusCode() === 404) {
+			if (self::statusOf($e) === 404) {
 				throw new SidecarException('The sidecar image engraves no display variants yet - rebuild it (sidecar/README.md).', 0, $e, ScoreVariant::ERROR_UNSUPPORTED);
 			}
-			throw new SidecarException('Sidecar variant request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
-		} catch (ServerException $e) {
-			if ($e->getResponse()->getStatusCode() === 503) {
-				throw new SidecarException('Sidecar busy: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_BUSY);
-			}
-			throw new SidecarException('Sidecar variant request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
-		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar variant request failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
+			throw $e;
 		}
 		$body = json_decode((string)$response->getBody(), true);
 		if (!is_array($body) || !isset($body['status'])) {
@@ -321,19 +333,13 @@ class SidecarClient {
 		if (!$this->isConfigured()) {
 			throw new SidecarException('Sidecar is not configured (Settings → ScoreView).');
 		}
-		$client = $this->clientService->newClient();
-		try {
-			$response = $client->get($this->getBaseUrl() . '/soundfont/info', [
-				'headers' => $this->headers(),
-				// SoundFontService asks on every SoundFont request and falls
-				// back to its cached copy when this fails - so a hanging
-				// sidecar must fail fast, not after the client's default
-				// timeout, or playback waits on a service it does not need.
-				'timeout' => 5,
-			]);
-		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar SoundFont request failed: ' . $e->getMessage(), 0, $e);
-		}
+		$response = $this->send('GET', '/soundfont/info', [
+			// SoundFontService asks on every SoundFont request and falls
+			// back to its cached copy when this fails - so a hanging
+			// sidecar must fail fast, not after the default timeout, or
+			// playback waits on a service it does not need.
+			'timeout' => 5,
+		], 'SoundFont request');
 		$body = json_decode($response->getBody(), true);
 		if (!is_array($body) || !isset($body['available'])) {
 			throw new SidecarException('Sidecar response to /soundfont/info without an available field.');
@@ -352,19 +358,13 @@ class SidecarClient {
 		if (!$this->isConfigured()) {
 			throw new SidecarException('Sidecar is not configured (Settings → ScoreView).');
 		}
-		$client = $this->clientService->newClient();
-		try {
-			$client->get($this->getBaseUrl() . '/soundfont', [
-				'headers' => $this->headers(),
-				'sink' => $targetPath,
-				// Deutlich groesser als der Default: 40 MB ueber eine langsame
-				// Verbindung zwischen zwei Containern darf nicht mittendrin
-				// abbrechen.
-				'timeout' => 120,
-			]);
-		} catch (\Exception $e) {
-			throw new SidecarException('SoundFont download from the sidecar failed: ' . $e->getMessage(), 0, $e);
-		}
+		$this->send('GET', '/soundfont', [
+			'sink' => $targetPath,
+			// Deutlich groesser als der Default: 40 MB ueber eine langsame
+			// Verbindung zwischen zwei Containern darf nicht mittendrin
+			// abbrechen.
+			'timeout' => 120,
+		], 'SoundFont download');
 	}
 
 	/**
@@ -402,16 +402,7 @@ class SidecarClient {
 				'Sidecar named an unusable artifact path: ' . $relativeUrl,
 				0, null, ScoreConversion::ERROR_SIDECAR_REJECTED);
 		}
-		$client = $this->clientService->newClient();
-		try {
-			$response = $client->get($this->getBaseUrl() . $relativeUrl, [
-				'headers' => $this->headers(),
-			]);
-		} catch (ClientException $e) {
-			throw new SidecarException('Sidecar file download failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_REJECTED);
-		} catch (\Exception $e) {
-			throw new SidecarException('Sidecar file download failed: ' . $e->getMessage(), 0, $e, ScoreConversion::ERROR_SIDECAR_UNREACHABLE);
-		}
+		$response = $this->send('GET', $relativeUrl, [], 'file download');
 		$body = $response->getBody();
 		// A resource only comes back for a request with 'stream' => true.
 		return is_string($body) ? $body : (string)stream_get_contents($body);

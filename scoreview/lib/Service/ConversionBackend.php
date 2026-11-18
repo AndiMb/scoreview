@@ -51,8 +51,7 @@ class ConversionBackend {
 	}
 
 	public function current(): string {
-		$value = $this->appConfig->getValueString(Application::APP_ID, self::CONFIG_KEY, self::LOCAL);
-		return $value === self::SIDECAR ? self::SIDECAR : self::LOCAL;
+		return self::normalize($this->appConfig->getValueString(Application::APP_ID, self::CONFIG_KEY, self::LOCAL));
 	}
 
 	public function isLocal(): bool {

@@ -29,7 +29,6 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\StreamResponse;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\File;
-use OCP\Files\Node;
 use OCP\Files\NotFoundException;
 use OCP\IAppConfig;
 use OCP\ICache;
@@ -54,7 +53,7 @@ use OCP\IURLGenerator;
  *
  * `immutable` verspricht dem Browser, dass sich unter DIESER URL nie etwas
  * aendert - deshalb muss der Cache-Schluessel in der URL stehen und nicht
- * nur im IAppData-Pfad (siehe cacheBuster()). Ohne den Parameter zeigte
+ * nur im IAppData-Pfad (siehe ArtifactResponse::version()). Ohne den Parameter zeigte
  * eine neu konvertierte Partitur unter unveraenderter URL weiter die alten
  * Seiten: Chrome revalidiert Unterressourcen beim Neuladen nicht, und
  * `immutable` verbietet es ausdruecklich - sichtbar wurde die neue Fassung
@@ -62,8 +61,6 @@ use OCP\IURLGenerator;
  */
 class ConversionController extends Controller {
 	use JsonErrors;
-
-	private const IMMUTABLE_CACHE_SECONDS = 31536000;
 
 	/**
 	 * Bis hierhin darf eine Partitur im BROWSER gesetzt werden. Viel kleiner
@@ -121,7 +118,7 @@ class ConversionController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession(share: 'read')]
 	public function status(int $fileId): JSONResponse {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
+		$node = $this->fileResolver->resolveScore($fileId);
 		if ($node === null) {
 			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
@@ -159,7 +156,13 @@ class ConversionController extends Controller {
 
 		$body = ['status' => $conversion->getStatus()];
 		if ($conversion->getStatus() === ScoreConversion::STATUS_ERROR) {
-			$body['error'] = $conversion->getErrorMessage();
+			// The stored text is the exception's, written for the log: it can
+			// name the sidecar's address, server paths or the converter's
+			// command line. A visitor on a public link gets the code only
+			// (S12); members keep the text as a detail behind the message.
+			if ($this->directAccess->shareGrant() === null) {
+				$body['error'] = $conversion->getErrorMessage();
+			}
 			// error_code statt uebersetztem error_message: der Text wird
 			// einmal beim Konvertieren geschrieben, aber von beliebigen Nutzerinnen
 			// in beliebigen Sprachen gelesen - IL10N ist an die Sprache der GERADE
@@ -259,7 +262,7 @@ class ConversionController extends Controller {
 	#[NoAdminRequired]
 	#[UserRateLimit(limit: 5, period: 300)]
 	public function reconvert(int $fileId): JSONResponse {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
+		$node = $this->fileResolver->resolveScore($fileId);
 		if ($node === null) {
 			return new JSONResponse(['status' => 'error', 'error' => $this->l->t('File not found or no access.')], Http::STATUS_NOT_FOUND);
 		}
@@ -325,7 +328,7 @@ class ConversionController extends Controller {
 	}
 
 	private function quotaExceeded(): JSONResponse {
-		return new JSONResponse(['status' => 'error', 'errorCode' => 'share_quota'], Http::STATUS_TOO_MANY_REQUESTS);
+		return new JSONResponse(['status' => ScoreConversion::STATUS_ERROR, 'errorCode' => ShareConversionQuota::ERROR_CODE], Http::STATUS_TOO_MANY_REQUESTS);
 	}
 
 	/**
@@ -352,7 +355,7 @@ class ConversionController extends Controller {
 	 * (UserFileResolver), an genau einer Stelle statt an zweien.
 	 *
 	 * `immutable` ist auch hier ehrlich, weil der Etag als `v` in der URL
-	 * steht (siehe cacheBuster()): Aendert sich die Datei, aendert sich die
+	 * steht (siehe ArtifactResponse::version()): Aendert sich die Datei, aendert sich die
 	 * URL.
 	 */
 	#[NoAdminRequired]
@@ -360,8 +363,8 @@ class ConversionController extends Controller {
 	#[PublicPage]
 	#[DirectTokenOrSession(csrfInSession: false, share: 'download')]
 	public function source(int $fileId): Http\Response {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
-		if (!$node instanceof File) {
+		$node = $this->fileResolver->resolveScore($fileId);
+		if ($node === null) {
 			return $this->notFound();
 		}
 
@@ -387,7 +390,7 @@ class ConversionController extends Controller {
 		$response->addHeader('Content-Disposition', 'attachment');
 		$response->addHeader('Content-Length', (string)$node->getSize());
 		$response->setETag($node->getEtag());
-		$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
+		$response->cacheFor(ArtifactResponse::IMMUTABLE_CACHE_SECONDS, false, true);
 		return $response;
 	}
 
@@ -397,7 +400,7 @@ class ConversionController extends Controller {
 	 * eingereiht und der Viewer wartet. Kann er es nicht, waere das Warten
 	 * endlos: Dann uebernimmt der Browser (Service\ClientFallback).
 	 */
-	private function pendingOrClient(int $fileId, Node $node): JSONResponse {
+	private function pendingOrClient(int $fileId, File $node): JSONResponse {
 		$grund = $this->clientFallback->reason();
 		if ($grund !== null) {
 			return $this->clientResponse($node, $grund);
@@ -420,7 +423,7 @@ class ConversionController extends Controller {
 	 * speichern; auf einer Instanz, die so laeuft, bleibt die Statustabelle
 	 * leer.
 	 */
-	private function clientResponse(Node $node, ?string $grund): JSONResponse {
+	private function clientResponse(File $node, ?string $grund): JSONResponse {
 		// A link with "hide download" gives the browser no source to set -
 		// an end, with its reason, instead of a fallback bound to fail
 		// (Service\ClientFallback::sourceOpenTo). Nothing is queued: the
@@ -456,14 +459,14 @@ class ConversionController extends Controller {
 	}
 
 	private function serveCachedFile(int $fileId, string $name): Http\Response {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
+		$node = $this->fileResolver->resolveScore($fileId);
 		if ($node === null) {
 			return $this->notFound();
 		}
 
 		$etag = $node->getEtag();
 		$conversion = $this->conversionService->find($fileId, $etag);
-		if ($conversion === null || $conversion->getStatus() !== ScoreConversion::STATUS_READY || !$this->conversionService->isCurrentFormat($conversion)) {
+		if (!$this->conversionService->isServable($conversion)) {
 			return new JSONResponse(['error' => $this->l->t('Conversion not finished yet.')], Http::STATUS_NOT_FOUND);
 		}
 
@@ -478,24 +481,7 @@ class ConversionController extends Controller {
 		// garantiert. So landet der Dateiinhalt nie komplett als PHP-String im
 		// Speicher. ArtifactResponse streams it and gzips SVG and JSON on the
 		// way out, which the stock web server config does not.
-		$response = new ArtifactResponse($file->read(), $mimeType, $this->request, $file->getSize());
-		// Die Bereinigung des SVG sitzt im Browser (ScorePage.vue ->
-		// lib/svgSanitizer.js) und greift nur, wo der Viewer es holt. Wer
-		// diese URL direkt aufruft, bekaeme das SVG als DOKUMENT auf der
-		// Nextcloud-Herkunft - Nextclouds nonce-basierte Default-CSP faengt
-		// Skripte darin zwar ab, aber der Sanitizer waere dann nicht mehr die
-		// Schicht, die das traegt. Dieser Header macht die Frage
-		// gegenstandslos. Den Viewer beruehrt er nicht: Er holt das Artefakt
-		// per XHR, und dort spielt Content-Disposition keine Rolle.
-		$response->addHeader('Content-Disposition', 'attachment');
-		// $etag ist der Nextcloud-Datei-etag, nicht IAppData's eigener - bewusst
-		// so: Inhalt ist fuer (fileId, etag) invariant (siehe ConversionService),
-		// er reicht also als stabiler HTTP-ETag, ohne von
-		// Speicher-Backend-Details von IAppData abzuhaengen.
-		$response->setETag($etag);
-		$response->setLastModified($conversion->getUpdatedAt());
-		$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
-		return $response;
+		return ArtifactResponse::immutable($file, $mimeType, $this->request, $etag, $conversion->getUpdatedAt());
 	}
 
 	/**
@@ -509,7 +495,7 @@ class ConversionController extends Controller {
 	 * CORS-faehig hostet.
 	 *
 	 * The app's own address carries the SoundFont's version as `?v=`, like
-	 * the artifacts carry theirs (cacheBuster()): it is delivered `immutable`,
+	 * the artifacts carry theirs (ArtifactResponse::version()): it is delivered `immutable`,
 	 * and without a version in the URL a browser kept the first SoundFont it
 	 * ever got, through any later change of sidecar image or download URL.
 	 * '0' stands for "not fetched yet"; SoundFontController does not let the
@@ -524,27 +510,10 @@ class ConversionController extends Controller {
 		return $this->urlGenerator->linkToRoute(Application::APP_ID . '.sound_font.get', ['v' => $version !== '' ? $version : '0']);
 	}
 
-	/**
-	 * Was die Artefakt-URL einer Konvertierung von der einer anderen
-	 * unterscheidet. Der Server wertet den Parameter nicht aus (er loest den
-	 * etag ohnehin aus der Datei auf) - er existiert allein als
-	 * Cache-Schluessel des Browsers, damit `immutable` oben die Wahrheit
-	 * sagt.
-	 *
-	 * Beides zusammen, weil es zwei verschiedene Aenderungen gibt: der etag
-	 * benennt die Fassung der PARTITUR (Bearbeitung, Re-Upload), der
-	 * Zeitstempel die KONVERTIERUNG dieser Fassung - ein Format-Upgrade oder
-	 * ein manuelles „Neu konvertieren" laesst den etag unberuehrt und
-	 * bliebe sonst unsichtbar.
-	 */
-	private function cacheBuster(ScoreConversion $conversion): string {
-		return $conversion->getEtag() . '-' . $conversion->getUpdatedAt()->getTimestamp();
-	}
-
 	private function buildFileUrls(int $fileId, ScoreConversion $conversion): array {
 		$etag = $conversion->getEtag();
 		$pageCount = $this->conversionService->getPageCount($conversion);
-		$version = $this->cacheBuster($conversion);
+		$version = ArtifactResponse::version($conversion);
 		$artifact = fn (string $name) => $this->urlGenerator->linkToRoute(
 			Application::APP_ID . '.conversion.artifact', ['fileId' => $fileId, 'name' => $name, 'v' => $version]);
 		$pages = [];

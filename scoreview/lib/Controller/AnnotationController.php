@@ -7,11 +7,11 @@ namespace OCA\ScoreView\Controller;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\Db\Annotation;
 use OCA\ScoreView\Middleware\Attribute\DirectTokenOrSession;
-use OCA\ScoreView\Service\AnnotationLimitException;
+use OCA\ScoreView\Service\AnnotationException;
 use OCA\ScoreView\Service\AnnotationService;
+use OCA\ScoreView\Service\AnnotationValidator;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LeaderService;
-use OCA\ScoreView\Service\TargetParts;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -43,28 +43,6 @@ use OCP\IRequest;
 class AnnotationController extends Controller {
 	use JsonErrors;
 
-	/**
-	 * Obergrenze fuer den Text einer Notiz. Die Spalte ist TEXT und haette
-	 * selbst keine, aber `content` ist das einzige frei formulierte Feld der
-	 * App: ohne Grenze traegt eine einzelne Notiz so viel, wie die
-	 * Anfragegroesse der Instanz durchlaesst, und wird danach bei JEDEM
-	 * Oeffnen der Partitur mit ausgeliefert (listForFile laedt alle Notizen
-	 * einer Datei auf einmal). 10000 Zeichen sind weit jenseits einer
-	 * Probennotiz und decken auch einen langen Absatz ab.
-	 */
-	private const MAX_CONTENT_LENGTH = 10000;
-
-	/**
-	 * Bounds of a drawing (E22), the same as src/lib/drawingLayout.js: a few
-	 * marks, not a picture.
-	 */
-	private const MAX_DRAWING_STROKES = 40;
-	private const MAX_DRAWING_POINTS = 800;
-	private const MAX_DRAWING_OFFSET = 400;
-
-	/** Die Breite der Spalte - siehe validateAnchorEtag(). */
-	private const MAX_ANCHOR_ETAG_LENGTH = 64;
-
 	public function __construct(
 		IRequest $request,
 		private UserFileResolver $fileResolver,
@@ -81,11 +59,11 @@ class AnnotationController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function index(int $fileId): JSONResponse {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
-		$userId = $this->fileResolver->currentUserId();
-		if ($node === null || $userId === null) {
+		$score = $this->fileResolver->resolveUserScore($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 
 		$currentMeasureCount = null;
 		try {
@@ -116,23 +94,16 @@ class AnnotationController extends Controller {
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[AnonRateLimit(limit: 60, period: 60)]
 	public function create(int $fileId, int $measureNumber, float $fraction, string $content = '', ?int $elid = null, ?string $anchorEtag = null, string $visibility = Annotation::VISIBILITY_PRIVATE, string $kind = Annotation::KIND_TEXT, ?string $stamp = null, ?array $targetParts = null, ?int $endMeasure = null): JSONResponse {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
-		$userId = $this->fileResolver->currentUserId();
-		if ($node === null || $userId === null) {
+		$score = $this->fileResolver->resolveUserScore($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
-		// Ein unbekannter Typ wird zur Textnotiz - der engere Fall: Sie
-		// braucht Text, ein Tippfehler endet also als 400 statt als Stempel
-		// ohne Bild.
-		$kind = in_array($kind, [Annotation::KIND_STAMP, Annotation::KIND_LOOP, Annotation::KIND_DRAWING], true) ? $kind : Annotation::KIND_TEXT;
-		$fehler = match ($kind) {
-			Annotation::KIND_STAMP => $this->validateStamp($stamp, $content),
-			Annotation::KIND_LOOP => $this->validateLoop($measureNumber, $endMeasure, $content),
-			Annotation::KIND_DRAWING => $this->validateDrawing($content),
-			default => $this->validateContent($content),
-		} ?? $this->validateAnchorEtag($anchorEtag);
-		if ($fehler !== null) {
-			return $fehler;
+		[$node, $userId] = $score;
+		$kind = AnnotationValidator::kind($kind);
+		try {
+			AnnotationValidator::forCreate($kind, $measureNumber, $endMeasure, $content, $stamp, $anchorEtag);
+		} catch (AnnotationException $e) {
+			return $this->refused($e);
 		}
 		if ($kind !== Annotation::KIND_STAMP) {
 			$stamp = null;
@@ -171,9 +142,10 @@ class AnnotationController extends Controller {
 			if (!$byLeader) {
 				return new JSONResponse(['error' => $this->l->t('Only leaders can address notes to voices.')], Http::STATUS_FORBIDDEN);
 			}
-			$targetPartsJson = $this->normalizeTargetParts($targetParts);
-			if ($targetPartsJson === null) {
-				return new JSONResponse(['error' => $this->l->t('Choose at least one voice.')], Http::STATUS_BAD_REQUEST);
+			try {
+				$targetPartsJson = AnnotationValidator::targetParts($targetParts);
+			} catch (AnnotationException $e) {
+				return $this->refused($e);
 			}
 		}
 
@@ -193,11 +165,8 @@ class AnnotationController extends Controller {
 
 		try {
 			$annotation = $this->annotationService->create($fileId, $userId, $measureNumber, $fraction, $elid, $anchorEtag, $content, $visibility, $kind, $stamp, $targetPartsJson, $byLeader, $endMeasure);
-		} catch (AnnotationLimitException) {
-			return new JSONResponse([
-				'error' => $this->l->t('You already have the maximum number of notes for this score. Delete some notes first.'),
-				'reason' => 'limit',
-			], Http::STATUS_CONFLICT);
+		} catch (AnnotationException $e) {
+			return $this->refused($e);
 		}
 		return new JSONResponse($this->annotationService->serialize($annotation, $userId), Http::STATUS_CREATED);
 	}
@@ -213,31 +182,19 @@ class AnnotationController extends Controller {
 	#[UserRateLimit(limit: 60, period: 60)]
 	#[AnonRateLimit(limit: 60, period: 60)]
 	public function update(int $fileId, int $id, string $content = '', ?array $targetParts = null): JSONResponse {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
-		$userId = $this->fileResolver->currentUserId();
-		if ($node === null || $userId === null) {
+		$score = $this->fileResolver->resolveUserScore($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
-		// Nur die Laenge hier: Ob der Text leer sein darf, haengt an der Art
-		// der Notiz (ein Stempel darf), und die kennt erst der Service.
-		$fehler = $this->validateContentLength($content);
-		if ($fehler !== null) {
-			return $fehler;
-		}
-		$targetPartsJson = null;
-		if ($targetParts !== null) {
-			$targetPartsJson = $this->normalizeTargetParts($targetParts);
-			if ($targetPartsJson === null) {
-				return new JSONResponse(['error' => $this->l->t('Choose at least one voice.')], Http::STATUS_BAD_REQUEST);
-			}
-		}
-
+		[$node, $userId] = $score;
+		// The text is checked by the service: whether it may be empty depends
+		// on the kind of the note (a stamp's may), which only the stored row
+		// knows.
 		try {
+			$targetPartsJson = $targetParts === null ? null : AnnotationValidator::targetParts($targetParts);
 			$annotation = $this->annotationService->updateContent($id, $fileId, $userId, $this->canWriteShared($node), $content, $this->leaders->isLeader($node, $userId), $targetPartsJson);
-		} catch (\InvalidArgumentException) {
-			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
-		} catch (\RuntimeException) {
-			return new JSONResponse(['error' => $this->l->t('You do not have permission to change this note.')], Http::STATUS_FORBIDDEN);
+		} catch (AnnotationException $e) {
+			return $this->refused($e);
 		}
 		if ($annotation === null) {
 			return new JSONResponse(['error' => $this->l->t('Note not found or no access.')], Http::STATUS_NOT_FOUND);
@@ -250,16 +207,16 @@ class AnnotationController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function destroy(int $fileId, int $id): JSONResponse {
-		$node = $this->fileResolver->resolveOwnNode($fileId);
-		$userId = $this->fileResolver->currentUserId();
-		if ($node === null || $userId === null) {
+		$score = $this->fileResolver->resolveUserScore($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 
 		try {
 			$deleted = $this->annotationService->delete($id, $fileId, $userId, $this->canWriteShared($node), $this->leaders->isLeader($node, $userId));
-		} catch (\RuntimeException) {
-			return new JSONResponse(['error' => $this->l->t('You do not have permission to change this note.')], Http::STATUS_FORBIDDEN);
+		} catch (AnnotationException $e) {
+			return $this->refused($e);
 		}
 		if (!$deleted) {
 			return new JSONResponse(['error' => $this->l->t('Note not found or no access.')], Http::STATUS_NOT_FOUND);
@@ -268,139 +225,24 @@ class AnnotationController extends Controller {
 	}
 
 	/**
-	 * Prueft den Text einer Notiz - leer und zu lang an EINER Stelle, weil
-	 * create() und update() dieselbe Zusage geben muessen: was angelegt
-	 * werden darf, darf auch hineingeaendert werden.
-	 *
-	 * @return ?JSONResponse null, wenn der Text in Ordnung ist
+	 * One answer per refusal (AnnotationException), so that create, update
+	 * and delete word the same case the same way.
 	 */
-	private function validateContent(string $content): ?JSONResponse {
-		if (trim($content) === '') {
-			return new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST);
-		}
-		return $this->validateContentLength($content);
-	}
-
-	private function validateContentLength(string $content): ?JSONResponse {
-		// mb_strlen, nicht strlen: gezaehlt werden Zeichen, sonst haette eine
-		// Notiz mit Umlauten weniger Platz als eine ohne.
-		if (mb_strlen($content) > self::MAX_CONTENT_LENGTH) {
-			return new JSONResponse(['error' => $this->l->t('Note is too long.')], Http::STATUS_BAD_REQUEST);
-		}
-		return null;
-	}
-
-	/**
-	 * A saved loop needs an end measure at or after its start; its name is
-	 * optional and only bounded in length. No upper bound against the score:
-	 * like a note's measure, a range beyond the current score shows as
-	 * orphaned (AnnotationService::serialize) rather than being refused.
-	 *
-	 * @return ?JSONResponse null when the loop is in order
-	 */
-	private function validateLoop(int $measureNumber, ?int $endMeasure, string $content): ?JSONResponse {
-		if ($endMeasure === null || $endMeasure < max(1, $measureNumber)) {
-			return new JSONResponse(['error' => $this->l->t('A loop needs an end measure at or after its start.')], Http::STATUS_BAD_REQUEST);
-		}
-		return $this->validateContentLength($content);
-	}
-
-	/**
-	 * A drawing (E22) is JSON `{v: 1, part: ?{id, name}, s: [[x, y, ...], ...]}`
-	 * with coordinates in staff spaces. Checked in full here: the content
-	 * goes to every reader of the score and is turned into SVG paths there,
-	 * so it has to be numbers - and few of them. The bounds are the client's
-	 * (src/lib/drawingLayout.js); the overall length is that of every note.
-	 *
-	 * @return ?JSONResponse null when the drawing is in order
-	 */
-	private function validateDrawing(string $content): ?JSONResponse {
-		$invalid = new JSONResponse(['error' => $this->l->t('Invalid drawing.')], Http::STATUS_BAD_REQUEST);
-		$length = $this->validateContentLength($content);
-		if ($length !== null) {
-			return $length;
-		}
-		try {
-			$data = json_decode($content, true, 8, JSON_THROW_ON_ERROR);
-		} catch (\JsonException) {
-			return $invalid;
-		}
-		if (!is_array($data) || ($data['v'] ?? null) !== 1 || !is_array($data['s'] ?? null)) {
-			return $invalid;
-		}
-		$strokes = $data['s'];
-		if (count($strokes) === 0 || count($strokes) > self::MAX_DRAWING_STROKES) {
-			return $invalid;
-		}
-		$numbers = 0;
-		foreach ($strokes as $stroke) {
-			if (!is_array($stroke) || count($stroke) < 4 || count($stroke) % 2 !== 0 || !array_is_list($stroke)) {
-				return $invalid;
-			}
-			foreach ($stroke as $value) {
-				if (!(is_int($value) || is_float($value)) || abs($value) > self::MAX_DRAWING_OFFSET) {
-					return $invalid;
-				}
-			}
-			$numbers += count($stroke);
-		}
-		// Two numbers a point, plus the doubled point of a single dot.
-		if ($numbers > 2 * self::MAX_DRAWING_POINTS + 2 * self::MAX_DRAWING_STROKES) {
-			return $invalid;
-		}
-		$part = $data['part'] ?? null;
-		if ($part !== null && TargetParts::normalize([$part]) === null) {
-			return $invalid;
-		}
-		return null;
-	}
-
-	/**
-	 * Ein Stempel braucht einen Code aus der festen Liste; sein Text ist ein
-	 * freiwilliger Zusatz und nur in der Laenge begrenzt.
-	 *
-	 * @return ?JSONResponse null, wenn der Stempel in Ordnung ist
-	 */
-	private function validateStamp(?string $stamp, string $content): ?JSONResponse {
-		if ($stamp === null || !in_array($stamp, Annotation::STAMPS, true)) {
-			return new JSONResponse(['error' => $this->l->t('Unknown stamp.')], Http::STATUS_BAD_REQUEST);
-		}
-		return $this->validateContentLength($content);
-	}
-
-	/**
-	 * Die Zielstimmen als geprueftes JSON `[{id, name}]` - dieselbe Regel wie
-	 * fuer die Aufnahmen der Leitung (Service\TargetParts).
-	 *
-	 * @param mixed $targetParts
-	 * @return ?string null, wenn keine gueltige Stimme uebrig bleibt oder die
-	 *                 Liste die Grenzen sprengt
-	 */
-	private function normalizeTargetParts(mixed $targetParts): ?string {
-		return TargetParts::normalize($targetParts);
-	}
-
-	/**
-	 * Prueft den Sekundaeranker. Die Spalte ist VARCHAR(64)
-	 * (Migration\Version000100Date20260823130000); ohne diese Pruefung endete
-	 * ein laengerer Wert unter MySQL/PostgreSQL im Strict-Mode als 500er - fuer
-	 * eine Eingabe, die der Client vollstaendig bestimmt, und als einziges
-	 * Feld dieses Endpunkts ohne Pruefung (Text, Sichtbarkeit, Taktnummer und
-	 * Bruchteil haben laengst eine).
-	 *
-	 * Geprueft wird nur die LAENGE, nicht der Inhalt: Ein etag ist fuer diese
-	 * App undurchsichtig, und ob er noch zu einer Konvertierung passt,
-	 * entscheidet ohnehin erst die Anzeige (AnnotationService::serialize
-	 * markiert eine nicht mehr aufloesbare Notiz als `orphaned`, statt sie zu
-	 * verwerfen).
-	 *
-	 * @return ?JSONResponse null, wenn der Anker in Ordnung ist
-	 */
-	private function validateAnchorEtag(?string $anchorEtag): ?JSONResponse {
-		if ($anchorEtag !== null && mb_strlen($anchorEtag) > self::MAX_ANCHOR_ETAG_LENGTH) {
-			return new JSONResponse(['error' => $this->l->t('Invalid note anchor.')], Http::STATUS_BAD_REQUEST);
-		}
-		return null;
+	private function refused(AnnotationException $e): JSONResponse {
+		return match ($e->getReason()) {
+			AnnotationException::FORBIDDEN => new JSONResponse(['error' => $this->l->t('You do not have permission to change this note.')], Http::STATUS_FORBIDDEN),
+			AnnotationException::LIMIT => new JSONResponse([
+				'error' => $this->l->t('You already have the maximum number of notes for this score. Delete some notes first.'),
+				'reason' => 'limit',
+			], Http::STATUS_CONFLICT),
+			AnnotationException::EMPTY => new JSONResponse(['error' => $this->l->t('Note must not be empty.')], Http::STATUS_BAD_REQUEST),
+			AnnotationException::TOO_LONG => new JSONResponse(['error' => $this->l->t('Note is too long.')], Http::STATUS_BAD_REQUEST),
+			AnnotationException::INVALID_LOOP => new JSONResponse(['error' => $this->l->t('A loop needs an end measure at or after its start.')], Http::STATUS_BAD_REQUEST),
+			AnnotationException::INVALID_DRAWING => new JSONResponse(['error' => $this->l->t('Invalid drawing.')], Http::STATUS_BAD_REQUEST),
+			AnnotationException::UNKNOWN_STAMP => new JSONResponse(['error' => $this->l->t('Unknown stamp.')], Http::STATUS_BAD_REQUEST),
+			AnnotationException::INVALID_ANCHOR => new JSONResponse(['error' => $this->l->t('Invalid note anchor.')], Http::STATUS_BAD_REQUEST),
+			default => new JSONResponse(['error' => $this->l->t('Choose at least one voice.')], Http::STATUS_BAD_REQUEST),
+		};
 	}
 
 	/**

@@ -69,6 +69,7 @@ class PublicShareAccessTest extends TestCase {
 		$file = $this->createMock(File::class);
 		$file->method('getId')->willReturn($id);
 		$file->method('getPath')->willReturn($path);
+		$file->method('getName')->willReturn(basename($path));
 		return $file;
 	}
 
@@ -220,6 +221,24 @@ class PublicShareAccessTest extends TestCase {
 		$folder->method('getFirstNodeById')->with(11)->willReturn($sub);
 		$this->share(node: $folder);
 		self::assertSame('not_found', $this->rejection(11)->getErrorCode());
+	}
+
+	/**
+	 * A folder share holds more than scores; every route behind the grant
+	 * shows or converts one, so anything else is not part of the share as
+	 * far as a visitor is concerned (issue #52).
+	 */
+	public function testFolderShareNonScoreFileRejects(): void {
+		$folder = $this->sharedFolder();
+		$folder->method('getFirstNodeById')->with(79)
+			->willReturn($this->file(79, '/anna/files/Chor/Probenplan.pdf'));
+		$this->share(node: $folder);
+		self::assertSame('not_found', $this->rejection(79)->getErrorCode());
+	}
+
+	public function testFileShareOfANonScoreRejects(): void {
+		$this->share(node: $this->file(42, '/anna/files/Probenplan.pdf'));
+		self::assertSame('not_found', $this->rejection(42)->getErrorCode());
 	}
 
 	public function testFolderShareUnknownIdRejects(): void {

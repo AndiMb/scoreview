@@ -1140,7 +1140,14 @@ Was ohne Sitzung erreichbar ist, darf nicht unbegrenzt Arbeit auslösen:
   wirklich gesetzt wird – nicht beim Abruf einer fertigen Variante), höchstens
   8 Varianten je Fassung (die am längsten nicht abgerufene fällt weg), und
   dieselbe Größengrenze wie die Grundkonvertierung (`max_score_bytes`). Jeder
-  Lauf ist ein Prozess mit 130–250 MB.
+  Lauf ist ein Prozess mit 130–250 MB, und er läuft in der Anfrage selbst, an
+  keinem Cron vorbei. Deshalb zusätzlich eine Grenze für die ganze Instanz:
+  höchstens 2 Läufe zugleich (`variant_max_parallel`, nur per `occ`,
+  mindestens 1). Gezählt werden die Zeilen in Arbeit, die nicht älter als die
+  Frist für tote Läufe sind (`VariantService::hasCapacity`); wer darüber
+  liegt, gibt seine Zeile zurück und bekommt `pending` – der Viewer fragt
+  weiter, wie bei einem laufenden Satz, und verbraucht dabei nichts vom
+  Stundenkontingent.
 
 ### S5: Aufnahmen haben eigene Speichergrenzen
 
@@ -1185,12 +1192,18 @@ Nextcloud kann Verwaltungsseiten an Gruppen delegieren
 `IDelegatedSettings` implementiert (`Settings\AdminSettings`). Über Nextclouds
 allgemeinen App-Config-Setter gibt sie keinen Schlüssel frei
 (`getAuthorizedAppConfig()` leer) – geschrieben wird nur über
-`SettingsController`, der prüft. Vier Einstellungen reichen aber über die App
+`SettingsController`, der prüft. Sechs Einstellungen reichen aber über die App
 hinaus: `node_path` wird als Programm gestartet, `sidecar_url` und
 `soundfont_fetch_url` ruft der Server selbst ab, und `sidecar_secret` öffnet
 den Konvertierungsdienst. Aus „darf ScoreView einstellen“ würde damit
-Codeausführung bzw. ein Abruf beliebiger Adressen im internen Netz. Ändern
-darf diese Felder deshalb nur, wer in der Gruppe `admin` ist
+Codeausführung bzw. ein Abruf beliebiger Adressen im internen Netz. Die
+beiden übrigen reichen über die Mitglieder der Instanz hinaus:
+`soundfont_url` trägt eine fremde Herkunft in die CSP der Files- und
+Viewer-Seiten ein (`connect-src`, `Listener\AddCspListener`), jeder Browser
+dort lädt von ihr; `feature_public_share` öffnet anonyme Routen und
+Konvertierungen auf Kosten der Freigebenden
+([S12](#s12-ein-freigabe-token-öffnet-nur-lesende-routen-und-nur-seine-freigabe)).
+Ändern darf diese Felder deshalb nur, wer in der Gruppe `admin` ist
 (`SettingsController::update`, 403); unverändert mitgeschickt stören sie
 nicht, damit delegierte Admins den Rest der Seite weiter speichern können.
 Geänderte Werte werden außerdem geprüft: `node_path` leer oder absolut mit
@@ -1331,8 +1344,17 @@ Ausweis ist der Token des Links im Header `X-ScoreView-Share`, geprüft in
   oder im geteilten Ordner liegen; geprüft über den Knoten der Freigabe und
   danach mit `getRelativePath()`, weil `getFirstNodeById()` einen
   zwischengespeicherten Pfad an einem bloßen Präfix annimmt (`/Chor` und
-  `/Chor-privat`). Sonst 404 ([S8](#s8-404-vor-403)). Routen ohne `fileId`
-  (SoundFont) prüfen nur den Link.
+  `/Chor-privat`). Und sie muss eine Partitur sein (`Service\ScoreFiles`:
+  Endung `.mscz` oder deren Mimetype): Ein geteilter Ordner enthält auch
+  anderes, und weder ein Unterordner noch eine fremde Datei darf über den
+  Link eine Konvertierung anstoßen. Sonst 404 ([S8](#s8-404-vor-403)).
+  Routen ohne `fileId` (SoundFont) prüfen nur den Link.
+- **Ein Fehlercode, kein Fehlertext.** Scheitert eine Konvertierung oder
+  Variante, bekommt ein Besuch nur `errorCode`, nie `error`: Der Text kommt
+  vom Konverter oder Sidecar und kann Pfade, Programmnamen und Versionen des
+  Servers tragen. Der Viewer übersetzt den Code ohnehin selbst
+  ([E4](#e4-englische-quellstrings-deutsch-als-gepflegte-übersetzung));
+  Mitglieder sehen den Text weiter, für die Fehlersuche.
 - **Zurechnung, keine Anmeldung.** Kein `setVolatileActiveUser()`, kein
   `useTokenScope()`. Eine Konvertierung, die ein Besuch anstößt, läuft unter
   dem **Eigentümer der Freigabe** (`getShareOwner()`, nicht `getSharedBy()`:
@@ -1356,7 +1378,10 @@ Ausweis ist der Token des Links im Header `X-ScoreView-Share`, geprüft in
   Gelockert wird auf `/s/…` allein die Permissions-Policy: Mikrofon für
   `'self'`, nur bei eingeschaltetem Schalter und wenn eine Mikrofonfunktion an
   ist ([S3](#s3-das-mikrofon-nur-wo-es-gebraucht-wird)) – ein Rahmen darf nur,
-  was seine Elternseite erlaubt.
+  was seine Elternseite erlaubt. Das gilt für **jede** Link-Seite der
+  Instanz, nicht nur für Freigaben von Partituren: Ob eine Seite unter `/s/…`
+  eine Partitur zeigt, steht beim Setzen der Richtlinie noch nicht fest, und
+  feiner als je Dokument geht es nicht – dieselbe Grenze wie in Files.
 
 ## Entwurfsentscheidungen
 
@@ -1655,6 +1680,19 @@ nach einer Stunde (`VariantService::RETRY_TRANSIENT_AFTER_SECONDS`).
 ([S11](#s11-der-lokale-konverter-sieht-nur-die-partitur-und-sein-ergebnis)),
 dazu mit beschnittener Umgebung: Das Berechtigungsmodell sperrt
 Umgebungsvariablen nicht, und die des Containers tragen das Secret.
+
+MuseScore bekommt dieselbe beschnittene Umgebung (`PATH`, `LANG`, `HOME`),
+also ebenfalls kein Secret. Weiter reicht die Gleichbehandlung nicht, und das
+ist die verbleibende Asymmetrie: Für das AppImage gibt es kein
+Berechtigungsmodell wie Nodes `--permission`. MuseScore liest und schreibt
+alles, was der Nutzer `scoreview` im Container darf – also auch die Aufträge
+anderer Partituren unter `SCOREVIEW_JOBS_DIR` – und erreicht das Netz. Ihn
+begrenzen nur der unprivilegierte Nutzer, der Container selbst (`--memory`,
+`--pids-limit`), der Zeitwächter und die Obergrenze für seine Ausgabe
+(`SCOREVIEW_MAX_MUSESCORE_OUTPUT_BYTES`). Eine Sandbox nur für diesen
+Prozess (eigene Namespaces, seccomp) wäre eine eigene Schicht im Image und
+ist offen; wer nicht vertrauenswürdige Partituren konvertiert, fährt mit dem
+Renderer `engine` abgeschotteter.
 
 #### Welchen Weg wählen
 
@@ -3257,6 +3295,12 @@ MuseScore schreibt rund 12 Zeilen Qt-Logausgabe (Locale-Warnung, DBus-Fehler)
 naives `json.load(stdout)` schlägt fehl – der Parser schneidet ab dem ersten
 `\n{\n`. Bekanntes MuseScore-Verhalten (Issue #13304), das nicht per Zufall
 funktionieren darf.
+
+Im Image ist das Rauschen gemessen allein die Locale-Warnung, und die
+entfällt, seit MuseScore mit `LANG=C.UTF-8` läuft (beschnittene Umgebung,
+siehe [E3](#e3-zwei-konvertierungswege-hinter-einer-api)): stdout beginnt dann
+direkt mit `{\n`. Der Parser nimmt beides an – das JSON am Dateianfang oder
+nach dem ersten `\n{\n` – und bricht laut ab, wenn keins von beiden passt.
 
 ### M4: Koordinaten passen mit Faktor 12 auf das SVG
 

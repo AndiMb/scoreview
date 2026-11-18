@@ -26,6 +26,7 @@ use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\FileDisplayResponse;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\Response;
+use OCP\Files\File;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IUserManager;
@@ -72,7 +73,7 @@ class RecordingController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function index(int $fileId): JSONResponse {
-		$userId = $this->resolve($fileId);
+		$userId = $this->scoreFor($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
@@ -120,7 +121,7 @@ class RecordingController extends Controller {
 		bool $replaceOldest = false,
 		float $referenceHz = ViewerPreferences::DEFAULT_REFERENCE_PITCH,
 	): JSONResponse {
-		$userId = $this->resolve($fileId);
+		$userId = $this->scoreFor($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
@@ -174,16 +175,16 @@ class RecordingController extends Controller {
 	#[UserRateLimit(limit: 30, period: 60)]
 	#[AnonRateLimit(limit: 30, period: 60)]
 	public function update(int $fileId, int $id, ?array $targetParts = null): JSONResponse {
-		$userId = $this->resolve($fileId);
-		if ($userId === null) {
+		$score = $this->scoreFor($fileId);
+		if ($score === null) {
 			return $this->notFound();
 		}
+		[$node, $userId] = $score;
 		$json = null;
 		if ($targetParts !== null && $targetParts !== []) {
 			// Releasing needs the role now; taking back never does - a
 			// revoked leader must be able to withdraw what they released.
-			$node = $this->fileResolver->resolveOwnNode($fileId);
-			if ($node === null || !$this->leaders->isLeader($node, $userId)) {
+			if (!$this->leaders->isLeader($node, $userId)) {
 				return new JSONResponse(['error' => $this->l->t('Only leaders can share recordings with voices.')], Http::STATUS_FORBIDDEN);
 			}
 			$json = TargetParts::normalize($targetParts);
@@ -208,7 +209,7 @@ class RecordingController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function show(int $fileId, int $id): Response {
-		$userId = $this->resolve($fileId);
+		$userId = $this->scoreFor($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
@@ -230,7 +231,7 @@ class RecordingController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function destroy(int $fileId, int $id): JSONResponse {
-		$userId = $this->resolve($fileId);
+		$userId = $this->scoreFor($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
@@ -243,18 +244,13 @@ class RecordingController extends Controller {
 	}
 
 	/**
-	 * @return ?string die Nutzerin, oder null, wenn die Funktion aus oder die
-	 *                 Datei nicht sichtbar ist
+	 * The score and the person, or null when the switch is off - only the
+	 * gate is this controller's, the resolution is UserFileResolver's.
+	 *
+	 * @return ?array{0: File, 1: string}
 	 */
-	private function resolve(int $fileId): ?string {
-		if (!$this->features->isEnabled(FeatureConfig::RECORDING)) {
-			return null;
-		}
-		$userId = $this->fileResolver->currentUserId();
-		if ($userId === null || $this->fileResolver->resolveOwnNode($fileId) === null) {
-			return null;
-		}
-		return $userId;
+	private function scoreFor(int $fileId): ?array {
+		return $this->features->isEnabled(FeatureConfig::RECORDING) ? $this->fileResolver->resolveUserScore($fileId) : null;
 	}
 
 	/**

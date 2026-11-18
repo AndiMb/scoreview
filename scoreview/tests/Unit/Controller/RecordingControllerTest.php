@@ -39,6 +39,8 @@ use PHPUnit\Framework\TestCase;
  *    taking back needs no role.
  */
 class RecordingControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private RecordingService&MockObject $recordings;
 	private RequestBodyReader&MockObject $body;
@@ -49,7 +51,7 @@ class RecordingControllerTest extends TestCase {
 	private array $bools = [];
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->recordings = $this->createMock(RecordingService::class);
 		$this->body = $this->createMock(RequestBodyReader::class);
 		$this->request = $this->createMock(IRequest::class);
@@ -89,7 +91,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testListeNurDerEigenenMitDenGrenzen(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->recordings->expects($this->once())->method('list')->with(42, 'anna')->willReturn([$this->aufnahme()]);
 
 		$daten = $this->controller()->index(42)->getData();
@@ -110,7 +112,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testHochladenReichtRumpfUndAngabenWeiter(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$strom = RecordingServiceTest::strom('WAV');
 		$this->body->method('readToStream')->willReturn($strom);
 		$this->recordings->expects($this->once())->method('create')
@@ -124,7 +126,7 @@ class RecordingControllerTest extends TestCase {
 
 	public function testRecordingWithoutReferenceWasMadeAt440(): void {
 		// An older bundle does not send the reference - it always heard 440.
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$strom = RecordingServiceTest::strom('WAV');
 		$this->body->method('readToStream')->willReturn($strom);
 		$this->recordings->expects($this->once())->method('create')
@@ -135,7 +137,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testAngekuendigteUeberlaengeWirdNichtGelesen(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->request->method('getHeader')->with('Content-Length')->willReturn((string)(700 * 32000));
 		$this->body->expects($this->never())->method('readToStream');
 
@@ -143,7 +145,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testUeberlangerRumpfOhneAngabe(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->request->method('getHeader')->willReturn('');
 		$this->body->method('readToStream')->willReturn(null);
 		$this->recordings->expects($this->never())->method('create');
@@ -166,7 +168,7 @@ class RecordingControllerTest extends TestCase {
 
 	#[DataProvider('ablehnungen')]
 	public function testAblehnungenHabenIhrenStatus(string $grund, int $status): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->body->method('readToStream')->willReturn(RecordingServiceTest::strom('WAV'));
 		$this->recordings->method('create')->willThrowException(new RecordingException($grund));
 
@@ -177,7 +179,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testAbspielenLiefertDieWav(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$datei = $this->createMock(ISimpleFile::class);
 		$datei->method('getName')->willReturn('3.wav');
 		$datei->method('getMTime')->willReturn(1700000000);
@@ -193,7 +195,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testFremdeAufnahmeIstVierNullVier(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->recordings->method('open')->willThrowException(new RecordingException(RecordingException::NOT_FOUND));
 		$this->recordings->method('delete')->willThrowException(new RecordingException(RecordingException::NOT_FOUND));
 
@@ -214,7 +216,7 @@ class RecordingControllerTest extends TestCase {
 
 	public function testSchalterAusVierNullVier(): void {
 		$this->bools[FeatureConfig::RECORDING] = false;
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->recordings->expects($this->never())->method($this->anything());
 
 		$c = $this->controller();
@@ -240,7 +242,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testListsWhatLeadersReleasedWithTheirName(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->recordings->method('list')->willReturn([]);
 		$shared = $this->aufnahme();
 		$shared->setUserId('lea');
@@ -255,7 +257,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testOnlyLeadersRelease(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->leaders->method('isLeader')->willReturn(false);
 		$this->recordings->expects($this->never())->method('share');
 
@@ -265,7 +267,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testALeaderReleasesToParts(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->leaders->method('isLeader')->willReturn(true);
 		$released = $this->aufnahme();
 		$released->setSharedParts('[{"id":"2","name":"Alt"}]');
@@ -279,7 +281,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testTakingBackNeedsNoRole(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->leaders->expects($this->never())->method('isLeader');
 		$this->recordings->expects($this->once())->method('share')->with(42, 'anna', 3, null)->willReturn($this->aufnahme());
 
@@ -287,7 +289,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testReleasingSomeoneElsesIsNotFound(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->leaders->method('isLeader')->willReturn(true);
 		$this->recordings->method('share')->willThrowException(new RecordingException(RecordingException::NOT_FOUND));
 
@@ -295,7 +297,7 @@ class RecordingControllerTest extends TestCase {
 	}
 
 	public function testReleaseWithoutAValidPartIsABadRequest(): void {
-		$this->angemeldet($this->createMock(Node::class));
+		$this->angemeldet($this->scoreDouble());
 		$this->leaders->method('isLeader')->willReturn(true);
 		$this->recordings->expects($this->never())->method('share');
 

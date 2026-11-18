@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace OCA\ScoreView\Http;
 
+use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Db\ScoreVariant;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\ICallbackResponse;
 use OCP\AppFramework\Http\IOutput;
 use OCP\AppFramework\Http\Response;
+use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IRequest;
 
 /**
@@ -33,6 +36,12 @@ use OCP\IRequest;
  * @template-extends Response<Http::STATUS_*, array<string, mixed>>
  */
 class ArtifactResponse extends Response implements ICallbackResponse {
+	/**
+	 * A year: what sits under an artifact URL never changes, because the
+	 * URL carries the version of what it shows (version()).
+	 */
+	public const IMMUTABLE_CACHE_SECONDS = 31536000;
+
 	/** Below this the gzip header and a round of zlib are not worth it. */
 	private const MIN_BYTES = 1024;
 	private const CHUNK = 65536;
@@ -61,6 +70,46 @@ class ArtifactResponse extends Response implements ICallbackResponse {
 		if ($this->gzip) {
 			$this->addHeader('Content-Encoding', 'gzip');
 		}
+	}
+
+	/**
+	 * A cached artifact of a base conversion or a variant, as both artifact
+	 * routes deliver it - one place, so that the two cannot drift apart.
+	 *
+	 * `Content-Disposition: attachment`: the SVG is sanitised in the browser
+	 * (ScorePage.vue -> lib/svgSanitizer.js), where the viewer fetches it.
+	 * Opened directly, it would be a document on Nextcloud's origin; the
+	 * header makes that moot, and an XHR does not care.
+	 *
+	 * The ETag is the Nextcloud file's etag, not IAppData's: the content is
+	 * invariant for (fileId, etag) (ConversionService), so it is a stable
+	 * HTTP ETag without depending on the storage backend of IAppData.
+	 * Nextcloud's NotModifiedMiddleware answers 304 from it.
+	 */
+	public static function immutable(ISimpleFile $file, string $mimeType, IRequest $request, string $etag, \DateTime $lastModified): self {
+		$response = new self($file->read(), $mimeType, $request, $file->getSize());
+		$response->addHeader('Content-Disposition', 'attachment');
+		$response->setETag($etag);
+		$response->setLastModified($lastModified);
+		$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
+		return $response;
+	}
+
+	/**
+	 * The `v` of an artifact URL: what tells one conversion's URL from
+	 * another's. The server does not read it back (it resolves the etag from
+	 * the file anyway); it exists as the browser's cache key, so that
+	 * `immutable` tells the truth.
+	 *
+	 * Both parts, because there are two kinds of change: the etag names the
+	 * version of the SCORE (an edit, a re-upload), the timestamp the
+	 * CONVERSION of that version - a format upgrade or "Convert again" leaves
+	 * the etag alone and would stay invisible otherwise. One formula for the
+	 * base and its variants: a variant points at the base's MIDI, and two
+	 * formulas would give the same MIDI two URLs.
+	 */
+	public static function version(ScoreConversion|ScoreVariant $row): string {
+		return $row->getEtag() . '-' . $row->getUpdatedAt()->getTimestamp();
 	}
 
 	public function isCompressed(): bool {

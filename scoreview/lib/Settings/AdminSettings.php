@@ -64,7 +64,7 @@ class AdminSettings implements IDelegatedSettings {
 			'soundFontFetchUrlDefault' => SoundFontService::DEFAULT_FETCH_URL,
 			'sidecarUrl' => $this->appConfig->getValueString(Application::APP_ID, ConversionConfig::SIDECAR_URL),
 			'sidecarSecretSet' => $this->appConfig->getValueString(Application::APP_ID, ConversionConfig::SIDECAR_SECRET) !== '',
-			'eagerConversion' => $this->appConfig->getValueBool(Application::APP_ID, 'eager_conversion'),
+			'eagerConversion' => $this->appConfig->getValueBool(Application::APP_ID, ConversionConfig::EAGER_CONVERSION),
 			'soundFontUrl' => $this->appConfig->getValueString(Application::APP_ID, ConversionConfig::SOUNDFONT_URL),
 			'featureFollowSession' => $this->features->isEnabled(FeatureConfig::FOLLOW_SESSION),
 			'featureRecording' => $this->features->isEnabled(FeatureConfig::RECORDING),

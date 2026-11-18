@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\ScoreView\Controller;
 
 use OCA\ScoreView\AppInfo\Application;
+use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Service\LocalConverter;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -74,8 +75,6 @@ use OCP\IRequest;
  * Engine-Version tut; gegen absichtliches Wiederholen schuetzt es nicht.
  */
 class EngineController extends Controller {
-	/** Wie in ConversionController: der Inhalt ist fuer eine Version unveraenderlich. */
-	private const IMMUTABLE_CACHE_SECONDS = 31536000;
 
 	/**
 	 * Was ausgeliefert werden darf, und als was. `text/javascript` fuer den
@@ -124,7 +123,8 @@ class EngineController extends Controller {
 			$response->addHeader('Content-Length', (string)$size);
 		}
 		$response->setETag($this->localConverter->engineVersion());
-		$response->cacheFor(self::IMMUTABLE_CACHE_SECONDS, false, true);
+		// As the artifacts: the content is immutable for a version.
+		$response->cacheFor(ArtifactResponse::IMMUTABLE_CACHE_SECONDS, false, true);
 		return $response;
 	}
 }

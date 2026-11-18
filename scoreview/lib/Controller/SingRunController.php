@@ -17,6 +17,7 @@ use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\Files\File;
 use OCP\IL10N;
 use OCP\IRequest;
 
@@ -50,7 +51,7 @@ class SingRunController extends Controller {
 	#[NoCSRFRequired]
 	#[DirectTokenOrSession]
 	public function index(int $fileId, ?int $from = null, ?int $to = null, string $level = 'choir'): JSONResponse {
-		$userId = $this->resolve($fileId);
+		$userId = $this->scoreFor($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
@@ -80,7 +81,7 @@ class SingRunController extends Controller {
 		?int $releasePct = null,
 		int $notesScored = 0,
 	): JSONResponse {
-		$userId = $this->resolve($fileId);
+		$userId = $this->scoreFor($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
@@ -109,21 +110,20 @@ class SingRunController extends Controller {
 	#[UserRateLimit(limit: 10, period: 60)]
 	#[AnonRateLimit(limit: 10, period: 60)]
 	public function destroy(int $fileId): JSONResponse {
-		$userId = $this->resolve($fileId);
+		$userId = $this->scoreFor($fileId)[1] ?? null;
 		if ($userId === null) {
 			return $this->notFound();
 		}
 		return new JSONResponse(['deleted' => $this->runs->clear($fileId, $userId)]);
 	}
 
-	private function resolve(int $fileId): ?string {
-		if (!$this->features->isEnabled(FeatureConfig::SING_SCORE) || !$this->features->isEnabled(FeatureConfig::INTONATION)) {
-			return null;
-		}
-		$userId = $this->fileResolver->currentUserId();
-		if ($userId === null || $this->fileResolver->resolveOwnNode($fileId) === null) {
-			return null;
-		}
-		return $userId;
+	/**
+	 * The score and the person, or null when the switch is off - only the
+	 * gate is this controller's, the resolution is UserFileResolver's.
+	 *
+	 * @return ?array{0: File, 1: string}
+	 */
+	private function scoreFor(int $fileId): ?array {
+		return $this->features->isEnabled(FeatureConfig::SING_SCORE) && $this->features->isEnabled(FeatureConfig::INTONATION) ? $this->fileResolver->resolveUserScore($fileId) : null;
 	}
 }

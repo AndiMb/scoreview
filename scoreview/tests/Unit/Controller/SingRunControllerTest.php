@@ -23,6 +23,8 @@ use PHPUnit\Framework\TestCase;
  * 3. Nonsense from the browser is a 400, not a stored run.
  */
 class SingRunControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private SingRunService&MockObject $runs;
 	private FeatureConfig&MockObject $features;
@@ -30,7 +32,7 @@ class SingRunControllerTest extends TestCase {
 	private array $switches = [];
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->runs = $this->createMock(SingRunService::class);
 		$this->features = $this->createMock(FeatureConfig::class);
 		$this->switches = [FeatureConfig::SING_SCORE => true, FeatureConfig::INTONATION => true];
@@ -55,7 +57,7 @@ class SingRunControllerTest extends TestCase {
 	}
 
 	public function testListsTheOwnRuns(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->runs->expects($this->once())->method('list')->with(42, 'anna', 5, 12, 'strict')
 			->willReturn(['runs' => [], 'best' => []]);
 
@@ -65,7 +67,7 @@ class SingRunControllerTest extends TestCase {
 	}
 
 	public function testStoresARun(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->runs->expects($this->once())->method('add')->with(42, 'anna', $this->callback(
 			fn (array $in) => $in['level'] === 'choir' && $in['totalPct'] === 78 && $in['from'] === null && $in['notesScored'] === 9,
 		))->willReturn(['totalPct' => 78]);
@@ -76,7 +78,7 @@ class SingRunControllerTest extends TestCase {
 	}
 
 	public function testNonsenseIsABadRequest(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->runs->method('add')->willThrowException(new \InvalidArgumentException('no'));
 
 		$response = $this->controller()->create(42, null, null, 'hard', 100, 78);
@@ -85,7 +87,7 @@ class SingRunControllerTest extends TestCase {
 	}
 
 	public function testDeletesOnlyTheOwnRuns(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->runs->expects($this->once())->method('clear')->with(42, 'anna')->willReturn(2);
 
 		$this->assertSame(['deleted' => 2], $this->controller()->destroy(42)->getData());
@@ -102,7 +104,7 @@ class SingRunControllerTest extends TestCase {
 	}
 
 	public function testScoringSwitchedOffIsNotFound(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->switches[FeatureConfig::SING_SCORE] = false;
 		$this->runs->expects($this->never())->method('add');
 
@@ -110,7 +112,7 @@ class SingRunControllerTest extends TestCase {
 	}
 
 	public function testIntonationSwitchedOffIsNotFound(): void {
-		$this->signedIn($this->createMock(Node::class));
+		$this->signedIn($this->scoreDouble());
 		$this->switches[FeatureConfig::INTONATION] = false;
 
 		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->index(42)->getStatus());

@@ -6,14 +6,13 @@ namespace OCA\ScoreView\Tests\Unit\Controller;
 
 use OCA\ScoreView\Controller\AnnotationController;
 use OCA\ScoreView\Db\Annotation;
-use OCA\ScoreView\Service\AnnotationLimitException;
+use OCA\ScoreView\Service\AnnotationException;
 use OCA\ScoreView\Service\AnnotationService;
 use OCA\ScoreView\Service\ConversionService;
 use OCA\ScoreView\Service\LeaderService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Http;
 use OCP\Constants;
-use OCP\Files\Node;
 use OCP\IL10N;
 use OCP\IRequest;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -37,12 +36,14 @@ use PHPUnit\Framework\TestCase;
  *    VARCHAR(64)-Spalte lief.
  */
 class AnnotationControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private AnnotationService&MockObject $annotationService;
 	private LeaderService&MockObject $leaders;
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
+		$this->fileResolver = $this->resolverDouble();
 		$this->annotationService = $this->createMock(AnnotationService::class);
 		// Ohne Vorgabe ist niemand Leitung - die Faelle vor den Stimmnotizen
 		// laufen damit unveraendert.
@@ -66,7 +67,7 @@ class AnnotationControllerTest extends TestCase {
 	 * @param int $permissions Dateirechte aus Sicht der anfragenden Nutzerin
 	 */
 	private function angemeldetMitDatei(int $permissions = Constants::PERMISSION_ALL): void {
-		$node = $this->createMock(Node::class);
+		$node = $this->scoreDouble();
 		$node->method('getId')->willReturn(42);
 		$node->method('getEtag')->willReturn('etag1');
 		$node->method('getPermissions')->willReturn($permissions);
@@ -235,7 +236,7 @@ class AnnotationControllerTest extends TestCase {
 	public function testEineGeteilteNotizOhneSchreibrechtEndetAls403(): void {
 		$this->angemeldetMitDatei(Constants::PERMISSION_READ);
 		$this->annotationService->method('updateContent')
-			->willThrowException(new \RuntimeException('Kein Schreibrecht'));
+			->willThrowException(new AnnotationException(AnnotationException::FORBIDDEN));
 
 		$response = $this->controller()->update(42, 7, 'Neuer Text');
 
@@ -411,7 +412,7 @@ class AnnotationControllerTest extends TestCase {
 		// Eigener Grund statt nur eines Texts: Der Viewer soll erkennen
 		// koennen, dass Loeschen hilft und ein neuer Versuch nicht.
 		$this->angemeldetMitDatei();
-		$this->annotationService->method('create')->willThrowException(new AnnotationLimitException());
+		$this->annotationService->method('create')->willThrowException(new AnnotationException(AnnotationException::LIMIT));
 
 		$response = $this->controller()->create(42, 1, 0.0, 'Notiz');
 
@@ -508,10 +509,24 @@ class AnnotationControllerTest extends TestCase {
 		$this->assertSame(Http::STATUS_OK, $this->controller()->destroy(42, 7)->getStatus());
 	}
 
+	/**
+	 * Only the service's own refusals are words for the user - anything else
+	 * from below (the database, a storage) is the error it is, not a 403
+	 * (issue #61).
+	 */
+	public function testAnUnrelatedRuntimeErrorIsNotReadAsForbidden(): void {
+		$this->angemeldetMitDatei();
+		$this->annotationService->method('updateContent')
+			->willThrowException(new \RuntimeException('database gone'));
+
+		$this->expectExceptionObject(new \RuntimeException('database gone'));
+		$this->controller()->update(42, 7, 'Neuer Text');
+	}
+
 	public function testEineLeerGeaenderteTextnotizEndetAls400(): void {
 		$this->angemeldetMitDatei();
 		$this->annotationService->method('updateContent')
-			->willThrowException(new \InvalidArgumentException('leer'));
+			->willThrowException(new AnnotationException(AnnotationException::EMPTY));
 
 		$this->assertSame(Http::STATUS_BAD_REQUEST, $this->controller()->update(42, 7, '')->getStatus());
 	}

@@ -103,7 +103,6 @@ class ConvertScoreJobTest extends TestCase {
 	private function jobLaufenLassen(array $zusatz = []): void {
 		$job = $this->job();
 		$method = new \ReflectionMethod($job, 'run');
-		$method->setAccessible(true);
 		$method->invoke($job, ['userId' => 'andreas', 'fileId' => 42] + $zusatz);
 	}
 
@@ -162,6 +161,31 @@ class ConvertScoreJobTest extends TestCase {
 			->with($this->anything(), 'kein node', ScoreConversion::ERROR_LOCAL_UNAVAILABLE);
 
 		$this->jobLaufenLassen();
+	}
+
+	/**
+	 * A full temp directory cuts the copy of the score short. That is the
+	 * server's fault, not the score's: `local_unavailable`, so the browser
+	 * takes over, instead of `conversion_failed` on a truncated file - and
+	 * the converter never sees it (issue #53).
+	 */
+	public function testAShortTempCopyIsTheServersFaultNotTheScores(): void {
+		$this->backend = ConversionBackend::LOCAL;
+		stream_wrapper_register('svfull', FullDiskStream::class);
+		try {
+			$this->tempManager->method('getTemporaryFile')->willReturn('svfull://score.mscz');
+			// The score's stream (setUp) gets content to copy.
+			$score = $this->file->fopen('rb');
+			fwrite($score, str_repeat('PK', 5000));
+			rewind($score);
+			$this->localConverter->expects($this->never())->method('convert');
+			$this->conversionService->expects($this->once())->method('markError')
+				->with($this->anything(), $this->stringContains('temporary'), ScoreConversion::ERROR_LOCAL_UNAVAILABLE);
+
+			$this->jobLaufenLassen();
+		} finally {
+			stream_wrapper_unregister('svfull');
+		}
 	}
 
 	public function testLehntEineZuGrosseDateiVorJedemKonvertierenAb(): void {
@@ -309,5 +333,26 @@ class ConvertScoreJobTest extends TestCase {
 			->with($this->anything(), $this->anything(), ScoreVariant::ERROR_UNSUPPORTED);
 
 		$this->job()->convertVariant($this->file, $this->variante());
+	}
+}
+
+/** A file system with no space left: every write is refused. */
+final class FullDiskStream {
+	/** @var resource|null */
+	public $context;
+
+	public function stream_open(string $path, string $mode, int $options, ?string &$opened): bool {
+		return true;
+	}
+
+	public function stream_write(string $data): int {
+		return 0;
+	}
+
+	public function stream_close(): void {
+	}
+
+	public function unlink(string $path): bool {
+		return true;
 	}
 }

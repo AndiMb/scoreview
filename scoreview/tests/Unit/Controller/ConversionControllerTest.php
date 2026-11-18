@@ -6,6 +6,7 @@ namespace OCA\ScoreView\Tests\Unit\Controller;
 
 use OCA\ScoreView\Controller\ConversionController;
 use OCA\ScoreView\Db\ScoreConversion;
+use OCA\ScoreView\Http\ArtifactResponse;
 use OCA\ScoreView\Middleware\DirectAccessContext;
 use OCA\ScoreView\Service\ClientFallback;
 use OCA\ScoreView\Service\ConversionBackend;
@@ -17,7 +18,10 @@ use OCA\ScoreView\Service\SoundFontService;
 use OCA\ScoreView\Service\UserFileResolver;
 use OCP\AppFramework\Http;
 use OCP\BackgroundJob\IJobList;
-use OCP\Files\Node;
+use OCP\Files\File;
+use OCP\Files\Folder;
+use OCP\Files\NotFoundException;
+use OCP\Files\SimpleFS\ISimpleFile;
 use OCP\IAppConfig;
 use OCP\ICache;
 use OCP\ICacheFactory;
@@ -46,22 +50,43 @@ use PHPUnit\Framework\TestCase;
  *    an ihm. Beide Stellen fragen jetzt ConversionService::isStale().
  */
 class ConversionControllerTest extends TestCase {
+	use ScoreDoubles;
+
 	private UserFileResolver&MockObject $fileResolver;
 	private ConversionService&MockObject $conversionService;
 	private ClientFallback&MockObject $clientFallback;
 	private IJobList&MockObject $jobList;
 	private DirectAccessContext&MockObject $directAccess;
 	private ShareConversionQuota&MockObject $quota;
+	private IURLGenerator&MockObject $urls;
+	private IAppConfig&MockObject $appConfig;
+	private SoundFontService&MockObject $soundFont;
+	private ConversionBackend&MockObject $backend;
+	private LocalConverter&MockObject $localConverter;
 	/** @var array<string, int> */
 	private array $requeueStore = [];
 
 	protected function setUp(): void {
-		$this->fileResolver = $this->createMock(UserFileResolver::class);
-		$this->conversionService = $this->createMock(ConversionService::class);
+		$this->fileResolver = $this->resolverDouble();
+		// isServable() stays real: it is the rule the artifact routes share.
+		$this->conversionService = $this->getMockBuilder(ConversionService::class)
+			->disableOriginalConstructor()
+			->onlyMethods(array_values(array_diff(get_class_methods(ConversionService::class), ['__construct', 'isServable'])))
+			->getMock();
 		$this->clientFallback = $this->createMock(ClientFallback::class);
 		$this->jobList = $this->createMock(IJobList::class);
 		$this->directAccess = $this->createMock(DirectAccessContext::class);
 		$this->quota = $this->createMock(ShareConversionQuota::class);
+		// Routes as readable strings, so the bodies below can be compared.
+		$this->urls = $this->createMock(IURLGenerator::class);
+		$this->urls->method('linkToRoute')->willReturnCallback(
+			static fn (string $route, array $p = []) => $route . '?' . http_build_query($p));
+		$this->appConfig = $this->createMock(IAppConfig::class);
+		$this->appConfig->method('getValueInt')->willReturnArgument(2);
+		$this->appConfig->method('getValueString')->willReturnArgument(2);
+		$this->soundFont = $this->createMock(SoundFontService::class);
+		$this->backend = $this->createMock(ConversionBackend::class);
+		$this->localConverter = $this->createMock(LocalConverter::class);
 	}
 
 	private function controller(): ConversionController {
@@ -72,13 +97,13 @@ class ConversionControllerTest extends TestCase {
 			$this->fileResolver,
 			$this->conversionService,
 			$this->clientFallback,
-			$this->createMock(LocalConverter::class),
+			$this->localConverter,
 			$this->jobList,
-			$this->createMock(IURLGenerator::class),
-			$this->createMock(IAppConfig::class),
+			$this->urls,
+			$this->appConfig,
 			$l,
-			$this->createMock(SoundFontService::class),
-			$this->createMock(ConversionBackend::class),
+			$this->soundFont,
+			$this->backend,
 			$this->cacheFactory ?? $this->noCache(),
 			$this->directAccess,
 			$this->quota,
@@ -110,12 +135,16 @@ class ConversionControllerTest extends TestCase {
 		$this->cacheFactory->method('createDistributed')->willReturn($cache);
 	}
 
-	/** @return Node&MockObject */
-	private function node(bool $schreibbar = true): Node {
-		$node = $this->createMock(Node::class);
+	/** @return File&MockObject */
+	private function node(bool $schreibbar = true, bool $folderWritable = true): File {
+		$node = $this->scoreDouble();
 		$node->method('getId')->willReturn(42);
 		$node->method('getEtag')->willReturn('etag1');
+		$node->method('getSize')->willReturn(1234);
 		$node->method('isUpdateable')->willReturn($schreibbar);
+		$parent = $this->createMock(Folder::class);
+		$parent->method('isCreatable')->willReturn($folderWritable);
+		$node->method('getParent')->willReturn($parent);
 		return $node;
 	}
 
@@ -445,5 +474,235 @@ class ConversionControllerTest extends TestCase {
 			'eingereiht' => [ScoreConversion::STATUS_PENDING],
 			'in Arbeit' => [ScoreConversion::STATUS_PROCESSING],
 		];
+	}
+
+	// --- A folder is no score (issue #51) -----------------------------------
+
+	public function testAFolderIdQueuesNothing(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->createMock(Folder::class));
+		$this->conversionService->expects($this->never())->method('find');
+		$this->jobList->expects($this->never())->method('add');
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->status(42)->getStatus());
+	}
+
+	// --- The ready path (issue #63) -----------------------------------------
+
+	private function ready(bool $current = true): ScoreConversion {
+		$conversion = $this->datensatz(ScoreConversion::STATUS_READY);
+		$conversion->setUpdatedAt(new \DateTime('@1790000000'));
+		$conversion->setFormatVersion(ConversionService::CURRENT_FORMAT_VERSION);
+		$conversion->setBackend(ConversionBackend::LOCAL);
+		$this->conversionService->method('find')->willReturn($conversion);
+		$this->conversionService->method('isCurrentFormat')->willReturn(true);
+		$this->conversionService->method('isCurrent')->willReturn($current);
+		return $conversion;
+	}
+
+	/**
+	 * Everything the viewer builds its page from (E3): the artifact URLs with
+	 * the conversion's version, the SoundFont, whether variants can be
+	 * engraved, whether practice tracks may go next to the score.
+	 */
+	public function testTheReadyBodyCarriesWhatTheViewerNeeds(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$conversion = $this->ready();
+		$this->conversionService->method('getPageCount')->willReturn(2);
+		$this->soundFont->method('expectedVersion')->willReturn('sf7');
+		$this->backend->method('supportsVariants')->willReturn(true);
+		$this->jobList->expects($this->never())->method('add');
+
+		$data = $this->controller()->status(42)->getData();
+
+		$v = ArtifactResponse::version($conversion);
+		$artifact = fn (string $name) => 'scoreview.conversion.artifact?' . http_build_query(['fileId' => 42, 'name' => $name, 'v' => $v]);
+		$this->assertSame('ready', $data['status']);
+		$this->assertSame([
+			'pageCount' => 2,
+			'pages' => [$artifact('page-1'), $artifact('page-2')],
+			'midi' => $artifact('midi'),
+			'timingJson' => $artifact('timing'),
+			'measuresJson' => $artifact('measures'),
+			'metaJson' => $artifact('meta'),
+			'etag' => 'etag1',
+		], $data['files']);
+		$this->assertSame('scoreview.sound_font.get?v=sf7', $data['soundFontUrl']);
+		$this->assertSame(['supported' => true], $data['variants']);
+		$this->assertTrue($data['canWriteFolder']);
+		$this->assertTrue($data['canReconvert']);
+		$this->assertSame(['backend' => ConversionBackend::LOCAL], $data['renderer']);
+	}
+
+	public function testAConfiguredSoundFontAddressWins(): void {
+		$this->appConfig = $this->createMock(IAppConfig::class);
+		$this->appConfig->method('getValueString')->willReturnCallback(
+			fn (string $app, string $key, string $default = '') => $key === 'soundfont_url' ? ' https://cdn.example/a.sf3 ' : $default);
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node(folderWritable: false));
+		$this->ready();
+		$this->conversionService->method('getPageCount')->willReturn(1);
+
+		$data = $this->controller()->status(42)->getData();
+		$this->assertSame('https://cdn.example/a.sf3', $data['soundFontUrl']);
+		$this->assertFalse($data['canWriteFolder']);
+	}
+
+	public function testReadyButNotCurrentIsConvertedAgain(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->fileResolver->method('attributionUserId')->willReturn('anna');
+		$this->ready(current: false);
+		$this->clientFallback->method('reason')->willReturn(null);
+		$this->conversionService->expects($this->never())->method('getPageCount');
+		$this->jobList->expects($this->once())->method('add')->with($this->anything(), ['userId' => 'anna', 'fileId' => 42]);
+
+		$this->assertSame(['status' => 'pending'], $this->controller()->status(42)->getData());
+	}
+
+	public function testReadyWithAMissingCacheFolderIsConvertedAgain(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->ready();
+		$this->clientFallback->method('reason')->willReturn(null);
+		$this->conversionService->method('getPageCount')->willThrowException(new NotFoundException());
+		$this->jobList->expects($this->once())->method('add');
+
+		$response = $this->controller()->status(42);
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame(['status' => 'pending'], $response->getData());
+	}
+
+	// --- The client answer (E7) ----------------------------------------------
+
+	public function testTheClientAnswerHasEverythingToConvertInTheBrowser(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node(folderWritable: false));
+		$this->conversionService->method('find')->willReturn(null);
+		$this->clientFallback->method('reason')->willReturn(ScoreConversion::ERROR_LOCAL_UNAVAILABLE);
+		$this->localConverter->method('engineVersion')->willReturn('4.7.7-engine.1');
+		$this->soundFont->method('expectedVersion')->willReturn('');
+		$this->jobList->expects($this->never())->method('add');
+
+		$this->assertSame([
+			'status' => ClientFallback::STATUS_CLIENT,
+			'reason' => ScoreConversion::ERROR_LOCAL_UNAVAILABLE,
+			'sourceUrl' => 'scoreview.conversion.source?fileId=42&v=etag1',
+			'engineUrl' => 'scoreview.engine.get?version=4.7.7-engine.1&name=scoreview.mjs',
+			'maxBytes' => 10485760,
+			// "Not fetched yet" is a version of its own, never an empty v.
+			'soundFontUrl' => 'scoreview.sound_font.get?v=0',
+			'canWriteFolder' => false,
+			'etag' => 'etag1',
+			'canReconvert' => true,
+		], $this->controller()->status(42)->getData());
+	}
+
+	// --- Error texts stay with members (issue #44) ---------------------------
+
+	private function failed(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$conversion = $this->datensatz(ScoreConversion::STATUS_ERROR);
+		$conversion->setErrorCode(ScoreConversion::ERROR_CONVERSION_FAILED);
+		$conversion->setErrorMessage('node /var/www/html/apps/scoreview/converter/convert.mjs exited with 1');
+		$this->conversionService->method('find')->willReturn($conversion);
+		$this->conversionService->method('isStale')->willReturn(false);
+		$this->quota->method('consume')->willReturn(true);
+	}
+
+	public function testAVisitorGetsTheErrorCodeButNotTheText(): void {
+		$this->directAccess->method('shareGrant')->willReturn(new PublicShareGrant('owner', null, false, 'dig'));
+		$this->failed();
+
+		$data = $this->controller()->status(42)->getData();
+		$this->assertSame(ScoreConversion::ERROR_CONVERSION_FAILED, $data['errorCode']);
+		$this->assertArrayNotHasKey('error', $data);
+	}
+
+	public function testAMemberKeepsTheErrorText(): void {
+		$this->failed();
+
+		$data = $this->controller()->status(42)->getData();
+		$this->assertSame('node /var/www/html/apps/scoreview/converter/convert.mjs exited with 1', $data['error']);
+	}
+
+	// --- artifact() and source() (issue #63) ---------------------------------
+
+	/** getHeaders() needs the server - the header is in the field. */
+	private function header(Http\Response $response, string $name): ?string {
+		return (new \ReflectionProperty(Http\Response::class, 'headers'))->getValue($response)[$name] ?? null;
+	}
+
+	public function testAnArtifactIsAnImmutableAttachmentUnderTheFilesEtag(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$conversion = $this->ready();
+		$file = $this->createMock(ISimpleFile::class);
+		$file->method('read')->willReturn(fopen('php://memory', 'rb'));
+		$file->method('getSize')->willReturn(0);
+		$this->conversionService->method('getArtifact')->with(42, 'etag1', 'page-1')->willReturn([$file, 'image/svg+xml']);
+
+		$response = $this->controller()->artifact(42, 'page-1');
+
+		$this->assertInstanceOf(ArtifactResponse::class, $response);
+		$this->assertSame('etag1', $response->getETag());
+		$this->assertSame($conversion->getUpdatedAt(), $response->getLastModified());
+		$this->assertSame('attachment', $this->header($response, 'Content-Disposition'));
+		$this->assertSame('image/svg+xml', $this->header($response, 'Content-Type'));
+		$this->assertStringContainsString('immutable', (string)$this->header($response, 'Cache-Control'));
+	}
+
+	public function testAnArtifactOfAnUnfinishedConversionIs404(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_PROCESSING));
+		$this->conversionService->expects($this->never())->method('getArtifact');
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->artifact(42, 'page-1')->getStatus());
+	}
+
+	public function testAnArtifactOfAnOlderFormatIs404(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->conversionService->method('find')->willReturn($this->datensatz(ScoreConversion::STATUS_READY));
+		$this->conversionService->method('isCurrentFormat')->willReturn(false);
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->artifact(42, 'page-1')->getStatus());
+	}
+
+	public function testAnUnknownArtifactIs404(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->node());
+		$this->ready();
+		$this->conversionService->method('getArtifact')->willThrowException(new NotFoundException());
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->artifact(42, 'secrets')->getStatus());
+	}
+
+	public function testAnArtifactOfAFolderIs404(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->createMock(Folder::class));
+		$this->conversionService->expects($this->never())->method('find');
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->artifact(42, 'page-1')->getStatus());
+	}
+
+	public function testTheSourceIsTheScoreAsAnImmutableAttachment(): void {
+		$node = $this->node();
+		$node->method('fopen')->willReturn(fopen('php://memory', 'rb'));
+		$this->fileResolver->method('resolveOwnNode')->willReturn($node);
+
+		$response = $this->controller()->source(42);
+
+		$this->assertSame(Http::STATUS_OK, $response->getStatus());
+		$this->assertSame('application/x-musescore', $this->header($response, 'Content-Type'));
+		$this->assertSame('attachment', $this->header($response, 'Content-Disposition'));
+		$this->assertSame('1234', $this->header($response, 'Content-Length'));
+		$this->assertSame('etag1', $response->getETag());
+		$this->assertStringContainsString('immutable', (string)$this->header($response, 'Cache-Control'));
+	}
+
+	public function testAnUnreadableSourceIs404(): void {
+		$node = $this->node();
+		$node->method('fopen')->willThrowException(new \RuntimeException('storage gone'));
+		$this->fileResolver->method('resolveOwnNode')->willReturn($node);
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->source(42)->getStatus());
+	}
+
+	public function testTheSourceOfAFolderIs404(): void {
+		$this->fileResolver->method('resolveOwnNode')->willReturn($this->createMock(Folder::class));
+
+		$this->assertSame(Http::STATUS_NOT_FOUND, $this->controller()->source(42)->getStatus());
 	}
 }

@@ -19,7 +19,7 @@ class PublicShareException extends \RuntimeException {
 	public const SHARE_AUTH = 'share_auth';
 	/** A link without read permission, i.e. a file drop. */
 	public const SHARE_NO_READ = 'share_no_read';
-	/** The file is not part of the share, or is no file. */
+	/** The file is not part of the share, or is no score. */
 	public const NOT_FOUND = 'not_found';
 
 	private const STATUS = [

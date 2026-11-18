@@ -59,6 +59,27 @@ class VariantServiceTest extends TestCase {
 		return $v;
 	}
 
+	/**
+	 * The own, just written row is among the counted ones: with a limit of
+	 * two, two running rows (the own one included) may run, a third may not.
+	 * Only rows touched within the stale window count (issue #43).
+	 */
+	public function testCapacityCountsTheOwnRowAndOnlyLiveRuns(): void {
+		$counts = [2, 3];
+		$this->mapper->expects($this->exactly(2))->method('countRunning')
+			->with($this->callback(fn (\DateTime $since) => $since->getTimestamp() === self::NOW - VariantService::STALE_AFTER_SECONDS))
+			->willReturnCallback(function () use (&$counts) {
+				return array_shift($counts);
+			});
+		$this->assertTrue($this->service()->hasCapacity(2));
+		$this->assertFalse($this->service()->hasCapacity(2));
+	}
+
+	public function testALimitBelowOneStillLetsOneRunThrough(): void {
+		$this->mapper->method('countRunning')->willReturn(1);
+		$this->assertTrue($this->service()->hasCapacity(0));
+	}
+
 	public function testTheSecondClaimOfTheSameVariantGetsNothing(): void {
 		$conflict = new class('duplicate') extends DbException {
 			public function getReason(): ?int {

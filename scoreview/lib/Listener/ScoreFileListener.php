@@ -7,6 +7,8 @@ namespace OCA\ScoreView\Listener;
 use OCA\ScoreView\AppInfo\Application;
 use OCA\ScoreView\BackgroundJob\ConvertScoreJob;
 use OCA\ScoreView\Service\ClientFallback;
+use OCA\ScoreView\Service\ConversionConfig;
+use OCA\ScoreView\Service\ScoreFiles;
 use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\Event;
 use OCP\EventDispatcher\IEventListener;
@@ -51,12 +53,12 @@ class ScoreFileListener implements IEventListener {
 		if (!$event instanceof NodeCreatedEvent && !$event instanceof NodeWrittenEvent) {
 			return;
 		}
-		if (!$this->appConfig->getValueBool(Application::APP_ID, 'eager_conversion')) {
+		if (!$this->appConfig->getValueBool(Application::APP_ID, ConversionConfig::EAGER_CONVERSION)) {
 			return;
 		}
 
 		$node = $event->getNode();
-		if (!str_ends_with(strtolower($node->getName()), '.mscz')) {
+		if (!ScoreFiles::hasScoreName($node->getName())) {
 			return;
 		}
 		// Erst hier gefragt, nicht weiter oben: Das Urteil kann einen
