@@ -37,7 +37,7 @@ ARG MUSESCORE_APPIMAGE_SHA256=8597105814359676483807ce4c4051eaf439bd723ebccaa916
 # first line with the stable permission model (`--permission`, 22.13), which
 # locks each run in (scoreview_sidecar/engine.py). Find the digest with
 #   docker buildx imagetools inspect node:22-bookworm-slim   (line "Digest:")
-FROM node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS converter
+FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS converter
 WORKDIR /opt/scoreview-converter
 COPY scoreview/converter/package.json scoreview/converter/package-lock.json ./
 # With @librescore/fonts: the app's release leaves the CJK fonts out because
