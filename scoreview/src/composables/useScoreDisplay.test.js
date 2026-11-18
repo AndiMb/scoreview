@@ -27,6 +27,7 @@ function setUp({ caps = {}, prefs = {}, width = 2000, myPart = 1, mappingOk = tr
 		myPartIndex: () => myPart,
 		staffMappingOk: () => mappingOk,
 		pagesWidthPx: () => width,
+		language: () => 'de_DE',
 	})
 	return { display, preferences }
 }
@@ -54,6 +55,13 @@ describe('useScoreDisplay', () => {
 		expect(setUp({ prefs: { noteNames: 'de' } }).display.noteNameSystem.value).toBe('de')
 		expect(setUp({ caps: { noteNames: 'old-pages' }, prefs: { noteNames: 'de' } }).display.noteNameSystem.value).toBeNull()
 		expect(setUp().display.noteNameSystem.value).toBeNull()
+	})
+
+	it('names a single note even with the names in the score off', () => {
+		expect(setUp().display.nameSystem.value).toBe('de')
+		expect(setUp({ prefs: { noteNames: 'solfa-fixed' } }).display.nameSystem.value).toBe('solfa-fixed')
+		// Not hidden by what the picture cannot draw: the tuner still names.
+		expect(setUp({ caps: { noteNames: 'old-pages' }, prefs: { noteNames: 'en' } }).display.nameSystem.value).toBe('en')
 	})
 
 	it('limits names and counts to my staff only where staves map to parts', () => {

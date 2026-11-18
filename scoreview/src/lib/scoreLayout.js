@@ -207,6 +207,23 @@ export function resolveMeasurePosition(measuresTimeline, timeMs, totalDurationMs
 }
 
 /**
+ * The measure number at a playback time - what most callers of
+ * resolveMeasurePosition want, without the fraction. Null without a
+ * measure timeline (not loaded yet) or with an empty one.
+ *
+ * @param {?Timeline} measuresTimeline from measures.json
+ * @param {number} timeMs
+ * @param {number} totalDurationMs end of the last measure
+ * @return {?number}
+ */
+export function measureAt(measuresTimeline, timeMs, totalDurationMs) {
+	if (!measuresTimeline) {
+		return null
+	}
+	return resolveMeasurePosition(measuresTimeline, timeMs, totalDurationMs)?.measureNumber ?? null
+}
+
+/**
  * Umkehrung von `resolveMeasurePosition` - löst einen gespeicherten Anker
  * wieder in eine Wiedergabezeit auf ("zu einer Notiz springen").
  * Verwendet wie `findMeasureStartTime` bewusst das ERSTE Vorkommen des

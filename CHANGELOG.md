@@ -6,6 +6,43 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Turn pages by listening no longer jumps back to where the singers were
+  before a tap: what was heard before the tap is forgotten (#40). It also
+  no longer turns unsure at every entry after a pause (#46), leaves no
+  audio node behind on the shared microphone (#47), and does not analyse
+  while it waits for a tap (#48).
+- Changing the bars of a running loop now changes where it repeats, not
+  only its flags; the export range no longer goes wrong with an empty
+  field (#41).
+- A quick second tap on a note, or a tap followed by Shift+arrow, is no
+  longer cut short by the first tone (#50).
+- Alt+arrow goes back in the browser again instead of moving a bar (#49).
+- Folder IDs are refused by the score endpoints; they no longer queue a
+  conversion every minute (#51).
+- A temporary copy cut short by a full disk is reported as a server problem,
+  not as a broken score (#53).
+
+### Changed
+
+- Public share links: visitors can open only scores in a shared folder,
+  and no longer see the technical text of a conversion error (#52, #44).
+- At most two display variants are engraved at the same time on the whole
+  instance (`variant_max_parallel`, occ only); further requests wait (#43).
+- Only full administrators can switch on public share links or set an
+  external SoundFont URL (#66).
+- Sidecar: MuseScore runs without the sidecar's secret in its environment
+  (#45), its output size is capped (`SCOREVIEW_MAX_MUSESCORE_OUTPUT_BYTES`,
+  #54), and the image now ships Flask/gunicorn from pinned pip packages
+  instead of Ubuntu's (#55) with a health check (#56). The image is about
+  0.5 GB smaller. Rebuild the sidecar image to get these changes.
+- Accessibility: the side panels take and return focus and close with
+  Escape; the follower's error has a close button; the dialog on public
+  share pages keeps focus inside (#72).
+- Lower memory use: parsed score pages are released when the viewer closes,
+  and staff bands are computed once per page (#58, #59).
+
 ## [1.33.0] – 2026-11-17
 
 ### Changed

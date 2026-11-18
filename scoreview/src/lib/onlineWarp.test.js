@@ -95,6 +95,24 @@ describe('createOnlineWarp', () => {
 		expect(Math.abs(warp.position() - before)).toBeLessThanOrEqual(1)
 	})
 
+	it('forgets the old band when anchored elsewhere', () => {
+		// The voice to 6 s, then a tap at 9 s, in its rest: once the path
+		// moves on, no score of the old run may come back and pull it to
+		// where it was before the tap.
+		const warp = createOnlineWarp(reference)
+		warp.anchor(0)
+		follow(warp, 'voices', 0, 6000, 1)
+		warp.anchor(9000 / 50)
+		let lowest = Infinity
+		let position
+		for (let at = 9000; at < 17000; at += 50) {
+			position = warp.step(liveAt('voices', at)).position
+			lowest = Math.min(lowest, position)
+		}
+		expect(lowest * 50).toBeGreaterThanOrEqual(8000)
+		expect(Math.abs(position * 50 - 16950)).toBeLessThanOrEqual(2500)
+	})
+
 	it('does nothing before an anchor', () => {
 		const warp = createOnlineWarp(reference)
 		expect(warp.step(liveAt('tutti', 0)).position).toBeNull()

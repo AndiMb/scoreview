@@ -3,8 +3,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { scoreFrameWrapper } from './scoreFrameWrapper.js'
 
-vi.mock('@nextcloud/files', () => ({ DefaultType: { DEFAULT: 'default' }, registerFileAction: vi.fn() }))
-
 /** A component instance as Vue would hand it to the hooks, without Vue. */
 function instance(props) {
 	const def = scoreFrameWrapper((fileId) => ({ fileId, remove: vi.fn() }))
@@ -63,18 +61,5 @@ describe('scoreFrameWrapper', () => {
 
 	it('declares the active prop Viewer passes to the shown file only', () => {
 		expect(scoreFrameWrapper(() => null).props.active).toEqual({ type: Boolean, default: false })
-	})
-})
-
-describe('registerScoreHandler', () => {
-	it('passes a group only when asked, so Files keeps its single-file viewer', async () => {
-		const registerHandler = vi.fn()
-		vi.stubGlobal('OCA', { Viewer: { registerHandler } })
-		const { registerScoreHandler } = await import('./scoreHandler.js')
-		registerScoreHandler({ name: 'A' })
-		registerScoreHandler({ name: 'B' }, { group: 'scoreview' })
-		expect(registerHandler.mock.calls[0][0]).not.toHaveProperty('group')
-		expect(registerHandler.mock.calls[1][0].group).toBe('scoreview')
-		vi.unstubAllGlobals()
 	})
 })

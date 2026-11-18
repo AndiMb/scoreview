@@ -6,11 +6,12 @@
 // this script only frames that page: it hands Nextcloud's Viewer a handler
 // whose component is an iframe. Therefore nothing of the viewer UI is imported
 // here - the bundle stays small enough to load on every share page.
+import { generateUrl } from '@nextcloud/router'
 import { getSharingToken } from '@nextcloud/sharing/public'
 import { translate } from './l10n.js'
 import { publicFrameUrl } from './lib/publicFrame.js'
 import { scoreFrameWrapper } from './lib/scoreFrameWrapper.js'
-import { registerScoreFileAction, registerScoreHandler } from './lib/scoreHandler.js'
+import { registerScoreFileAction, registerScoreHandler } from './scoreHandler.js'
 
 import './publicPath.js'
 
@@ -32,7 +33,7 @@ const FRAME_STYLE = 'width:100%;height:100%;border:0'
  */
 function createFrame(fileId, title = 'ScoreView') {
 	const frame = document.createElement('iframe')
-	frame.src = publicFrameUrl(getSharingToken(), fileId)
+	frame.src = publicFrameUrl(generateUrl, getSharingToken(), fileId)
 	frame.allow = FRAME_ALLOW
 	frame.allowFullscreen = true
 	frame.title = title
@@ -54,19 +55,34 @@ registerScoreHandler(scoreFrameWrapper(createFrame), { group: 'scoreview' })
 
 let modalEl = null
 let modalKeydown = null
+// Where the focus was before the modal opened, to go back there on close.
+let modalReturnFocus = null
+// The page's own elements made inert while the modal is open - only those
+// that were not inert already, so closing restores the page as it was.
+let modalInerted = []
 
 function closeModal() {
 	if (modalKeydown) {
 		document.removeEventListener('keydown', modalKeydown, true)
 		modalKeydown = null
 	}
+	for (const el of modalInerted) {
+		el.inert = false
+	}
+	modalInerted = []
 	modalEl?.remove()
 	modalEl = null
+	const back = modalReturnFocus
+	modalReturnFocus = null
+	if (back?.isConnected && typeof back.focus === 'function') {
+		back.focus()
+	}
 }
 
 function openModal(node) {
 	// A second modal on top of the first would be a state without a way out.
 	closeModal()
+	modalReturnFocus = document.activeElement
 
 	const frame = createFrame(node.fileid, node.basename ?? 'ScoreView')
 	frame.style.flex = '1'
@@ -85,12 +101,24 @@ function openModal(node) {
 		+ 'background:var(--color-main-background,#fff)'
 	modalEl.append(close, frame)
 	document.body.appendChild(modalEl)
+	// aria-modal only tells assistive technology; `inert` makes the page
+	// behind really unreachable - no Tab, no click, no virtual cursor. That
+	// is the focus trap: inside remain the button and the frame.
+	modalInerted = [...document.body.children].filter((el) => el !== modalEl && !el.inert)
+	for (const el of modalInerted) {
+		el.inert = true
+	}
 	close.focus()
 
 	modalKeydown = (event) => {
 		if (event.key === 'Escape') {
 			event.stopPropagation()
 			closeModal()
+		} else if (event.key === 'Tab' && event.shiftKey && document.activeElement === close) {
+			// Backwards from the first control: round to the frame, not out
+			// to the browser's address bar.
+			event.preventDefault()
+			frame.focus()
 		}
 	}
 	document.addEventListener('keydown', modalKeydown, true)

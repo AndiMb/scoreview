@@ -16,8 +16,12 @@ msgstr ""
 msgid "Only leaders can address notes to voices."
 msgstr ""
 
-#: lib/Controller/AnnotationController.php lib/Controller/RecordingController.php src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
-msgid "Choose at least one voice."
+#: lib/Controller/AnnotationController.php
+msgid "Note not found or no access."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php
+msgid "You do not have permission to change this note."
 msgstr ""
 
 #: lib/Controller/AnnotationController.php
@@ -26,14 +30,6 @@ msgstr ""
 
 #: lib/Controller/AnnotationController.php
 msgid "Note must not be empty."
-msgstr ""
-
-#: lib/Controller/AnnotationController.php
-msgid "You do not have permission to change this note."
-msgstr ""
-
-#: lib/Controller/AnnotationController.php
-msgid "Note not found or no access."
 msgstr ""
 
 #: lib/Controller/AnnotationController.php
@@ -54,6 +50,10 @@ msgstr ""
 
 #: lib/Controller/AnnotationController.php
 msgid "Invalid note anchor."
+msgstr ""
+
+#: lib/Controller/AnnotationController.php lib/Controller/RecordingController.php src/components/LoopSaveForm.vue src/components/ScoreAnnotations.vue
+msgid "Choose at least one voice."
 msgstr ""
 
 #: lib/Controller/ConversionController.php lib/Controller/JsonErrors.php lib/Controller/PageController.php lib/Controller/SetlistController.php lib/Controller/VariantController.php
@@ -221,7 +221,7 @@ msgid "The setlist could not be saved."
 msgstr ""
 
 #: lib/Controller/SettingsController.php
-msgid "Only administrators can change the Node.js path, the conversion service and the SoundFont source."
+msgid "Only administrators can change the Node.js path, the conversion service, the SoundFont sources and public share links."
 msgstr ""
 
 #: lib/Controller/SettingsController.php
@@ -285,7 +285,7 @@ msgid "Sidecar container (conversion in its own container)"
 msgstr ""
 
 #: src/components/AdminSettings.vue
-msgid "Only administrators can change the sidecar connection, the path to node and the SoundFont download URL."
+msgid "Only administrators can change the sidecar connection, the path to node, the SoundFont addresses and public share links."
 msgstr ""
 
 #: src/components/AdminSettings.vue
@@ -784,7 +784,7 @@ msgstr ""
 msgid "Only singers of the chosen voices see it"
 msgstr ""
 
-#: src/components/LoopSaveForm.vue src/components/PracticeExportControls.vue src/components/PrintToolbar.vue src/components/RecordingPanel.vue src/components/ScoreAnnotations.vue src/components/ScoreViewer.vue src/components/SetlistEditor.vue
+#: src/components/LoopSaveForm.vue src/components/PracticeExportControls.vue src/components/PrintToolbar.vue src/components/RecordingPanel.vue src/components/ScoreAnnotations.vue src/components/SetlistEditor.vue src/components/ViewerPanels.vue
 msgid "Cancel"
 msgstr ""
 
@@ -808,7 +808,7 @@ msgstr ""
 msgid "Intonation"
 msgstr ""
 
-#: src/components/MicIndicator.vue src/components/ScoreViewer.vue src/components/barTools.js
+#: src/components/MicIndicator.vue src/components/ViewerPanels.vue src/components/barTools.js
 msgid "Tuner"
 msgstr ""
 
@@ -820,7 +820,7 @@ msgstr ""
 msgid "Microphone on for: {purpose}. Tap to turn it off."
 msgstr ""
 
-#: src/components/MyPartControls.vue src/components/ScoreViewer.vue src/components/barTools.js
+#: src/components/MyPartControls.vue src/components/ViewerPanels.vue src/components/barTools.js
 msgid "My part"
 msgstr ""
 
@@ -1584,7 +1584,7 @@ msgstr ""
 msgid "This page could not be loaded ({error})."
 msgstr ""
 
-#: src/components/ScorePage.vue src/components/ScoreViewer.vue
+#: src/components/ScorePage.vue src/components/ViewerHints.vue
 msgid "Try again"
 msgstr ""
 
@@ -1724,6 +1724,10 @@ msgstr ""
 msgid "Technical detail"
 msgstr ""
 
+#: src/components/ScoreViewer.vue src/components/SetlistBar.vue src/components/ViewerHints.vue
+msgid "Dismiss"
+msgstr ""
+
 #: src/components/ScoreViewer.vue
 msgid "Wait"
 msgstr ""
@@ -1740,138 +1744,6 @@ msgstr ""
 msgid "Back to the playing position"
 msgstr ""
 
-#: src/components/ScoreViewer.vue
-msgid "Loading sound ({percent}%)…"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Continue without sound"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "No sound: {reason}"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Playback is not available."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "The score cursor keeps running independently of this."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Engraving the chosen part or page format …"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/SetlistBar.vue
-msgid "Dismiss"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "This score can be engraved on pages the size of a phone screen, with larger notes."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Use phone pages"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "No, thanks"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "On a phone, the system band shows the staves side by side in landscape."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Try the system band"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Lyrics view is not available: {reason} Showing the pages instead."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Draw on the music with finger, pen or mouse."
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Undo"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Done"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Tap the score where the {stamp} belongs."
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/barTools.js
-msgid "New setlist"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/SetlistBar.vue
-msgid "Edit setlist"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/SingPanel.vue
-msgid "Choose your part first."
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/barTools.js
-msgid "Mixer"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "My part: {name}"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "No part chosen"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "My voice on the right, the others on the left"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/barTools.js
-msgid "Notes"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/barTools.js
-msgid "Recording and intonation"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/barTools.js
-msgid "Practice log"
-msgstr ""
-
-#: src/components/ScoreViewer.vue src/components/barTools.js
-msgid "Scored singing"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Rehearsal"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Waiting - tap the note where you start again"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Listening - tap the note where the singing starts"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Following"
-msgstr ""
-
-#: src/components/ScoreViewer.vue
-msgid "Lost the place - tap the note where you are"
-msgstr ""
-
 #: src/components/SetlistBar.vue src/components/SetlistEditor.vue
 msgid "Setlist"
 msgstr ""
@@ -1886,6 +1758,10 @@ msgstr ""
 
 #: src/components/SetlistBar.vue
 msgid "Next piece"
+msgstr ""
+
+#: src/components/SetlistBar.vue src/components/ViewerPanels.vue
+msgid "Edit setlist"
 msgstr ""
 
 #: src/components/SetlistBar.vue
@@ -1986,6 +1862,10 @@ msgstr ""
 
 #: src/components/SingLane.vue
 msgid "without score"
+msgstr ""
+
+#: src/components/SingPanel.vue src/components/ViewerPanels.vue
+msgid "Choose your part first."
 msgstr ""
 
 #: src/components/SingPanel.vue
@@ -2334,6 +2214,110 @@ msgstr ""
 
 #: src/components/ViewerBar.vue
 msgid "{part} (generated)"
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "Loading sound ({percent}%)…"
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "Continue without sound"
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "No sound: {reason}"
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "Playback is not available."
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "The score cursor keeps running independently of this."
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "Engraving the chosen part or page format …"
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "This score can be engraved on pages the size of a phone screen, with larger notes."
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "Use phone pages"
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "No, thanks"
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "On a phone, the system band shows the staves side by side in landscape."
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "Try the system band"
+msgstr ""
+
+#: src/components/ViewerHints.vue
+msgid "Lyrics view is not available: {reason} Showing the pages instead."
+msgstr ""
+
+#: src/components/ViewerPanels.vue
+msgid "Draw on the music with finger, pen or mouse."
+msgstr ""
+
+#: src/components/ViewerPanels.vue
+msgid "Undo"
+msgstr ""
+
+#: src/components/ViewerPanels.vue
+msgid "Done"
+msgstr ""
+
+#: src/components/ViewerPanels.vue
+msgid "Tap the score where the {stamp} belongs."
+msgstr ""
+
+#: src/components/ViewerPanels.vue src/components/barTools.js
+msgid "New setlist"
+msgstr ""
+
+#: src/components/ViewerPanels.vue src/components/barTools.js
+msgid "Mixer"
+msgstr ""
+
+#: src/components/ViewerPanels.vue
+msgid "My part: {name}"
+msgstr ""
+
+#: src/components/ViewerPanels.vue
+msgid "No part chosen"
+msgstr ""
+
+#: src/components/ViewerPanels.vue
+msgid "My voice on the right, the others on the left"
+msgstr ""
+
+#: src/components/ViewerPanels.vue src/components/barTools.js
+msgid "Notes"
+msgstr ""
+
+#: src/components/ViewerPanels.vue src/components/barTools.js
+msgid "Recording and intonation"
+msgstr ""
+
+#: src/components/ViewerPanels.vue src/components/barTools.js
+msgid "Practice log"
+msgstr ""
+
+#: src/components/ViewerPanels.vue src/components/barTools.js
+msgid "Scored singing"
+msgstr ""
+
+#: src/components/ViewerPanels.vue
+msgid "Rehearsal"
 msgstr ""
 
 #: src/components/ZoomControls.vue
@@ -2802,6 +2786,22 @@ msgstr ""
 
 #: src/lib/barGroups.js
 msgid "Text"
+msgstr ""
+
+#: src/lib/followerStatusText.js
+msgid "Waiting - tap the note where you start again"
+msgstr ""
+
+#: src/lib/followerStatusText.js
+msgid "Listening - tap the note where the singing starts"
+msgstr ""
+
+#: src/lib/followerStatusText.js
+msgid "Following"
+msgstr ""
+
+#: src/lib/followerStatusText.js
+msgid "Lost the place - tap the note where you are"
 msgstr ""
 
 #: src/lib/shareRefusals.js

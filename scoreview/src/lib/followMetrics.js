@@ -1,8 +1,7 @@
-// PARKED - part of the microphone score follower (automatic page turning),
-// which is paused; no viewer code imports it. Kept and tested because
-// tools/follow/replay.mjs measures it against recorded rehearsals, and the
-// work resumes from here. The switch `feature_score_follower` exists but
-// turns nothing on (docs/installation.md).
+// Part of the microphone score follower (automatic page turning, behind the
+// switch `feature_score_follower`): the acceptance figures are replay
+// only (tools/follow/replay.mjs, npm test); the viewer uses just
+// printedMs, through lib/followRef.js.
 //
 // Acceptance figures of the microphone follower, computed from a replay -
 // pure, so they run the same in `npm test` (synthetic cases) and in

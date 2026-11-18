@@ -83,8 +83,8 @@
 			</NcButton>
 			<LoopSaveForm
 				v-if="loopSaving && loop.active"
-				:from="Number(loop.fromMeasure)"
-				:to="Number(loop.toMeasure)"
+				:from="loop.range?.from"
+				:to="loop.range?.to"
 				:isLeader="leaderRoles.isLeader"
 				:parts="session.scoreParts"
 				:error="annotations.error"
@@ -539,7 +539,6 @@ import ZoomControls from './ZoomControls.vue'
 import nodeText from '../directives/nodeText.js'
 import { translate } from '../l10n.js'
 import { anyGroupActive, groupActive, isPinned, pinLimitReached, PINNABLE, togglePin, toolOn, toolValue, barGroups as visibleBarGroups, barPins as visibleBarPins } from '../lib/barGroups.js'
-import { findMeasureStartTime } from '../lib/scoreLayout.js'
 import { MODE_TONIC, MODE_VOICE } from '../lib/startTone.js'
 import { formatTime, progressPercent, seekValue } from '../lib/viewerFormat.js'
 import { GROUP_ICONS, groupLabel, TOOL_ICONS, toolLabel } from './barTools.js'
@@ -728,14 +727,9 @@ export default {
 		 * @return {?{fromMeasure: number, toMeasure: number, fromMs: number, toMs: number}}
 		 */
 		exportLoopRange() {
-			const { loop } = this
-			const measures = this.session.measuresTimeline
-			if (!loop.active || !measures) {
-				return null
-			}
-			const fromMs = findMeasureStartTime(measures, loop.fromMeasure)
-			const toMs = findMeasureStartTime(measures, loop.toMeasure + 1) ?? this.session.durationMs
-			return fromMs === null ? null : { fromMeasure: loop.fromMeasure, toMeasure: loop.toMeasure, fromMs, toMs }
+			// The range playback loops (useLoop), not the fields being edited.
+			const range = this.loop.range
+			return range ? { fromMeasure: range.from, toMeasure: range.to, fromMs: range.startMs, toMs: range.endMs } : null
 		},
 
 		/** Wie das Vorgemerkte auf der Offline-Seite heisst (Material, E4). */
@@ -779,9 +773,9 @@ export default {
 		 */
 		toolValue(id) {
 			return toolValue(id, {
-				loopActive: this.loop.active,
-				loopFrom: this.loop.fromMeasure,
-				loopTo: this.loop.toMeasure,
+				loopActive: !!this.loop.range,
+				loopFrom: this.loop.range?.from,
+				loopTo: this.loop.range?.to,
 				tempoBpm: this.playback.effectiveTempoBpm,
 				tempoGuessed: this.playback.tempoGuessed,
 				transpose: this.view.effectiveTranspose,
@@ -904,8 +898,8 @@ export default {
 		 */
 		async saveLoop(choice) {
 			await this.annotations.create({
-				measureNumber: Number(this.loop.fromMeasure),
-				endMeasure: Number(this.loop.toMeasure),
+				measureNumber: this.loop.range.from,
+				endMeasure: this.loop.range.to,
 				fraction: 0,
 				elid: null,
 				anchorEtag: null,

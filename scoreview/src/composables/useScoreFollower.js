@@ -44,6 +44,8 @@ export function useScoreFollower({ microphone, input, followTime }) {
 
 	let worker = null
 	let analyser = null
+	// The shared microphone source the analyser hangs on (useMicrophone.js).
+	let source = null
 	let context = null
 	let timer = null
 	let spectrum = null
@@ -68,8 +70,9 @@ export function useScoreFollower({ microphone, input, followTime }) {
 				return
 			}
 			if (data.type === 'state') {
-				// Waiting: the follower inside runs on, but nothing it finds is
-				// shown - the next tap starts it afresh anyway.
+				// Reports of frames from before the tap, or still on their
+				// way after wait(): nothing they say is shown - the next tap
+				// starts afresh anyway.
 				if (!(data.atMs >= listenFromMs)) {
 					return
 				}
@@ -141,7 +144,8 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		// No smoothing: the follower was measured on raw spectra, and its
 		// own windows do the averaging.
 		analyser.smoothingTimeConstant = 0
-		handle.source.connect(analyser)
+		source = handle.source
+		source.connect(analyser)
 		spectrum = new Float32Array(analyser.frequencyBinCount)
 		// The singer's own voice, from the same spectrum (S7: no samples).
 		voicePitch = createVoicePitch(context.sampleRate, analyser.fftSize)
@@ -159,7 +163,10 @@ export function useScoreFollower({ microphone, input, followTime }) {
 	}
 
 	function tap() {
-		if (!analyser || !worker) {
+		// Waiting for a tap: whatever the worker found would be thrown away at
+		// the next anchor, and its FFT, voice pitch and global search cost a
+		// phone's battery for nothing.
+		if (!analyser || !worker || listenFromMs === Infinity) {
 			return
 		}
 		analyser.getFloatFrequencyData(spectrum)
@@ -193,6 +200,43 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		phase.value = 'following'
 	}
 
+	/** Undoes a pending anchorAfterSeek: listener off, timer cleared. */
+	let cancelSeekAnchor = null
+
+	/**
+	 * Anchor where a seek lands. The viewer's navigation reports before it
+	 * seeks, and the player keeps reporting the old place until its worklet
+	 * confirms the seek ('timechange', lib/player.js) - so the place is read
+	 * on that event; the silent clock has no such event and is read after
+	 * 300 ms. A newer seek replaces a pending one, and stop() drops it.
+	 *
+	 * @param {?{getCurrentTimeMs: function(): number, addEventListener?: function(string, function(): void): void, removeEventListener?: function(string, function(): void): void}} source the playback clock
+	 */
+	function anchorAfterSeek(source) {
+		cancelSeekAnchor?.()
+		if (!source) {
+			return
+		}
+		let timer = null
+		const cancel = () => {
+			clearTimeout(timer)
+			source.removeEventListener?.('timechange', take)
+			if (cancelSeekAnchor === cancel) {
+				cancelSeekAnchor = null
+			}
+		}
+		function take() {
+			cancel()
+			const ms = source.getCurrentTimeMs()
+			if (Number.isFinite(ms)) {
+				anchor(ms)
+			}
+		}
+		cancelSeekAnchor = cancel
+		source.addEventListener?.('timechange', take)
+		timer = setTimeout(take, 300)
+	}
+
 	/**
 	 * Stop following until the next tap: the score stays where it is, the
 	 * microphone stays open (no second permission question on a phone).
@@ -211,16 +255,26 @@ export function useScoreFollower({ microphone, input, followTime }) {
 	function stop() {
 		generation.invalidate()
 		starting = false
+		cancelSeekAnchor?.()
 		if (!active.value) {
 			return
 		}
 		clearInterval(timer)
 		timer = null
+		// analyser.disconnect() alone cuts only the analyser's outputs. The
+		// source is shared (tuner, intonation, recorder keep it alive), and
+		// each switch on and off would leave another analyser hanging on it.
+		try {
+			source?.disconnect(analyser)
+		} catch {
+			// Already gone with the microphone chain.
+		}
 		try {
 			analyser?.disconnect()
 		} catch {
 			// Already gone with the microphone chain.
 		}
+		source = null
 		analyser = null
 		spectrum = null
 		voicePitch = null
@@ -241,17 +295,6 @@ export function useScoreFollower({ microphone, input, followTime }) {
 		}
 	}
 
-	function destroy() {
-		destroyed = true
-		stop()
-		worker?.terminate()
-		worker = null
-	}
-
-	if (getCurrentScope()) {
-		onScopeDispose(destroy)
-	}
-
 	// On a hidden page nobody reads the score, and the browser may starve
 	// the timer anyway. Switching back on is a deliberate act (S3).
 	const onVisibilityChange = () => {
@@ -261,10 +304,23 @@ export function useScoreFollower({ microphone, input, followTime }) {
 	}
 	if (typeof document !== 'undefined') {
 		document.addEventListener('visibilitychange', onVisibilityChange)
-		if (getCurrentScope()) {
-			onScopeDispose(() => document.removeEventListener('visibilitychange', onVisibilityChange))
+	}
+
+	function destroy() {
+		destroyed = true
+		stop()
+		worker?.terminate()
+		worker = null
+		// Here and not only on scope dispose: a caller outside an effect
+		// scope ends the follower with destroy() alone.
+		if (typeof document !== 'undefined') {
+			document.removeEventListener('visibilitychange', onVisibilityChange)
 		}
 	}
 
-	return { active, phase, held, error, start, stop, toggle, anchor, wait, destroy }
+	if (getCurrentScope()) {
+		onScopeDispose(destroy)
+	}
+
+	return { active, phase, held, error, start, stop, toggle, anchor, anchorAfterSeek, wait, destroy }
 }

@@ -183,7 +183,8 @@ async function convert(msczPath, fontVerzeichnis) {
 	}
 
 	// Kein score.destroy(): dieser Prozess konvertiert genau eine Partitur (der
-	// Selbsttest zwei winzige) und endet danach, der Prozessabbau gibt die Wasm-Instanz samt Heap frei. Wer
+	// Selbsttest acht winzige: fuenf Partituren, dazu drei Varianten aus
+	// convertVariant) und endet danach, der Prozessabbau gibt die Wasm-Instanz samt Heap frei. Wer
 	// hier je mehrere Partituren nacheinander laedt, braucht den Aufruf - mit
 	// ihm bleibt der Speicher flach (gemessen: fuenf Durchlaeufe, rund 105 MB
 	// unveraendert), ohne ihn waechst er je Partitur.

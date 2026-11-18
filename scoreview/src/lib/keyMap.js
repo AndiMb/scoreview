@@ -50,7 +50,7 @@ export const KEY_BINDINGS = Object.freeze([
 ])
 
 /**
- * @param {{code?:string, key?:string, ctrlKey?:boolean, metaKey?:boolean, shiftKey?:boolean}} event ein KeyboardEvent oder etwas mit denselben Feldern
+ * @param {{code?:string, key?:string, ctrlKey?:boolean, metaKey?:boolean, shiftKey?:boolean, altKey?:boolean}} event ein KeyboardEvent oder etwas mit denselben Feldern
  * @param {{performance?:boolean}} ctx
  * @return {?{command:string, action:?string, preventDefault:boolean}}
  *   null = diese Taste gehoert nicht dem Viewer. Eine im Aufführungsmodus
@@ -58,6 +58,13 @@ export const KEY_BINDINGS = Object.freeze([
  *   die Seite zu scrollen - ein Tipp auf die Leertaste soll dort gar nichts tun.
  */
 export function resolveKey(event, { performance = false } = {}) {
+	// Alt belongs to the browser and the system: Alt+Left is Back on Windows
+	// and Linux, Option+arrows move by word on a Mac. AltGr arrives as
+	// Ctrl+Alt on Windows and types characters; it falls through to the Ctrl
+	// rows below, where only Ctrl+P lives.
+	if (event.altKey === true && event.ctrlKey !== true) {
+		return null
+	}
 	const withCtrl = event.ctrlKey === true || event.metaKey === true
 	const withShift = event.shiftKey === true
 	const rows = KEY_BINDINGS.filter((b) => (b.ctrl === true) === withCtrl && (b.shift !== true || withShift))

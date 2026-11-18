@@ -1,6 +1,6 @@
 import axios from '@nextcloud/axios'
 import { generateUrl } from '@nextcloud/router'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { clampLevel, DEFAULT_OTHERS_LEVEL } from '../lib/coachMix.js'
 import { GUEST_KEYS, readGuest, writeGuest } from '../lib/guestStore.js'
 
@@ -42,11 +42,20 @@ const PRACTICE_DEFAULTS = Object.freeze({
  * @param {object} deps
  * @param {() => (number|string)} deps.fileId aktuelle fileId
  * @param {() => boolean} [deps.local] keep it in the browser, not on the server
+ * @param {() => ?Array<{id: (number|string), name: string}>} [deps.parts] the score's parts (meta.parts)
  * @return {object}
  */
-export function useMyPart({ fileId, local = () => false }) {
+export function useMyPart({ fileId, local = () => false, parts = () => null }) {
 	const myPartId = ref(null)
 	const practice = ref({ ...PRACTICE_DEFAULTS })
+
+	// My part as an entry of the score, or null - none chosen, or a choice
+	// the score no longer has (re-upload). Ids compare as strings: meta.parts
+	// may carry numbers, the stored choice is a string.
+	const myPartEntry = computed(() => {
+		const id = myPartId.value
+		return id === null ? null : (parts() ?? []).find((p) => String(p.id) === String(id)) ?? null
+	})
 
 	// Jede Ladung bekommt eine Nummer. Eine Antwort, die nach einem
 	// Dateiwechsel oder einer eigenen Wahl eintrifft, ist veraltet und darf
@@ -121,7 +130,7 @@ export function useMyPart({ fileId, local = () => false }) {
 		}
 	}
 
-	return { myPartId, practice, load, set, setPractice }
+	return { myPartId, myPartEntry, practice, load, set, setPractice }
 }
 
 /**

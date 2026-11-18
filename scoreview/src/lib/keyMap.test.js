@@ -68,7 +68,27 @@ describe('keyMap.resolveKey', () => {
 	})
 
 	it('swallows Shift+arrows in performance mode, a step would sound', () => {
-		expect(resolveKey({ code: 'ArrowRight', key: 'ArrowRight', shiftKey: true }, { performance: true }).command).toBe('blocked')
+		const blocked = { command: 'blocked', action: null, preventDefault: true }
+		expect(resolveKey({ code: 'ArrowRight', key: 'ArrowRight', shiftKey: true }, { performance: true })).toEqual(blocked)
+		expect(resolveKey({ code: 'ArrowLeft', key: 'ArrowLeft', shiftKey: true }, { performance: true })).toEqual(blocked)
+	})
+
+	it('leaves Alt combinations to the browser - Alt+Left is Back', () => {
+		for (const performance of [false, true]) {
+			expect(resolveKey({ code: 'ArrowLeft', key: 'ArrowLeft', altKey: true }, { performance })).toBeNull()
+			expect(resolveKey({ code: 'ArrowRight', key: 'ArrowRight', altKey: true }, { performance })).toBeNull()
+			expect(resolveKey({ code: 'ArrowRight', key: 'ArrowRight', altKey: true, shiftKey: true }, { performance })).toBeNull()
+			expect(resolveKey({ code: 'Space', key: ' ', altKey: true }, { performance })).toBeNull()
+			expect(resolveKey({ code: 'PageDown', key: 'PageDown', altKey: true }, { performance })).toBeNull()
+		}
+		// Option+arrows on a Mac: Alt with Cmd is no AltGr.
+		expect(resolveKey({ code: 'ArrowLeft', key: 'ArrowLeft', altKey: true, metaKey: true })).toBeNull()
+	})
+
+	it('treats AltGr (Ctrl+Alt on Windows) like Ctrl, not like Alt', () => {
+		// AltGr types characters; none of them is a viewer key.
+		expect(resolveKey({ code: 'Digit0', key: '}', altKey: true, ctrlKey: true })).toBeNull()
+		expect(resolveKey({ code: 'ArrowLeft', key: 'ArrowLeft', altKey: true, ctrlKey: true })).toBeNull()
 	})
 
 	it('still reads keys that need Shift on the layout', () => {

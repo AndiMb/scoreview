@@ -2,7 +2,7 @@ import { computed } from 'vue'
 import { translate } from '../l10n.js'
 import { unavailableReason } from '../lib/capabilities.js'
 import { countLabels } from '../lib/countLabels.js'
-import { noteNameStaves as stavesForNames } from '../lib/noteNameSystem.js'
+import { noteNameSystem as nameSystemOf, noteNameStaves as stavesForNames } from '../lib/noteNameSystem.js'
 import { MIN_SPREAD_WIDTH_PX, spreadMode as spreadModeOf } from '../lib/spreadLayout.js'
 
 /**
@@ -23,9 +23,10 @@ import { MIN_SPREAD_WIDTH_PX, spreadMode as spreadModeOf } from '../lib/spreadLa
  * @param {() => ?number} deps.myPartIndex my part among the picture's parts
  * @param {() => boolean} deps.staffMappingOk whether staves map to parts
  * @param {() => number} deps.pagesWidthPx the width of the page area
+ * @param {() => string} [deps.language] the interface language (getLanguage()), for nameSystem
  * @return {object}
  */
-export function useScoreDisplay({ capabilities, pictureMeta, preferences, meters, myPartIndex, staffMappingOk, pagesWidthPx }) {
+export function useScoreDisplay({ capabilities, pictureMeta, preferences, meters, myPartIndex, staffMappingOk, pagesWidthPx, language = () => 'en' }) {
 	const t = (text, vars) => translate('scoreview', text, vars)
 
 	/**
@@ -79,6 +80,13 @@ export function useScoreDisplay({ capabilities, pictureMeta, preferences, meters
 		return names !== 'off' && noteNamesUnavailable.value === '' ? names : null
 	})
 
+	/**
+	 * How a single note is named where a name is needed even with the names
+	 * in the score off - the tuner and a tapped note: the chosen system, else
+	 * the one of the interface language (lib/noteNameSystem.js).
+	 */
+	const nameSystem = computed(() => nameSystemOf(preferences.noteNames.value, language()))
+
 	/** Nur die Zeile der eigenen Stimme - wo sich Zeilen Stimmen zuordnen lassen. */
 	const noteNameStaves = computed(() => stavesForNames(preferences.noteNamesMine.value, myPartIndex(), staffMappingOk()))
 
@@ -104,6 +112,7 @@ export function useScoreDisplay({ capabilities, pictureMeta, preferences, meters
 		spreadMode,
 		spreadUnavailable,
 		noteNameSystem,
+		nameSystem,
 		noteNameStaves,
 		countOfElid,
 		countStaves,

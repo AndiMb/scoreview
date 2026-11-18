@@ -11,6 +11,7 @@ import {
 	findNearestOccurrenceTimeMs,
 	groupRectsByPage,
 	MAX_ZOOM,
+	measureAt,
 	measurePositionToTimeMs,
 	MIN_ZOOM,
 	parseSvgSizeMm,
@@ -134,6 +135,13 @@ describe('resolveMeasurePosition / measurePositionToTimeMs', () => {
 
 	it('liefert null für eine leere Timeline', () => {
 		expect(resolveMeasurePosition(buildTimeline({ events: [] }), 100, DURATION_MS)).toBeNull()
+	})
+
+	it('measureAt gives the measure number alone, null without a timeline', () => {
+		expect(measureAt(measuresTimeline, 4500, DURATION_MS)).toBe(1)
+		expect(measureAt(measuresTimeline, 10750, DURATION_MS)).toBe(5)
+		expect(measureAt(null, 100, DURATION_MS)).toBeNull()
+		expect(measureAt(buildTimeline({ events: [] }), 100, DURATION_MS)).toBeNull()
 	})
 })
 

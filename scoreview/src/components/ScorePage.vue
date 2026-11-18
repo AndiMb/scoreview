@@ -259,26 +259,19 @@ import ScoreStamps from './ScoreStamps.vue'
 import { translate } from '../l10n.js'
 import { placeCountLabels } from '../lib/countLayout.js'
 import { formatCents } from '../lib/intonation.js'
-import { createLru } from '../lib/lruCache.js'
 import { labelScale, noteNameTexts, placeNoteLabels } from '../lib/noteLabelLayout.js'
 import { nameOf } from '../lib/noteNames.js'
 import { hitNotehead, matchNoteheads } from '../lib/noteSpellingIndex.js'
+import { emptyPageDom, forgetSpellings } from '../lib/pageDom.js'
 import { bandStyle, cursorBands, percentStyle, percentX, percentY, stackNoteTexts } from '../lib/pageGeometry.js'
 import { BASE_PAGE_WIDTH_PX, parseSvgSizeMm, parseViewBox } from '../lib/scoreLayout.js'
-import { canMapStavesToParts, findStaffBands, groupBandsIntoSystems, partOfStaff, staffOfPart, stavesOfPart } from '../lib/staffBands.js'
+import { canMapStavesToParts, groupBandsIntoSystems, partOfStaff, staffOfPart, stavesOfPart } from '../lib/staffBands.js'
 import { systemOf } from '../lib/stampLayout.js'
 import { buildNoteIndex, buildSegmentIndex, pickNoteheads, setHighlight } from '../lib/svgIndex.js'
 import { sanitizeSvgPage } from '../lib/svgSanitizer.js'
 import { yieldToMain } from '../lib/yieldToMain.js'
 import { createScoreFrame } from './scorePageFrame.js'
-
-// Sanitized pages, shared by all ScorePages. Page URLs carry the conversion
-// version (`?v=`), so an entry never goes stale. A few pages are enough: the
-// system band mounts several frames of the same page and re-mounts them when
-// they scroll back into reach (SystemBand.vue), and the page view unloads a
-// page 2,400 px away and loads it again on the way back. Each entry holds
-// the text and the parsed nodes (lib/svgSanitizer.js#sanitizeSvgPage).
-const svgCache = createLru(6)
+import { cachedSvgPage, cacheSvgPage, staffBandsOf, svgPageCacheGeneration } from './svgPageCache.js'
 
 // Wie weit der Zeiger zwischen pointerdown und click wandern darf, damit es
 // noch als Klick gilt. Grosszuegig genug fuer das Zittern eines
@@ -291,6 +284,9 @@ const NO_CURSOR_RECTS = Object.freeze([])
 
 // No note names (see noteLabels in data()).
 const NO_NOTE_LABELS = Object.freeze({ halo: 0, texts: Object.freeze([]) })
+
+// No beat numbers (see countLabels in data()).
+const NO_COUNT_LABELS = Object.freeze([])
 
 // Layouts of the note names kept per page, one per zoom band (labelScale):
 // zooming back and forth between two bands re-places nothing.
@@ -575,8 +571,10 @@ export default {
 			noteLabels: NO_NOTE_LABELS,
 			// The beat numbers of this page: {key, x, y, size, text} in SVG
 			// units (lib/countLayout.js) - drawn as SVG text, so playback
-			// never touches a style attribute for them.
-			countLabels: [],
+			// never touches a style attribute for them. Frozen like
+			// noteLabels: replaced as a whole, never changed in place, so Vue
+			// need not proxy every entry.
+			countLabels: NO_COUNT_LABELS,
 			// Der Name des zuletzt angetippten Kopfs, kurz eingeblendet (D13).
 			tapBubble: null,
 		}
@@ -610,10 +608,11 @@ export default {
 		 * Notenlinien der Seite.
 		 */
 		staffSystems() {
-			if (!this.svgMarkup) {
+			// dom.page is set before svgMarkup, which is what this recomputes on.
+			if (!this.svgMarkup || !this.dom.page) {
 				return []
 			}
-			return groupBandsIntoSystems(findStaffBands(this.svgMarkup), this.systemRects)
+			return groupBandsIntoSystems(staffBandsOf(this.dom.page), this.systemRects)
 		},
 
 		/**
@@ -880,43 +879,21 @@ export default {
 
 	created() {
 		/*
-		 * Die Segmentkarte (M10) und die gerade eingefaerbten Knoten stehen
-		 * bewusst NICHT in data(): Beides sind DOM-Knoten, die kein Template
-		 * liest. In data() wuerde Vue sie tief reaktiv machen - einen Proxy um
-		 * jeden einzelnen SVG-Knoten legen, je Seite ueber tausend davon - fuer
-		 * einen Wert, dessen Aenderung gar nichts neu rendern soll.
+		 * Everything this page knows about its SVG beyond the markup - the
+		 * segment map (M10), the intonation map, coloured nodes, measured
+		 * noteheads, note name layouts - in ONE object (lib/pageDom.js), not
+		 * in data(): they are DOM nodes no template reads, and data() would
+		 * put a proxy around every one of them. Load, re-index and unload
+		 * replace the object as a whole. `dom.page` is the cache entry, whose
+		 * parsed nodes renderSvg() clones in.
 		 */
-		this.segmentIndex = null
-		this.highlighted = []
-		// Dasselbe fuer die Intonation: Karte `elid:staff` -> Notenkoepfe
-		// und die gerade gefaerbten Knoten mit ihrer Klasse.
-		this.noteIndex = null
-		this.marked = []
-		this.liveMarked = []
-		// Notenkoepfe mit Tonhoehe und Schreibweise (lib/noteSpellingIndex.js)
-		// - DOM-Knoten, also ebenfalls nicht reaktiv. Gemessen erst bei
-		// Bedarf (measuredNoteItems()), `noteItemsMeasured` sagt, ob schon.
-		this.noteItems = []
-		this.noteItemsMeasured = false
-		// Hindernisse fuer die Tonnamen, gemessen beim ersten Bedarf.
-		this.labelObstacles = null
-		// Note name layouts of the current setting by zoom band
-		// (relayoutNoteLabels() empties it), and the band shown now.
-		this.labelLayouts = new Map()
-		this.labelScaleKey = null
-		// Vertical place of a notehead in page units, for the order of the
-		// heads in a chord (replaceMarks). Read once per head: the SVG never
-		// changes, and reading after a class change forced a style
-		// recalculation in a frame of some 17,000 nodes.
-		this.headYs = new WeakMap()
+		this.dom = emptyPageDom()
 		this.tapTimer = null
 		// The frame with the page SVG and the element in it that holds the
 		// SVG (see the template and attachSvgRoot()) - DOM nodes, so not in
-		// data(). `svgSource` is the sanitized page as nodes, cloned in by
-		// renderSvg().
+		// data(). They live as long as the component, not the loaded page.
 		this.frame = null
 		this.svgRoot = null
-		this.svgSource = null
 	},
 
 	mounted() {
@@ -966,9 +943,7 @@ export default {
 		 * something needs them (measuredNoteItems()).
 		 */
 		indexSpellings() {
-			this.labelObstacles = null
-			this.noteItems = []
-			this.noteItemsMeasured = false
+			forgetSpellings(this.dom)
 			this.relayoutNoteLabels()
 			this.updateCountLabels()
 		},
@@ -983,13 +958,13 @@ export default {
 		 * @return {Array<object>}
 		 */
 		measuredNoteItems() {
-			if (this.noteItemsMeasured) {
-				return this.noteItems
+			if (this.dom.noteItemsMeasured) {
+				return this.dom.noteItems
 			}
-			this.noteItemsMeasured = true
-			this.noteItems = []
-			if (this.spellings && this.noteIndex) {
-				this.noteItems = matchNoteheads(this.noteIndex, this.spellings).map((item) => {
+			this.dom.noteItemsMeasured = true
+			this.dom.noteItems = []
+			if (this.spellings && this.dom.noteIndex) {
+				this.dom.noteItems = matchNoteheads(this.dom.noteIndex, this.spellings).map((item) => {
 					let box = null
 					try {
 						const b = item.node.getBBox()
@@ -1000,19 +975,19 @@ export default {
 					return { ...item, box }
 				}).filter((item) => item.box !== null)
 			}
-			return this.noteItems
+			return this.dom.noteItems
 		},
 
 		updateCountLabels() {
 			this.countLabels = this.viewBox && this.countOfElid?.size > 0
-				? placeCountLabels(this.measuredNoteItems(), this.staffSystems, this.countOfElid, this.countStaves)
-				: []
+				? Object.freeze(placeCountLabels(this.measuredNoteItems(), this.staffSystems, this.countOfElid, this.countStaves))
+				: NO_COUNT_LABELS
 		},
 
 		/** The names' inputs changed: drop the kept layouts and place them anew. */
 		relayoutNoteLabels() {
-			this.labelLayouts.clear()
-			this.labelScaleKey = null
+			this.dom.labelLayouts.clear()
+			this.dom.labelScaleKey = null
 			this.updateNoteLabels()
 		},
 
@@ -1025,21 +1000,21 @@ export default {
 			const scale = box ? labelScale((BASE_PAGE_WIDTH_PX * this.zoom) / box.width) : null
 			if (!this.noteNameSystem || !scale || this.measuredNoteItems().length === 0) {
 				this.noteLabels = NO_NOTE_LABELS
-				this.labelScaleKey = null
+				this.dom.labelScaleKey = null
 				return
 			}
-			if (scale.key === this.labelScaleKey) {
+			if (scale.key === this.dom.labelScaleKey) {
 				return
 			}
-			let layout = this.labelLayouts.get(scale.key)
+			let layout = this.dom.labelLayouts.get(scale.key)
 			if (!layout) {
 				layout = Object.freeze(this.layoutNoteLabels(scale.pxPerUnit))
-				if (this.labelLayouts.size >= NOTE_LABEL_LAYOUTS) {
-					this.labelLayouts.delete(this.labelLayouts.keys().next().value)
+				if (this.dom.labelLayouts.size >= NOTE_LABEL_LAYOUTS) {
+					this.dom.labelLayouts.delete(this.dom.labelLayouts.keys().next().value)
 				}
-				this.labelLayouts.set(scale.key, layout)
+				this.dom.labelLayouts.set(scale.key, layout)
 			}
-			this.labelScaleKey = scale.key
+			this.dom.labelScaleKey = scale.key
 			this.noteLabels = layout
 		},
 
@@ -1056,7 +1031,7 @@ export default {
 			// Koepfe nur 4 px hoch, groessere Namen deckten dort alles zu.
 			// Not rounded to whole pixels: as SVG text the size is in page
 			// units, and inside the limits it then stays the same at every zoom.
-			const items = this.noteItems
+			const items = this.dom.noteItems
 				.map((item, id) => ({ item, id }))
 				.filter(({ item }) => staves === null || staves.has(item.staff))
 				.map(({ item, id }) => ({
@@ -1079,8 +1054,8 @@ export default {
 		 * @return {Array<{box: object, id: number}>}
 		 */
 		obstacles() {
-			if (this.labelObstacles) {
-				return this.labelObstacles
+			if (this.dom.labelObstacles) {
+				return this.dom.labelObstacles
 			}
 			const out = this.measuredNoteItems().map((item, id) => ({ box: item.box, id }))
 			for (const node of this.svgRoot?.querySelectorAll(LABEL_OBSTACLES) ?? []) {
@@ -1093,7 +1068,7 @@ export default {
 					// Ohne Layout kein Hindernis.
 				}
 			}
-			this.labelObstacles = out
+			this.dom.labelObstacles = out
 			return out
 		},
 
@@ -1167,8 +1142,9 @@ export default {
 			this.loadError = ''
 			try {
 				const key = `${this.svgUrl}|${this.pageIndex}`
-				let page = svgCache.get(key)
+				let page = cachedSvgPage(key)
 				if (!page) {
+					const generation = svgPageCacheGeneration()
 					const res = await axios.get(this.svgUrl, { responseType: 'text' })
 					// Der Praefix macht die Glyph-Kennungen dieser Seite im
 					// Dokument eindeutig - ohne ihn greift die zweite Seite auf
@@ -1181,7 +1157,7 @@ export default {
 						markup,
 						source,
 					}
-					svgCache.set(key, page)
+					cacheSvgPage(key, page, generation)
 					// Sanitizing was one long stretch; a tap or a frame goes
 					// first before the page is put in.
 					await yieldToMain()
@@ -1191,8 +1167,8 @@ export default {
 				}
 				this.viewBox = page.viewBox
 				this.sizeMm = page.sizeMm
+				this.dom = emptyPageDom(page)
 				this.svgMarkup = page.markup
-				this.svgSource = page.source
 				this.renderSvg()
 				// Für die Zoom-Presets ("Seitenbreite/ganze Seite/100%") -
 				// ScoreViewer.vue kennt die Seitengeometrie selbst nicht, nur die
@@ -1257,7 +1233,7 @@ export default {
 		 * a user upload - MuseScore renders title, lyrics and free text from
 		 * the score into it - so what goes in has ALWAYS been through
 		 * lib/svgSanitizer.js (DOMPurify), never raw response text: see load().
-		 * The sanitized nodes are cloned in (`svgSource`); the sanitized text is
+		 * The sanitized nodes are cloned in (`dom.page.source`); the sanitized text is
 		 * parsed only where no nodes are kept. If that rule is ever relaxed,
 		 * this method must stand out again.
 		 */
@@ -1265,8 +1241,9 @@ export default {
 			if (!this.svgRoot) {
 				return
 			}
-			if (this.svgMarkup && this.svgSource) {
-				const copy = this.svgRoot.ownerDocument.importNode(this.svgSource, true)
+			const source = this.dom.page?.source
+			if (this.svgMarkup && source) {
+				const copy = this.svgRoot.ownerDocument.importNode(source, true)
 				this.svgRoot.replaceChildren(...copy.childNodes)
 			} else if (this.svgMarkup) {
 				this.svgRoot.innerHTML = this.svgMarkup
@@ -1289,16 +1266,15 @@ export default {
 		 * Schalter, keine Einstellung: was da ist, wird benutzt.
 		 */
 		indexSegments() {
-			this.segmentIndex = buildSegmentIndex(this.svgRoot)
-			this.highlighted = []
-			this.noteIndex = buildNoteIndex(this.svgRoot)
-			this.marked = []
-			this.liveMarked = []
-			this.headYs = new WeakMap()
+			// A fresh state: the nodes of an earlier index are gone (frame reset)
+			// or never existed (first load).
+			this.dom = emptyPageDom(this.dom.page)
+			this.dom.segmentIndex = buildSegmentIndex(this.svgRoot)
+			this.dom.noteIndex = buildNoteIndex(this.svgRoot)
 			this.indexSpellings()
 			// Ob das SVG Kennungen traegt (M10) - eine Faehigkeit der Artefakte,
 			// nach der der Viewer Liedtext und Tonnamen anbietet (E15).
-			this.$emit('indexed', { segIds: (this.segmentIndex?.size ?? 0) > 0 })
+			this.$emit('indexed', { segIds: (this.dom.segmentIndex?.size ?? 0) > 0 })
 			// Die Seite kann mitten in der Wiedergabe nachgeladen worden sein.
 			this.applyHighlight()
 			this.applyNoteMarks()
@@ -1311,7 +1287,7 @@ export default {
 		 * hier schlicht keinen Knoten.
 		 */
 		applyNoteMarks() {
-			this.marked = this.replaceMarks(this.marked, this.noteMarks, this.liveMarked)
+			this.dom.marked = this.replaceMarks(this.dom.marked, this.noteMarks, this.dom.liveMarked)
 		},
 
 		/**
@@ -1322,7 +1298,7 @@ export default {
 		 */
 		applyLiveNoteMarks() {
 			const marks = this.onCursorPage === false ? [] : this.liveNoteMarks
-			this.liveMarked = this.replaceMarks(this.liveMarked, marks, this.marked)
+			this.dom.liveMarked = this.replaceMarks(this.dom.liveMarked, marks, this.dom.marked)
 		},
 
 		/**
@@ -1341,9 +1317,9 @@ export default {
 			// reads positions, and a read right after a class change forces
 			// a style recalculation of the whole frame.
 			const next = []
-			if (this.noteIndex && this.noteIndex.size > 0) {
+			if (this.dom.noteIndex && this.dom.noteIndex.size > 0) {
 				for (const mark of marks) {
-					const nodes = pickNoteheads(this.noteIndex.get(`${mark.elid}:${mark.staff}`), mark.rank, mark.size, this.headY)
+					const nodes = pickNoteheads(this.dom.noteIndex.get(`${mark.elid}:${mark.staff}`), mark.rank, mark.size, this.headY)
 					const cls = `scoreview-intonation-${mark.cls}`
 					for (const node of nodes) {
 						next.push({ node, cls })
@@ -1363,13 +1339,13 @@ export default {
 
 		/**
 		 * The vertical place of a notehead, in page units - read once, the
-		 * page SVG never changes (see headYs in created()).
+		 * page SVG never changes (see dom.headYs, lib/pageDom.js).
 		 *
 		 * @param {Element} node
 		 * @return {number}
 		 */
 		headY(node) {
-			let y = this.headYs.get(node)
+			let y = this.dom.headYs.get(node)
 			if (y === undefined) {
 				try {
 					y = node.getBBox().y
@@ -1377,14 +1353,14 @@ export default {
 					// Without layout (hidden) there is no place to sort by.
 					y = 0
 				}
-				this.headYs.set(node, y)
+				this.dom.headYs.set(node, y)
 			}
 			return y
 		},
 
 		/** Haengt die Hervorhebung auf das gerade klingende Segment um. */
 		applyHighlight() {
-			if (!this.segmentIndex) {
+			if (!this.dom.segmentIndex) {
 				return
 			}
 			// Nur die Seite, auf der der Cursor steht, faerbt - dieselbe elid
@@ -1394,8 +1370,8 @@ export default {
 			// (siehe .score-page-cursor--hidden).
 			const aufDieserSeite = this.highlightMode === 'notes' && this.cursorRect?.page === this.pageIndex
 			const aktiv = aufDieserSeite ? this.cursorElid : null
-			this.highlighted = setHighlight(this.segmentIndex, aktiv, this.highlighted, 'scoreview-sounding')
-			this.notesHighlighted = this.highlighted.length > 0
+			this.dom.highlighted = setHighlight(this.dom.segmentIndex, aktiv, this.dom.highlighted, 'scoreview-sounding')
+			this.notesHighlighted = this.dom.highlighted.length > 0
 		},
 
 		/**
@@ -1423,24 +1399,14 @@ export default {
 			if (this.cursorRect && this.cursorRect.page === this.pageIndex) {
 				return
 			}
+			// The whole DOM state in one step: everything in it points at
+			// nodes that are about to go (lib/pageDom.js).
+			this.dom = emptyPageDom()
 			this.svgMarkup = null
-			this.svgSource = null
 			this.renderSvg()
-			// Die Karte zeigt auf Knoten, die es gleich nicht mehr gibt.
-			this.segmentIndex = null
-			this.highlighted = []
 			this.notesHighlighted = false
-			this.noteIndex = null
-			this.marked = []
-			this.liveMarked = []
-			this.noteItems = []
-			this.noteItemsMeasured = false
 			this.noteLabels = NO_NOTE_LABELS
-			this.labelLayouts.clear()
-			this.labelScaleKey = null
-			this.headYs = new WeakMap()
-			this.countLabels = []
-			this.labelObstacles = null
+			this.countLabels = NO_COUNT_LABELS
 		},
 
 		// Umkehrung von M4 (Koordinate -> elid: "Klick auf eine Note springt

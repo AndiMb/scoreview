@@ -1,8 +1,7 @@
-// PARKED - part of the microphone score follower (automatic page turning),
-// which is paused; no viewer code imports it. Kept and tested because
-// tools/follow/replay.mjs measures it against recorded rehearsals, and the
-// work resumes from here. The switch `feature_score_follower` exists but
-// turns nothing on (docs/installation.md).
+// Part of the microphone score follower (automatic page turning, behind the
+// switch `feature_score_follower`): the viewer runs the level gate inside
+// lib/scoreFollower.js in workers/followerWorker.js. The music gate below
+// is measured and tested but not wired into the follower.
 //
 // Does this frame belong to the music at all? The level part of the answer
 // - pure, no DOM, no AudioContext.
@@ -110,7 +109,7 @@ export function createLevelGate({ dropDb = 30, decayDbPerSec = 1.5, minDb = -80,
  * @return {{accept: (levelDb: number, atMs: number) => boolean, levelDb: () => ?number, musicDb: () => ?number}}
  */
 export function createMusicGate({ windowMs = 1000, dropDb = 8, decayDbPerSec = 0.3, minDb = -80 } = {}) {
-	const window = []
+	const recent = []
 	let sum = 0
 	let music = null
 	let lastAt = null
@@ -118,12 +117,12 @@ export function createMusicGate({ windowMs = 1000, dropDb = 8, decayDbPerSec = 0
 
 	function accept(levelDb, atMs) {
 		const level = Number.isFinite(levelDb) ? Math.max(levelDb, minDb - 20) : minDb - 20
-		window.push({ atMs, level })
+		recent.push({ atMs, level })
 		sum += level
-		while (window.length > 1 && window[0].atMs <= atMs - windowMs) {
-			sum -= window.shift().level
+		while (recent.length > 1 && recent[0].atMs <= atMs - windowMs) {
+			sum -= recent.shift().level
 		}
-		smoothed = sum / window.length
+		smoothed = sum / recent.length
 		if (lastAt !== null && music !== null) {
 			music -= (decayDbPerSec * Math.max(0, atMs - lastAt)) / 1000
 		}

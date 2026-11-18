@@ -1,8 +1,6 @@
-// PARKED - part of the microphone score follower (automatic page turning),
-// which is paused; no viewer code imports it. Kept and tested because
-// tools/follow/replay.mjs measures it against recorded rehearsals, and the
-// work resumes from here. The switch `feature_score_follower` exists but
-// turns nothing on (docs/installation.md).
+// Part of the microphone score follower (automatic page turning, behind the
+// switch `feature_score_follower`): the viewer runs it inside
+// lib/scoreFollower.js in workers/followerWorker.js.
 //
 // Local following of a live performance against the score reference: an
 // online alignment in a band around the current place (after Dixon,
@@ -31,6 +29,7 @@
 // conductor talks.
 
 import { similarity } from './chroma.js'
+import { clamp } from './numeric.js'
 import { pitchClassDistance } from './voicePitch.js'
 
 /**
@@ -91,7 +90,6 @@ export function createOnlineWarp(reference, options = {}) {
 	let score = new Float64Array(n).fill(-Infinity)
 	let next = new Float64Array(n).fill(-Infinity)
 	const sims = new Float64Array(n)
-	const winner = new Int16Array(n)
 	let position = null
 	let lo = 0
 	let hi = -1
@@ -112,6 +110,10 @@ export function createOnlineWarp(reference, options = {}) {
 	 */
 	function anchor(frame, spread = 10) {
 		score.fill(-Infinity)
+		// `next` is cleared only inside the band before each step and then
+		// swapped in: cells of an earlier band would come back as scores
+		// once the new band reaches them.
+		next.fill(-Infinity)
 		const centre = clamp(Math.round(frame), 0, n - 1)
 		for (let j = Math.max(0, centre - spread); j <= Math.min(n - 1, centre + spread); j++) {
 			score[j] = -0.01 * Math.abs(j - centre)
@@ -143,16 +145,11 @@ export function createOnlineWarp(reference, options = {}) {
 		if (chroma) {
 			for (let j = lo; j <= hi; j++) {
 				let s = -1
-				let w = -1
 				for (let e = 0; e < ensembles.length; e++) {
 					if (ensembles[e].silent[j]) {
 						continue
 					}
-					const v = similarity(chroma, ensembles[e].chroma.subarray(j * 12, j * 12 + 12))
-					if (v > s) {
-						s = v
-						w = e
-					}
+					s = Math.max(s, similarity(chroma, ensembles[e].chroma.subarray(j * 12, j * 12 + 12)))
 				}
 				// Where the own part sings, its line weighs in; where it
 				// rests, a clear voice is someone else's and says nothing.
@@ -160,7 +157,6 @@ export function createOnlineWarp(reference, options = {}) {
 					s = (1 - voiceWeight) * s + voiceWeight * voiceMatch(voice, j)
 				}
 				sims[j] = s
-				winner[j] = w
 				if (s > best) {
 					best = s
 				}
@@ -330,8 +326,4 @@ export function createOnlineWarp(reference, options = {}) {
 	}
 
 	return { anchor, step, tempoRatio, position: () => position }
-}
-
-function clamp(v, min, max) {
-	return Math.min(max, Math.max(min, v))
 }

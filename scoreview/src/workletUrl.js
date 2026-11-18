@@ -1,11 +1,14 @@
 import { generateFilePath } from '@nextcloud/router'
-import { withAppVersion } from './assetVersion.js'
+import { withAppVersion } from './lib/assetVersion.js'
 
 // spessasynth_lib's AudioWorklet processor runs in its own
 // AudioWorkletGlobalScope and is loaded as a file of its own via
 // addModule(url), not bundled - webpack.config.js copies it next to the
 // bundles. With the app version, or after an update it would come from the
-// browser cache (assetVersion.js).
+// browser cache (lib/assetVersion.js).
+//
+// Outside src/lib because it needs Nextcloud's router; lib/player.js gets
+// the address from usePlayback instead of importing it.
 //
 // Its own module rather than part of lib/player.js: the offline page needs
 // the address to store it (useOffline.js), and importing it from the

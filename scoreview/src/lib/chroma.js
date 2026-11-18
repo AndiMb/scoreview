@@ -1,8 +1,7 @@
-// PARKED - part of the microphone score follower (automatic page turning),
-// which is paused; no viewer code imports it. Kept and tested because
-// tools/follow/replay.mjs measures it against recorded rehearsals, and the
-// work resumes from here. The switch `feature_score_follower` exists but
-// turns nothing on (docs/installation.md).
+// Part of the microphone score follower (automatic page turning, behind the
+// switch `feature_score_follower`): the viewer computes the features in
+// composables/useScoreFollower.js and matches them in
+// workers/followerWorker.js.
 //
 // Chroma features for score following by microphone - pure, no DOM, no
 // AudioContext, so the measuring rig (tools/follow-replay.mjs) computes
@@ -262,9 +261,9 @@ export function toCens(frames, frameMs, { targetMs = 200, smoothMs = 1000 } = {}
 		return q
 	})
 	const half = Math.max(1, Math.round(smoothMs / frameMs / 2))
-	const window = []
+	const hann = []
 	for (let i = -half; i <= half; i++) {
-		window.push(0.5 + 0.5 * Math.cos((Math.PI * i) / (half + 1)))
+		hann.push(0.5 + 0.5 * Math.cos((Math.PI * i) / (half + 1)))
 	}
 	const step = Math.max(1, Math.round(targetMs / frameMs))
 	const result = []
@@ -275,7 +274,7 @@ export function toCens(frames, frameMs, { targetMs = 200, smoothMs = 1000 } = {}
 			if (!frame) {
 				continue
 			}
-			const w = window[i + half]
+			const w = hann[i + half]
 			for (let pc = 0; pc < 12; pc++) {
 				out[pc] += w * frame[pc]
 			}

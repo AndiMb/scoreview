@@ -34,6 +34,7 @@
 
 import { similarity } from './chroma.js'
 import { nearestOccurrenceMs } from './followRef.js'
+import { clamp, lowerBound } from './numeric.js'
 
 /**
  * @param {import('./followRef.js').FollowReference} reference
@@ -441,24 +442,6 @@ function entryFrames(reference) {
 		}
 	}
 	return { frames: Float64Array.from(frames), weight: Float64Array.from(weight) }
-}
-
-function lowerBound(sorted, value) {
-	let lo = 0
-	let hi = sorted.length
-	while (lo < hi) {
-		const mid = (lo + hi) >> 1
-		if (sorted[mid] < value) {
-			lo = mid + 1
-		} else {
-			hi = mid
-		}
-	}
-	return lo
-}
-
-function clamp(v, min, max) {
-	return Math.min(max, Math.max(min, v))
 }
 
 /**

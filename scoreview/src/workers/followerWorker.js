@@ -13,7 +13,8 @@
 // Messages in:
 //   {type: 'init', input}               input from lib/followInput.js
 //   {type: 'frame', c36, levelDb, voice, atMs} one tap; c36 null when nothing is in range,
-//                                       voice from lib/voicePitch.js
+//                                       voice from lib/voicePitch.js. Sent only after an
+//                                       anchor and until the singer waits again.
 //   {type: 'anchor', scoreMs, atMs}     the singer tapped the starting place
 // Messages out:
 //   {type: 'state', atMs, phase, shownMs, snapped, confirmedMs, tempoRatio, matched, jumped}

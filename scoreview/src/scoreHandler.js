@@ -2,8 +2,11 @@
 // (public.js) that must not drift apart: how a handler gets registered with
 // Nextcloud's Viewer, and the file action on the extension (E6). What each
 // entry opens - the in-page viewer or a frame - is passed in.
+//
+// Next to the entries, not in lib/: it talks to Nextcloud (@nextcloud/files,
+// OCA.Viewer), and lib/ stays free of Nextcloud and the DOM.
 import { DefaultType, registerFileAction } from '@nextcloud/files'
-import { MSCZ_MIME, needsOwnFileAction } from './scoreFile.js'
+import { MSCZ_MIME, needsOwnFileAction } from './lib/scoreFile.js'
 
 /**
  * Guarded because `OCA.Viewer` may be missing: Viewer app disabled, or its

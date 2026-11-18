@@ -1,11 +1,12 @@
 // Experimental, behind the switch `feature_score_follower`: the viewer runs
 // it in workers/followerWorker.js (composables/useScoreFollower.js), and
-// tools/follow/replay.mjs measures it against recorded rehearsals.
+// tools/follow-replay.mjs (the command line over tools/follow/replay.mjs)
+// measures it against recorded rehearsals.
 //
 // The microphone follower: features in, place in the score out - pure, no
 // DOM, no AudioContext, no clock of its own. Fed by the viewer from its
-// AnalyserNode and by tools/follow-replay.mjs from a file, which is what
-// makes the acceptance figures measurable.
+// AnalyserNode and by the replay from a file, which is what makes the
+// acceptance figures measurable.
 //
 // Pipeline per tap: level gate (lib/listenGates.js) → fold to 12 classes at
 // the current tuning (lib/chroma.js) → online warp in the band
@@ -19,7 +20,8 @@
 //   place twice in a row, by a margin, before the follower leads.
 // - `following`: the warp matches.
 // - `unsure`: sound that fits nothing nearby for a while. The cursor may
-//   coast, nothing is turned (lib/followTurn.js reads the phase).
+//   coast, nothing is turned (the worker's turn ahead of the music and the
+//   replay's lib/followTurn.js read the phase).
 // - `lost`: the search hears music that fits clearly better elsewhere than
 //   here, twice in a row. Nothing is turned. Sound that fits nowhere
 //   (speech between pieces) only makes the follower `unsure` - otherwise
@@ -55,7 +57,8 @@ import { clearVoiceMidi } from './voicePitch.js'
  * @property {number} tuningCents running tuning estimate
  * @property {boolean} matched this tap matched the score
  * @property {boolean} jumped this tap moved the place by a jump or a found start
- * @property {?{timeMs: number}} offer a place the search suggests but does not take (F12)
+ * @property {?{timeMs: number}} offer a place the search suggests but does not take (F12);
+ *   replay only - the viewer shows no offer, the singer taps instead
  */
 
 const DEFAULTS = Object.freeze({
@@ -82,7 +85,7 @@ const DEFAULTS = Object.freeze({
 	reentryPauseMs: 1500,
 	priorWeight: 0.03,
 	// Cold start: the music most likely begins on the page the singer has
-	// open (setView). A bonus, not an anchor - singing elsewhere still wins
+	// open (setView; only the replay sets it - the viewer starts from a tap). A bonus, not an anchor - singing elsewhere still wins
 	// if it fits clearly better. Not used once lost: then the page on
 	// screen is the one the follower got wrong. Measured on rehearsal
 	// recordings: 0.03 settles a hymn opened at its first page (a3: 28 % →
@@ -136,13 +139,39 @@ export function createScoreFollower(reference, options = {}) {
 	let previousDb = null
 
 	/**
-	 * Start following at a place (bar entered by hand, note tapped, offer
-	 * taken, remembered place confirmed).
+	 * The singer set the place (bar entered by hand, note tapped, remembered
+	 * place confirmed). What was heard before belongs to another place: left
+	 * in the history, the global search would match it for another
+	 * `queryMs` and could confirm the old place and jump back there.
+	 *
+	 * Forgotten as silence, not dropped: buildQuery wants half of a full
+	 * history heard. An emptied one passes that with the first taps of
+	 * sound, and a query of a few hundred milliseconds settles on wrong
+	 * places (measured on the rehearsal recordings: two wrong jumps and a
+	 * wrong turn more).
 	 *
 	 * @param {number} scoreMs
 	 * @param {number} atMs
 	 */
 	function anchor(scoreMs, atMs) {
+		history.length = 0
+		for (let i = 0; i < historyLength; i++) {
+			history.push(null)
+		}
+		previousDb = null
+		silentSince = null
+		lastPauseMs = 0
+		place(scoreMs, atMs)
+	}
+
+	/**
+	 * Follow on from a place. The history stays: when the place comes from
+	 * the search (a jump, an offer taken), that history is what matched it.
+	 *
+	 * @param {number} scoreMs
+	 * @param {number} atMs
+	 */
+	function place(scoreMs, atMs) {
 		warp.anchor(scoreMs / reference.frameMs)
 		time.reset()
 		time.confirm(scoreMs, atMs, 1)
@@ -154,7 +183,7 @@ export function createScoreFollower(reference, options = {}) {
 	}
 
 	/**
-	 * Take the place the search offered.
+	 * Take the place the search offered. Replay only, as `offer`.
 	 *
 	 * @param {number} atMs
 	 * @return {boolean} whether there was an offer
@@ -163,7 +192,7 @@ export function createScoreFollower(reference, options = {}) {
 		if (!offer) {
 			return false
 		}
-		anchor(offer.timeMs, atMs)
+		place(offer.timeMs, atMs)
 		return true
 	}
 
@@ -199,6 +228,11 @@ export function createScoreFollower(reference, options = {}) {
 				onMatch(frame, result, atMs)
 			} else if (audible) {
 				onUnmatched(atMs)
+			} else {
+				// A pause is no evidence against the place: one odd frame at
+				// a phrase end and one at the next entry are not a second
+				// of sound that fits nothing.
+				unmatchedSince = null
 			}
 		}
 		remember(recent, matched, Math.round(1000 / reference.frameMs))
@@ -380,12 +414,14 @@ export function createScoreFollower(reference, options = {}) {
 		// The same bar in another verse sounds the same: take the
 		// occurrence that continues from where the follower was.
 		const endMs = nearestOccurrenceMs(reference, best.endMs, time.confirmedMs(), { backCost: o.verseBackCost })
-		anchor(endMs + (o.windowMs / 2) * best.rate, atMs)
+		place(endMs + (o.windowMs / 2) * best.rate, atMs)
 	}
 
 	/**
-	 * What the viewer shows, as score time ranges - every pass of the
+	 * What the screen shows, as score time ranges - every pass of the
 	 * systems on screen, since a repeat shows the same notes. Null: unknown.
+	 * Replay only (cold-start measurements): the viewer starts from a tap
+	 * and never calls it.
 	 *
 	 * @param {?Array<{fromMs:number, toMs:number}>} ranges
 	 */

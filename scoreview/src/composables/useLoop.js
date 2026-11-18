@@ -1,5 +1,5 @@
-import { computed, ref } from 'vue'
-import { findMeasureStartTime } from '../lib/scoreLayout.js'
+import { computed, ref, shallowRef, watch } from 'vue'
+import { resolveLoopRange } from '../lib/loopRange.js'
 
 /**
  * Der Loop von Takt A bis Takt B - Kernfunktion für die Probenarbeit, samt
@@ -33,8 +33,27 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 	const fromMeasure = ref('')
 	const toMeasure = ref('')
 	const active = ref(false)
-	const startMs = ref(null)
-	const endMs = ref(null)
+	// The loop that playback actually runs - numeric, null while off
+	// (lib/loopRange.js). Markers, loop focus, export, singing lane and
+	// "Follow me" read this, not the fields: a field being edited holds
+	// '' or a half-typed number, and a reader converting it on its own
+	// drifted from what playback jumps back to.
+	const range = shallowRef(null)
+	const startMs = computed(() => range.value?.startMs ?? null)
+	const endMs = computed(() => range.value?.endMs ?? null)
+
+	// Editing a field while the loop runs moves the loop itself, not just
+	// its markers. An incomplete value (empty while retyping) keeps the
+	// last valid range so playback does not lose its loop mid-edit.
+	watch([fromMeasure, toMeasure], ([from, to]) => {
+		if (!active.value) {
+			return
+		}
+		const next = resolveLoopRange(measuresTimeline(), from, to, durationMs())
+		if (next) {
+			range.value = next
+		}
+	})
 
 	/**
 	 * Sichtbare Markierung des Loop-Bereichs - zwei Flaggen an
@@ -44,11 +63,12 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 	 */
 	const markers = computed(() => {
 		const measures = measuresTimeline()
-		if (!active.value || !measures) {
+		const current = range.value
+		if (!active.value || !measures || !current) {
 			return []
 		}
-		const fromRect = measures.elements[String(Number(fromMeasure.value) - 1)]
-		const toRect = measures.elements[String(Number(toMeasure.value) - 1)]
+		const fromRect = measures.elements[String(current.from - 1)]
+		const toRect = measures.elements[String(current.to - 1)]
 		const list = []
 		if (fromRect) {
 			list.push({ id: 'loop-start', kind: 'start', ...fromRect })
@@ -62,31 +82,21 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 	function toggle() {
 		if (active.value) {
 			active.value = false
-			startMs.value = null
-			endMs.value = null
+			range.value = null
 			clearCountIn()
 			return
 		}
-		const measures = measuresTimeline()
-		if (!measures || !fromMeasure.value || !toMeasure.value) {
+		const next = resolveLoopRange(measuresTimeline(), fromMeasure.value, toMeasure.value, durationMs())
+		if (!next) {
 			return
 		}
-		const start = findMeasureStartTime(measures, Number(fromMeasure.value))
-		// Loop-Ende = Beginn des Taktes NACH dem angegebenen "bis"-Takt, damit
-		// dieser Takt noch vollständig durchgespielt wird, bevor
-		// zurückgesprungen wird; am Stückende gilt stattdessen durationMs.
-		const end = findMeasureStartTime(measures, Number(toMeasure.value) + 1) ?? durationMs()
-		if (start === null) {
-			return
-		}
-		startMs.value = start
-		endMs.value = end
+		range.value = next
 		active.value = true
-		seek(start)
+		seek(next.startMs)
 		// Nur einzählen, wenn noch nicht gespielt wird - sonst würde eine
 		// laufende Probe unterbrochen statt unterstützt.
 		if (!isPlaying()) {
-			startCountIn(start)
+			startCountIn(next.startMs)
 		}
 	}
 
@@ -103,16 +113,16 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 	 * @return {boolean} ob der Bereich gilt - false, wenn es die Takte nicht gibt
 	 */
 	function setRange(from, to) {
-		const measures = measuresTimeline()
-		const start = measures ? findMeasureStartTime(measures, Number(from)) : null
-		if (start === null || !(Number(to) >= Number(from))) {
+		const next = resolveLoopRange(measuresTimeline(), from, to, durationMs())
+		if (!next) {
 			return false
 		}
-		fromMeasure.value = Number(from)
-		toMeasure.value = Number(to)
-		startMs.value = start
-		endMs.value = findMeasureStartTime(measures, Number(to) + 1) ?? durationMs()
+		// Range and flag first: the field watcher then sees the same values
+		// and resolves them to the same range.
+		range.value = next
 		active.value = true
+		fromMeasure.value = next.from
+		toMeasure.value = next.to
 		return true
 	}
 
@@ -144,8 +154,9 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 	 * @return {?number} Zielzeit, oder null wenn nichts zu tun ist
 	 */
 	function restartTarget(currentTimeMs) {
-		if (active.value && endMs.value !== null && currentTimeMs >= endMs.value) {
-			return startMs.value
+		const current = range.value
+		if (active.value && current && currentTimeMs >= current.endMs) {
+			return current.startMs
 		}
 		return null
 	}
@@ -171,9 +182,8 @@ export function useLoop({ measuresTimeline, durationMs, isPlaying, seek, startCo
 		fromMeasure.value = ''
 		toMeasure.value = ''
 		active.value = false
-		startMs.value = null
-		endMs.value = null
+		range.value = null
 	}
 
-	return { fromMeasure, toMeasure, active, startMs, endMs, markers, toggle, setRange, clear, setFromCurrentMeasure, restartTarget, wrapIfDue, reset }
+	return { fromMeasure, toMeasure, active, range, startMs, endMs, markers, toggle, setRange, clear, setFromCurrentMeasure, restartTarget, wrapIfDue, reset }
 }

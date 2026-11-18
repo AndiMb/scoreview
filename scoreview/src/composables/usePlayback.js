@@ -18,6 +18,7 @@ import { abortableDelay, retryAfterMs } from '../lib/retryAfter.js'
 import { createSilentClock } from '../lib/silentClock.js'
 import { createSoundFontCache } from '../lib/soundFontCache.js'
 import { readStored, writeStored } from '../lib/storage.js'
+import { WORKLET_URL } from '../workletUrl.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)
 
@@ -325,7 +326,7 @@ export function usePlayback({ clock, durationMs, defaultTempoBpm }) {
 			// bekommt: Er reicht es an sein Worklet weiter, und ein dabei
 			// uebertragener Puffer waere hier danach leer.
 			midiData.value = midiRes.data.slice(0)
-			const player = await createPlayer(midiRes.data, soundFontBuffer)
+			const player = await createPlayer(midiRes.data, soundFontBuffer, WORKLET_URL)
 			if (!current()) {
 				player.destroy?.()
 				return

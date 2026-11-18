@@ -14,7 +14,6 @@ import { audioSession } from './audioSession.js'
 import { soundFontPresets } from './presetList.js'
 import { fineTuneCents } from './referencePitch.js'
 import { channelsSetUp, pickToneChannel } from './startTone.js'
-import { WORKLET_URL } from './workletUrl.js'
 
 // MIDI CC7 = Kanal-Lautstärke (General-MIDI-Standard). Mute/Solo werden
 // bewusst darüber abgebildet statt über eine synth-interne Mute-API - CC7
@@ -39,8 +38,10 @@ const SONG_LOAD_TIMEOUT_MS = 30_000
 /**
  * @param {ArrayBuffer} midiArrayBuffer
  * @param {ArrayBuffer} soundFontArrayBuffer
+ * @param {string} workletUrl address of spessasynth's AudioWorklet processor
+ *   (workletUrl.js) - passed in, so this module needs no Nextcloud router
  */
-export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
+export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer, workletUrl) {
 	// Read before the sequencer gets the buffer - see startTone.js.
 	const setUpChannels = channelsSetUp(midiArrayBuffer)
 	const context = new AudioContext()
@@ -53,7 +54,7 @@ export async function createPlayer(midiArrayBuffer, soundFontArrayBuffer) {
 	let master
 	const panners = []
 	try {
-		await context.audioWorklet.addModule(WORKLET_URL)
+		await context.audioWorklet.addModule(workletUrl)
 		synth = new WorkletSynthesizer(context)
 		// Ein Regler fuer die ganze Begleitung, vor dem Ausgang: Eine eigene
 		// Aufnahme laeuft wahlweise mit oder ohne Begleitung, mit getrennten

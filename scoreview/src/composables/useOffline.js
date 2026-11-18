@@ -22,7 +22,7 @@ import {
 } from '../lib/offlinePlan.js'
 import { isPlayable } from '../lib/setlistNav.js'
 import { readStored } from '../lib/storage.js'
-import { WORKLET_URL } from '../lib/workletUrl.js'
+import { WORKLET_URL } from '../workletUrl.js'
 import { LAST_VARIANT_PREFIX } from './useScoreVariant.js'
 
 const t = (text, vars) => translate('scoreview', text, vars)

@@ -1,10 +1,10 @@
 import { DefaultType, registerFileAction } from '@nextcloud/files'
 import { generateUrl } from '@nextcloud/router'
-import { createApp, h, nextTick } from 'vue'
+import { createApp, h, nextTick, shallowReactive } from 'vue'
 import { translate } from './l10n.js'
 import { isSetlistFile } from './lib/scoreFile.js'
-import { registerScoreFileAction, registerScoreHandler } from './lib/scoreHandler.js'
 import { firstPlayableIndex } from './lib/setlistNav.js'
+import { registerScoreFileAction, registerScoreHandler } from './scoreHandler.js'
 
 import './publicPath.js'
 
@@ -99,9 +99,20 @@ const ScoreViewerWrapper = {
 	},
 
 	watch: {
-		fileid() {
-			this.unmountInner()
-			this.mountInner()
+		// Where Viewer hands a new file to the same component, the inner app
+		// stays mounted and gets the new id: ScoreViewer switches the score
+		// itself (its fileid watcher) and keeps performance mode, zoom and the
+		// loaded synth with its AudioContext. Checked on Nextcloud 34: Files
+		// never gets there - the handler registers no group (scoreHandler.js),
+		// so Viewer does not step through the folder, and an OCA.Viewer.open
+		// on another file re-keys Viewer's wrapper div, which destroys this
+		// component (beforeUnmount) and mounts a fresh one. Moving between
+		// scores inside the viewer (setlist, "Follow me") happens in
+		// ScoreViewer itself and keeps all of it.
+		fileid(id) {
+			if (this.innerProps) {
+				this.innerProps.fileid = id
+			}
 		},
 	},
 
@@ -133,7 +144,12 @@ const ScoreViewerWrapper = {
 			// bereits gemountete Knoten hat einen gültigen parentNode.
 			this.$el.parentNode.insertBefore(this.mountEl, this.$el.nextSibling)
 
-			this.innerApp = createApp(ScoreViewer, { fileid: this.fileid })
+			// Reactive in OUR Vue instance: the wrapper's own props belong to
+			// Viewer's Vue (see above) and cannot drive our tree directly.
+			// mountInner reads the id now, so a change during the chunk load
+			// is not lost.
+			const innerProps = this.innerProps = shallowReactive({ fileid: this.fileid })
+			this.innerApp = createApp({ render: () => h(ScoreViewer, { fileid: innerProps.fileid }) })
 			this.innerApp.mount(this.mountEl)
 		},
 		unmountInner() {
@@ -142,6 +158,7 @@ const ScoreViewerWrapper = {
 				this.innerApp.unmount()
 				this.innerApp = null
 			}
+			this.innerProps = null
 			if (this.mountEl?.parentNode) {
 				this.mountEl.parentNode.removeChild(this.mountEl)
 			}
@@ -150,7 +167,7 @@ const ScoreViewerWrapper = {
 	},
 }
 
-// Abgesichert (siehe lib/scoreHandler.js): Fehlt `OCA.Viewer`, soll der
+// Abgesichert (siehe scoreHandler.js): Fehlt `OCA.Viewer`, soll der
 // TypeError nicht das ganze Modul mitreissen, und mit ihm den zweiten Einstieg
 // (E6), der genau fuer solche Instanzen da ist.
 registerScoreHandler(ScoreViewerWrapper)
@@ -224,7 +241,7 @@ async function openModal(fileid, name, setlist = {}) {
 }
 
 // Die Aktion selbst und ihre doppelte Eintragung (alte und neue
-// @nextcloud/files-Staende) stehen in lib/scoreHandler.js, damit der Einstieg
+// @nextcloud/files-Staende) stehen in scoreHandler.js, damit der Einstieg
 // der oeffentlichen Link-Seite (public.js) dieselbe Bedingung teilt.
 registerScoreFileAction(() => t('Open in ScoreView'), (node) => openModal(node.fileid, node.basename))
 
@@ -293,7 +310,7 @@ registerFileAction({
 	exec: ({ nodes }) => setlistAusfuehren(nodes[0]),
 })
 
-// Dieselbe doppelte Eintragung wie in lib/scoreHandler.js, aus demselben Grund.
+// Dieselbe doppelte Eintragung wie in scoreHandler.js, aus demselben Grund.
 window._nc_fileactions.push({
 	...SETLIST_AKTION,
 	enabled: (nodes) => nodes.length === 1 && isSetlistFile(nodes[0]),
