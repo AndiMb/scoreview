@@ -61,6 +61,24 @@ def _clear_stale_display(display: int) -> None:
             pass
 
 
+def _environment() -> dict:
+    """The environment MuseScore runs with: the minimum, not the container's.
+
+    The container's environment carries SCOREVIEW_SIDECAR_SECRET, and
+    MuseScore runs on an untrusted score - a crafted file that got code
+    execution in it would read the secret straight from /proc/self/environ.
+    Same rule as engine._environment(). HOME stays the container's on
+    purpose: MuseScore keeps its settings there, and concurrent instances
+    coordinate their access to them (see the -f comment in
+    run_score_media). xvfb-run sets DISPLAY and XAUTHORITY for the child
+    itself."""
+    return {
+        "PATH": "/usr/local/bin:/usr/bin:/bin",
+        "LANG": "C.UTF-8",
+        "HOME": os.environ.get("HOME") or str(Path(tempfile.gettempdir())),
+    }
+
+
 def run_score_media(input_path: Path, display: int = config.FIRST_DISPLAY_NUMBER) -> dict:
     """Laesst `--score-media` auf `input_path` laufen und gibt das JSON
     zurueck, ohne die Teile aus DISCARDED_KEYS.
@@ -99,7 +117,7 @@ def run_score_media(input_path: Path, display: int = config.FIRST_DISPLAY_NUMBER
     # ueberlebt und die Pipe offen haelt, das Einsammeln ewig blockieren -
     # eine Datei hat kein "Ende", auf das gewartet wird.
     with tempfile.TemporaryFile(dir=workdir) as out, tempfile.TemporaryFile(dir=workdir) as err:
-        result = subprocess.run(cmd, stdout=out, stderr=err)
+        result = subprocess.run(cmd, stdout=out, stderr=err, env=_environment())
         if result.returncode == _KILLED_BY_SIGKILL:
             # `timeout` schickt SIGKILL an seine ganze Prozessgruppe, also
             # auch an sich selbst - der Aufrufer sieht dann -9 statt 124/137
@@ -146,29 +164,46 @@ def _tail(fh, limit: int) -> bytes:
 def _json_payload(fh) -> bytes:
     """Liest stdout ab dem Beginn des JSON.
 
-    M3: MuseScore writes ~12 lines of Qt log noise (locale warning, DBus
-    errors) to stdout BEFORE the JSON payload - a naive json.loads(stdout)
-    fails. The JSON always starts at the first "\\n{\\n" (known MuseScore
-    behaviour, issue #13304) - this must not work "by accident", so we
-    fail loudly if that marker is missing instead of silently returning
-    nothing.
+    M3: MuseScore writes Qt log noise to stdout BEFORE the JSON payload -
+    a naive json.loads(stdout) fails. The JSON starts at the first
+    "\\n{\\n" (known MuseScore behaviour, issue #13304), or at byte 0 when
+    there is no noise: with LANG=C.UTF-8 (see _environment) the locale
+    warning, measured as the only noise in the image, stays away and stdout
+    begins with "{\\n". This must not work "by accident", so we fail
+    loudly if neither is found instead of silently returning nothing.
 
     Gesucht wird ueber mmap, gelesen erst ab dem Marker: das Rauschen davor
     wird nie kopiert, und die Nutzlast liegt genau einmal als bytes vor.
     """
     fh.flush()
     size = fh.seek(0, os.SEEK_END)
-    marker = -1
+    # Checked before anything is read: the payload is decoded and parsed in
+    # memory at roughly twice its size (see run_score_media), and a score
+    # that makes MuseScore write hundreds of MB would take the whole
+    # gunicorn process - and with it every job in the registry - down with
+    # the OOM killer instead of failing on its own. The engine path caps its
+    # stdout for the same reason (engine._run).
+    if size > config.MAX_MUSESCORE_OUTPUT_BYTES:
+        raise errors.ConversionError(
+            errors.CONVERSION_FAILED,
+            f"mscore4portable --score-media wrote {size} bytes, more than "
+            f"SCOREVIEW_MAX_MUSESCORE_OUTPUT_BYTES={config.MAX_MUSESCORE_OUTPUT_BYTES}",
+        )
+    start = -1
     if size:
         with mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ) as view:
-            marker = view.find(b"\n{\n")
-    if marker == -1:
+            if view[:2] == b"{\n":
+                start = 0
+            else:
+                marker = view.find(b"\n{\n")
+                start = marker + 1 if marker != -1 else -1
+    if start == -1:
         raise RuntimeError(
             "mscore4portable --score-media produced no recognizable JSON "
             "payload on stdout (missing '\\n{\\n' marker) - output format "
             "may have changed."
         )
-    fh.seek(marker + 1)
+    fh.seek(start)
     return fh.read()
 
 

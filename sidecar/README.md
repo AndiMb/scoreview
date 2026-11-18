@@ -77,6 +77,7 @@ Alle Variablen außer dem Secret sind optional.
 | `SCOREVIEW_PENDING_MAX_AGE_SECONDS` | `3600` | Ab welchem Alter ein noch wartender Auftrag verworfen wird |
 | `SCOREVIEW_JOBS_DIR` | `/tmp/scoreview-jobs` | Arbeitsverzeichnis für laufende Jobs |
 | `SCOREVIEW_SOUNDFONT_PATH` | automatische Suche | Welches SoundFont `GET /soundfont` ausliefert |
+| `SCOREVIEW_MAX_MUSESCORE_OUTPUT_BYTES` | `268435456` | Obergrenze (256 MiB) für die `--score-media`-Ausgabe von MuseScore; darüber scheitert der Auftrag mit `conversion_failed`, ohne dass die Ausgabe gelesen wird |
 | `PORT` | `8765` | Port, auf dem gunicorn im Container lauscht |
 
 **Zum Timeout:** Eine Konvertierung braucht gemessen rund **6 s pro
@@ -86,6 +87,17 @@ rechnerisch rund 50 Seiten. Die 600 s hier greifen deshalb nur, wenn sie
 kleiner gesetzt werden. Die Zahl hängt spürbar von der CPU ab und ist als
 Größenordnung zu lesen, nicht als Garantie. Siehe
 [Grenzwerte](../docs/limits.de.md).
+
+**Zur Ausgabegrenze:** `--score-media` liefert jede Seite als SVG und PNG
+samt PDF, alles base64 – gemessen 16 MB für fünf Seiten, rund 3 MB je Seite.
+Geparst wird das im Speicher, mit etwa der doppelten Größe als Spitze. Ohne
+Grenze könnte eine präparierte Partitur Hunderte MB erzeugen, und der
+OOM-Killer nähme statt des einen Auftrags den ganzen gunicorn-Prozess samt
+allen laufenden Aufträgen mit. 256 MiB reichen für rund 80 Seiten, mehr als
+die rund 50, die die App in ihren 300 s Wartezeit ohnehin abwartet. Wer die
+Grenze hebt, hebt `--memory` mit. Die Engine braucht keine solche Variable:
+Sie schreibt ihre Artefakte als Dateien, und von stdout liest der Sidecar
+höchstens 1 MB.
 
 **Zum SoundFont:** Ohne Angabe wird der erste vorhandene Kandidat genommen, in
 dieser Reihenfolge: `/usr/share/sounds/sf3/MuseScore_General_Lite.sf3`,
@@ -116,6 +128,13 @@ Deshalb:
   `LANG` und `HOME` beschnitten – das Berechtigungsmodell sperrt
   Umgebungsvariablen nicht, und die des Containers tragen das Secret. Das Netz
   bleibt wie bei Node 22 auf dem lokalen Weg offen.
+- **MuseScore bekommt dieselbe beschnittene Umgebung**, sieht das Secret also
+  ebenfalls nicht. Eingesperrt wie die Engine ist es aber nicht: Es gibt
+  kein Berechtigungsmodell für das AppImage, MuseScore darf im Container
+  alles, was der Nutzer `scoreview` darf, einschließlich der Dateien anderer
+  Aufträge und des Netzes. Seine Ausgabe ist gedeckelt
+  (`SCOREVIEW_MAX_MUSESCORE_OUTPUT_BYTES`). Die Begründung steht unter
+  [E3](../docs/architecture.md#e3-zwei-konvertierungswege-hinter-einer-api).
 - `--memory` und `--pids-limit` sind für den Produktivbetrieb empfohlen.
 - Alle Endpunkte außer `/health` verlangen das Shared Secret.
 - Wer den Dienst über eine Maschinengrenze hinweg betreibt, braucht TLS davor
@@ -139,7 +158,9 @@ Asynchrone Job-API; ein Container läuft dauerhaft. Alle Endpunkte außer
   Wert ist `400`). Antwortet `202 {"jobId": "...", "renderer": "..."}`; die
   Konvertierung läuft im Hintergrund.
   Warten schon `SCOREVIEW_MAX_QUEUED` Aufträge, antwortet er stattdessen
-  `503` mit `Retry-After` und speichert nichts. Bewusst 5xx und nicht 429:
+  `503` mit `Retry-After` und legt keinen Auftrag an (empfangen ist der
+  Upload da schon, die Grenze schützt das Auftragsverzeichnis, nicht die
+  Leitung). Bewusst 5xx und nicht 429:
   Die App wertet das als Infrastrukturfehler und lässt den Browser
   konvertieren, statt die Partitur als abgelehnt zu markieren.
 - **`GET /convert/{jobId}`** –
@@ -199,7 +220,10 @@ defekte `.mscz` landet sichtbar auf `status: error`, statt zu hängen.
 
 ### Diagnose
 
-- **`GET /health`** – ohne Auth, liefert `ok`.
+- **`GET /health`** – ohne Auth, liefert `ok`. Darauf fragt auch der
+  `HEALTHCHECK` des Images (alle 30 s); Docker zeigt den Container damit als
+  `healthy` oder `unhealthy`. Er prüft nur, ob die API antwortet, nicht die
+  Renderer – das ist Sache von `/selftest`.
 - **`GET /selftest?renderer=engine|musescore`** – prüft den genannten
   Renderer (ohne Angabe die Voreinstellung); die Antwort nennt ihn als
   `renderer`. Mit der Engine ist es der Selbsttest des Konverters selbst
@@ -398,6 +422,14 @@ Parser- und API-Unit-Tests, ohne MuseScore, Node, Xvfb oder Container. Wie die
 Engine aufgerufen wird – Berechtigungen, Umgebung, Varianten –, prüft
 `tests/test_engine.py` gegen einen ersetzten Aufruf; dass sie im Image
 tatsächlich läuft, zeigt `GET /selftest?renderer=engine`.
+
+`requirements-dev.txt` zieht `requirements.txt` ein – dieselben gepinnten
+Flask-, Werkzeug- und gunicorn-Versionen, die das Dockerfile in die venv des
+Images installiert. Die Tests laufen also gegen das, was ausgeliefert wird,
+nicht gegen die Pakete der Distribution. Den Rest prüft der CI-Job
+`sidecar-image`: Er baut das Image, sobald sich unter `sidecar/` oder
+`scoreview/converter/` etwas ändert, startet es mit einem Wegwerf-Secret und
+ruft `/selftest` für beide Renderer sowie den `HEALTHCHECK` ab.
 
 ## Docker-Compose-Skizze
 

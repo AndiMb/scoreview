@@ -104,8 +104,12 @@ def create_app(start_reaper: bool = True) -> Flask:
     def require_secret():
         if request.path in PUBLIC_PATHS:
             return None
-        provided = request.headers.get("X-ScoreView-Secret", "")
-        if not secrets.compare_digest(provided, config.APP_SECRET):
+        # Compared as bytes: compare_digest raises TypeError for a str with
+        # non-ASCII characters, and a stray umlaut in the header would turn
+        # "wrong secret" into a 500. Werkzeug hands header values over as
+        # latin-1-decoded str, so latin-1 gets the client's bytes back.
+        provided = request.headers.get("X-ScoreView-Secret", "").encode("latin-1", "replace")
+        if not secrets.compare_digest(provided, config.APP_SECRET.encode("utf-8")):
             abort(401)
         return None
 

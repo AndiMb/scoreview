@@ -62,6 +62,8 @@ secrets/
 
 # Lokale Wegwerf-Arbeitsverzeichnisse
 spike/
+# Local notes and reports of agent sessions - working material, not docs.
+/claudedocs/
 
 # OS
 Thumbs.db

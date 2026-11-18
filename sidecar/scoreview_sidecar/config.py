@@ -57,6 +57,17 @@ JOBS_DIR.mkdir(parents=True, exist_ok=True)
 # that reaches the sidecar by another route.
 MAX_UPLOAD_BYTES = int(os.environ.get("SCOREVIEW_MAX_UPLOAD_BYTES", str(200 * 1024 * 1024)))
 
+# Upper bound for what `--score-media` may write to stdout before it is
+# parsed. The JSON carries every page as SVG and PNG plus the PDF, all
+# base64 - measured 16 MB for a five-page score, so roughly 3 MB a page.
+# Parsing holds about twice that in memory (musescore.run_score_media).
+# 256 MiB covers ~80 pages, beyond the ~50 the app's 300 s wait allows
+# anyway (docs/limits.md), and two conversions at that size still fit the
+# recommended --memory=2g. Anything above is rejected unread.
+MAX_MUSESCORE_OUTPUT_BYTES = int(
+    os.environ.get("SCOREVIEW_MAX_MUSESCORE_OUTPUT_BYTES", str(256 * 1024 * 1024))
+)
+
 # How long a finished (ready/error) job's files stay on disk after
 # completion before the reaper thread deletes them. The caller
 # (PollConversionJob on the PHP side) fetches all files immediately after

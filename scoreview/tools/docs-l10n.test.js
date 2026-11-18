@@ -27,6 +27,20 @@ describe('slug (GitHub-Anker)', () => {
 		expect(slug('E5: `@nextcloud/vue` als UI-Basis')).toBe('e5-nextcloudvue-als-ui-basis')
 		expect(slug('The [sidecar](x.md) and **you**')).toBe('the-sidecar-and-you')
 	})
+
+	it('laesst Inline-Code woertlich, auch Unterstriche darin', () => {
+		// github-slugger keeps `_` (a connector punctuation), so the anchor
+		// GitHub renders is "the-max_score_bytes-setting".
+		expect(slug('The `max_score_bytes` setting')).toBe('the-max_score_bytes-setting')
+		expect(slug('`a_b` and `c_d`')).toBe('a_b-and-c_d')
+		expect(slug('Option `<path>`')).toBe('option-path')
+	})
+
+	it('liest _ nur an Wortgrenzen als Hervorhebung', () => {
+		expect(slug('max_score_bytes in plain text')).toBe('max_score_bytes-in-plain-text')
+		expect(slug('An _emphasised_ word')).toBe('an-emphasised-word')
+		expect(slug('__Strong__ start')).toBe('strong-start')
+	})
 })
 
 describe('anchorsOf / linksOf', () => {

@@ -70,6 +70,24 @@ def test_falsches_secret_wird_abgelehnt(client):
     assert client.get("/soundfont/info", headers={"X-ScoreView-Secret": "falsch"}).status_code == 401
 
 
+def test_secret_mit_nicht_ascii_zeichen_ist_401_kein_500(client):
+    # compare_digest raises TypeError for a non-ASCII str. WSGI hands header
+    # values over latin-1-decoded, so this is what an umlaut in the header
+    # looks like on the server side.
+    antwort = client.get("/soundfont/info", environ_overrides={"HTTP_X_SCOREVIEW_SECRET": "gehäim"})
+    assert antwort.status_code == 401
+
+
+def test_secret_mit_nicht_ascii_zeichen_passt_byteweise(client, monkeypatch):
+    # A secret with non-ASCII characters still works: the client sends its
+    # UTF-8 bytes, WSGI decodes them as latin-1, and the check compares the
+    # bytes again.
+    monkeypatch.setattr(config, "APP_SECRET", "grün")
+    raw = "grün".encode("utf-8").decode("latin-1")
+    antwort = client.get("/soundfont/info", environ_overrides={"HTTP_X_SCOREVIEW_SECRET": raw})
+    assert antwort.status_code != 401
+
+
 # --- Auslieferung -----------------------------------------------------------
 
 def _fertiger_job(tmp_path):

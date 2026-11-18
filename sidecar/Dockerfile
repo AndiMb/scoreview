@@ -80,10 +80,22 @@ ARG MUSESCORE_APPIMAGE_SHA256
 # 0700, so the extracted tree belongs to root alone, and the unprivileged
 # user the container runs as (see USER below) got exit 126 for
 # mscore4portable. Read and traverse for everyone, write stays with root.
+#
+# --no-install-recommends keeps the image to what the dependencies demand.
+# The SoundFont GET /soundfont serves (config.SOUNDFONT_CANDIDATES) is named
+# explicitly although `musescore-common` depends on it: it is one choice of
+# an alternative there, and only a package installed by name is marked
+# manual - so the `apt-get remove musescore` below cannot take it along,
+# and a changed alternative cannot swap it out. Whether the trimmed library
+# set still carries the AppImage is what GET /selftest?renderer=musescore
+# checks (CI job sidecar-image).
+#
+# Python comes from the distribution only as the interpreter; Flask,
+# Werkzeug and gunicorn come from requirements.txt into a venv below.
 RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-suggests \
-        xvfb wget libopengl0 musescore ca-certificates libpipewire-0.3-0 \
-        python3 python3-flask gunicorn && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --no-install-suggests \
+        xvfb wget libopengl0 musescore musescore-general-soundfont-small \
+        ca-certificates libpipewire-0.3-0 python3 python3-venv && \
     wget -O /tmp/musescore.AppImage "${MUSESCORE_APPIMAGE_URL}" && \
     echo "${MUSESCORE_APPIMAGE_SHA256}  /tmp/musescore.AppImage" | sha256sum -c - && \
     chmod +x /tmp/musescore.AppImage && \
@@ -92,6 +104,19 @@ RUN apt-get update && \
     chmod -R a+rX musescore && \
     apt-get remove -y wget musescore && \
     rm -rf /tmp/musescore.AppImage /var/lib/apt/lists/*
+
+# The sidecar's Python packages, pinned in requirements.txt (transitive ones
+# included). A venv rather than the distribution's python3-flask/gunicorn:
+# those are frozen at Ubuntu 22.04's versions (Flask 2.0, gunicorn 20.1,
+# without later request-smuggling fixes), and the unit tests did not run
+# against them. Own layer before the code, so a code change does not
+# reinstall the packages.
+ENV VIRTUAL_ENV=/opt/scoreview-venv
+ENV PATH="${VIRTUAL_ENV}/bin:${PATH}"
+COPY sidecar/requirements.txt /tmp/requirements.txt
+RUN python3 -m venv "${VIRTUAL_ENV}" && \
+    pip install --no-cache-dir --disable-pip-version-check -r /tmp/requirements.txt && \
+    rm /tmp/requirements.txt
 
 WORKDIR /data
 COPY sidecar/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -159,6 +184,14 @@ USER scoreview
 
 EXPOSE 8765
 WORKDIR /opt/scoreview-sidecar
+
+# Liveness only: /health needs no secret and touches no renderer. A real
+# conversion (/selftest) every 30 s would take a conversion slot and
+# seconds of CPU each time; whether the renderers work is what the admin
+# diagnostics and the CI job check. Python from the venv because the image
+# has neither curl nor wget (wget is removed above).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.environ.get('PORT', '8765'), timeout=4)"
 
 # gunicorn statt Flasks Entwicklungsserver. Werkzeug warnt beim Start
 # selbst davor, und zu Recht: kein Worker-Management, kein definiertes

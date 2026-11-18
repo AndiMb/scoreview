@@ -5,7 +5,8 @@
 # Vier Baeume statt einem, weil das Repo drei Sprachen mischt: scoreview/ und
 # scoreview/converter/ haben getrennte package.json mit voellig verschiedenem
 # Zweck (Oberflaeche gegen Konvertierung), der Sidecar ist Python. Die
-# Verzeichnisse sind ab der Repo-Wurzel angegeben.
+# Verzeichnisse sind ab der Repo-Wurzel angegeben. Dazu kommen die
+# Basis-Images des Sidecars (docker) und die GitHub Actions.
 version: 2
 updates:
   # Die App selbst - Vue, Nextcloud-Bibliotheken, Werkzeuge.
@@ -55,15 +56,40 @@ updates:
       - dependency-name: nextcloud/ocp
         update-types: ['version-update:semver-major']
 
-  # Der Sidecar. requirements-dev.txt deckt nur die Unit-Tests ab; die
-  # Laufzeit-Pakete des Images kommen als Debian-Pakete aus dem Dockerfile
-  # (python3-flask, musescore) und liegen ausserhalb von Dependabots
-  # Reichweite - dort haelt die Ubuntu-Basis die Versionen fest.
+  # The sidecar's Python packages: requirements.txt pins what the image
+  # installs into its venv (Flask, Werkzeug, gunicorn and their
+  # dependencies), requirements-dev.txt adds pytest on top. One tree, so the
+  # unit tests and the image move together; each bump runs through the
+  # sidecar-image job in ci.yml, which builds the image and runs both
+  # renderers' self-tests.
   - package-ecosystem: pip
     directory: /sidecar
     schedule:
       interval: weekly
 
+  # The base images of sidecar/Dockerfile are pinned by digest (tag plus
+  # sha256), which keeps a build reproducible but means security updates of
+  # Ubuntu and Node arrive only with a deliberate bump - this is that bump.
+  # Only digest updates under the same tag come through; version jumps are
+  # held (ubuntu 22.04 -> 22.10 counts as minor), because both tags are
+  # choices with reasons in the Dockerfile (Ubuntu 22.04 carries the
+  # libraries the MuseScore AppImage is known to run with, Node 22 is the
+  # permission-model line engine.py relies on). The
+  # MuseScore AppImage itself is an ARG with a URL and a checksum and is
+  # lifted by engine-release.yml, not here.
+  - package-ecosystem: docker
+    directory: /sidecar
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: ubuntu
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: node
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+
+  # Third-party actions are pinned by commit SHA with the version as a
+  # comment (`@<sha> # v1.2.3`); Dependabot updates both together. A tag
+  # can be moved by whoever controls the action's repository, a SHA cannot.
   - package-ecosystem: github-actions
     directory: /
     schedule:

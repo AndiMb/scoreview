@@ -22,6 +22,10 @@ on:
   # hier jemand etwas aendert - ein Lauf allein bei Aenderungen faende sie
   # erst beim naechsten Commit. Montagmorgen, damit sie zum Wochenstart
   # dasteht.
+  #
+  # Every other job carries `if: github.event_name != 'schedule'`: nothing
+  # they test changes without a commit, and the full matrix every Monday
+  # would only cost runner time.
   schedule:
     - cron: '0 6 * * 1'
 
@@ -31,6 +35,7 @@ permissions:
 jobs:
   frontend:
     name: Frontend (Build, Tests, Linter, l10n)
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -78,6 +83,7 @@ jobs:
 
   backend:
     name: Backend (PHP ${{ matrix.php }}, OCP ${{ matrix.ocp }})
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -106,7 +112,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: ${{ matrix.php }}
           coverage: none
@@ -167,6 +173,7 @@ jobs:
   # brings new checks, and that should be a change here, not a red CI.
   psalm:
     name: Psalm (OCP ${{ matrix.ocp }})
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -178,7 +185,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.3'
           coverage: none
@@ -210,6 +217,7 @@ jobs:
   # converter run must not do.
   konverter:
     name: Lokaler Konverter (scoreview-engine, ${{ matrix.runtime }})
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -241,12 +249,12 @@ jobs:
           cache: npm
           cache-dependency-path: scoreview/converter/package-lock.json
 
-      - uses: denoland/setup-deno@v2
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         if: matrix.deno
         with:
           deno-version: ${{ matrix.deno }}
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.3'
           coverage: none
@@ -271,6 +279,7 @@ jobs:
 
   sidecar:
     name: Sidecar (Python ${{ matrix.python }})
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -278,7 +287,8 @@ jobs:
         # 3.10 ist die Systemversion von Ubuntu 22.04, auf dem das Image
         # aufsetzt (siehe sidecar/Dockerfile). Die zweite Version faengt
         # Unvertraeglichkeiten ab, bevor ein Basiswechsel sie zum Problem
-        # macht.
+        # macht. requirements-dev.txt pulls in requirements.txt, so both run
+        # against the Flask/Werkzeug/gunicorn pins the image installs.
         python: ['3.10', '3.12']
     defaults:
       run:
@@ -295,12 +305,117 @@ jobs:
       - name: Unit-Tests (pytest)
         run: python -m pytest
 
+  # The sidecar image itself. The unit tests above replace every process
+  # call; what only the built image shows - a wrong AppImage digest after a
+  # bump by the engine bot, a file missing from the dockerignore allowlist,
+  # a library gone from the apt set, a pin in requirements.txt that does not
+  # install on the image's Python - surfaced only on a manual build.
+  #
+  # Path-filtered inside the job rather than with `on.paths`: that would
+  # filter the whole workflow. The image takes sidecar/ and
+  # scoreview/converter/ (the engine renderer); workflow_call (the release)
+  # and workflow_dispatch (the engine bot's pin PR) always build.
+  sidecar-image:
+    name: Sidecar-Image (Build, Selbsttest beider Renderer)
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Betroffen?
+        id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          case "$EVENT" in
+            pull_request|push) ;;
+            *) echo "build=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
+          esac
+          # A new branch has no "before" (all zeros); build rather than guess.
+          if [ -z "$BASE" ] || [ "$BASE" = 0000000000000000000000000000000000000000 ] \
+             || ! git fetch --quiet --depth=1 origin "$BASE"; then
+            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          GEAENDERT=$(git diff --name-only "$BASE" HEAD)
+          echo "$GEAENDERT"
+          if echo "$GEAENDERT" | grep -qE '^(sidecar/|scoreview/converter/|\.github/workflows/ci\.yml$)'; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nichts am Image geaendert - Build uebersprungen."
+          fi
+
+      - name: Image bauen
+        if: steps.filter.outputs.build == 'true'
+        run: docker build -f sidecar/Dockerfile -t scoreview-sidecar-ci .
+
+      # A throwaway secret: the container refuses to start without one, and
+      # nothing it guards outlives this job.
+      - name: Container starten
+        if: steps.filter.outputs.build == 'true'
+        run: |
+          docker run -d --name sidecar-ci -p 8765:8765 \
+            -e SCOREVIEW_SIDECAR_SECRET=ci-dummy-secret \
+            --memory=2g --pids-limit=512 scoreview-sidecar-ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8765/health >/dev/null 2>&1; then
+              echo "Sidecar antwortet."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Sidecar antwortet nicht auf /health." >&2
+          docker logs sidecar-ci >&2 || true
+          exit 1
+
+      # A real conversion per renderer against the bundled score, checked for
+      # M2/M4/M7 (and, for the engine, M10, score facts, lyrics, variants).
+      - name: Selbsttest beider Renderer
+        if: steps.filter.outputs.build == 'true'
+        run: |
+          FEHLER=0
+          for RENDERER in engine musescore; do
+            ANTWORT=$(curl -sS --max-time 180 -H 'X-ScoreView-Secret: ci-dummy-secret' \
+              "http://127.0.0.1:8765/selftest?renderer=$RENDERER")
+            echo "$RENDERER: $ANTWORT" | head -c 2000; echo
+            if [ "$(echo "$ANTWORT" | jq -r '.ok')" != "true" ]; then
+              echo "Selbsttest fuer $RENDERER fehlgeschlagen." >&2
+              FEHLER=1
+            fi
+          done
+          exit $FEHLER
+
+      # The Dockerfile's HEALTHCHECK has to work too - a broken one marks a
+      # healthy sidecar as unhealthy in every orchestrator. Its first probe
+      # runs one interval after the start.
+      - name: HEALTHCHECK des Images
+        if: steps.filter.outputs.build == 'true'
+        run: |
+          for _ in $(seq 1 30); do
+            STATUS=$(docker inspect --format '{{.State.Health.Status}}' sidecar-ci)
+            case "$STATUS" in
+              healthy) echo "HEALTHCHECK: healthy"; exit 0 ;;
+              unhealthy) break ;;
+            esac
+            sleep 3
+          done
+          echo "HEALTHCHECK meldet: $STATUS" >&2
+          docker inspect --format '{{json .State.Health}}' sidecar-ci >&2
+          exit 1
+
+      - name: Container-Log
+        if: always() && steps.filter.outputs.build == 'true'
+        run: docker logs sidecar-ci 2>&1 | tail -n 100 || true
+
   # Der App Store validiert info.xml gegen dieses Schema und lehnt beim
   # Hochladen ab, was nicht passt - also nach dem Tag, wenn die Version schon
   # vergeben ist. Hier faellt es bei jedem Push auf. Eigener Job statt ein
   # Schritt im Backend: das ist reine XML-Pruefung und braucht kein PHP.
   appinfo:
     name: info.xml gegen App-Store-Schema
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -323,6 +438,7 @@ jobs:
   # noch Docker braucht.
   versionen:
     name: Gleiche MuseScore-Version auf beiden Wegen
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -388,7 +504,7 @@ jobs:
         with:
           node-version: 24
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.3'
           coverage: none

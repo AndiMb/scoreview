@@ -46,15 +46,30 @@ const MARKER_PATTERN = /^<!-- translation-of: (\S+) sha256:([0-9a-f]{12}) -->$/m
 
 // --- headings and anchors -----------------------------------------------------
 
+// Inline code is set aside before anything else and put back last: its
+// content is literal, so `max_score_bytes` keeps its underscores (GitHub:
+// "the-max_score_bytes-setting") and `<x>` is text, not a tag to drop. The
+// placeholder uses a character no heading contains.
+const CODE_MARK = '\u0000'
+
 function stripInline(text) {
-	return text
+	const code = []
+	const prose = text.replace(/`([^`]*)`/g, (match, content) => {
+		code.push(content)
+		return `${CODE_MARK}${code.length - 1}${CODE_MARK}`
+	})
+	return prose
 		.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
 		.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
 		.replace(/\[([^\]]*)\]\[[^\]]*\]/g, '$1')
 		.replace(/<[^>]+>/g, '')
-		.replace(/`([^`]*)`/g, '$1')
-		.replace(/(\*\*|__)(.*?)\1/g, '$2')
-		.replace(/(\*|_)(.*?)\1/g, '$2')
+		.replace(/\*\*(.*?)\*\*/g, '$1')
+		.replace(/\*(.*?)\*/g, '$1')
+		// `_` is emphasis only at word boundaries (CommonMark's flanking rule
+		// in short): snake_case in plain text stays as it is.
+		.replace(/(^|[^\p{L}\p{N}_])__(?!\s)(.+?)(?<!\s)__(?![\p{L}\p{N}_])/gu, '$1$2')
+		.replace(/(^|[^\p{L}\p{N}_])_(?!\s)(.+?)(?<!\s)_(?![\p{L}\p{N}_])/gu, '$1$2')
+		.replace(new RegExp(`${CODE_MARK}(\\d+)${CODE_MARK}`, 'g'), (match, index) => code[Number(index)])
 }
 
 /**

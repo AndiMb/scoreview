@@ -19,7 +19,8 @@ Zwei getrennte Grenzen:
   nimmt sich einen solchen Platz, sonst liefe er an der Grenze vorbei.
 * **Warteplaetze** (SCOREVIEW_MAX_QUEUED): wie viele Auftraege auf einen
   Konvertierungsplatz warten duerfen. Darueber lehnt ``submit`` ab, bevor
-  der Upload gespeichert wird.
+  der Upload ins Auftragsverzeichnis kommt - empfangen und gepuffert hat
+  Werkzeug ihn da allerdings schon.
 
 Wartende Auftraege haben keinen eigenen Thread: eine feste Zahl Worker holt
 Auftrags-IDs aus einer Warteschlange. Vorher wartete je Upload ein Thread am
@@ -119,8 +120,11 @@ def submit(uploaded_file, renderer: str = config.DEFAULT_RENDERER) -> str:
 
     `renderer` is one of config.RENDERERS; the caller has checked it.
 
-    Raises QueueFull, wenn alle Warteplaetze belegt sind - dann wird auch
-    nichts gespeichert."""
+    Raises QueueFull when every waiting slot is taken. The upload is then
+    not stored in the job directory - but Flask/Werkzeug has already
+    received and spooled the request body by the time this runs, so the
+    queue limit bounds disk use in JOBS_DIR, not the transfer itself
+    (that is MAX_UPLOAD_BYTES)."""
     job_id = uuid.uuid4().hex
     with JOBS_LOCK:
         waiting = sum(1 for job in JOBS.values() if job["status"] == "pending")

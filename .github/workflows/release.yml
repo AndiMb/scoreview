@@ -13,6 +13,14 @@
 # Die drei Secrets sind optional: ohne sie baut der Job ein unsigniertes
 # Paket und laedt nichts hoch - ein Fork kommt so trotzdem zu einem Tarball.
 # Ihre Einrichtung steht in docs/development.md#veroeffentlichung-im-app-store.
+#
+# Two jobs on purpose, split along the secrets. `build` runs everything that
+# executes third-party code - npm install scripts, webpack, composer, the
+# engine self-test - with a read-only token, no persisted git credentials
+# and no secret in reach. `publish` never checks out or builds anything: it
+# takes the finished delivery tree from the artifact, signs it, packs it and
+# publishes it. Only there do the signing key, the certificate and the App
+# Store token exist, and only in the steps that use them.
 name: Release
 
 on:
@@ -21,8 +29,9 @@ on:
   # Zum Ausprobieren, ohne einen Tag setzen zu muessen.
   workflow_dispatch:
 
+# Read-only by default; only `publish` asks for more.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   # Die komplette CI als Pflicht-Vorstufe: eine Version, die Linter,
@@ -35,18 +44,18 @@ jobs:
     name: CI
     uses: ./.github/workflows/ci.yml
 
-  tarball:
+  build:
     name: App-Tarball bauen
     needs: pruefungen
     runs-on: ubuntu-latest
-    env:
-      # Ueber env statt direkt ueber `secrets`, weil `if:`-Bedingungen den
-      # secrets-Kontext nicht sehen.
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-      APP_CERTIFICATE: ${{ secrets.APP_CERTIFICATE }}
-      APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
+    permissions:
+      contents: read
     steps:
+      # No credentials left in .git/config: nothing in this job pushes, and
+      # every npm/composer script below could otherwise read the token.
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       # Ganz vorn, weil danach zehn Minuten Build folgen und beides in einer
       # Sekunde zu pruefen ist. Ein Tag, der nicht zur Version in info.xml
@@ -79,7 +88,7 @@ jobs:
           cache: npm
           cache-dependency-path: scoreview/package-lock.json
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.3'
           coverage: none
@@ -214,12 +223,44 @@ jobs:
               exit 1
             fi
           done
-          for VERBOTEN in src tests tools node_modules; do
-            if [ -e "dist/scoreview/$VERBOTEN" ]; then
-              echo "Im Paket steht $VERBOTEN, das dort nicht hingehoert - Release abgebrochen." >&2
-              exit 1
-            fi
-          done
+
+          # The tar step above packs by exclusion, so a new development file
+          # in the app root (a config, a cache, a coverage report) would ship
+          # without anyone deciding it. These lists are the decision: every
+          # entry of the app root, of converter/ and of vendor/ must be named
+          # here, or the release stops and says which one is new. Add it
+          # either to the exclusions above or to the list below.
+          erlaubt() {
+            VERZEICHNIS=$1; shift
+            # Glob instead of ls, hidden entries included (.[!.]*).
+            for PFAD in "dist/scoreview/$VERZEICHNIS"/* "dist/scoreview/$VERZEICHNIS"/.[!.]*; do
+              [ -e "$PFAD" ] || continue
+              EINTRAG=$(basename "$PFAD")
+              case " $* " in
+                *" $EINTRAG "*) ;;
+                *)
+                  echo "Unerwartet im Paket: ${VERZEICHNIS:+$VERZEICHNIS/}$EINTRAG - in die Ausschlussliste oder in die Erlaubnisliste dieser Gegenprobe aufnehmen. Release abgebrochen." >&2
+                  exit 1 ;;
+              esac
+            done
+          }
+          erlaubt '' appinfo CHANGELOG.md converter img js l10n lib LICENSE README.md templates vendor
+          erlaubt converter convert.mjs lib node_modules package.json \
+            keys-marks-test.mscz lyrics-test.mscz parts-test.mscz selftest-score.mscz timesig-test.mscz
+          # --no-dev leaves only Composer's own autoloader: the app has no
+          # runtime PHP dependency. vendor/nextcloud would be the OCP stubs.
+          erlaubt vendor autoload.php composer
+
+          # Development files deeper in the tree, outside the third-party
+          # node_modules (whose packages bring their own configs).
+          VERBOTEN=$(find dist/scoreview -path '*/node_modules' -prune -o \( \
+            -name '*.test.*' -o -name '*.spec.*' -o -name '*.config.*' -o -name 'coverage' \
+            -o -name 'tests' -o -name '.php-cs-fixer*' -o -name '.phpunit*' -o -name 'psalm*.xml' \) -print)
+          if [ -n "$VERBOTEN" ]; then
+            echo "Im Paket steht, was dort nicht hingehoert - Release abgebrochen:" >&2
+            echo "$VERBOTEN" >&2
+            exit 1
+          fi
           echo "Auslieferungsbaum vollstaendig."
 
       # Der Selbsttest oben lief gegen den ENTWICKLUNGSBAUM - mit CJK-Fonts und
@@ -230,11 +271,72 @@ jobs:
         working-directory: dist/scoreview/converter
         run: node convert.mjs --selftest 2>/dev/null
 
+      # Handed over as a tar inside the artifact, not as the bare directory:
+      # upload-artifact zips and drops file modes, and the publish job packs
+      # the tree with the modes it has. Unsigned on purpose - signing needs
+      # the key, and the key is not in this job.
+      - name: Auslieferungsbaum fuer die Signatur verpacken
+        run: tar --create --file dist.tar -C dist scoreview
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: scoreview-unsigned
+          path: dist.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    name: Signieren und veroeffentlichen
+    needs: build
+    runs-on: ubuntu-latest
+    # contents: write for the GitHub release. Nothing from the repository
+    # runs here - no checkout, no install - so the token and the secrets
+    # meet only the steps below.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: scoreview-unsigned
+
+      - name: Auslieferungsbaum auspacken
+        run: |
+          mkdir -p dist
+          tar --extract --file dist.tar -C dist
+          rm dist.tar
+
+      # Which of the optional secrets exist, as plain flags: `if:` cannot see
+      # the secrets context, and the secrets themselves are given to each step
+      # that uses them rather than to the whole job - download-artifact and
+      # the release action above and below never get them.
+      - name: Vorhandene Secrets feststellen
+        id: vorhanden
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_CERTIFICATE: ${{ secrets.APP_CERTIFICATE }}
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
+        run: |
+          if [ -n "$APP_PRIVATE_KEY" ] && [ -n "$APP_CERTIFICATE" ]; then
+            echo "sign=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$APPSTORE_TOKEN" ] && [ -n "$APP_PRIVATE_KEY" ] && [ -n "$APP_CERTIFICATE" ]; then
+            echo "store=true" >> "$GITHUB_OUTPUT"
+          fi
+
       # Der App Store nimmt nur signierte Apps an. Signiert wird mit dem
       # App-Zertifikat, das Nextcloud auf eine CSR hin ausstellt; `occ` gibt es
       # nur in einer installierten Instanz, deshalb der Container.
+      #
+      # The image is pinned by digest: it is handed the private key, so a
+      # re-pushed `nextcloud:31` must not be able to change what runs here.
+      # Dependabot does not see image references inside a run script; lift
+      # it by hand with `docker buildx imagetools inspect nextcloud:31`
+      # (line "Digest:") - it only has to run `occ integrity:sign-app`.
       - name: App signieren
-        if: env.APP_PRIVATE_KEY != '' && env.APP_CERTIFICATE != ''
+        if: steps.vorhanden.outputs.sign == 'true'
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_CERTIFICATE: ${{ secrets.APP_CERTIFICATE }}
         run: |
           # Raeumt Schluessel und Container auch dann weg, wenn das Signieren
           # scheitert - sonst bliebe der unverschluesselte private Schluessel
@@ -242,10 +344,14 @@ jobs:
           aufraeumen() { docker rm -f nc-sign >/dev/null 2>&1 || true; rm -rf /tmp/cert; }
           trap aufraeumen EXIT
 
+          # umask first: the files are 0600 from their first byte on, not
+          # only after the chmod below.
+          umask 077
           mkdir -p /tmp/cert && chmod 700 /tmp/cert
           printf '%s' "$APP_PRIVATE_KEY" > /tmp/cert/scoreview.key
           printf '%s' "$APP_CERTIFICATE" > /tmp/cert/scoreview.crt
-          chmod 600 /tmp/cert/scoreview.key
+          chmod 600 /tmp/cert/scoreview.key /tmp/cert/scoreview.crt
+          umask 022
 
           # NUR appinfo/ beschreibbar machen, und nur fuer diesen Schritt:
           # `occ` schreibt dort die signature.json, laeuft im Container aber
@@ -270,9 +376,9 @@ jobs:
             -e NEXTCLOUD_ADMIN_USER=admin \
             -e NEXTCLOUD_ADMIN_PASSWORD="$(openssl rand -hex 24)" \
             -v "$PWD/dist/scoreview:/signing/scoreview" \
-            nextcloud:31
+            nextcloud:31@sha256:07ec73cc816e58d6f45a162cd53ef886462c29271a23fc68d0124cec276e3767
           BEREIT=nein
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if docker exec -u www-data nc-sign php occ status 2>/dev/null | grep -q 'installed: true'; then
               BEREIT=ja
               break
@@ -342,10 +448,11 @@ jobs:
         with:
           name: scoreview-app
           path: scoreview.tar.gz
+          if-no-files-found: error
 
       - name: An das Release haengen
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: scoreview.tar.gz
 
@@ -362,13 +469,23 @@ jobs:
       # Schritt darunter - er ist die eigentliche Zusage und schlaegt fehl,
       # wenn hier etwas gefehlt haette.
       - name: App-ID beim App Store anmelden
-        if: startsWith(github.ref, 'refs/tags/v') && env.APPSTORE_TOKEN != '' && env.APP_PRIVATE_KEY != '' && env.APP_CERTIFICATE != ''
+        if: startsWith(github.ref, 'refs/tags/v') && steps.vorhanden.outputs.store == 'true'
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_CERTIFICATE: ${{ secrets.APP_CERTIFICATE }}
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
         run: |
-          printf '%s' "$APP_PRIVATE_KEY" > /tmp/anmeldung.key
+          # 0600 from the start and removed however the step ends - a failing
+          # openssl or curl must not leave the key behind on the runner.
+          umask 077
+          SCHLUESSEL=$(mktemp)
+          trap 'rm -f "$SCHLUESSEL"' EXIT
+          printf '%s' "$APP_PRIVATE_KEY" > "$SCHLUESSEL"
+          chmod 600 "$SCHLUESSEL"
           # Ohne Zeilenumbruch: signiert wird die App-ID selbst, und der Store
           # prueft die Signatur gegen genau diese Bytes.
-          SIGNATUR=$(printf '%s' 'scoreview' | openssl dgst -sha512 -sign /tmp/anmeldung.key | openssl base64 -A)
-          rm -f /tmp/anmeldung.key
+          SIGNATUR=$(printf '%s' 'scoreview' | openssl dgst -sha512 -sign "$SCHLUESSEL" | openssl base64 -A)
+          rm -f "$SCHLUESSEL"
           ANTWORT=$(curl -sS -w '\n%{http_code}' -X POST https://apps.nextcloud.com/api/v1/apps \
             -H "Authorization: Token ${APPSTORE_TOKEN}" \
             -H 'Content-Type: application/json' \
@@ -379,7 +496,10 @@ jobs:
       # Erst jetzt, weil der App Store das Archiv selbst herunterlaedt: die
       # Release-Datei muss oeffentlich liegen, bevor er davon erfaehrt.
       - name: Beim App Store anmelden
-        if: startsWith(github.ref, 'refs/tags/v') && env.APPSTORE_TOKEN != '' && env.APP_PRIVATE_KEY != '' && env.APP_CERTIFICATE != ''
+        if: startsWith(github.ref, 'refs/tags/v') && steps.vorhanden.outputs.store == 'true'
+        env:
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APPSTORE_TOKEN: ${{ secrets.APPSTORE_TOKEN }}
         run: |
           # Ohne diese Probe koennte ein fehlendes/falsch benanntes
           # APP_CERTIFICATE den Signierschritt still ueberspringen (ein
@@ -389,9 +509,13 @@ jobs:
             echo "Das Paket ist nicht signiert - Anmeldung abgebrochen." >&2
             exit 1
           fi
-          printf '%s' "$APP_PRIVATE_KEY" > /tmp/scoreview.key
-          SIGNATUR=$(openssl dgst -sha512 -sign /tmp/scoreview.key scoreview.tar.gz | openssl base64 -A)
-          rm -f /tmp/scoreview.key
+          umask 077
+          SCHLUESSEL=$(mktemp)
+          trap 'rm -f "$SCHLUESSEL"' EXIT
+          printf '%s' "$APP_PRIVATE_KEY" > "$SCHLUESSEL"
+          chmod 600 "$SCHLUESSEL"
+          SIGNATUR=$(openssl dgst -sha512 -sign "$SCHLUESSEL" scoreview.tar.gz | openssl base64 -A)
+          rm -f "$SCHLUESSEL"
           URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/scoreview.tar.gz"
           ANTWORT=$(curl -sS -w '\n%{http_code}' -X POST https://apps.nextcloud.com/api/v1/apps/releases \
             -H "Authorization: Token ${APPSTORE_TOKEN}" \

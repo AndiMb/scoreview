@@ -73,6 +73,16 @@ def test_findet_json_auch_ohne_vorheriges_rauschen(monkeypatch, partitur):
     assert musescore.run_score_media(partitur) == nutzlast
 
 
+def test_findet_json_am_dateianfang(monkeypatch, partitur):
+    # What the image really delivers since MuseScore runs with LANG=C.UTF-8:
+    # without the locale warning, stdout begins with the JSON itself, and
+    # there is no newline in front of the brace.
+    nutzlast = {"svgs": ["abc"]}
+    fake_run(monkeypatch, json.dumps(nutzlast, indent=1).encode())
+
+    assert musescore.run_score_media(partitur) == nutzlast
+
+
 def test_meldet_fehlenden_json_marker_deutlich(monkeypatch, partitur):
     # Der Kernpunkt aus M3: kein stilles Leerlaufen, sondern ein Fehler, der
     # sagt, dass sich das Ausgabeformat geaendert haben koennte.
@@ -169,3 +179,51 @@ def test_benennt_den_timeout(monkeypatch, partitur):
 
     with pytest.raises(RuntimeError, match="MSCORE_TIMEOUT_SECONDS"):
         musescore.run_score_media(partitur)
+
+
+def test_mscore_sieht_das_secret_nicht(monkeypatch, partitur):
+    # MuseScore runs on an untrusted score; the container's environment
+    # carries the sidecar secret. Same rule as engine._environment().
+    monkeypatch.setenv("SCOREVIEW_SIDECAR_SECRET", "streng-geheim")
+    calls = fake_run(monkeypatch, b"\n" + json.dumps({"svgs": ["abc"]}, indent=1).encode())
+
+    musescore.run_score_media(partitur)
+
+    _, kwargs = calls[0]
+    umgebung = kwargs["env"]
+    assert "streng-geheim" not in json.dumps(umgebung)
+    assert set(umgebung) == {"PATH", "LANG", "HOME"}
+
+
+def test_mscore_behaelt_das_home_des_containers(monkeypatch, partitur):
+    # MuseScore keeps its settings in HOME, and concurrent instances share
+    # the lock on them - a per-run HOME would break that.
+    monkeypatch.setenv("HOME", "/home/scoreview")
+    calls = fake_run(monkeypatch, b"\n" + json.dumps({"svgs": ["abc"]}, indent=1).encode())
+
+    musescore.run_score_media(partitur)
+
+    assert calls[0][1]["env"]["HOME"] == "/home/scoreview"
+
+
+def test_zu_grosse_ausgabe_wird_ungelesen_abgelehnt(monkeypatch, partitur):
+    # A pathological score must fail on its own instead of taking the
+    # gunicorn process down with the OOM killer.
+    monkeypatch.setattr(musescore.config, "MAX_MUSESCORE_OUTPUT_BYTES", 64)
+    nutzlast = {"svgs": ["x" * 200]}
+    fake_run(monkeypatch, b"\n" + json.dumps(nutzlast, indent=1).encode())
+    gelesen = []
+    monkeypatch.setattr(musescore.json, "loads", lambda *a, **k: gelesen.append(a) or {})
+
+    with pytest.raises(musescore.errors.ConversionError, match="SCOREVIEW_MAX_MUSESCORE_OUTPUT_BYTES") as exc:
+        musescore.run_score_media(partitur)
+    assert exc.value.code == musescore.errors.CONVERSION_FAILED
+    assert gelesen == []
+
+
+def test_ausgabe_an_der_grenze_geht_durch(monkeypatch, partitur):
+    stdout = b"\n" + json.dumps({"svgs": ["abc"]}, indent=1).encode()
+    monkeypatch.setattr(musescore.config, "MAX_MUSESCORE_OUTPUT_BYTES", len(stdout))
+    fake_run(monkeypatch, stdout)
+
+    assert musescore.run_score_media(partitur) == {"svgs": ["abc"]}
