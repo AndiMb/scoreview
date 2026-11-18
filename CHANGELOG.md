@@ -6,6 +6,8 @@ All notable changes to ScoreView. The format follows
 
 ## [Unreleased]
 
+## [1.33.1] – 2026-11-18
+
 ### Fixed
 
 - Turn pages by listening no longer jumps back to where the singers were
