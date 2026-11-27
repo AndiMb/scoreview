@@ -62,7 +62,7 @@ COPY scoreview/converter/*.mscz ./
 #   docker buildx imagetools inspect ubuntu:22.04   (Zeile "Digest:")
 # und das Tag davor stehen lassen - es ist nur Lesehilfe, massgeblich ist
 # der Digest.
-FROM ubuntu:22.04@sha256:b8b6ee6aa931ecd9d0d952abc34dc0e5f7c6a30c6bb71b079fe399fde0329c02
+FROM ubuntu:22.04@sha256:b000e69a50ff940390233025e7a337fb8469b509e2334fa4d018ac30f3e18cdb
 ARG MUSESCORE_APPIMAGE_URL
 ARG MUSESCORE_APPIMAGE_SHA256
 
