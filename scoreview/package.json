@@ -36,11 +36,11 @@
 		"@nextcloud/router": "^3.1.0",
 		"@nextcloud/sharing": "^0.4.0",
 		"@nextcloud/vue": "^9.13.1",
-		"dompurify": "^3.4.18",
-		"spessasynth_core": "^4.4.10",
-		"spessasynth_lib": "^4.4.8",
-		"stb-vorbis": "^0.0.7",
-		"vue": "^3.5.45",
+		"dompurify": "^3.5.0",
+		"spessasynth_core": "^4.4.12",
+		"spessasynth_lib": "^4.4.10",
+		"stb-vorbis": "^0.0.8",
+		"vue": "^3.5.46",
 		"vue-material-design-icons": "^5.4.0"
 	},
 	"devDependencies": {
